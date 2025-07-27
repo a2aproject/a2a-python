@@ -55,6 +55,7 @@ from a2a.utils import (
     new_task,
 )
 
+
 class DummyAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task_updater = TaskUpdater(
@@ -77,6 +78,7 @@ class DummyAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
 
 # Helper to create a simple task for tests
 def create_sample_task(
@@ -585,8 +587,10 @@ class HelloAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task = context.current_task
         if not task:
-            assert context.message is not None, "A message is required to create a new task"
-            task = new_task(context.message) # type: ignore
+            assert context.message is not None, (
+                'A message is required to create a new task'
+            )
+            task = new_task(context.message)  # type: ignore
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
@@ -598,16 +602,17 @@ class HelloAgentExecutor(AgentExecutor):
             )
         except Exception as e:
             # Stop processing when the event loop is closed
-            logging.warning("Error: %s", e)
+            logging.warning('Error: %s', e)
             return
         await updater.add_artifact(
-            [Part(root=TextPart(text="Hello world!"))],
+            [Part(root=TextPart(text='Hello world!'))],
             name='conversion_result',
         )
         await updater.complete()
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
 
 @pytest.mark.asyncio
 async def test_on_message_send_non_blocking():
@@ -623,12 +628,11 @@ async def test_on_message_send_non_blocking():
         message=Message(
             role=Role.user,
             message_id='msg_push',
-            parts=[Part(root=TextPart(text=f'Hi'))]
+            parts=[Part(root=TextPart(text=f'Hi'))],
         ),
         configuration=MessageSendConfiguration(
-            blocking=False,
-            accepted_output_modes=['text/plain']
-        )
+            blocking=False, accepted_output_modes=['text/plain']
+        ),
     )
 
     result = await request_handler.on_message_send(
@@ -650,6 +654,7 @@ async def test_on_message_send_non_blocking():
 
     assert task is not None
     assert task.status.state == TaskState.completed
+
 
 @pytest.mark.asyncio
 async def test_on_message_send_interrupted_flow():
