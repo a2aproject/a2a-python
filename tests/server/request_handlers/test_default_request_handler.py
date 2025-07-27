@@ -1,5 +1,6 @@
 import asyncio
 import time
+import logging
 
 from unittest.mock import (
     AsyncMock,
@@ -595,9 +596,9 @@ class HelloAgentExecutor(AgentExecutor):
                 TaskState.working,
                 message=updater.new_agent_message(parts),
             )
-        except RuntimeError as e:
+        except Exception as e:
             # Stop processing when the event loop is closed
-            print("Runtim error", e)
+            logging.warning("Error: %s", e)
             return
         await updater.add_artifact(
             [Part(root=TextPart(text="Hello world!"))],
@@ -635,7 +636,7 @@ async def test_on_message_send_non_blocking():
     )
 
     assert result is not None
-    assert type(result) == Task
+    assert isinstance(result, Task)
     assert result.status.state == TaskState.submitted
 
     # Polling for 500ms until task is completed.
