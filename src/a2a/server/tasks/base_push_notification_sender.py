@@ -52,8 +52,13 @@ class BasePushNotificationSender(PushNotificationSender):
     ) -> bool:
         url = push_info.url
         try:
+            headers = None
+            if push_info.token:
+                headers = {'X-A2A-Notification-Token': push_info.token}
             response = await self._client.post(
-                url, json=task.model_dump(mode='json', exclude_none=True)
+                url,
+                json=task.model_dump(mode='json', exclude_none=True),
+                headers=headers,
             )
             response.raise_for_status()
             logger.info(

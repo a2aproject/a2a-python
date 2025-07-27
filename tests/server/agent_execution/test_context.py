@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from a2a.server.agent_execution import RequestContext
+from a2a.server.context import ServerCallContext
 from a2a.types import (
     Message,
     MessageSendParams,
@@ -19,7 +20,7 @@ class TestRequestContext:
     @pytest.fixture
     def mock_message(self):
         """Fixture for a mock Message."""
-        return Mock(spec=Message, taskId=None, contextId=None)
+        return Mock(spec=Message, task_id=None, context_id=None)
 
     @pytest.fixture
     def mock_params(self, mock_message):
@@ -29,7 +30,7 @@ class TestRequestContext:
     @pytest.fixture
     def mock_task(self):
         """Fixture for a mock Task."""
-        return Mock(spec=Task, id='task-123', contextId='context-456')
+        return Mock(spec=Task, id='task-123', context_id='context-456')
 
     def test_init_without_params(self):
         """Test initialization without parameters."""
@@ -54,11 +55,12 @@ class TestRequestContext:
         assert context.message == mock_params.message
         assert context.task_id == '00000000-0000-0000-0000-000000000001'
         assert (
-            mock_params.message.taskId == '00000000-0000-0000-0000-000000000001'
+            mock_params.message.task_id
+            == '00000000-0000-0000-0000-000000000001'
         )
         assert context.context_id == '00000000-0000-0000-0000-000000000002'
         assert (
-            mock_params.message.contextId
+            mock_params.message.context_id
             == '00000000-0000-0000-0000-000000000002'
         )
 
@@ -68,7 +70,7 @@ class TestRequestContext:
         context = RequestContext(request=mock_params, task_id=task_id)
 
         assert context.task_id == task_id
-        assert mock_params.message.taskId == task_id
+        assert mock_params.message.task_id == task_id
 
     def test_init_with_context_id(self, mock_params):
         """Test initialization with context ID provided."""
@@ -76,7 +78,7 @@ class TestRequestContext:
         context = RequestContext(request=mock_params, context_id=context_id)
 
         assert context.context_id == context_id
-        assert mock_params.message.contextId == context_id
+        assert mock_params.message.context_id == context_id
 
     def test_init_with_both_ids(self, mock_params):
         """Test initialization with both task and context IDs provided."""
@@ -87,9 +89,9 @@ class TestRequestContext:
         )
 
         assert context.task_id == task_id
-        assert mock_params.message.taskId == task_id
+        assert mock_params.message.task_id == task_id
         assert context.context_id == context_id
-        assert mock_params.message.contextId == context_id
+        assert mock_params.message.context_id == context_id
 
     def test_init_with_task(self, mock_params, mock_task):
         """Test initialization with a task object."""
@@ -139,13 +141,13 @@ class TestRequestContext:
     def test_check_or_generate_task_id_with_existing_task_id(self, mock_params):
         """Test _check_or_generate_task_id with existing task ID."""
         existing_id = 'existing-task-id'
-        mock_params.message.taskId = existing_id
+        mock_params.message.task_id = existing_id
 
         context = RequestContext(request=mock_params)
         # The method is called during initialization
 
         assert context.task_id == existing_id
-        assert mock_params.message.taskId == existing_id
+        assert mock_params.message.task_id == existing_id
 
     def test_check_or_generate_context_id_no_params(self):
         """Test _check_or_generate_context_id with no params does nothing."""
@@ -158,13 +160,13 @@ class TestRequestContext:
     ):
         """Test _check_or_generate_context_id with existing context ID."""
         existing_id = 'existing-context-id'
-        mock_params.message.contextId = existing_id
+        mock_params.message.context_id = existing_id
 
         context = RequestContext(request=mock_params)
         # The method is called during initialization
 
         assert context.context_id == existing_id
-        assert mock_params.message.contextId == existing_id
+        assert mock_params.message.context_id == existing_id
 
     def test_init_raises_error_on_task_id_mismatch(
         self, mock_params, mock_task
@@ -179,9 +181,9 @@ class TestRequestContext:
     def test_init_raises_error_on_context_id_mismatch(
         self, mock_params, mock_task
     ):
-        """Test that an error is raised if provided context_id mismatches task.contextId."""
+        """Test that an error is raised if provided context_id mismatches task.context_id."""
         # Set a valid task_id to avoid that error
-        mock_params.message.taskId = mock_task.id
+        mock_params.message.task_id = mock_task.id
 
         with pytest.raises(ServerError) as exc_info:
             RequestContext(
@@ -211,10 +213,21 @@ class TestRequestContext:
         context = RequestContext(request=mock_params)
         assert context.message == mock_params.message
 
+    def test_metadata_property_without_content(self):
+        """Test metadata property returns empty dict when no content are provided."""
+        context = RequestContext()
+        assert context.metadata == {}
+
+    def test_metadata_property_with_content(self, mock_params):
+        """Test metadata property returns the metadata from params."""
+        mock_params.metadata = {'key': 'value'}
+        context = RequestContext(request=mock_params)
+        assert context.metadata == {'key': 'value'}
+
     def test_init_with_existing_ids_in_message(self, mock_message, mock_params):
         """Test initialization with existing IDs in the message."""
-        mock_message.taskId = 'existing-task-id'
-        mock_message.contextId = 'existing-context-id'
+        mock_message.task_id = 'existing-task-id'
+        mock_message.context_id = 'existing-context-id'
 
         context = RequestContext(request=mock_params)
 
@@ -226,7 +239,7 @@ class TestRequestContext:
         self, mock_params, mock_task
     ):
         """Test initialization succeeds when task_id matches task.id."""
-        mock_params.message.taskId = mock_task.id
+        mock_params.message.task_id = mock_task.id
 
         context = RequestContext(
             request=mock_params, task_id=mock_task.id, task=mock_task
@@ -238,16 +251,29 @@ class TestRequestContext:
     def test_init_with_context_id_and_existing_context_id_match(
         self, mock_params, mock_task
     ):
-        """Test initialization succeeds when context_id matches task.contextId."""
-        mock_params.message.taskId = mock_task.id  # Set matching task ID
-        mock_params.message.contextId = mock_task.contextId
+        """Test initialization succeeds when context_id matches task.context_id."""
+        mock_params.message.task_id = mock_task.id  # Set matching task ID
+        mock_params.message.context_id = mock_task.context_id
 
         context = RequestContext(
             request=mock_params,
             task_id=mock_task.id,
-            context_id=mock_task.contextId,
+            context_id=mock_task.context_id,
             task=mock_task,
         )
 
-        assert context.context_id == mock_task.contextId
+        assert context.context_id == mock_task.context_id
         assert context.current_task == mock_task
+
+    def test_extension_handling(self):
+        """Test extension handling in RequestContext."""
+        call_context = ServerCallContext(requested_extensions={'foo', 'bar'})
+        context = RequestContext(call_context=call_context)
+
+        assert context.requested_extensions == {'foo', 'bar'}
+
+        context.add_activated_extension('foo')
+        assert call_context.activated_extensions == {'foo'}
+
+        context.add_activated_extension('baz')
+        assert call_context.activated_extensions == {'foo', 'baz'}

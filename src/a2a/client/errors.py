@@ -31,3 +31,16 @@ class A2AClientJSONError(A2AClientError):
         """
         self.message = message
         super().__init__(f'JSON Error: {message}')
+
+
+class A2AClientTimeoutError(A2AClientError):
+    """Client exception for timeout errors during a request."""
+
+    def __init__(self, message: str):
+        """Initializes the A2AClientTimeoutError.
+
+        Args:
+            message: A descriptive error message.
+        """
+        self.message = message
+        super().__init__(f'Timeout Error: {message}')

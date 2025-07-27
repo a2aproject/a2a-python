@@ -17,6 +17,8 @@ from a2a.utils.helpers import (
     create_task_obj,
 )
 from a2a.utils.message import (
+    get_data_parts,
+    get_file_parts,
     get_message_text,
     get_text_parts,
     new_agent_parts_message,
@@ -37,6 +39,8 @@ __all__ = [
     'build_text_artifact',
     'completed_task',
     'create_task_obj',
+    'get_data_parts',
+    'get_file_parts',
     'get_message_text',
     'get_text_parts',
     'new_agent_parts_message',

@@ -24,7 +24,7 @@ def create_sample_message(
     content='test message', msg_id='msg1', role=Role.user
 ):
     return Message(
-        messageId=msg_id,
+        message_id=msg_id,
         role=role,
         parts=[Part(root=TextPart(text=content))],
     )
@@ -36,7 +36,7 @@ def create_sample_task(
 ):
     return Task(
         id=task_id,
-        contextId=context_id,
+        context_id=context_id,
         status=TaskStatus(state=status_state),
     )
 
@@ -46,8 +46,8 @@ def create_sample_status_update(
     task_id='task1', status_state=TaskState.working, context_id='ctx1'
 ):
     return TaskStatusUpdateEvent(
-        taskId=task_id,
-        contextId=context_id,
+        task_id=task_id,
+        context_id=context_id,
         status=TaskStatus(state=status_state),
         final=False,  # Typically false unless it's the very last update
     )
@@ -383,6 +383,44 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             unittest.mock.ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
+
+    @patch('asyncio.create_task')
+    async def test_consume_and_break_non_blocking(
+        self, mock_create_task: MagicMock
+    ):
+        """Test that with blocking=False, the method returns after the first event."""
+        first_event = create_sample_task('non_blocking_task')
+        event_after = create_sample_message('should be consumed later')
+
+        async def mock_consume_generator():
+            yield first_event
+            yield event_after
+
+        self.mock_event_consumer.consume_all.return_value = (
+            mock_consume_generator()
+        )
+        # After processing `first_event`, the current result will be that task.
+        self.aggregator.task_manager.get_task.return_value = first_event
+
+        self.aggregator._continue_consuming = AsyncMock()
+        mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
+
+        (
+            result,
+            interrupted,
+        ) = await self.aggregator.consume_and_break_on_interrupt(
+            self.mock_event_consumer, blocking=False
+        )
+
+        self.assertEqual(result, first_event)
+        self.assertTrue(interrupted)
+        self.mock_task_manager.process.assert_called_once_with(first_event)
+        mock_create_task.assert_called_once()
+        # The background task should be created with the remaining stream
+        self.aggregator._continue_consuming.assert_called_once()
+        self.assertIsInstance(
+            self.aggregator._continue_consuming.call_args[0][0], AsyncIterator
+        )
 
     @patch('asyncio.create_task')  # To verify _continue_consuming is called
     async def test_continue_consuming_processes_remaining_events(

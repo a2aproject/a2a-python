@@ -15,8 +15,8 @@ def create_text_message_object(
         content: The text content of the message. Defaults to an empty string.
 
     Returns:
-        A `Message` object with a new UUID messageId.
+        A `Message` object with a new UUID message_id.
     """
     return Message(
-        role=role, parts=[Part(TextPart(text=content))], messageId=str(uuid4())
+        role=role, parts=[Part(TextPart(text=content))], message_id=str(uuid4())
     )

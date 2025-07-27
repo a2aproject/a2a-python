@@ -255,7 +255,7 @@ class JSONRPCHandler:
             )
 
     @validate(
-        lambda self: self.agent_card.capabilities.pushNotifications,
+        lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
     )
     async def set_push_notification_config(
@@ -347,10 +347,8 @@ class JSONRPCHandler:
             A `ListTaskPushNotificationConfigResponse` object containing the config or a JSON-RPC error.
         """
         try:
-            config = (
-                await self.request_handler.on_list_task_push_notification_config(
-                    request.params, context
-                )
+            config = await self.request_handler.on_list_task_push_notification_config(
+                request.params, context
             )
             return prepare_response_object(
                 request.id,

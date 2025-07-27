@@ -96,7 +96,7 @@ class TestResponseHelpers(unittest.TestCase):
     def _create_sample_task(self, task_id='task123', context_id='ctx456'):
         return Task(
             id=task_id,
-            contextId=context_id,
+            context_id=context_id,
             status=TaskStatus(state=TaskState.submitted),
             history=[],
         )

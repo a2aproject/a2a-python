@@ -11,16 +11,11 @@ dependencies = [
   "fastapi>=0.115.2",
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
-  "google-api-core>=1.26.0",
   "opentelemetry-api>=1.33.0",
   "opentelemetry-sdk>=1.33.0",
   "pydantic>=2.11.3",
   "sse-starlette",
-  "starlette",
-  "grpcio>=1.60",
-  "grpcio-tools>=1.60",
-  "grpcio_reflection>=1.7.0",
-  "protobuf==5.29.5",
+  "starlette"
 ]
 
 classifiers = [
@@ -41,12 +36,14 @@ postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 sql = ["sqlalchemy[asyncio,postgresql-asyncpg,aiomysql,aiosqlite]>=2.0.0"]
+encryption = ["cryptography>=43.0.0"]
+grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "protobuf==5.29.5", "google-api-core>=1.26.0"]
 
 [project.urls]
-homepage = "https://a2aproject.github.io/A2A/"
+homepage = "https://a2a-protocol.org/"
 repository = "https://github.com/a2aproject/a2a-python"
 changelog = "https://github.com/a2aproject/a2a-python/blob/main/CHANGELOG.md"
-documentation = "https://a2aproject.github.io/A2A/sdk/python/"
+documentation = "https://a2a-protocol.org/latest/sdk/python/"
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/a2a"]
@@ -91,6 +88,9 @@ dev = [
   "types-protobuf",
   "types-requests",
   "pre-commit",
+  "pyupgrade",
+  "autoflake",
+  "no_implicit_optional",
 ]
 
 [[tool.uv.index]]
@@ -98,6 +98,9 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
+[tool.mypy]
+plugins = ['pydantic.mypy']
 
 [tool.pyright]
 include = ["src"]

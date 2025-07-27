@@ -17,7 +17,7 @@ class TestArtifact(unittest.TestCase):
         mock_uuid = uuid.UUID('abcdef12-1234-5678-1234-567812345678')
         mock_uuid4.return_value = mock_uuid
         artifact = new_artifact(parts=[], name='test_artifact')
-        self.assertEqual(artifact.artifactId, str(mock_uuid))
+        self.assertEqual(artifact.artifact_id, str(mock_uuid))
 
     def test_new_artifact_assigns_parts_name_description(self):
         parts = [Part(root=TextPart(text='Sample text'))]

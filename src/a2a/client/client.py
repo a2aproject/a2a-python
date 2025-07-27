@@ -10,7 +10,11 @@ import httpx
 from httpx_sse import SSEError, aconnect_sse
 from pydantic import ValidationError
 
-from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
+from a2a.client.errors import (
+    A2AClientHTTPError,
+    A2AClientJSONError,
+    A2AClientTimeoutError,
+)
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.types import (
     AgentCard,
@@ -340,6 +344,8 @@ class A2AClient:
             )
             response.raise_for_status()
             return response.json()
+        except httpx.ReadTimeout as e:
+            raise A2AClientTimeoutError('Client Request timed out') from e
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(e.response.status_code, str(e)) from e
         except json.JSONDecodeError as e:

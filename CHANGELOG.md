@@ -1,5 +1,95 @@
 # Changelog
 
+## [0.2.16](https://github.com/a2aproject/a2a-python/compare/v0.2.15...v0.2.16) (2025-07-21)
+
+
+### Features
+
+* Convert fields in `types.py` to use `snake_case` ([#199](https://github.com/a2aproject/a2a-python/issues/199)) ([0bb5563](https://github.com/a2aproject/a2a-python/commit/0bb55633272605a0404fc14c448a9dcaca7bb693))
+
+
+### Bug Fixes
+
+* Add deprecation warning for camelCase alias ([#334](https://github.com/a2aproject/a2a-python/issues/334)) ([f22b384](https://github.com/a2aproject/a2a-python/commit/f22b384d919e349be8d275c8f44bd760d627bcb9))
+* client should not specify `taskId` if it doesn't exist ([#264](https://github.com/a2aproject/a2a-python/issues/264)) ([97f1093](https://github.com/a2aproject/a2a-python/commit/97f109326c7fe291c96bb51935ac80e0fab4cf66))
+
+## [0.2.15](https://github.com/a2aproject/a2a-python/compare/v0.2.14...v0.2.15) (2025-07-21)
+
+
+### Bug Fixes
+
+* Add Input Validation for Empty Message Content ([#327](https://github.com/a2aproject/a2a-python/issues/327)) ([5061834](https://github.com/a2aproject/a2a-python/commit/5061834e112a4eb523ac505f9176fc42d86d8178))
+* Prevent import grpc issues for Client after making dependencies optional ([#330](https://github.com/a2aproject/a2a-python/issues/330)) ([53ad485](https://github.com/a2aproject/a2a-python/commit/53ad48530b47ef1cbd3f40d0432f9170b663839d)), closes [#326](https://github.com/a2aproject/a2a-python/issues/326)
+
+## [0.2.14](https://github.com/a2aproject/a2a-python/compare/v0.2.13...v0.2.14) (2025-07-18)
+
+
+### Features
+
+* Set grpc dependencies as optional ([#322](https://github.com/a2aproject/a2a-python/issues/322)) ([365f158](https://github.com/a2aproject/a2a-python/commit/365f158f87166838b55bdadd48778cb313a453e1))
+* **spec:** Update A2A types from specification 🤖 ([#325](https://github.com/a2aproject/a2a-python/issues/325)) ([02e7a31](https://github.com/a2aproject/a2a-python/commit/02e7a3100e000e115b4aeec7147cf8fc1948c107))
+
+## [0.2.13](https://github.com/a2aproject/a2a-python/compare/v0.2.12...v0.2.13) (2025-07-17)
+
+
+### Features
+
+* Add `get_data_parts()` and `get_file_parts()` helper methods ([#312](https://github.com/a2aproject/a2a-python/issues/312)) ([5b98c32](https://github.com/a2aproject/a2a-python/commit/5b98c3240db4ff6007e242742f76822fc6ea380c))
+* Support for Database based Push Config Store ([#299](https://github.com/a2aproject/a2a-python/issues/299)) ([e5d99ee](https://github.com/a2aproject/a2a-python/commit/e5d99ee9e478cda5e93355cba2e93f1d28039806))
+* Update A2A types from specification 🤖 ([#319](https://github.com/a2aproject/a2a-python/issues/319)) ([18506a4](https://github.com/a2aproject/a2a-python/commit/18506a4fe32c1956725d8f205ec7848f7b86c77d))
+
+
+### Bug Fixes
+
+* Add Input Validation for Task IDs in TaskManager ([#310](https://github.com/a2aproject/a2a-python/issues/310)) ([a38d438](https://github.com/a2aproject/a2a-python/commit/a38d43881d8476e6fbcb9766b59e3378dbe64306))
+* Add validation for empty artifact lists in `completed_task` ([#308](https://github.com/a2aproject/a2a-python/issues/308)) ([c4a324d](https://github.com/a2aproject/a2a-python/commit/c4a324dcb693f19fbbf90cee483f6a912698a921))
+* Handle readtimeout errors. ([#305](https://github.com/a2aproject/a2a-python/issues/305)) ([b94b8f5](https://github.com/a2aproject/a2a-python/commit/b94b8f52bf58315f3ef138b6a1ffaf894f35bcef)), closes [#249](https://github.com/a2aproject/a2a-python/issues/249)
+
+
+### Documentation
+
+* Update Documentation Site Link ([#315](https://github.com/a2aproject/a2a-python/issues/315)) ([edf392c](https://github.com/a2aproject/a2a-python/commit/edf392cfe531d0448659e2f08ab08f0ba05475b3))
+
+## [0.2.12](https://github.com/a2aproject/a2a-python/compare/v0.2.11...v0.2.12) (2025-07-14)
+
+
+### Features
+
+* add `metadata` property to `RequestContext` ([#302](https://github.com/a2aproject/a2a-python/issues/302)) ([e781ced](https://github.com/a2aproject/a2a-python/commit/e781ced3b082ef085f9aeef02ceebb9b35c68280))
+* add A2ABaseModel ([#292](https://github.com/a2aproject/a2a-python/issues/292)) ([24f2eb0](https://github.com/a2aproject/a2a-python/commit/24f2eb0947112539cbd4e493c98d0d9dadc87f05))
+* add support for notification tokens in PushNotificationSender ([#266](https://github.com/a2aproject/a2a-python/issues/266)) ([75aa4ed](https://github.com/a2aproject/a2a-python/commit/75aa4ed866a6b4005e59eb000e965fb593e0888f))
+* Update A2A types from specification 🤖 ([#289](https://github.com/a2aproject/a2a-python/issues/289)) ([ecb321a](https://github.com/a2aproject/a2a-python/commit/ecb321a354d691ca90b52cc39e0a397a576fd7d7))
+
+
+### Bug Fixes
+
+* add proper a2a request body documentation to Swagger UI ([#276](https://github.com/a2aproject/a2a-python/issues/276)) ([4343be9](https://github.com/a2aproject/a2a-python/commit/4343be99ad0df5eb6908867b71d55b1f7d0fafc6)), closes [#274](https://github.com/a2aproject/a2a-python/issues/274)
+* Handle asyncio.cancellederror and raise to propagate back ([#293](https://github.com/a2aproject/a2a-python/issues/293)) ([9d6cb68](https://github.com/a2aproject/a2a-python/commit/9d6cb68a1619960b9c9fd8e7aa08ffb27047343f))
+* Improve error handling in task creation ([#294](https://github.com/a2aproject/a2a-python/issues/294)) ([6412c75](https://github.com/a2aproject/a2a-python/commit/6412c75413e26489bd3d33f59e41b626a71807d3))
+* Resolve dependency issue with sql stores ([#303](https://github.com/a2aproject/a2a-python/issues/303)) ([2126828](https://github.com/a2aproject/a2a-python/commit/2126828b5cb6291f47ca15d56c0e870950f17536))
+* Send push notifications for message/send ([#298](https://github.com/a2aproject/a2a-python/issues/298)) ([0274112](https://github.com/a2aproject/a2a-python/commit/0274112bb5b077c17b344da3a65277f2ad67d38f))
+* **server:** Improve event consumer error handling ([#282](https://github.com/a2aproject/a2a-python/issues/282)) ([a5786a1](https://github.com/a2aproject/a2a-python/commit/a5786a112779a21819d28e4dfee40fa11f1bb49a))
+
+## [0.2.11](https://github.com/a2aproject/a2a-python/compare/v0.2.10...v0.2.11) (2025-07-07)
+
+
+### ⚠ BREAKING CHANGES
+
+* Removes `push_notifier` interface from the SDK and introduces `push_notification_config_store` and `push_notification_sender` for supporting push notifications.
+
+### Features
+
+* Add constants for Well-Known URIs ([#271](https://github.com/a2aproject/a2a-python/issues/271)) ([1c8e12e](https://github.com/a2aproject/a2a-python/commit/1c8e12e448dc7469e508fccdac06818836f5b520))
+* Adds support for List and Delete push notification configurations. ([f1b576e](https://github.com/a2aproject/a2a-python/commit/f1b576e061e7a3ab891d8368ade56c7046684c5e))
+* Adds support for more than one `push_notification_config` per task. ([f1b576e](https://github.com/a2aproject/a2a-python/commit/f1b576e061e7a3ab891d8368ade56c7046684c5e))
+* **server:** Add lock to TaskUpdater to prevent race conditions ([#279](https://github.com/a2aproject/a2a-python/issues/279)) ([1022093](https://github.com/a2aproject/a2a-python/commit/1022093110100da27f040be4b35831bf8b1fe094))
+* Support for database backend Task Store ([#259](https://github.com/a2aproject/a2a-python/issues/259)) ([7c46e70](https://github.com/a2aproject/a2a-python/commit/7c46e70b3142f3ec274c492bacbfd6e8f0204b36))
+
+
+### Code Refactoring
+
+* Removes `push_notifier` interface from the SDK and introduces `push_notification_config_store` and `push_notification_sender` for supporting push notifications. ([f1b576e](https://github.com/a2aproject/a2a-python/commit/f1b576e061e7a3ab891d8368ade56c7046684c5e))
+
 ## [0.2.10](https://github.com/a2aproject/a2a-python/compare/v0.2.9...v0.2.10) (2025-06-30)
 
 

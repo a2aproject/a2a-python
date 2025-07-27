@@ -26,6 +26,8 @@ jobs:
         run: uv sync --dev
       - name: Run Ruff Linter
         run: uv run ruff check .
+      - name: Run Ruff Format Check
+        run: uv run ruff format --check .
       - name: Run MyPy Type Checker
         run: uv run mypy src
       - name: Run Pyright (Pylance equivalent)

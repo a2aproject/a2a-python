@@ -2,7 +2,16 @@ import logging
 
 from collections.abc import AsyncGenerator
 
-import grpc
+
+try:
+    import grpc
+except ImportError as e:
+    raise ImportError(
+        'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
+        'Install with: '
+        "'pip install a2a-sdk[grpc]'"
+    ) from e
+
 
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (

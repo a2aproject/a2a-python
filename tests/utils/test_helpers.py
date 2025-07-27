@@ -32,7 +32,7 @@ TEXT_PART_DATA: dict[str, Any] = {'type': 'text', 'text': 'Hello'}
 MINIMAL_MESSAGE_USER: dict[str, Any] = {
     'role': 'user',
     'parts': [TEXT_PART_DATA],
-    'messageId': 'msg-123',
+    'message_id': 'msg-123',
     'type': 'message',
 }
 
@@ -40,7 +40,7 @@ MINIMAL_TASK_STATUS: dict[str, Any] = {'state': 'submitted'}
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': MINIMAL_TASK_STATUS,
     'type': 'task',
 }
@@ -53,52 +53,52 @@ def test_create_task_obj():
 
     task = create_task_obj(send_params)
     assert task.id is not None
-    assert task.contextId == message.contextId
+    assert task.context_id == message.context_id
     assert task.status.state == TaskState.submitted
     assert len(task.history) == 1
     assert task.history[0] == message
 
 
 def test_create_task_obj_generates_context_id():
-    """Test that create_task_obj generates contextId if not present and uses it for the task."""
-    # Message without contextId
+    """Test that create_task_obj generates context_id if not present and uses it for the task."""
+    # Message without context_id
     message_no_context_id = Message(
         role=Role.user,
         parts=[Part(root=TextPart(text='test'))],
-        messageId='msg-no-ctx',
-        taskId='task-from-msg',  # Provide a taskId to differentiate from generated task.id
+        message_id='msg-no-ctx',
+        task_id='task-from-msg',  # Provide a task_id to differentiate from generated task.id
     )
     send_params = MessageSendParams(message=message_no_context_id)
 
-    # Ensure message.contextId is None initially
-    assert send_params.message.contextId is None
+    # Ensure message.context_id is None initially
+    assert send_params.message.context_id is None
 
     known_task_uuid = uuid.UUID('11111111-1111-1111-1111-111111111111')
     known_context_uuid = uuid.UUID('22222222-2222-2222-2222-222222222222')
 
     # Patch uuid.uuid4 to return specific UUIDs in sequence
-    # The first call will be for message.contextId (if None), the second for task.id.
+    # The first call will be for message.context_id (if None), the second for task.id.
     with patch(
         'a2a.utils.helpers.uuid4',
         side_effect=[known_context_uuid, known_task_uuid],
     ) as mock_uuid4:
         task = create_task_obj(send_params)
 
-    # Assert that uuid4 was called twice (once for contextId, once for task.id)
+    # Assert that uuid4 was called twice (once for context_id, once for task.id)
     assert mock_uuid4.call_count == 2
 
-    # Assert that message.contextId was set to the first generated UUID
-    assert send_params.message.contextId == str(known_context_uuid)
+    # Assert that message.context_id was set to the first generated UUID
+    assert send_params.message.context_id == str(known_context_uuid)
 
-    # Assert that task.contextId is the same generated UUID
-    assert task.contextId == str(known_context_uuid)
+    # Assert that task.context_id is the same generated UUID
+    assert task.context_id == str(known_context_uuid)
 
     # Assert that task.id is the second generated UUID
     assert task.id == str(known_task_uuid)
 
-    # Ensure the original message in history also has the updated contextId
+    # Ensure the original message in history also has the updated context_id
     assert len(task.history) == 1
-    assert task.history[0].contextId == str(known_context_uuid)
+    assert task.history[0].context_id == str(known_context_uuid)
 
 
 # Test append_artifact_to_task
@@ -106,7 +106,7 @@ def test_append_artifact_to_task():
     # Prepare base task
     task = Task(**MINIMAL_TASK)
     assert task.id == 'task-abc'
-    assert task.contextId == 'session-xyz'
+    assert task.context_id == 'session-xyz'
     assert task.status.state == TaskState.submitted
     assert task.history is None
     assert task.artifacts is None
@@ -114,42 +114,45 @@ def test_append_artifact_to_task():
 
     # Prepare appending artifact and event
     artifact_1 = Artifact(
-        artifactId='artifact-123', parts=[Part(root=TextPart(text='Hello'))]
+        artifact_id='artifact-123', parts=[Part(root=TextPart(text='Hello'))]
     )
     append_event_1 = TaskArtifactUpdateEvent(
-        artifact=artifact_1, append=False, taskId='123', contextId='123'
+        artifact=artifact_1, append=False, task_id='123', context_id='123'
     )
 
     # Test adding a new artifact (not appending)
     append_artifact_to_task(task, append_event_1)
     assert len(task.artifacts) == 1
-    assert task.artifacts[0].artifactId == 'artifact-123'
+    assert task.artifacts[0].artifact_id == 'artifact-123'
     assert task.artifacts[0].name is None
     assert len(task.artifacts[0].parts) == 1
     assert task.artifacts[0].parts[0].root.text == 'Hello'
 
     # Test replacing the artifact
     artifact_2 = Artifact(
-        artifactId='artifact-123',
+        artifact_id='artifact-123',
         name='updated name',
         parts=[Part(root=TextPart(text='Updated'))],
     )
     append_event_2 = TaskArtifactUpdateEvent(
-        artifact=artifact_2, append=False, taskId='123', contextId='123'
+        artifact=artifact_2, append=False, task_id='123', context_id='123'
     )
     append_artifact_to_task(task, append_event_2)
     assert len(task.artifacts) == 1  # Should still have one artifact
-    assert task.artifacts[0].artifactId == 'artifact-123'
+    assert task.artifacts[0].artifact_id == 'artifact-123'
     assert task.artifacts[0].name == 'updated name'
     assert len(task.artifacts[0].parts) == 1
     assert task.artifacts[0].parts[0].root.text == 'Updated'
 
     # Test appending parts to an existing artifact
     artifact_with_parts = Artifact(
-        artifactId='artifact-123', parts=[Part(root=TextPart(text='Part 2'))]
+        artifact_id='artifact-123', parts=[Part(root=TextPart(text='Part 2'))]
     )
     append_event_3 = TaskArtifactUpdateEvent(
-        artifact=artifact_with_parts, append=True, taskId='123', contextId='123'
+        artifact=artifact_with_parts,
+        append=True,
+        task_id='123',
+        context_id='123',
     )
     append_artifact_to_task(task, append_event_3)
     assert len(task.artifacts[0].parts) == 2
@@ -158,31 +161,31 @@ def test_append_artifact_to_task():
 
     # Test adding another new artifact
     another_artifact_with_parts = Artifact(
-        artifactId='new_artifact',
+        artifact_id='new_artifact',
         parts=[Part(root=TextPart(text='new artifact Part 1'))],
     )
     append_event_4 = TaskArtifactUpdateEvent(
         artifact=another_artifact_with_parts,
         append=False,
-        taskId='123',
-        contextId='123',
+        task_id='123',
+        context_id='123',
     )
     append_artifact_to_task(task, append_event_4)
     assert len(task.artifacts) == 2
-    assert task.artifacts[0].artifactId == 'artifact-123'
-    assert task.artifacts[1].artifactId == 'new_artifact'
+    assert task.artifacts[0].artifact_id == 'artifact-123'
+    assert task.artifacts[1].artifact_id == 'new_artifact'
     assert len(task.artifacts[0].parts) == 2
     assert len(task.artifacts[1].parts) == 1
 
     # Test appending part to a task that does not have a matching artifact
     non_existing_artifact_with_parts = Artifact(
-        artifactId='artifact-456', parts=[Part(root=TextPart(text='Part 1'))]
+        artifact_id='artifact-456', parts=[Part(root=TextPart(text='Part 1'))]
     )
     append_event_5 = TaskArtifactUpdateEvent(
         artifact=non_existing_artifact_with_parts,
         append=True,
-        taskId='123',
-        contextId='123',
+        task_id='123',
+        context_id='123',
     )
     append_artifact_to_task(task, append_event_5)
     assert len(task.artifacts) == 2
@@ -196,7 +199,7 @@ def test_build_text_artifact():
     text = 'This is a sample text'
     artifact = build_text_artifact(text, artifact_id)
 
-    assert artifact.artifactId == artifact_id
+    assert artifact.artifact_id == artifact_id
     assert len(artifact.parts) == 1
     assert artifact.parts[0].root.text == text
 

@@ -53,6 +53,7 @@ Usage:
     ```
 """
 
+import asyncio
 import functools
 import inspect
 import logging
@@ -162,6 +163,12 @@ def trace_function(  # noqa: PLR0915
                 span.set_status(StatusCode.OK)
                 return result
 
+            # asyncio.CancelledError extends from BaseException
+            except asyncio.CancelledError as ce:
+                exception = None
+                logger.debug(f'CancelledError in span {actual_span_name}')
+                span.record_exception(ce)
+                raise
             except Exception as e:
                 exception = e
                 span.record_exception(e)

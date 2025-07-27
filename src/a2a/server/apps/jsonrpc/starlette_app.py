@@ -86,7 +86,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             ),
         ]
 
-        if self.agent_card.supportsAuthenticatedExtendedCard:
+        if self.agent_card.supports_authenticated_extended_card:
             app_routes.append(
                 Route(
                     extended_agent_card_url,

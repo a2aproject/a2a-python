@@ -1,3 +1,4 @@
+import asyncio
 import uuid
 
 from datetime import datetime, timezone
@@ -33,6 +34,14 @@ class TaskUpdater:
         self.event_queue = event_queue
         self.task_id = task_id
         self.context_id = context_id
+        self._lock = asyncio.Lock()
+        self._terminal_state_reached = False
+        self._terminal_states = {
+            TaskState.completed,
+            TaskState.canceled,
+            TaskState.failed,
+            TaskState.rejected,
+        }
 
     async def update_status(
         self,
@@ -49,21 +58,32 @@ class TaskUpdater:
             final: If True, indicates this is the final status update for the task.
             timestamp: Optional ISO 8601 datetime string. Defaults to current time.
         """
-        current_timestamp = (
-            timestamp if timestamp else datetime.now(timezone.utc).isoformat()
-        )
-        await self.event_queue.enqueue_event(
-            TaskStatusUpdateEvent(
-                taskId=self.task_id,
-                contextId=self.context_id,
-                final=final,
-                status=TaskStatus(
-                    state=state,
-                    message=message,
-                    timestamp=current_timestamp,
-                ),
+        async with self._lock:
+            if self._terminal_state_reached:
+                raise RuntimeError(
+                    f'Task {self.task_id} is already in a terminal state.'
+                )
+            if state in self._terminal_states:
+                self._terminal_state_reached = True
+                final = True
+
+            current_timestamp = (
+                timestamp
+                if timestamp
+                else datetime.now(timezone.utc).isoformat()
             )
-        )
+            await self.event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=self.task_id,
+                    context_id=self.context_id,
+                    final=final,
+                    status=TaskStatus(
+                        state=state,
+                        message=message,
+                        timestamp=current_timestamp,
+                    ),
+                )
+            )
 
     async def add_artifact(  # noqa: PLR0913
         self,
@@ -89,16 +109,16 @@ class TaskUpdater:
 
         await self.event_queue.enqueue_event(
             TaskArtifactUpdateEvent(
-                taskId=self.task_id,
-                contextId=self.context_id,
+                task_id=self.task_id,
+                context_id=self.context_id,
                 artifact=Artifact(
-                    artifactId=artifact_id,
+                    artifact_id=artifact_id,
                     name=name,
                     parts=parts,
                     metadata=metadata,
                 ),
                 append=append,
-                lastChunk=last_chunk
+                last_chunk=last_chunk,
             )
         )
 
@@ -177,9 +197,9 @@ class TaskUpdater:
         """
         return Message(
             role=Role.agent,
-            taskId=self.task_id,
-            contextId=self.context_id,
-            messageId=str(uuid.uuid4()),
+            task_id=self.task_id,
+            context_id=self.context_id,
+            message_id=str(uuid.uuid4()),
             metadata=metadata,
             parts=parts,
             isDelta=False

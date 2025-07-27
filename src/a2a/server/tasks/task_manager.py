@@ -41,6 +41,9 @@ class TaskManager:
             initial_message: The `Message` that initiated the task, if any.
                              Used when creating a new task object.
         """
+        if task_id is not None and not (isinstance(task_id, str) and task_id):
+            raise ValueError('Task ID must be a non-empty string')
+
         self.task_id = task_id
         self.context_id = context_id
         self.task_store = task_store
@@ -115,7 +118,7 @@ class TaskManager:
                          when the TaskManager's ID is already set.
         """
         task_id_from_event = (
-            event.id if isinstance(event, Task) else event.taskId
+            event.id if isinstance(event, Task) else event.task_id
         )
         # If task id is known, make sure it is matched
         if self.task_id and self.task_id != task_id_from_event:
@@ -126,14 +129,14 @@ class TaskManager:
             )
         if not self.task_id:
             self.task_id = task_id_from_event
-        if self.context_id and self.context_id != event.contextId:
+        if self.context_id and self.context_id != event.context_id:
             raise ServerError(
                 error=InvalidParamsError(
-                    message=f"Context in event doesn't match TaskManager {self.context_id} : {event.contextId}"
+                    message=f"Context in event doesn't match TaskManager {self.context_id} : {event.context_id}"
                 )
             )
         if not self.context_id:
-            self.context_id = event.contextId
+            self.context_id = event.context_id
 
         logger.debug(
             'Processing save of task event of type %s for task_id: %s',
@@ -185,12 +188,12 @@ class TaskManager:
         if not task:
             logger.info(
                 'Task not found or task_id not set. Creating new task for event (task_id: %s, context_id: %s).',
-                event.taskId,
-                event.contextId,
+                event.task_id,
+                event.context_id,
             )
             # streaming agent did not previously stream task object.
             # Create a task object with the available information and persist the event
-            task = self._init_task_obj(event.taskId, event.contextId)
+            task = self._init_task_obj(event.task_id, event.context_id)
             await self._save_task(task)
 
         return task
@@ -232,7 +235,7 @@ class TaskManager:
         history = [self._initial_message] if self._initial_message else []
         return Task(
             id=task_id,
-            contextId=context_id,
+            context_id=context_id,
             status=TaskStatus(state=TaskState.submitted),
             history=history,
         )
@@ -249,7 +252,7 @@ class TaskManager:
         if not self.task_id:
             logger.info('New task created with id: %s', task.id)
             self.task_id = task.id
-            self.context_id = task.contextId
+            self.context_id = task.context_id
 
     def update_with_message(self, message: Message, task: Task) -> Task:
         """Updates a task object in memory by adding a new message to its history.

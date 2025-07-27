@@ -6,7 +6,9 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import BaseModel, Field, RootModel
+from pydantic import Field, RootModel
+
+from a2a._base import A2ABaseModel
 
 
 class A2A(RootModel[Any]):
@@ -15,7 +17,7 @@ class A2A(RootModel[Any]):
 
 class In(str, Enum):
     """
-    The location of the API key. Valid values are "query", "header", or "cookie".
+    The location of the API key.
     """
 
     cookie = 'cookie'
@@ -23,852 +25,905 @@ class In(str, Enum):
     query = 'query'
 
 
-class APIKeySecurityScheme(BaseModel):
+class APIKeySecurityScheme(A2ABaseModel):
     """
-    API Key security scheme.
+    Defines a security scheme using an API key.
     """
 
     description: str | None = None
     """
-    Description of this security scheme.
+    An optional description for the security scheme.
     """
-    in_: In = Field(..., alias='in')
+    in_: In
     """
-    The location of the API key. Valid values are "query", "header", or "cookie".
+    The location of the API key.
     """
     name: str
     """
-    The name of the header, query or cookie parameter to be used.
+    The name of the header, query, or cookie parameter to be used.
     """
     type: Literal['apiKey'] = 'apiKey'
-
-
-class AgentExtension(BaseModel):
     """
-    A declaration of an extension supported by an Agent.
+    The type of the security scheme. Must be 'apiKey'.
+    """
+
+
+class AgentCardSignature(A2ABaseModel):
+    """
+    AgentCardSignature represents a JWS signature of an AgentCard.
+    This follows the JSON format of an RFC 7515 JSON Web Signature (JWS).
+    """
+
+    header: dict[str, Any] | None = None
+    """
+    The unprotected JWS header values.
+    """
+    protected: str
+    """
+    The protected JWS header for the signature. This is a Base64url-encoded
+    JSON object, as per RFC 7515.
+    """
+    signature: str
+    """
+    The computed signature, Base64url-encoded.
+    """
+
+
+class AgentExtension(A2ABaseModel):
+    """
+    A declaration of a protocol extension supported by an Agent.
     """
 
     description: str | None = None
     """
-    A description of how this agent uses this extension.
+    A human-readable description of how this agent uses the extension.
     """
     params: dict[str, Any] | None = None
     """
-    Optional configuration for the extension.
+    Optional, extension-specific configuration parameters.
     """
     required: bool | None = None
     """
-    Whether the client must follow specific requirements of the extension.
+    If true, the client must understand and comply with the extension's requirements
+    to interact with the agent.
     """
     uri: str
     """
-    The URI of the extension.
+    The unique URI identifying the extension.
     """
 
 
-class AgentInterface(BaseModel):
+class AgentInterface(A2ABaseModel):
     """
-    AgentInterface provides a declaration of a combination of the
-    target url and the supported transport to interact with the agent.
+    Declares a combination of a target URL and a transport protocol for interacting with the agent.
+    This allows agents to expose the same functionality over multiple transport mechanisms.
     """
 
-    transport: str
+    transport: str = Field(..., examples=['JSONRPC', 'GRPC', 'HTTP+JSON'])
     """
-    The transport supported this url. This is an open form string, to be
-    easily extended for many transport protocols. The core ones officially
-    supported are JSONRPC, GRPC and HTTP+JSON.
+    The transport protocol supported at this URL.
     """
-    url: str
+    url: str = Field(
+        ...,
+        examples=[
+            'https://api.example.com/a2a/v1',
+            'https://grpc.example.com/a2a',
+            'https://rest.example.com/v1',
+        ],
+    )
+    """
+    The URL where this interface is available. Must be a valid absolute HTTPS URL in production.
+    """
 
 
-class AgentProvider(BaseModel):
+class AgentProvider(A2ABaseModel):
     """
     Represents the service provider of an agent.
     """
 
     organization: str
     """
-    Agent provider's organization name.
+    The name of the agent provider's organization.
     """
     url: str
     """
-    Agent provider's URL.
+    A URL for the agent provider's website or relevant documentation.
     """
 
 
-class AgentSkill(BaseModel):
+class AgentSkill(A2ABaseModel):
     """
-    Represents a unit of capability that an agent can perform.
+    Represents a distinct capability or function that an agent can perform.
     """
 
     description: str
     """
-    Description of the skill - will be used by the client or a human
-    as a hint to understand what the skill does.
+    A detailed description of the skill, intended to help clients or users
+    understand its purpose and functionality.
     """
     examples: list[str] | None = Field(
         default=None, examples=[['I need a recipe for bread']]
     )
     """
-    The set of example scenarios that the skill can perform.
-    Will be used by the client as a hint to understand how the skill can be used.
+    Example prompts or scenarios that this skill can handle. Provides a hint to
+    the client on how to use the skill.
     """
     id: str
     """
-    Unique identifier for the agent's skill.
+    A unique identifier for the agent's skill.
     """
-    inputModes: list[str] | None = None
+    input_modes: list[str] | None = None
     """
-    The set of interaction modes that the skill supports
-    (if different than the default).
-    Supported media types for input.
+    The set of supported input MIME types for this skill, overriding the agent's defaults.
     """
     name: str
     """
-    Human readable name of the skill.
+    A human-readable name for the skill.
     """
-    outputModes: list[str] | None = None
+    output_modes: list[str] | None = None
     """
-    Supported media types for output.
+    The set of supported output MIME types for this skill, overriding the agent's defaults.
     """
-    tags: list[str] = Field(..., examples=[['cooking', 'customer support', 'billing']])
+    tags: list[str] = Field(
+        ..., examples=[['cooking', 'customer support', 'billing']]
+    )
     """
-    Set of tagwords describing classes of capabilities for this specific skill.
-    """
-
-
-class AuthorizationCodeOAuthFlow(BaseModel):
-    """
-    Configuration details for a supported OAuth Flow
+    A set of keywords describing the skill's capabilities.
     """
 
-    authorizationUrl: str
+
+class AuthorizationCodeOAuthFlow(A2ABaseModel):
     """
-    The authorization URL to be used for this flow. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS
+    Defines configuration details for the OAuth 2.0 Authorization Code flow.
     """
-    refreshUrl: str | None = None
+
+    authorization_url: str
     """
-    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS.
+    The authorization URL to be used for this flow.
+    This MUST be a URL and use TLS.
+    """
+    refresh_url: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens.
+    This MUST be a URL and use TLS.
     """
     scopes: dict[str, str]
     """
-    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
-    description for it. The map MAY be empty.
+    The available scopes for the OAuth2 security scheme. A map between the scope
+    name and a short description for it.
     """
-    tokenUrl: str
+    token_url: str
     """
-    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
-    requires the use of TLS.
-    """
-
-
-class ClientCredentialsOAuthFlow(BaseModel):
-    """
-    Configuration details for a supported OAuth Flow
+    The token URL to be used for this flow.
+    This MUST be a URL and use TLS.
     """
 
-    refreshUrl: str | None = None
+
+class ClientCredentialsOAuthFlow(A2ABaseModel):
     """
-    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS.
+    Defines configuration details for the OAuth 2.0 Client Credentials flow.
+    """
+
+    refresh_url: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be a URL.
     """
     scopes: dict[str, str]
     """
-    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
-    description for it. The map MAY be empty.
+    The available scopes for the OAuth2 security scheme. A map between the scope
+    name and a short description for it.
     """
-    tokenUrl: str
+    token_url: str
     """
-    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
-    requires the use of TLS.
+    The token URL to be used for this flow. This MUST be a URL.
     """
 
 
-class ContentTypeNotSupportedError(BaseModel):
+class ContentTypeNotSupportedError(A2ABaseModel):
     """
-    A2A specific error indicating incompatible content types between request and agent capabilities.
+    An A2A-specific error indicating an incompatibility between the requested
+    content types and the agent's capabilities.
     """
 
     code: Literal[-32005] = -32005
     """
-    A Number that indicates the error type that occurred.
+    The error code for an unsupported content type.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Incompatible content types'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class DataPart(BaseModel):
+class DataPart(A2ABaseModel):
     """
-    Represents a structured data segment within a message part.
+    Represents a structured data segment (e.g., JSON) within a message or artifact.
     """
 
     data: dict[str, Any]
     """
-    Structured data content
+    The structured data content.
     """
     kind: Literal['data'] = 'data'
     """
-    Part type - data for DataParts
+    The type of this part, used as a discriminator. Always 'data'.
     """
     metadata: dict[str, Any] | None = None
     """
-    Optional metadata associated with the part.
+    Optional metadata associated with this part.
     """
 
 
-class DeleteTaskPushNotificationConfigParams(BaseModel):
+class DeleteTaskPushNotificationConfigParams(A2ABaseModel):
     """
-    Parameters for removing pushNotificationConfiguration associated with a Task
+    Defines parameters for deleting a specific push notification configuration for a task.
     """
 
     id: str
     """
-    Task id.
+    The unique identifier of the task.
     """
     metadata: dict[str, Any] | None = None
-    pushNotificationConfigId: str
-
-
-class DeleteTaskPushNotificationConfigRequest(BaseModel):
     """
-    JSON-RPC request model for the 'tasks/pushNotificationConfig/delete' method.
+    Optional metadata associated with the request.
+    """
+    push_notification_config_id: str
+    """
+    The ID of the push notification configuration to delete.
+    """
+
+
+class DeleteTaskPushNotificationConfigRequest(A2ABaseModel):
+    """
+    Represents a JSON-RPC request for the `tasks/pushNotificationConfig/delete` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/pushNotificationConfig/delete'] = (
         'tasks/pushNotificationConfig/delete'
     )
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/pushNotificationConfig/delete'.
     """
     params: DeleteTaskPushNotificationConfigParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters identifying the push notification configuration to delete.
     """
 
 
-class DeleteTaskPushNotificationConfigSuccessResponse(BaseModel):
+class DeleteTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'tasks/pushNotificationConfig/delete' method.
+    Represents a successful JSON-RPC response for the `tasks/pushNotificationConfig/delete` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: None
     """
-    The result object on success.
+    The result is null on successful deletion.
     """
 
 
-class FileBase(BaseModel):
+class FileBase(A2ABaseModel):
     """
-    Represents the base entity for FileParts
+    Defines base properties for a file.
     """
 
-    mimeType: str | None = None
+    mime_type: str | None = None
     """
-    Optional mimeType for the file
+    The MIME type of the file (e.g., "application/pdf").
     """
     name: str | None = None
     """
-    Optional name for the file
+    An optional name for the file (e.g., "document.pdf").
     """
 
 
-class FileWithBytes(BaseModel):
+class FileWithBytes(A2ABaseModel):
     """
-    Define the variant where 'bytes' is present and 'uri' is absent
+    Represents a file with its content provided directly as a base64-encoded string.
     """
 
     bytes: str
     """
-    base64 encoded content of the file
+    The base64-encoded content of the file.
     """
-    mimeType: str | None = None
+    mime_type: str | None = None
     """
-    Optional mimeType for the file
-    """
-    name: str | None = None
-    """
-    Optional name for the file
-    """
-
-
-class FileWithUri(BaseModel):
-    """
-    Define the variant where 'uri' is present and 'bytes' is absent
-    """
-
-    mimeType: str | None = None
-    """
-    Optional mimeType for the file
+    The MIME type of the file (e.g., "application/pdf").
     """
     name: str | None = None
     """
-    Optional name for the file
+    An optional name for the file (e.g., "document.pdf").
+    """
+
+
+class FileWithUri(A2ABaseModel):
+    """
+    Represents a file with its content located at a specific URI.
+    """
+
+    mime_type: str | None = None
+    """
+    The MIME type of the file (e.g., "application/pdf").
+    """
+    name: str | None = None
+    """
+    An optional name for the file (e.g., "document.pdf").
     """
     uri: str
     """
-    URL for the File content
+    A URL pointing to the file's content.
     """
 
 
-class GetTaskPushNotificationConfigParams(BaseModel):
+class GetTaskPushNotificationConfigParams(A2ABaseModel):
     """
-    Parameters for fetching a pushNotificationConfiguration associated with a Task
+    Defines parameters for fetching a specific push notification configuration for a task.
     """
 
     id: str
     """
-    Task id.
+    The unique identifier of the task.
     """
     metadata: dict[str, Any] | None = None
-    pushNotificationConfigId: str | None = None
+    """
+    Optional metadata associated with the request.
+    """
+    push_notification_config_id: str | None = None
+    """
+    The ID of the push notification configuration to retrieve.
+    """
 
 
-class HTTPAuthSecurityScheme(BaseModel):
+class HTTPAuthSecurityScheme(A2ABaseModel):
     """
-    HTTP Authentication security scheme.
+    Defines a security scheme using HTTP authentication.
     """
 
-    bearerFormat: str | None = None
+    bearer_format: str | None = None
     """
-    A hint to the client to identify how the bearer token is formatted. Bearer tokens are usually
-    generated by an authorization server, so this information is primarily for documentation
-    purposes.
+    A hint to the client to identify how the bearer token is formatted (e.g., "JWT").
+    This is primarily for documentation purposes.
     """
     description: str | None = None
     """
-    Description of this security scheme.
+    An optional description for the security scheme.
     """
     scheme: str
     """
-    The name of the HTTP Authentication scheme to be used in the Authorization header as defined
-    in RFC7235. The values used SHOULD be registered in the IANA Authentication Scheme registry.
-    The value is case-insensitive, as defined in RFC7235.
+    The name of the HTTP Authentication scheme to be used in the Authorization header,
+    as defined in RFC7235 (e.g., "Bearer").
+    This value should be registered in the IANA Authentication Scheme registry.
     """
     type: Literal['http'] = 'http'
-
-
-class ImplicitOAuthFlow(BaseModel):
     """
-    Configuration details for a supported OAuth Flow
+    The type of the security scheme. Must be 'http'.
     """
 
-    authorizationUrl: str
+
+class ImplicitOAuthFlow(A2ABaseModel):
     """
-    The authorization URL to be used for this flow. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS
+    Defines configuration details for the OAuth 2.0 Implicit flow.
     """
-    refreshUrl: str | None = None
+
+    authorization_url: str
     """
-    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS.
+    The authorization URL to be used for this flow. This MUST be a URL.
+    """
+    refresh_url: str | None = None
+    """
+    The URL to be used for obtaining refresh tokens. This MUST be a URL.
     """
     scopes: dict[str, str]
     """
-    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
-    description for it. The map MAY be empty.
+    The available scopes for the OAuth2 security scheme. A map between the scope
+    name and a short description for it.
     """
 
 
-class InternalError(BaseModel):
+class InternalError(A2ABaseModel):
     """
-    JSON-RPC error indicating an internal JSON-RPC error on the server.
+    An error indicating an internal error on the server.
     """
 
     code: Literal[-32603] = -32603
     """
-    A Number that indicates the error type that occurred.
+    The error code for an internal server error.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Internal error'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class InvalidAgentResponseError(BaseModel):
+class InvalidAgentResponseError(A2ABaseModel):
     """
-    A2A specific error indicating agent returned invalid response for the current method
+    An A2A-specific error indicating that the agent returned a response that
+    does not conform to the specification for the current method.
     """
 
     code: Literal[-32006] = -32006
     """
-    A Number that indicates the error type that occurred.
+    The error code for an invalid agent response.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Invalid agent response'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class InvalidParamsError(BaseModel):
+class InvalidParamsError(A2ABaseModel):
     """
-    JSON-RPC error indicating invalid method parameter(s).
+    An error indicating that the method parameters are invalid.
     """
 
     code: Literal[-32602] = -32602
     """
-    A Number that indicates the error type that occurred.
+    The error code for an invalid parameters error.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Invalid parameters'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class InvalidRequestError(BaseModel):
+class InvalidRequestError(A2ABaseModel):
     """
-    JSON-RPC error indicating the JSON sent is not a valid Request object.
+    An error indicating that the JSON sent is not a valid Request object.
     """
 
     code: Literal[-32600] = -32600
     """
-    A Number that indicates the error type that occurred.
+    The error code for an invalid request.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Request payload validation error'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class JSONParseError(BaseModel):
+class JSONParseError(A2ABaseModel):
     """
-    JSON-RPC error indicating invalid JSON was received by the server.
+    An error indicating that the server received invalid JSON.
     """
 
     code: Literal[-32700] = -32700
     """
-    A Number that indicates the error type that occurred.
+    The error code for a JSON parse error.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Invalid JSON payload'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class JSONRPCError(BaseModel):
+class JSONRPCError(A2ABaseModel):
     """
-    Represents a JSON-RPC 2.0 Error object.
-    This is typically included in a JSONRPCErrorResponse when an error occurs.
+    Represents a JSON-RPC 2.0 Error object, included in an error response.
     """
 
     code: int
     """
-    A Number that indicates the error type that occurred.
+    A number that indicates the error type that occurred.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str
     """
-    A String providing a short description of the error.
+    A string providing a short description of the error.
     """
 
 
-class JSONRPCMessage(BaseModel):
+class JSONRPCMessage(A2ABaseModel):
     """
-    Base interface for any JSON-RPC 2.0 request or response.
+    Defines the base structure for any JSON-RPC 2.0 request, response, or notification.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    A unique identifier established by the client. It must be a String, a Number, or null.
+    The server must reply with the same value in the response. This property is omitted for notifications.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
 
 
-class JSONRPCRequest(BaseModel):
+class JSONRPCRequest(A2ABaseModel):
     """
     Represents a JSON-RPC 2.0 Request object.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    A unique identifier established by the client. It must be a String, a Number, or null.
+    The server must reply with the same value in the response. This property is omitted for notifications.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: str
     """
-    A String containing the name of the method to be invoked.
+    A string containing the name of the method to be invoked.
     """
     params: dict[str, Any] | None = None
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    A structured value holding the parameter values to be used during the method invocation.
     """
 
 
-class JSONRPCSuccessResponse(BaseModel):
+class JSONRPCSuccessResponse(A2ABaseModel):
     """
-    Represents a JSON-RPC 2.0 Success Response object.
+    Represents a successful JSON-RPC 2.0 Response object.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Any
     """
-    The result object on success
+    The value of this member is determined by the method invoked on the Server.
     """
 
 
-class ListTaskPushNotificationConfigParams(BaseModel):
+class ListTaskPushNotificationConfigParams(A2ABaseModel):
     """
-    Parameters for getting list of pushNotificationConfigurations associated with a Task
+    Defines parameters for listing all push notification configurations associated with a task.
     """
 
     id: str
     """
-    Task id.
+    The unique identifier of the task.
     """
     metadata: dict[str, Any] | None = None
-
-
-class ListTaskPushNotificationConfigRequest(BaseModel):
     """
-    JSON-RPC request model for the 'tasks/pushNotificationConfig/list' method.
+    Optional metadata associated with the request.
+    """
+
+
+class ListTaskPushNotificationConfigRequest(A2ABaseModel):
+    """
+    Represents a JSON-RPC request for the `tasks/pushNotificationConfig/list` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/pushNotificationConfig/list'] = (
         'tasks/pushNotificationConfig/list'
     )
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/pushNotificationConfig/list'.
     """
     params: ListTaskPushNotificationConfigParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters identifying the task whose configurations are to be listed.
     """
 
 
 class Role(str, Enum):
     """
-    Message sender's role
+    Identifies the sender of the message. `user` for the client, `agent` for the service.
     """
 
     agent = 'agent'
     user = 'user'
 
 
-class MethodNotFoundError(BaseModel):
+class MethodNotFoundError(A2ABaseModel):
     """
-    JSON-RPC error indicating the method does not exist or is not available.
+    An error indicating that the requested method does not exist or is not available.
     """
 
     code: Literal[-32601] = -32601
     """
-    A Number that indicates the error type that occurred.
+    The error code for a method not found error.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Method not found'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class OpenIdConnectSecurityScheme(BaseModel):
+class OpenIdConnectSecurityScheme(A2ABaseModel):
     """
-    OpenID Connect security scheme configuration.
+    Defines a security scheme using OpenID Connect.
     """
 
     description: str | None = None
     """
-    Description of this security scheme.
+    An optional description for the security scheme.
     """
-    openIdConnectUrl: str
+    open_id_connect_url: str
     """
-    Well-known URL to discover the [[OpenID-Connect-Discovery]] provider metadata.
+    The OpenID Connect Discovery URL for the OIDC provider's metadata.
     """
     type: Literal['openIdConnect'] = 'openIdConnect'
-
-
-class PartBase(BaseModel):
     """
-    Base properties common to all message parts.
+    The type of the security scheme. Must be 'openIdConnect'.
+    """
+
+
+class PartBase(A2ABaseModel):
+    """
+    Defines base properties common to all message or artifact parts.
     """
 
     metadata: dict[str, Any] | None = None
     """
-    Optional metadata associated with the part.
+    Optional metadata associated with this part.
     """
 
 
-class PasswordOAuthFlow(BaseModel):
+class PasswordOAuthFlow(A2ABaseModel):
     """
-    Configuration details for a supported OAuth Flow
+    Defines configuration details for the OAuth 2.0 Resource Owner Password flow.
     """
 
-    refreshUrl: str | None = None
+    refresh_url: str | None = None
     """
-    The URL to be used for obtaining refresh tokens. This MUST be in the form of a URL. The OAuth2
-    standard requires the use of TLS.
+    The URL to be used for obtaining refresh tokens. This MUST be a URL.
     """
     scopes: dict[str, str]
     """
-    The available scopes for the OAuth2 security scheme. A map between the scope name and a short
-    description for it. The map MAY be empty.
+    The available scopes for the OAuth2 security scheme. A map between the scope
+    name and a short description for it.
     """
-    tokenUrl: str
+    token_url: str
     """
-    The token URL to be used for this flow. This MUST be in the form of a URL. The OAuth2 standard
-    requires the use of TLS.
+    The token URL to be used for this flow. This MUST be a URL.
     """
 
 
-class PushNotificationAuthenticationInfo(BaseModel):
+class PushNotificationAuthenticationInfo(A2ABaseModel):
     """
-    Defines authentication details for push notifications.
+    Defines authentication details for a push notification endpoint.
     """
 
     credentials: str | None = None
     """
-    Optional credentials
+    Optional credentials required by the push notification endpoint.
     """
     schemes: list[str]
     """
-    Supported authentication schemes - e.g. Basic, Bearer
+    A list of supported authentication schemes (e.g., 'Basic', 'Bearer').
     """
 
 
-class PushNotificationConfig(BaseModel):
+class PushNotificationConfig(A2ABaseModel):
     """
-    Configuration for setting up push notifications for task updates.
+    Defines the configuration for setting up push notifications for task updates.
     """
 
     authentication: PushNotificationAuthenticationInfo | None = None
+    """
+    Optional authentication details for the agent to use when calling the notification URL.
+    """
     id: str | None = None
     """
-    Push Notification ID - created by server to support multiple callbacks
+    A unique ID for the push notification configuration, created by the server
+    to support multiple notification callbacks.
     """
     token: str | None = None
     """
-    Token unique to this task/session.
+    A unique token for this task or session to validate incoming push notifications.
     """
     url: str
     """
-    URL for sending the push notifications.
+    The callback URL where the agent should send push notifications.
     """
 
 
-class PushNotificationNotSupportedError(BaseModel):
+class PushNotificationNotSupportedError(A2ABaseModel):
     """
-    A2A specific error indicating the agent does not support push notifications.
+    An A2A-specific error indicating that the agent does not support push notifications.
     """
 
     code: Literal[-32003] = -32003
     """
-    A Number that indicates the error type that occurred.
+    The error code for when push notifications are not supported.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Push Notification is not supported'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class SecuritySchemeBase(BaseModel):
+class SecuritySchemeBase(A2ABaseModel):
     """
-    Base properties shared by all security schemes.
+    Defines base properties shared by all security scheme objects.
     """
 
     description: str | None = None
     """
-    Description of this security scheme.
+    An optional description for the security scheme.
     """
 
 
-class TaskIdParams(BaseModel):
+class TaskIdParams(A2ABaseModel):
     """
-    Parameters containing only a task ID, used for simple task operations.
+    Defines parameters containing a task ID, used for simple task operations.
     """
 
     id: str
     """
-    Task id.
+    The unique identifier of the task.
     """
     metadata: dict[str, Any] | None = None
-
-
-class TaskNotCancelableError(BaseModel):
     """
-    A2A specific error indicating the task is in a state where it cannot be canceled.
+    Optional metadata associated with the request.
+    """
+
+
+class TaskNotCancelableError(A2ABaseModel):
+    """
+    An A2A-specific error indicating that the task is in a state where it cannot be canceled.
     """
 
     code: Literal[-32002] = -32002
     """
-    A Number that indicates the error type that occurred.
+    The error code for a task that cannot be canceled.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Task cannot be canceled'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class TaskNotFoundError(BaseModel):
+class TaskNotFoundError(A2ABaseModel):
     """
-    A2A specific error indicating the requested task ID was not found.
+    An A2A-specific error indicating that the requested task ID was not found.
     """
 
     code: Literal[-32001] = -32001
     """
-    A Number that indicates the error type that occurred.
+    The error code for a task not found error.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'Task not found'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
-class TaskPushNotificationConfig(BaseModel):
+class TaskPushNotificationConfig(A2ABaseModel):
     """
-    Parameters for setting or getting push notification configuration for a task
-    """
-
-    pushNotificationConfig: PushNotificationConfig
-    """
-    Push notification configuration.
-    """
-    taskId: str
-    """
-    Task id.
+    A container associating a push notification configuration with a specific task.
     """
 
+    push_notification_config: PushNotificationConfig
+    """
+    The push notification configuration for this task.
+    """
+    task_id: str
+    """
+    The ID of the task.
+    """
 
-class TaskQueryParams(BaseModel):
+
+class TaskQueryParams(A2ABaseModel):
     """
-    Parameters for querying a task, including optional history length.
+    Defines parameters for querying a task, with an option to limit history length.
     """
 
-    historyLength: int | None = None
+    history_length: int | None = None
     """
-    Number of recent messages to be retrieved.
+    The number of most recent messages from the task's history to retrieve.
     """
     id: str
     """
-    Task id.
+    The unique identifier of the task.
     """
     metadata: dict[str, Any] | None = None
-
-
-class TaskResubscriptionRequest(BaseModel):
     """
-    JSON-RPC request model for the 'tasks/resubscribe' method.
+    Optional metadata associated with the request.
+    """
+
+
+class TaskResubscriptionRequest(A2ABaseModel):
+    """
+    Represents a JSON-RPC request for the `tasks/resubscribe` method, used to resume a streaming connection.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/resubscribe'] = 'tasks/resubscribe'
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/resubscribe'.
     """
     params: TaskIdParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters identifying the task to resubscribe to.
     """
 
 
 class TaskState(str, Enum):
     """
-    Represents the possible states of a Task.
+    Defines the lifecycle states of a Task.
     """
 
     submitted = 'submitted'
@@ -882,42 +937,52 @@ class TaskState(str, Enum):
     unknown = 'unknown'
 
 
-class TextPart(BaseModel):
+class TextPart(A2ABaseModel):
     """
-    Represents a text segment within parts.
+    Represents a text segment within a message or artifact.
     """
 
     kind: Literal['text'] = 'text'
     """
-    Part type - text for TextParts
+    The type of this part, used as a discriminator. Always 'text'.
     """
     metadata: dict[str, Any] | None = None
     """
-    Optional metadata associated with the part.
+    Optional metadata associated with this part.
     """
     text: str
     """
-    Text content
+    The string content of the text part.
     """
 
 
-class UnsupportedOperationError(BaseModel):
+class TransportProtocol(str, Enum):
     """
-    A2A specific error indicating the requested operation is not supported by the agent.
+    Supported A2A transport protocols.
+    """
+
+    jsonrpc = 'JSONRPC'
+    grpc = 'GRPC'
+    http_json = 'HTTP+JSON'
+
+
+class UnsupportedOperationError(A2ABaseModel):
+    """
+    An A2A-specific error indicating that the requested operation is not supported by the agent.
     """
 
     code: Literal[-32004] = -32004
     """
-    A Number that indicates the error type that occurred.
+    The error code for an unsupported operation.
     """
     data: Any | None = None
     """
-    A Primitive or Structured value that contains additional information about the error.
+    A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
     message: str | None = 'This operation is not supported'
     """
-    A String providing a short description of the error.
+    The error message.
     """
 
 
@@ -949,146 +1014,145 @@ class A2AError(
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
     )
+    """
+    A discriminated union of all standard JSON-RPC and A2A-specific error types.
+    """
 
 
-class AgentCapabilities(BaseModel):
+class AgentCapabilities(A2ABaseModel):
     """
     Defines optional capabilities supported by an agent.
     """
 
     extensions: list[AgentExtension] | None = None
     """
-    extensions supported by this agent.
+    A list of protocol extensions supported by the agent.
     """
-    pushNotifications: bool | None = None
+    push_notifications: bool | None = None
     """
-    true if the agent can notify updates to client.
+    Indicates if the agent supports sending push notifications for asynchronous task updates.
     """
-    stateTransitionHistory: bool | None = None
+    state_transition_history: bool | None = None
     """
-    true if the agent exposes status change history for tasks.
+    Indicates if the agent provides a history of state transitions for a task.
     """
     streaming: bool | None = None
     """
-    true if the agent supports SSE.
+    Indicates if the agent supports Server-Sent Events (SSE) for streaming responses.
     """
 
 
-class CancelTaskRequest(BaseModel):
+class CancelTaskRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'tasks/cancel' method.
+    Represents a JSON-RPC request for the `tasks/cancel` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/cancel'] = 'tasks/cancel'
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/cancel'.
     """
     params: TaskIdParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters identifying the task to cancel.
     """
 
 
-class FilePart(BaseModel):
+class FilePart(A2ABaseModel):
     """
-    Represents a File segment within parts.
+    Represents a file segment within a message or artifact. The file content can be
+    provided either directly as bytes or as a URI.
     """
 
     file: FileWithBytes | FileWithUri
     """
-    File content either as url or bytes
+    The file content, represented as either a URI or as base64-encoded bytes.
     """
     kind: Literal['file'] = 'file'
     """
-    Part type - file for FileParts
+    The type of this part, used as a discriminator. Always 'file'.
     """
     metadata: dict[str, Any] | None = None
     """
-    Optional metadata associated with the part.
+    Optional metadata associated with this part.
     """
 
 
-class GetTaskPushNotificationConfigRequest(BaseModel):
+class GetTaskPushNotificationConfigRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'tasks/pushNotificationConfig/get' method.
+    Represents a JSON-RPC request for the `tasks/pushNotificationConfig/get` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/pushNotificationConfig/get'] = (
         'tasks/pushNotificationConfig/get'
     )
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/pushNotificationConfig/get'.
     """
     params: TaskIdParams | GetTaskPushNotificationConfigParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
-    TaskIdParams type is deprecated for this method use `GetTaskPushNotificationConfigParams` instead.
+    The parameters for getting a push notification configuration.
     """
 
 
-class GetTaskPushNotificationConfigSuccessResponse(BaseModel):
+class GetTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'tasks/pushNotificationConfig/get' method.
+    Represents a successful JSON-RPC response for the `tasks/pushNotificationConfig/get` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: TaskPushNotificationConfig
     """
-    The result object on success.
+    The result, containing the requested push notification configuration.
     """
 
 
-class GetTaskRequest(BaseModel):
+class GetTaskRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'tasks/get' method.
+    Represents a JSON-RPC request for the `tasks/get` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/get'] = 'tasks/get'
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/get'.
     """
     params: TaskQueryParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters for querying a task.
     """
 
 
-class JSONRPCErrorResponse(BaseModel):
+class JSONRPCErrorResponse(A2ABaseModel):
     """
     Represents a JSON-RPC 2.0 Error Response object.
     """
@@ -1107,234 +1171,241 @@ class JSONRPCErrorResponse(BaseModel):
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
     )
+    """
+    An object describing the error that occurred.
+    """
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
 
 
-class ListTaskPushNotificationConfigSuccessResponse(BaseModel):
+class ListTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'tasks/pushNotificationConfig/list' method.
+    Represents a successful JSON-RPC response for the `tasks/pushNotificationConfig/list` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: list[TaskPushNotificationConfig]
     """
-    The result object on success.
+    The result, containing an array of all push notification configurations for the task.
     """
 
 
-class MessageSendConfiguration(BaseModel):
+class MessageSendConfiguration(A2ABaseModel):
     """
-    Configuration for the send message request.
+    Defines configuration options for a `message/send` or `message/stream` request.
     """
 
-    acceptedOutputModes: list[str]
+    accepted_output_modes: list[str] | None = None
     """
-    Accepted output modalities by the client.
+    A list of output MIME types the client is prepared to accept in the response.
     """
     blocking: bool | None = None
     """
-    If the server should treat the client as a blocking request.
+    If true, the client will wait for the task to complete. The server may reject this if the task is long-running.
     """
-    historyLength: int | None = None
+    history_length: int | None = None
     """
-    Number of recent messages to be retrieved.
+    The number of most recent messages from the task's history to retrieve in the response.
     """
-    pushNotificationConfig: PushNotificationConfig | None = None
+    push_notification_config: PushNotificationConfig | None = None
     """
-    Where the server should send notifications when disconnected.
-    """
-
-
-class OAuthFlows(BaseModel):
-    """
-    Allows configuration of the supported OAuth Flows
+    Configuration for the agent to send push notifications for updates after the initial response.
     """
 
-    authorizationCode: AuthorizationCodeOAuthFlow | None = None
+
+class OAuthFlows(A2ABaseModel):
+    """
+    Defines the configuration for the supported OAuth 2.0 flows.
+    """
+
+    authorization_code: AuthorizationCodeOAuthFlow | None = None
     """
     Configuration for the OAuth Authorization Code flow. Previously called accessCode in OpenAPI 2.0.
     """
-    clientCredentials: ClientCredentialsOAuthFlow | None = None
+    client_credentials: ClientCredentialsOAuthFlow | None = None
     """
-    Configuration for the OAuth Client Credentials flow. Previously called application in OpenAPI 2.0
+    Configuration for the OAuth Client Credentials flow. Previously called application in OpenAPI 2.0.
     """
     implicit: ImplicitOAuthFlow | None = None
     """
-    Configuration for the OAuth Implicit flow
+    Configuration for the OAuth Implicit flow.
     """
     password: PasswordOAuthFlow | None = None
     """
-    Configuration for the OAuth Resource Owner Password flow
+    Configuration for the OAuth Resource Owner Password flow.
     """
 
 
 class Part(RootModel[TextPart | FilePart | DataPart]):
     root: TextPart | FilePart | DataPart
     """
-    Represents a part of a message, which can be text, a file, or structured data.
+    A discriminated union representing a part of a message or artifact, which can
+    be text, a file, or structured data.
     """
 
 
-class SetTaskPushNotificationConfigRequest(BaseModel):
+class SetTaskPushNotificationConfigRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'tasks/pushNotificationConfig/set' method.
+    Represents a JSON-RPC request for the `tasks/pushNotificationConfig/set` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['tasks/pushNotificationConfig/set'] = (
         'tasks/pushNotificationConfig/set'
     )
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'tasks/pushNotificationConfig/set'.
     """
     params: TaskPushNotificationConfig
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters for setting the push notification configuration.
     """
 
 
-class SetTaskPushNotificationConfigSuccessResponse(BaseModel):
+class SetTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'tasks/pushNotificationConfig/set' method.
+    Represents a successful JSON-RPC response for the `tasks/pushNotificationConfig/set` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: TaskPushNotificationConfig
     """
-    The result object on success.
+    The result, containing the configured push notification settings.
     """
 
 
-class Artifact(BaseModel):
+class Artifact(A2ABaseModel):
     """
-    Represents an artifact generated for a task.
+    Represents a file, data structure, or other resource generated by an agent during a task.
     """
 
-    artifactId: str
+    artifact_id: str
     """
-    Unique identifier for the artifact.
+    A unique identifier for the artifact within the scope of the task.
     """
     description: str | None = None
     """
-    Optional description for the artifact.
+    An optional, human-readable description of the artifact.
     """
     extensions: list[str] | None = None
     """
-    The URIs of extensions that are present or contributed to this Artifact.
+    The URIs of extensions that are relevant to this artifact.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions. The key is an extension-specific identifier.
     """
     name: str | None = None
     """
-    Optional name for the artifact.
+    An optional, human-readable name for the artifact.
     """
     parts: list[Part]
     """
-    Artifact parts.
+    An array of content parts that make up the artifact.
     """
 
 
 class DeleteTaskPushNotificationConfigResponse(
-    RootModel[JSONRPCErrorResponse | DeleteTaskPushNotificationConfigSuccessResponse]
+    RootModel[
+        JSONRPCErrorResponse | DeleteTaskPushNotificationConfigSuccessResponse
+    ]
 ):
     root: JSONRPCErrorResponse | DeleteTaskPushNotificationConfigSuccessResponse
     """
-    JSON-RPC response for the 'tasks/pushNotificationConfig/delete' method.
+    Represents a JSON-RPC response for the `tasks/pushNotificationConfig/delete` method.
     """
 
 
 class GetTaskPushNotificationConfigResponse(
-    RootModel[JSONRPCErrorResponse | GetTaskPushNotificationConfigSuccessResponse]
+    RootModel[
+        JSONRPCErrorResponse | GetTaskPushNotificationConfigSuccessResponse
+    ]
 ):
     root: JSONRPCErrorResponse | GetTaskPushNotificationConfigSuccessResponse
     """
-    JSON-RPC response for the 'tasks/pushNotificationConfig/set' method.
+    Represents a JSON-RPC response for the `tasks/pushNotificationConfig/get` method.
     """
 
 
 class ListTaskPushNotificationConfigResponse(
-    RootModel[JSONRPCErrorResponse | ListTaskPushNotificationConfigSuccessResponse]
+    RootModel[
+        JSONRPCErrorResponse | ListTaskPushNotificationConfigSuccessResponse
+    ]
 ):
     root: JSONRPCErrorResponse | ListTaskPushNotificationConfigSuccessResponse
     """
-    JSON-RPC response for the 'tasks/pushNotificationConfig/list' method.
+    Represents a JSON-RPC response for the `tasks/pushNotificationConfig/list` method.
     """
 
 
-class Message(BaseModel):
+class Message(A2ABaseModel):
     """
-    Represents a single message exchanged between user and agent.
+    Represents a single message in the conversation between a user and an agent.
     """
 
-    contextId: str | None = None
+    context_id: str | None = None
     """
-    The context the message is associated with
+    The context identifier for this message, used to group related interactions.
     """
     extensions: list[str] | None = None
     """
-    The URIs of extensions that are present or contributed to this Message.
+    The URIs of extensions that are relevant to this message.
     """
     kind: Literal['message'] = 'message'
     """
-    Event type
+    The type of this object, used as a discriminator. Always 'message' for a Message.
     """
-    messageId: str
+    message_id: str
     """
-    Identifier created by the message creator
+    A unique identifier for the message, typically a UUID, generated by the sender.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions. The key is an extension-specific identifier.
     """
     parts: list[Part]
     """
-    Message content
+    An array of content parts that form the message body. A message can be
+    composed of multiple parts of different types (e.g., text and files).
     """
-    referenceTaskIds: list[str] | None = None
+    reference_task_ids: list[str] | None = None
     """
-    List of tasks referenced as context by this message.
+    A list of other task IDs that this message references for additional context.
     """
     role: Role
     """
-    Message sender's role
+    Identifies the sender of the message. `user` for the client, `agent` for the service.
     """
-    taskId: str | None = None
+    task_id: str | None = None
     """
-    Identifier of task the message is related to
+    The identifier of the task this message is part of. Can be omitted for the first message of a new task.
     """
     isDelta: bool | None = None
     """
@@ -1342,39 +1413,43 @@ class Message(BaseModel):
     """
 
 
-class MessageSendParams(BaseModel):
+class MessageSendParams(A2ABaseModel):
     """
-    Sent by the client to the agent as a request. May create, continue or restart a task.
+    Defines the parameters for a request to send a message to an agent. This can be used
+    to create a new task, continue an existing one, or restart a task.
     """
 
     configuration: MessageSendConfiguration | None = None
     """
-    Send message configuration.
+    Optional configuration for the send request.
     """
     message: Message
     """
-    The message being sent to the server.
+    The message object being sent to the agent.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions.
     """
 
 
-class OAuth2SecurityScheme(BaseModel):
+class OAuth2SecurityScheme(A2ABaseModel):
     """
-    OAuth2.0 security scheme configuration.
+    Defines a security scheme using OAuth 2.0.
     """
 
     description: str | None = None
     """
-    Description of this security scheme.
+    An optional description for the security scheme.
     """
     flows: OAuthFlows
     """
-    An object containing configuration information for the flow types supported.
+    An object containing configuration information for the supported OAuth 2.0 flows.
     """
     type: Literal['oauth2'] = 'oauth2'
+    """
+    The type of the security scheme. Must be 'oauth2'.
+    """
 
 
 class SecurityScheme(
@@ -1392,147 +1467,154 @@ class SecurityScheme(
         | OpenIdConnectSecurityScheme
     )
     """
-    Mirrors the OpenAPI Security Scheme Object
-    (https://swagger.io/specification/#security-scheme-object)
+    Defines a security scheme that can be used to secure an agent's endpoints.
+    This is a discriminated union type based on the OpenAPI 3.0 Security Scheme Object.
     """
 
 
-class SendMessageRequest(BaseModel):
+class SendMessageRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'message/send' method.
+    Represents a JSON-RPC request for the `message/send` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['message/send'] = 'message/send'
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'message/send'.
     """
     params: MessageSendParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters for sending a message.
     """
 
 
-class SendStreamingMessageRequest(BaseModel):
+class SendStreamingMessageRequest(A2ABaseModel):
     """
-    JSON-RPC request model for the 'message/stream' method.
+    Represents a JSON-RPC request for the `message/stream` method.
     """
 
     id: str | int
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier for this request.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     method: Literal['message/stream'] = 'message/stream'
     """
-    A String containing the name of the method to be invoked.
+    The method name. Must be 'message/stream'.
     """
     params: MessageSendParams
     """
-    A Structured value that holds the parameter values to be used during the invocation of the method.
+    The parameters for sending a message.
     """
 
 
 class SetTaskPushNotificationConfigResponse(
-    RootModel[JSONRPCErrorResponse | SetTaskPushNotificationConfigSuccessResponse]
+    RootModel[
+        JSONRPCErrorResponse | SetTaskPushNotificationConfigSuccessResponse
+    ]
 ):
     root: JSONRPCErrorResponse | SetTaskPushNotificationConfigSuccessResponse
     """
-    JSON-RPC response for the 'tasks/pushNotificationConfig/set' method.
+    Represents a JSON-RPC response for the `tasks/pushNotificationConfig/set` method.
     """
 
 
-class TaskArtifactUpdateEvent(BaseModel):
+class TaskArtifactUpdateEvent(A2ABaseModel):
     """
-    Sent by server during sendStream or subscribe requests
+    An event sent by the agent to notify the client that an artifact has been
+    generated or updated. This is typically used in streaming models.
     """
 
     append: bool | None = None
     """
-    Indicates if this artifact appends to a previous one
+    If true, the content of this artifact should be appended to a previously sent artifact with the same ID.
     """
     artifact: Artifact
     """
-    Generated artifact
+    The artifact that was generated or updated.
     """
-    contextId: str
+    context_id: str
     """
-    The context the task is associated with
+    The context ID associated with the task.
     """
     kind: Literal['artifact-update'] = 'artifact-update'
     """
-    Event type
+    The type of this event, used as a discriminator. Always 'artifact-update'.
     """
-    lastChunk: bool | None = None
+    last_chunk: bool | None = None
     """
-    Indicates if this is the last chunk of the artifact
+    If true, this is the final chunk of the artifact.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions.
     """
-    taskId: str
+    task_id: str
     """
-    Task id
+    The ID of the task this artifact belongs to.
     """
 
 
-class TaskStatus(BaseModel):
+class TaskStatus(A2ABaseModel):
     """
-    TaskState and accompanying message.
+    Represents the status of a task at a specific point in time.
     """
 
     message: Message | None = None
     """
-    Additional status updates for client
+    An optional, human-readable message providing more details about the current status.
     """
     state: TaskState
-    timestamp: str | None = Field(default=None, examples=['2023-10-27T10:00:00Z'])
     """
-    ISO 8601 datetime string when the status was recorded.
+    The current state of the task's lifecycle.
+    """
+    timestamp: str | None = Field(
+        default=None, examples=['2023-10-27T10:00:00Z']
+    )
+    """
+    An ISO 8601 datetime string indicating when this status was recorded.
     """
 
 
-class TaskStatusUpdateEvent(BaseModel):
+class TaskStatusUpdateEvent(A2ABaseModel):
     """
-    Sent by server during sendStream or subscribe requests
+    An event sent by the agent to notify the client of a change in a task's status.
+    This is typically used in streaming or subscription models.
     """
 
-    contextId: str
+    context_id: str
     """
-    The context the task is associated with
+    The context ID associated with the task.
     """
     final: bool
     """
-    Indicates the end of the event stream
+    If true, this is the final event in the stream for this interaction.
     """
     kind: Literal['status-update'] = 'status-update'
     """
-    Event type
+    The type of this event, used as a discriminator. Always 'status-update'.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions.
     """
     status: TaskStatus
     """
-    Current status of the task
+    The new status of the task.
     """
-    taskId: str
+    task_id: str
     """
-    Task id
+    The ID of the task that was updated.
     """
 
 
@@ -1561,215 +1643,242 @@ class A2ARequest(
         | DeleteTaskPushNotificationConfigRequest
     )
     """
-    A2A supported request types
+    A discriminated union representing all possible JSON-RPC 2.0 requests supported by the A2A specification.
     """
 
 
-class AgentCard(BaseModel):
+class AgentCard(A2ABaseModel):
     """
-    An AgentCard conveys key information:
-    - Overall details (version, name, description, uses)
-    - Skills: A set of capabilities the agent can perform
-    - Default modalities/content types supported by the agent.
-    - Authentication requirements
+    The AgentCard is a self-describing manifest for an agent. It provides essential
+    metadata including the agent's identity, capabilities, skills, supported
+    communication methods, and security requirements.
     """
 
-    additionalInterfaces: list[AgentInterface] | None = None
+    additional_interfaces: list[AgentInterface] | None = None
     """
-    Announcement of additional supported transports. Client can use any of
-    the supported transports.
+    A list of additional supported interfaces (transport and URL combinations).
+    This allows agents to expose multiple transports, potentially at different URLs.
+
+    Best practices:
+    - SHOULD include all supported transports for completeness
+    - SHOULD include an entry matching the main 'url' and 'preferredTransport'
+    - MAY reuse URLs if multiple transports are available at the same endpoint
+    - MUST accurately declare the transport available at each URL
+
+    Clients can select any interface from this list based on their transport capabilities
+    and preferences. This enables transport negotiation and fallback scenarios.
     """
     capabilities: AgentCapabilities
     """
-    Optional capabilities supported by the agent.
+    A declaration of optional capabilities supported by the agent.
     """
-    defaultInputModes: list[str]
+    default_input_modes: list[str]
     """
-    The set of interaction modes that the agent supports across all skills. This can be overridden per-skill.
-    Supported media types for input.
+    Default set of supported input MIME types for all skills, which can be
+    overridden on a per-skill basis.
     """
-    defaultOutputModes: list[str]
+    default_output_modes: list[str]
     """
-    Supported media types for output.
+    Default set of supported output MIME types for all skills, which can be
+    overridden on a per-skill basis.
     """
     description: str = Field(
         ..., examples=['Agent that helps users with recipes and cooking.']
     )
     """
-    A human-readable description of the agent. Used to assist users and
-    other agents in understanding what the agent can do.
+    A human-readable description of the agent, assisting users and other agents
+    in understanding its purpose.
     """
-    documentationUrl: str | None = None
+    documentation_url: str | None = None
     """
-    A URL to documentation for the agent.
+    An optional URL to the agent's documentation.
     """
-    iconUrl: str | None = None
+    icon_url: str | None = None
     """
-    A URL to an icon for the agent.
+    An optional URL to an icon for the agent.
     """
     name: str = Field(..., examples=['Recipe Agent'])
     """
-    Human readable name of the agent.
+    A human-readable name for the agent.
     """
-    preferredTransport: str | None = None
+    preferred_transport: str | None = Field(
+        default='JSONRPC', examples=['JSONRPC', 'GRPC', 'HTTP+JSON']
+    )
     """
-    The transport of the preferred endpoint. If empty, defaults to JSONRPC.
+    The transport protocol for the preferred endpoint (the main 'url' field).
+    If not specified, defaults to 'JSONRPC'.
+
+    IMPORTANT: The transport specified here MUST be available at the main 'url'.
+    This creates a binding between the main URL and its supported transport protocol.
+    Clients should prefer this transport and URL combination when both are supported.
     """
-    protocolVersion: str | None = '0.2.5'
+    protocol_version: str | None = '0.2.6'
     """
     The version of the A2A protocol this agent supports.
     """
     provider: AgentProvider | None = None
     """
-    The service provider of the agent
+    Information about the agent's service provider.
     """
     security: list[dict[str, list[str]]] | None = None
     """
-    Security requirements for contacting the agent.
+    A list of security requirement objects that apply to all agent interactions. Each object
+    lists security schemes that can be used. Follows the OpenAPI 3.0 Security Requirement Object.
     """
-    securitySchemes: dict[str, SecurityScheme] | None = None
+    security_schemes: dict[str, SecurityScheme] | None = None
     """
-    Security scheme details used for authenticating with this agent.
+    A declaration of the security schemes available to authorize requests. The key is the
+    scheme name. Follows the OpenAPI 3.0 Security Scheme Object.
+    """
+    signatures: list[AgentCardSignature] | None = None
+    """
+    JSON Web Signatures computed for this AgentCard.
     """
     skills: list[AgentSkill]
     """
-    Skills are a unit of capability that an agent can perform.
+    The set of skills, or distinct capabilities, that the agent can perform.
     """
-    supportsAuthenticatedExtendedCard: bool | None = None
+    supports_authenticated_extended_card: bool | None = None
     """
-    true if the agent supports providing an extended agent card when the user is authenticated.
-    Defaults to false if not specified.
+    If true, the agent can provide an extended agent card with additional details
+    to authenticated users. Defaults to false.
     """
-    url: str
+    url: str = Field(..., examples=['https://api.example.com/a2a/v1'])
     """
-    A URL to the address the agent is hosted at. This represents the
-    preferred endpoint as declared by the agent.
+    The preferred endpoint URL for interacting with the agent.
+    This URL MUST support the transport specified by 'preferredTransport'.
     """
     version: str = Field(..., examples=['1.0.0'])
     """
-    The version of the agent - format is up to the provider.
+    The agent's own version number. The format is defined by the provider.
     """
 
 
-class Task(BaseModel):
+class Task(A2ABaseModel):
+    """
+    Represents a single, stateful operation or conversation between a client and an agent.
+    """
+
     artifacts: list[Artifact] | None = None
     """
-    Collection of artifacts created by the agent.
+    A collection of artifacts generated by the agent during the execution of the task.
     """
-    contextId: str
+    context_id: str
     """
-    Server-generated id for contextual alignment across interactions
+    A server-generated identifier for maintaining context across multiple related tasks or interactions.
     """
     history: list[Message] | None = None
+    """
+    An array of messages exchanged during the task, representing the conversation history.
+    """
     id: str
     """
-    Unique identifier for the task
+    A unique identifier for the task, generated by the client for a new task or provided by the agent.
     """
     kind: Literal['task'] = 'task'
     """
-    Event type
+    The type of this object, used as a discriminator. Always 'task' for a Task.
     """
     metadata: dict[str, Any] | None = None
     """
-    Extension metadata.
+    Optional metadata for extensions. The key is an extension-specific identifier.
     """
     status: TaskStatus
     """
-    Current status of the task
+    The current status of the task, including its state and a descriptive message.
     """
 
 
-class CancelTaskSuccessResponse(BaseModel):
+class CancelTaskSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'tasks/cancel' method.
+    Represents a successful JSON-RPC response for the `tasks/cancel` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task
     """
-    The result object on success.
+    The result, containing the final state of the canceled Task object.
     """
 
 
-class GetTaskSuccessResponse(BaseModel):
+class GetTaskSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response for the 'tasks/get' method.
+    Represents a successful JSON-RPC response for the `tasks/get` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task
     """
-    The result object on success.
+    The result, containing the requested Task object.
     """
 
 
-class SendMessageSuccessResponse(BaseModel):
+class SendMessageSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'message/send' method.
+    Represents a successful JSON-RPC response for the `message/send` method.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task | Message
     """
-    The result object on success
+    The result, which can be a direct reply Message or the initial Task object.
     """
 
 
-class SendStreamingMessageSuccessResponse(BaseModel):
+class SendStreamingMessageSuccessResponse(A2ABaseModel):
     """
-    JSON-RPC success response model for the 'message/stream' method.
+    Represents a successful JSON-RPC response for the `message/stream` method.
+    The server may send multiple response objects for a single request.
     """
 
     id: str | int | None = None
     """
-    An identifier established by the Client that MUST contain a String, Number.
-    Numbers SHOULD NOT contain fractional parts.
+    The identifier established by the client.
     """
     jsonrpc: Literal['2.0'] = '2.0'
     """
-    Specifies the version of the JSON-RPC protocol. MUST be exactly "2.0".
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
     result: Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     """
-    The result object on success
+    The result, which can be a Message, Task, or a streaming update event.
     """
 
 
-class CancelTaskResponse(RootModel[JSONRPCErrorResponse | CancelTaskSuccessResponse]):
+class CancelTaskResponse(
+    RootModel[JSONRPCErrorResponse | CancelTaskSuccessResponse]
+):
     root: JSONRPCErrorResponse | CancelTaskSuccessResponse
     """
-    JSON-RPC response for the 'tasks/cancel' method.
+    Represents a JSON-RPC response for the `tasks/cancel` method.
     """
 
 
 class GetTaskResponse(RootModel[JSONRPCErrorResponse | GetTaskSuccessResponse]):
     root: JSONRPCErrorResponse | GetTaskSuccessResponse
     """
-    JSON-RPC response for the 'tasks/get' method.
+    Represents a JSON-RPC response for the `tasks/get` method.
     """
 
 
@@ -1798,14 +1907,17 @@ class JSONRPCResponse(
         | DeleteTaskPushNotificationConfigSuccessResponse
     )
     """
-    Represents a JSON-RPC 2.0 Response object.
+    A discriminated union representing all possible JSON-RPC 2.0 responses
+    for the A2A specification methods.
     """
 
 
-class SendMessageResponse(RootModel[JSONRPCErrorResponse | SendMessageSuccessResponse]):
+class SendMessageResponse(
+    RootModel[JSONRPCErrorResponse | SendMessageSuccessResponse]
+):
     root: JSONRPCErrorResponse | SendMessageSuccessResponse
     """
-    JSON-RPC response model for the 'message/send' method.
+    Represents a JSON-RPC response for the `message/send` method.
     """
 
 
@@ -1814,5 +1926,5 @@ class SendStreamingMessageResponse(
 ):
     root: JSONRPCErrorResponse | SendStreamingMessageSuccessResponse
     """
-    JSON-RPC response model for the 'message/stream' method.
+    Represents a JSON-RPC response for the `message/stream` method.
     """

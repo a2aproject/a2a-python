@@ -1,13 +1,12 @@
-from a2a.server.tasks.base_push_notification_sender import (
-    BasePushNotificationSender,
-)
-
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
+from a2a.server.tasks.base_push_notification_sender import (
+    BasePushNotificationSender,
+)
 from a2a.types import (
     PushNotificationConfig,
     Task,
@@ -19,15 +18,15 @@ from a2a.types import (
 def create_sample_task(task_id='task123', status_state=TaskState.completed):
     return Task(
         id=task_id,
-        contextId='ctx456',
+        context_id='ctx456',
         status=TaskStatus(state=status_state),
     )
 
 
 def create_sample_push_config(
-    url='http://example.com/callback', config_id='cfg1'
+    url='http://example.com/callback', config_id='cfg1', token=None
 ):
-    return PushNotificationConfig(id=config_id, url=url)
+    return PushNotificationConfig(id=config_id, url=url, token=token)
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
@@ -61,6 +60,31 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=task_data.model_dump(mode='json', exclude_none=True),
+            headers=None,
+        )
+        mock_response.raise_for_status.assert_called_once()
+
+    async def test_send_notification_with_token_success(self):
+        task_id = 'task_send_success'
+        task_data = create_sample_task(task_id=task_id)
+        config = create_sample_push_config(
+            url='http://notify.me/here', token='unique_token'
+        )
+        self.mock_config_store.get_info.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_data)
+
+        self.mock_config_store.get_info.assert_awaited_once_with
+
+        # assert httpx_client post method got invoked with right parameters
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=task_data.model_dump(mode='json', exclude_none=True),
+            headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
 
@@ -97,6 +121,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=task_data.model_dump(mode='json', exclude_none=True),
+            headers=None,
         )
         mock_logger.error.assert_called_once()
 
@@ -124,10 +149,12 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
             json=task_data.model_dump(mode='json', exclude_none=True),
+            headers=None,
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
             json=task_data.model_dump(mode='json', exclude_none=True),
+            headers=None,
         )
         mock_response.raise_for_status.call_count = 2

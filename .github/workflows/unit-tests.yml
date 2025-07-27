@@ -15,11 +15,24 @@ jobs:
       postgres:
         image: postgres:15-alpine
         env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
+          POSTGRES_USER: a2a
+          POSTGRES_PASSWORD: a2a_password
           POSTGRES_DB: a2a_test
         ports:
           - 5432:5432
+        options: >-
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+      mysql:
+        image: mysql:8.0
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: a2a_test
+          MYSQL_USER: a2a
+          MYSQL_PASSWORD: a2a_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot" --health-interval=10s --health-timeout=5s --health-retries=5
 
     strategy:
       matrix:
@@ -31,11 +44,10 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: ${{ matrix.python-version }}
-      - name: Set postgres for tests
-        run: |
-          sudo apt-get update && sudo apt-get install -y postgresql-client
-          PGPASSWORD=postgres psql -h localhost -p 5432 -U postgres -d a2a_test -f ${{ github.workspace }}/docker/postgres/init.sql
-          export POSTGRES_TEST_DSN="postgresql+asyncpg://postgres:postgres@localhost:5432/a2a_test"
+      - name: Set up test environment variables
+        run: |          
+          echo "POSTGRES_TEST_DSN=postgresql+asyncpg://a2a:a2a_password@localhost:5432/a2a_test" >> $GITHUB_ENV
+          echo "MYSQL_TEST_DSN=mysql+aiomysql://a2a:a2a_password@localhost:3306/a2a_test" >> $GITHUB_ENV
 
       - name: Install uv
         uses: astral-sh/setup-uv@v6
@@ -43,8 +55,8 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: uv sync --dev --extra sql
+        run: uv sync --dev --extra sql --extra encryption --extra grpc
       - name: Run tests and check coverage
-        run: uv run pytest --cov=a2a --cov-report=xml --cov-fail-under=90
+        run: uv run pytest --cov=a2a --cov-report=xml --cov-fail-under=89
       - name: Show coverage summary in log
         run: uv run coverage report

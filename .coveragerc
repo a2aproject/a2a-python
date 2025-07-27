@@ -4,7 +4,6 @@ omit =
     */tests/*
     */site-packages/*
     */__init__.py
-    */noxfile.py*
     src/a2a/grpc/*
 
 [report]

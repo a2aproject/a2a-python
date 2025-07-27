@@ -4,6 +4,8 @@ import sys
 
 from collections.abc import AsyncGenerator
 
+from pydantic import ValidationError
+
 from a2a.server.events.event_queue import Event, EventQueue
 from a2a.types import (
     InternalError,
@@ -138,6 +140,9 @@ class EventConsumer:
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():
                     break
+            except ValidationError as e:
+                logger.error(f'Invalid event format received: {e}')
+                continue
             except Exception as e:
                 logger.error(
                     f'Stopping event consumption due to exception: {e}'

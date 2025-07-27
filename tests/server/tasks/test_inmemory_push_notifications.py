@@ -4,11 +4,11 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
-from a2a.server.tasks.inmemory_push_notification_config_store import (
-    InMemoryPushNotificationConfigStore,
-)
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
+)
+from a2a.server.tasks.inmemory_push_notification_config_store import (
+    InMemoryPushNotificationConfigStore,
 )
 from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
 
@@ -20,15 +20,15 @@ from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
 def create_sample_task(task_id='task123', status_state=TaskState.completed):
     return Task(
         id=task_id,
-        contextId='ctx456',
+        context_id='ctx456',
         status=TaskStatus(state=status_state),
     )
 
 
 def create_sample_push_config(
-    url='http://example.com/callback', config_id='cfg1'
+    url='http://example.com/callback', config_id='cfg1', token=None
 ):
-    return PushNotificationConfig(id=config_id, url=url)
+    return PushNotificationConfig(id=config_id, url=url, token=token)
 
 
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
@@ -152,6 +152,37 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(
             called_kwargs['json'],
             task_data.model_dump(mode='json', exclude_none=True),
+        )
+        self.assertNotIn(
+            'auth', called_kwargs
+        )  # auth is not passed by current implementation
+        mock_response.raise_for_status.assert_called_once()
+
+    async def test_send_notification_with_token_success(self):
+        task_id = 'task_send_success'
+        task_data = create_sample_task(task_id=task_id)
+        config = create_sample_push_config(
+            url='http://notify.me/here', token='unique_token'
+        )
+        await self.config_store.set_info(task_id, config)
+
+        # Mock the post call to simulate success
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.notifier.send_notification(task_data)  # Pass only task_data
+
+        self.mock_httpx_client.post.assert_awaited_once()
+        called_args, called_kwargs = self.mock_httpx_client.post.call_args
+        self.assertEqual(called_args[0], config.url)
+        self.assertEqual(
+            called_kwargs['json'],
+            task_data.model_dump(mode='json', exclude_none=True),
+        )
+        self.assertEqual(
+            called_kwargs['headers'],
+            {'X-A2A-Notification-Token': 'unique_token'},
         )
         self.assertNotIn(
             'auth', called_kwargs

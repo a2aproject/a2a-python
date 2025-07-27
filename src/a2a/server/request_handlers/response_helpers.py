@@ -41,7 +41,7 @@ RT = TypeVar(
     GetTaskPushNotificationConfigResponse,
     SendStreamingMessageResponse,
     ListTaskPushNotificationConfigResponse,
-    DeleteTaskPushNotificationConfigResponse
+    DeleteTaskPushNotificationConfigResponse,
 )
 """Type variable for RootModel response types."""
 
@@ -55,7 +55,7 @@ SPT = TypeVar(
     GetTaskPushNotificationConfigSuccessResponse,
     SendStreamingMessageSuccessResponse,
     ListTaskPushNotificationConfigSuccessResponse,
-    DeleteTaskPushNotificationConfigSuccessResponse
+    DeleteTaskPushNotificationConfigSuccessResponse,
 )
 """Type variable for SuccessResponse types."""
 
