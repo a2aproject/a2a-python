@@ -584,7 +584,8 @@ class HelloAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task = context.current_task
         if not task:
-            task = new_task(context.message)  # type: ignore
+            assert context.message is not None, "A message is required to create a new task"
+            task = new_task(context.message) # type: ignore
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
@@ -635,7 +636,7 @@ async def test_on_message_send_non_blocking():
 
     assert result is not None
     assert type(result) == Task
-    result.status.state = TaskState.submitted
+    assert result.status.state == TaskState.submitted
 
     # Polling for 500ms until task is completed.
     task: Task | None = None
