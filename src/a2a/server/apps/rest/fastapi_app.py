@@ -76,7 +76,7 @@ class A2ARESTFastAPIApplication:
 
         @router.get(f'{rpc_url}{agent_card_url}')
         async def get_agent_card(request: Request) -> Response:
-            return await self._handler._handle_get_agent_card(request)
+            return await self._handler._handle_get_agent_card(request)  # noqa: SLF001
 
         app.include_router(router)
         return app
