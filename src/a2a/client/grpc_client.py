@@ -21,6 +21,7 @@ from a2a.client.client import (
     Consumer,
 )
 from a2a.client.client_task_manager import ClientTaskManager
+from a2a.client.errors import A2AClientInvalidStateError
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
@@ -104,8 +105,7 @@ class GrpcTransportClient:
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[
-        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
-        None,
+        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
         """Sends a streaming message request to the agent and yields responses as they arrive.
 
@@ -134,18 +134,36 @@ class GrpcTransportClient:
             response = await stream.read()
             if response == grpc.aio.EOF:  # pyright: ignore [reportAttributeAccessIssue]
                 break
-            if response.HasField('msg'):
-                yield proto_utils.FromProto.message(response.msg)
-            elif response.HasField('task'):
-                yield proto_utils.FromProto.task(response.task)
-            elif response.HasField('status_update'):
-                yield proto_utils.FromProto.task_status_update_event(
-                    response.status_update
-                )
-            elif response.HasField('artifact_update'):
-                yield proto_utils.FromProto.task_artifact_update_event(
-                    response.artifact_update
-                )
+            yield proto_utils.FromProto.stream_response(response)
+
+    async def resubscribe(
+        self, request: TaskIdParams, *, context: ClientCallContext | None = None
+    ) -> AsyncGenerator[
+        Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+    ]:
+        """Reconnects to get task updates.
+
+        This method uses a unary server-side stream to receive updates.
+
+        Args:
+            request: The `TaskIdParams` object containing the task information to reconnect to.
+            context: The client call context.
+
+        Yields:
+            Task update events, which can be either a Task, Message,
+            TaskStatusUpdateEvent, or TaskArtifactUpdateEvent.
+
+        Raises:
+            A2AClientInvalidStateError: If the server returns an invalid response.
+        """
+        stream = self.stub.TaskSubscription(
+            a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}')
+        )
+        while True:
+            response = await stream.read()
+            if response == grpc.aio.EOF:  # pyright: ignore [reportAttributeAccessIssue]
+                break
+            yield proto_utils.FromProto.stream_response(response)
 
     async def get_task(
         self,
@@ -283,9 +301,7 @@ class GrpcClient(Client):
             raise ValueError('GRPC client requires channel factory.')
         self._card = card
         self._config = config
-        # Defer init to first use.
-        self._transport_client = None
-        channel = self._config.grpc_channel_factory(self._card.url)
+        channel = config.grpc_channel_factory(self._card.url)
         stub = a2a_pb2_grpc.A2AServiceStub(channel)
         self._transport_client = GrpcTransportClient(stub, self._card)
 
@@ -331,27 +347,45 @@ class GrpcClient(Client):
             await self.consume(result, self._card)
             yield result
             return
-        # Get Task tracker
         tracker = ClientTaskManager()
-        async for event in self._transport_client.send_message_streaming(
+        stream = self._transport_client.send_message_streaming(
             MessageSendParams(
                 message=request,
                 configuration=config,
             ),
             context=context,
-        ):
-            # Update task, check for errors, etc.
-            if isinstance(event, Message):
-                await self.consume(event, self._card)
-                yield event
-                return
-            await tracker.process(event)
-            result = (
-                tracker.get_task(),
-                None if isinstance(event, Task) else event,
+        )
+        # Only the first event may be a Message. All others must be Task
+        # or TaskStatusUpdates. Separate this one out, which allows our core
+        # event processing logic to ignore that case.
+        # TODO(mikeas1): Reconcile with other transport logic.
+        first_event = await anext(stream)
+        if isinstance(first_event, Message):
+            yield first_event
+            return
+        yield await self._process_response(tracker, first_event)
+        async for result in stream:
+            yield await self._process_response(tracker, result)
+
+    async def _process_response(
+        self,
+        tracker: ClientTaskManager,
+        event: Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
+    ) -> ClientEvent:
+        result = event.root.result
+        # Update task, check for errors, etc.
+        if isinstance(result, Message):
+            raise A2AClientInvalidStateError(
+                'received a streamed Message from server after first response; this'
+                ' is not supported'
             )
-            await self.consume(result, self._card)
-            yield result
+        await tracker.process(result)
+        result = (
+            tracker.get_task_or_raise(),
+            None if isinstance(result, Task) else result,
+        )
+        await self.consume(result, self._card)
+        return result
 
     async def get_task(
         self,
@@ -438,7 +472,7 @@ class GrpcClient(Client):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream.
 
         This is only available if both the client and server support streaming.
@@ -464,12 +498,14 @@ class GrpcClient(Client):
             raise NotImplementedError(
                 'Resubscribe is not implemented on the gRPC transport client.'
             )
-        async for event in self._transport_client.resubscribe(
+        # Note: works correctly for resubscription where the first event is the
+        # current Task state.
+        tracker = ClientTaskManager()
+        async for result in self._transport_client.resubscribe(
             request,
             context=context,
         ):
-            # Update task, check for errors, etc.
-            yield event
+            yield await self._process_response(tracker, result)
 
     async def get_card(
         self,

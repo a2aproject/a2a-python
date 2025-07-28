@@ -1,5 +1,7 @@
 """Custom exceptions for the A2A client."""
 
+from a2a.types import JSONRPCErrorResponse
+
 
 class A2AClientError(Exception):
     """Base exception for A2A Client errors."""
@@ -57,3 +59,31 @@ class A2AClientInvalidArgsError(A2AClientError):
         """
         self.message = message
         super().__init__(f'Invalid arguments error: {message}')
+
+
+class A2AClientInvalidStateError(A2AClientError):
+    """Client exception for an invalid client state."""
+
+    def __init__(self, message: str):
+        """Initializes the A2AClientInvalidStateError.
+
+        Args:
+            message: A descriptive error message.
+        """
+        self.message = message
+        super().__init__(f'Invalid state error: {message}')
+
+
+class A2AClientJSONRPCError(A2AClientError):
+    """Client exception for JSON-RPC errors returned by the server."""
+
+    def __init__(self, error: JSONRPCErrorResponse):
+        """Initializes the A2AClientJsonRPCError.
+
+        Args:
+            code: The error code.
+            message: A descriptive error message.
+            data: Optional additional error data.
+        """
+        self.error = error.error
+        super().__init__(f'JSON-RPC Error {error.error}')

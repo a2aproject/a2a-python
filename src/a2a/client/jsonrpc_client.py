@@ -13,12 +13,15 @@ from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import (
     Client,
     ClientConfig,
+    ClientEvent,
     Consumer,
 )
 from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.errors import (
     A2AClientHTTPError,
+    A2AClientInvalidStateError,
     A2AClientJSONError,
+    A2AClientJSONRPCError,
     A2AClientTimeoutError,
 )
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
@@ -47,9 +50,7 @@ from a2a.types import (
     TaskQueryParams,
     TaskResubscriptionRequest,
 )
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-)
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -482,8 +483,8 @@ class JsonRpcTransportClient:
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
-                    yield SendStreamingMessageResponse.model_validate(
-                        json.loads(sse.data)
+                    yield SendStreamingMessageResponse.model_validate_json(
+                        sse.data
                     )
             except SSEError as e:
                 raise A2AClientHTTPError(
@@ -572,7 +573,7 @@ class JsonRpcClient(Client):
         )
 
     def get_http_args(
-        self, context: ClientCallContext
+        self, context: ClientCallContext | None
     ) -> dict[str, Any] | None:
         """Extract HTTP-specific keyword arguments from the client call context.
 
@@ -589,7 +590,7 @@ class JsonRpcClient(Client):
         request: Message,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[ClientEvent | Message]:
         """Send a message to the agent and consumes the response(s).
 
         This method handles both blocking (non-streaming) and streaming responses
@@ -627,14 +628,14 @@ class JsonRpcClient(Client):
                 context=context,
             )
             if isinstance(response.root, JSONRPCErrorResponse):
-                raise response.root.error
+                raise A2AClientJSONRPCError(response.root)
             result = response.root.result
             result = result if isinstance(result, Message) else (result, None)
             await self.consume(result, self._card)
             yield result
             return
         tracker = ClientTaskManager()
-        async for event in self._transport_client.send_message_streaming(
+        stream = self._transport_client.send_message_streaming(
             SendStreamingMessageRequest(
                 params=MessageSendParams(
                     message=request,
@@ -644,21 +645,39 @@ class JsonRpcClient(Client):
             ),
             http_kwargs=self.get_http_args(context),
             context=context,
-        ):
-            if isinstance(event.root, JSONRPCErrorResponse):
-                raise event.root.error
-            result = event.root.result
-            # Update task, check for errors, etc.
-            if isinstance(result, Message):
-                yield result
-                return
-            await tracker.process(result)
-            result = (
-                tracker.get_task(),
-                None if isinstance(result, Task) else result,
+        )
+        # Only the first event may be a Message. All others must be Task
+        # or TaskStatusUpdates. Separate this one out, which allows our core
+        # event processing logic to ignore that case.
+        first_event = await anext(stream)
+        if isinstance(first_event, Message):
+            yield first_event
+            return
+        yield await self._process_response(tracker, first_event)
+        async for event in stream:
+            yield await self._process_response(tracker, event)
+
+    async def _process_response(
+        self,
+        tracker: ClientTaskManager,
+        event: SendStreamingMessageResponse,
+    ) -> ClientEvent:
+        if isinstance(event.root, JSONRPCErrorResponse):
+            raise A2AClientJSONRPCError(event.root)
+        result = event.root.result
+        # Update task, check for errors, etc.
+        if isinstance(result, Message):
+            raise A2AClientInvalidStateError(
+                'received a streamed Message from server after first response; this'
+                ' is not supported'
             )
-            await self.consume(result, self._card)
-            yield result
+        await tracker.process(result)
+        result = (
+            tracker.get_task_or_raise(),
+            None if isinstance(result, Task) else result,
+        )
+        await self.consume(result, self._card)
+        return result
 
     async def get_task(
         self,
@@ -765,7 +784,7 @@ class JsonRpcClient(Client):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Resubscribe to a task's event stream.
 
         This is only available if both the client and server support streaming.
@@ -781,9 +800,10 @@ class JsonRpcClient(Client):
             Exception: If streaming is not supported.
         """
         if not self._config.streaming or not self._card.capabilities.streaming:
-            raise Exception(
+            raise NotImplementedError(
                 'client and/or server do not support resubscription.'
             )
+        tracker = ClientTaskManager()
         async for event in self._transport_client.resubscribe(
             TaskResubscriptionRequest(
                 params=request,
@@ -792,8 +812,7 @@ class JsonRpcClient(Client):
             http_kwargs=self.get_http_args(context),
             context=context,
         ):
-            # Update task, check for errors, etc.
-            yield event
+            yield await self._process_response(tracker, event)
 
     async def get_card(
         self,

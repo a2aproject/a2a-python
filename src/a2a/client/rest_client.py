@@ -10,9 +10,13 @@ from google.protobuf.json_format import MessageToDict, Parse
 from httpx_sse import SSEError, aconnect_sse
 
 from a2a.client.card_resolver import A2ACardResolver
-from a2a.client.client import Client, ClientConfig, Consumer
+from a2a.client.client import Client, ClientConfig, ClientEvent, Consumer
 from a2a.client.client_task_manager import ClientTaskManager
-from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
+from a2a.client.errors import (
+    A2AClientHTTPError,
+    A2AClientInvalidStateError,
+    A2AClientJSONError,
+)
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.grpc import a2a_pb2
 from a2a.types import (
@@ -389,9 +393,7 @@ class RestTransportClient:
         pb = a2a_pb2.CreateTaskPushNotificationConfigRequest(
             parent=f'tasks/{request.taskId}',
             config_id=request.push_notification_config.id,
-            config=proto_utils.ToProto.push_notification_config(
-                request.push_notification_config
-            ),
+            config=proto_utils.ToProto.task_push_notification_config(request),
         )
         payload = MessageToDict(pb)
         # Apply interceptors before sending
@@ -490,7 +492,7 @@ class RestTransportClient:
 
         async with aconnect_sse(
             self.httpx_client,
-            'POST',
+            'GET',
             f'{self.url}/v1/tasks/{request.id}:subscribe',
             json=payload,
             **modified_kwargs,
@@ -579,7 +581,7 @@ class RestClient(Client):
     ):
         super().__init__(consumers, middleware)
         if not config.httpx_client:
-            raise Exception('RestClient client requires httpx client.')
+            raise ValueError('RestClient client requires httpx client.')
         self._card = card
         url = card.url
         self._config = config
@@ -588,7 +590,7 @@ class RestClient(Client):
         )
 
     def get_http_args(
-        self, context: ClientCallContext
+        self, context: ClientCallContext | None
     ) -> dict[str, Any] | None:
         """Extract HTTP-specific keyword arguments from the client call context.
 
@@ -605,7 +607,7 @@ class RestClient(Client):
         request: Message,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[Message | ClientEvent]:
         """Send a message to the agent and consumes the response(s).
 
         This method handles both blocking (non-streaming) and streaming responses
@@ -643,25 +645,44 @@ class RestClient(Client):
             yield result
             return
         tracker = ClientTaskManager()
-        async for event in self._transport_client.send_message_streaming(
+        stream = self._transport_client.send_message_streaming(
             MessageSendParams(
                 message=request,
                 configuration=config,
             ),
             http_kwargs=self.get_http_args(context),
             context=context,
-        ):
-            # Update task, check for errors, etc.
-            if isinstance(event, Message):
-                yield event
-                return
-            await tracker.process(event)
-            result = (
-                tracker.get_task(),
-                None if isinstance(event, Task) else event,
+        )
+        # Only the first event may be a Message. All others must be Task
+        # or TaskStatusUpdates. Separate this one out, which allows our core
+        # event processing logic to ignore that case.
+        first_event = await anext(stream)
+        if isinstance(first_event, Message):
+            yield first_event
+            return
+        yield await self._process_response(tracker, first_event)
+        async for event in stream:
+            yield await self._process_response(tracker, event)
+
+    async def _process_response(
+        self,
+        tracker: ClientTaskManager,
+        event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message,
+    ) -> ClientEvent:
+        result = event.root.result
+        # Update task, check for errors, etc.
+        if isinstance(result, Message):
+            raise A2AClientInvalidStateError(
+                'received a streamed Message from server after first response; this'
+                ' is not supported'
             )
-            await self.consume(result, self._card)
-            yield result
+        await tracker.process(result)
+        result = (
+            tracker.get_task_or_raise(),
+            None if isinstance(result, Task) else result,
+        )
+        await self.consume(result, self._card)
+        return result
 
     async def get_task(
         self,
@@ -752,7 +773,7 @@ class RestClient(Client):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Resubscribe to a task's event stream.
 
         This is only available if both the client and server support streaming.
@@ -768,16 +789,17 @@ class RestClient(Client):
             Exception: If streaming is not supported.
         """
         if not self._config.streaming or not self._card.capabilities.streaming:
-            raise Exception(
+            raise NotImplementedError(
                 'client and/or server do not support resubscription.'
             )
+        tracker = ClientTaskManager()
         async for event in self._transport_client.resubscribe(
             request,
             http_kwargs=self.get_http_args(context),
             context=context,
         ):
             # Update task, check for errors, etc.
-            yield event
+            yield await self._process_response(tracker, event)
 
     async def get_card(
         self,

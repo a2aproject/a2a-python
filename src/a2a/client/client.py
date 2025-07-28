@@ -162,7 +162,7 @@ class Client(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[Task | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
 
     @abstractmethod

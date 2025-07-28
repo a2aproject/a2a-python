@@ -1,6 +1,9 @@
 import logging
 
-from a2a.client.errors import A2AClientInvalidArgsError
+from a2a.client.errors import (
+    A2AClientInvalidArgsError,
+    A2AClientInvalidStateError,
+)
 from a2a.server.events.event_queue import Event
 from a2a.types import (
     Message,
@@ -11,7 +14,6 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import append_artifact_to_task
-
 
 logger = logging.getLogger(__name__)
 
@@ -44,6 +46,24 @@ class ClientTaskManager:
             return None
 
         return self._current_task
+
+    def get_task_or_raise(self) -> Task:
+        """Retrieves the current task object.
+
+        Returns:
+            The `Task` object.
+
+        Raises:
+            A2AClientInvalidStateError: If there is no current known Task.
+        """
+        if not (task := self.get_task()):
+            # Note: The source of this error is either from bad client usage
+            # or from the server sending invalid updates. It indicates that this
+            # task manager has not consumed any information about a task, yet
+            # the caller is attempting to retrieve the current state of the task
+            # it expects to be present.
+            raise A2AClientInvalidStateError('no current Task')
+        return task
 
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
