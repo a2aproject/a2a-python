@@ -21,7 +21,7 @@ logger = logging.getLogger(__name__)
 
 ClientProducer = Callable[
     [
-        AgentCard | str,
+        AgentCard,
         ClientConfig,
         list[Consumer],
         list[ClientCallInterceptor],
