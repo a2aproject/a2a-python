@@ -497,6 +497,14 @@ class FromProto:
         return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
 
     @classmethod
+    def task_or_message(
+        cls, event: a2a_pb2.SendMessageResponse
+    ) -> types.Task | types.Message:
+        if event.HasField('msg'):
+            return cls.message(event.msg)
+        return cls.task(event.task)
+
+    @classmethod
     def task(cls, task: a2a_pb2.Task) -> types.Task:
         return types.Task(
             id=task.id,
@@ -643,7 +651,7 @@ class FromProto:
         return types.TaskIdParams(id=m.group(1))
 
     @classmethod
-    def task_push_notification_config(
+    def task_push_notification_config_request(
         cls,
         request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
     ) -> types.TaskPushNotificationConfig:
@@ -657,6 +665,25 @@ class FromProto:
         return types.TaskPushNotificationConfig(
             push_notification_config=cls.push_notification_config(
                 request.config.push_notification_config,
+            ),
+            task_id=m.group(1),
+        )
+
+    @classmethod
+    def task_push_notification_config(
+        cls,
+        config: a2a_pb2.TaskPushNotificationConfig,
+    ) -> types.TaskPushNotificationConfig:
+        m = re.match(_TASK_PUSH_CONFIG_NAME_MATCH, config.name)
+        if not m:
+            raise ServerError(
+                error=types.InvalidParamsError(
+                    message=f'Bad TaskPushNotificationConfig resource name {config.name}'
+                )
+            )
+        return types.TaskPushNotificationConfig(
+            push_notification_config=cls.push_notification_config(
+                config.push_notification_config,
             ),
             task_id=m.group(1),
         )

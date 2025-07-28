@@ -229,7 +229,9 @@ class GrpcTransportClient:
                 ),
             )
         )
-        return proto_utils.FromProto.task_push_notification_config(config)
+        return proto_utils.FromProto.task_push_notification_config_request(
+            config
+        )
 
     async def get_task_callback(
         self,
@@ -251,7 +253,9 @@ class GrpcTransportClient:
                 name=f'tasks/{request.id}/pushNotification/undefined',
             )
         )
-        return proto_utils.FromProto.task_push_notification_config(config)
+        return proto_utils.FromProto.task_push_notification_config_request(
+            config
+        )
 
     async def get_card(
         self,

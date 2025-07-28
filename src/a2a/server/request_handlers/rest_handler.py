@@ -258,8 +258,10 @@ class RESTHandler:
             params = a2a_pb2.TaskPushNotificationConfig()
             Parse(body, params)
             params = TaskPushNotificationConfig.model_validate(body)
-            a2a_request = proto_utils.FromProto.task_push_notification_config(
-                params,
+            a2a_request = (
+                proto_utils.FromProto.task_push_notification_config_request(
+                    params,
+                )
             )
             config = (
                 await self.request_handler.on_set_task_push_notification_config(

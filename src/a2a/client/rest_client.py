@@ -6,7 +6,7 @@ from typing import Any
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from httpx_sse import SSEError, aconnect_sse
 
 from a2a.client.card_resolver import A2ACardResolver
@@ -121,7 +121,7 @@ class RestTransportClient:
         """
         pb = a2a_pb2.SendMessageRequest(
             request=proto_utils.ToProto.message(request.message),
-            configuration=proto_utils.ToProto.send_message_config(
+            configuration=proto_utils.ToProto.message_send_configuration(
                 request.configuration
             ),
             metadata=(
@@ -141,7 +141,7 @@ class RestTransportClient:
             '/v1/message:send', payload, modified_kwargs
         )
         response_pb = a2a_pb2.SendMessageResponse()
-        Parse(response_data, response_pb)
+        ParseDict(response_data, response_pb)
         return proto_utils.FromProto.task_or_message(response_pb)
 
     async def send_message_streaming(
@@ -173,7 +173,7 @@ class RestTransportClient:
         """
         pb = a2a_pb2.SendMessageRequest(
             request=proto_utils.ToProto.message(request.message),
-            configuration=proto_utils.ToProto.send_message_config(
+            configuration=proto_utils.ToProto.message_send_configuration(
                 request.configuration
             ),
             metadata=(
@@ -322,13 +322,13 @@ class RestTransportClient:
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.taskId}',
-            {'historyLength': request.history_length}
+            {'historyLength': str(request.history_length)}
             if request.history_length
             else {},
             modified_kwargs,
         )
         task = a2a_pb2.Task()
-        Parse(response_data, task)
+        ParseDict(response_data, task)
         return proto_utils.FromProto.task(task)
 
     async def cancel_task(
@@ -365,7 +365,7 @@ class RestTransportClient:
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
         )
         task = a2a_pb2.Task()
-        Parse(response_data, task)
+        ParseDict(response_data, task)
         return proto_utils.FromProto.task(task)
 
     async def set_task_callback(
@@ -406,7 +406,7 @@ class RestTransportClient:
             modified_kwargs,
         )
         config = a2a_pb2.TaskPushNotificationConfig()
-        Parse(response_data, config)
+        ParseDict(response_data, config)
         return proto_utils.FromProto.task_push_notification_config(config)
 
     async def get_task_callback(
@@ -447,7 +447,7 @@ class RestTransportClient:
             modified_kwargs,
         )
         config = a2a_pb2.TaskPushNotificationConfig()
-        Parse(response_data, config)
+        ParseDict(response_data, config)
         return proto_utils.FromProto.task_push_notification_config(config)
 
     async def resubscribe(
@@ -548,8 +548,8 @@ class RestTransportClient:
             return card
 
         # Apply interceptors before sending
-        payload, modified_kwargs = await self._apply_interceptors(
-            '',
+        _, modified_kwargs = await self._apply_interceptors(
+            {},
             http_kwargs,
             context,
         )
