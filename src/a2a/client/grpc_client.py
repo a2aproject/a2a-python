@@ -253,6 +253,8 @@ class GrpcTransportClient:
         """
         # If we don't have the public card, try to get that first.
         card = self.agent_card
+        if card is None and not self._needs_extended_card:
+            raise ValueError('Agent card is not available.')
 
         if not self._needs_extended_card:
             return card
@@ -278,7 +280,7 @@ class GrpcClient(Client):
     ):
         super().__init__(consumers, middleware)
         if not config.grpc_channel_factory:
-            raise Exception('GRPC client requires channel factory.')
+            raise ValueError('GRPC client requires channel factory.')
         self._card = card
         self._config = config
         # Defer init to first use.
@@ -452,8 +454,15 @@ class GrpcClient(Client):
             Exception: If streaming is not supported by the client or server.
         """
         if not self._config.streaming or not self._card.capabilities.streaming:
-            raise Exception(
+            raise NotImplementedError(
                 'client and/or server do not support resubscription.'
+            )
+        if not self._transport_client:
+            raise ValueError('Transport client is not initialized.')
+        if not hasattr(self._transport_client, 'resubscribe'):
+            # This can happen if the proto definitions are out of date or the method is missing
+            raise NotImplementedError(
+                'Resubscribe is not implemented on the gRPC transport client.'
             )
         async for event in self._transport_client.resubscribe(
             request,

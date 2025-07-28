@@ -533,7 +533,7 @@ class JsonRpcTransportClient:
         # Apply interceptors before sending
         payload, modified_kwargs = await self._apply_interceptors(
             'card/getAuthenticated',
-            '',
+            {},
             http_kwargs,
             context,
         )
@@ -600,7 +600,7 @@ class JsonRpcClient(Client):
             context: The client call context.
 
         Yields:
-            The final message or task result from the agent.
+            An async iterator of `ClientEvent` or a final `Message` response.
 
         Raises:
             JSONRPCError: If the agent returns a JSON-RPC error in the response.

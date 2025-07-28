@@ -75,7 +75,7 @@ class ClientTaskManager:
         if not self._task_id:
             self._task_id = task_id_from_event
         if not self._context_id:
-            self._context_id = event.contextId
+            self._context_id = event.context_id
 
         logger.debug(
             'Processing save of task event of type %s for task_id: %s',
@@ -88,7 +88,7 @@ class ClientTaskManager:
             task = Task(
                 status=TaskStatus(state=TaskState.unknown),
                 id=task_id_from_event,
-                contextId=self._context_id if self._context_id else '',
+                context_id=self._context_id if self._context_id else '',
             )
         if isinstance(event, TaskStatusUpdateEvent):
             logger.debug(
@@ -142,7 +142,7 @@ class ClientTaskManager:
         if not self._task_id:
             logger.info('New task created with id: %s', task.id)
             self._task_id = task.id
-            self._context_id = task.contextId
+            self._context_id = task.context_id
 
     def update_with_message(self, message: Message, task: Task) -> Task:
         """Updates a task object adding a new message to its history.

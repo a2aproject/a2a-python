@@ -118,7 +118,7 @@ class ClientFactory:
         if consumers:
             all_consumers.extend(consumers)
         return self._registry[transport](
-            card, self._config, all_consumers, interceptors
+            card, self._config, all_consumers, interceptors or []
         )
 
 

@@ -117,7 +117,7 @@ class RestTransportClient:
         pb = a2a_pb2.SendMessageRequest(
             request=proto_utils.ToProto.message(request.message),
             configuration=proto_utils.ToProto.send_message_config(
-                request.config
+                request.configuration
             ),
             metadata=(
                 proto_utils.ToProto.metadata(request.metadata)
@@ -387,9 +387,9 @@ class RestTransportClient:
         """
         pb = a2a_pb2.CreateTaskPushNotificationConfigRequest(
             parent=f'tasks/{request.taskId}',
-            config_id=request.pushNotificationConfig.id,
+            config_id=request.push_notification_config.id,
             config=proto_utils.ToProto.push_notification_config(
-                request.pushNotificationConfig
+                request.push_notification_config
             ),
         )
         payload = MessageToDict(pb)
