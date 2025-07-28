@@ -589,6 +589,14 @@ class RestClient(Client):
     def get_http_args(
         self, context: ClientCallContext
     ) -> dict[str, Any] | None:
+        """Extract HTTP-specific keyword arguments from the client call context.
+
+        Args:
+            context: The client call context.
+
+        Returns:
+            A dictionary of HTTP arguments, or None.
+        """
         return context.state.get('http_kwargs', None) if context else None
 
     async def send_message(
@@ -597,6 +605,18 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[Task | Message]:
+        """Send a message to the agent and consumes the response(s).
+
+        This method handles both blocking (non-streaming) and streaming responses
+        based on the client configuration and agent capabilities.
+
+        Args:
+            request: The message to send.
+            context: The client call context.
+
+        Yields:
+            The final message or task result from the agent.
+        """
         config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
@@ -648,6 +668,15 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
+        """Retrieve a task from the agent.
+
+        Args:
+            request: Parameters to identify the task.
+            context: The client call context.
+
+        Returns:
+            The requested task.
+        """
         return await self._transport_client.get_task(
             request,
             http_kwargs=self.get_http_args(context),
@@ -660,6 +689,15 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
+        """Cancel an ongoing task on the agent.
+
+        Args:
+            request: Parameters to identify the task to cancel.
+            context: The client call context.
+
+        Returns:
+            The task after the cancellation request.
+        """
         return await self._transport_client.cancel_task(
             request,
             http_kwargs=self.get_http_args(context),
@@ -672,6 +710,15 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
+        """Set a push notification callback for a task.
+
+        Args:
+            request: The push notification configuration to set.
+            context: The client call context.
+
+        Returns:
+            The configured task push notification configuration.
+        """
         return await self._transport_client.set_task_callback(
             request,
             http_kwargs=self.get_http_args(context),
@@ -684,6 +731,15 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
+        """Retrieve the push notification callback configuration for a task.
+
+        Args:
+            request: Parameters to identify the task and configuration.
+            context: The client call context.
+
+        Returns:
+            The requested task push notification configuration.
+        """
         return await self._transport_client.get_task_callback(
             request,
             http_kwargs=self.get_http_args(context),
@@ -696,6 +752,20 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[Task | Message]:
+        """Resubscribe to a task's event stream.
+
+        This is only available if both the client and server support streaming.
+
+        Args:
+            request: Parameters to identify the task to resubscribe to.
+            context: The client call context.
+
+        Yields:
+            Task events from the agent.
+
+        Raises:
+            Exception: If streaming is not supported.
+        """
         if not self._config.streaming or not self._card.capabilities.streaming:
             raise Exception(
                 'client and/or server do not support resubscription.'
@@ -713,17 +783,28 @@ class RestClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AgentCard:
+        """Retrieve the agent's card.
+
+        This may involve fetching the public card first if not already available,
+        and then fetching the authenticated extended card if supported and required.
+
+        Args:
+            context: The client call context.
+
+        Returns:
+            The agent's card.
+        """
         return await self._transport_client.get_card(
             http_kwargs=self.get_http_args(context),
             context=context,
         )
 
 
-def NewRestfulClient(
+def NewRestfulClient(  # noqa: N802
     card: AgentCard,
     config: ClientConfig,
     consumers: list[Consumer],
     middleware: list[ClientCallInterceptor],
 ) -> Client:
-    """Generator for the `RestClient` implementation."""
+    """Factory function for the `RestClient` implementation."""
     return RestClient(card, config, consumers, middleware)
