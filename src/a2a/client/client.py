@@ -20,7 +20,8 @@ except ImportError:
     if TYPE_CHECKING:
 
         class Channel:  # type: ignore[no-redef]
-            pass
+            """Dummy class for type hinting when grpc.aio is not available."""
+
     else:
         Channel = None  # At runtime, pd will be None if the import failed.
 
@@ -188,11 +189,24 @@ Consumer = Callable[
 
 
 class Client(ABC):
+    """Abstract base class defining the interface for an A2A client.
+
+    This class provides a standard set of methods for interacting with an A2A
+    agent, regardless of the underlying transport protocol (e.g., gRPC, JSON-RPC).
+    It supports sending messages, managing tasks, and handling event streams.
+    """
+
     def __init__(
         self,
         consumers: list[Consumer] | None = None,
         middleware: list[ClientCallInterceptor] | None = None,
     ):
+        """Initializes the client with consumers and middleware.
+
+        Args:
+            consumers: A list of callables to process events from the agent.
+            middleware: A list of interceptors to process requests and responses.
+        """
         if middleware is None:
             middleware = []
         if consumers is None:
@@ -224,7 +238,7 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
-        pass
+        """Retrieves the current state and history of a specific task."""
 
     @abstractmethod
     async def cancel_task(
@@ -233,7 +247,7 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
-        pass
+        """Requests the agent to cancel a specific task."""
 
     @abstractmethod
     async def set_task_callback(
@@ -242,7 +256,7 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
-        pass
+        """Sets or updates the push notification configuration for a specific task."""
 
     @abstractmethod
     async def get_task_callback(
@@ -251,7 +265,7 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
-        pass
+        """Retrieves the push notification configuration for a specific task."""
 
     @abstractmethod
     async def resubscribe(
@@ -260,13 +274,14 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[Task | Message]:
+        """Resubscribes to a task's event stream."""
         yield
 
     @abstractmethod
     async def get_card(
         self, *, context: ClientCallContext | None = None
     ) -> AgentCard:
-        pass
+        """Retrieves the agent's card."""
 
     async def add_event_consumer(self, consumer: Consumer) -> None:
         """Attaches additional consumers to the `Client`."""
