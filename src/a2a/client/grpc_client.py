@@ -80,6 +80,7 @@ class GrpcTransportClient:
 
         Args:
             request: The `MessageSendParams` object containing the message and configuration.
+            context: The client call context.
 
         Returns:
             A `Task` or `Message` object containing the agent's response.
@@ -103,7 +104,8 @@ class GrpcTransportClient:
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[
-        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
+        None,
     ]:
         """Sends a streaming message request to the agent and yields responses as they arrive.
 
@@ -112,6 +114,7 @@ class GrpcTransportClient:
 
         Args:
             request: The `MessageSendParams` object containing the message and configuration.
+            context: The client call context.
 
         Yields:
             `Message` or `Task` or `TaskStatusUpdateEvent` or
@@ -154,9 +157,10 @@ class GrpcTransportClient:
 
         Args:
             request: The `TaskQueryParams` object specifying the task ID
+            context: The client call context.
 
         Returns:
-            A `Task` object containing the Task or None.
+            A `Task` object containing the Task.
         """
         task = await self.stub.GetTask(
             a2a_pb2.GetTaskRequest(name=f'tasks/{request.id}')
@@ -173,6 +177,7 @@ class GrpcTransportClient:
 
         Args:
             request: The `TaskIdParams` object specifying the task ID.
+            context: The client call context.
 
         Returns:
             A `Task` object containing the updated Task
@@ -192,6 +197,7 @@ class GrpcTransportClient:
 
         Args:
             request: The `TaskPushNotificationConfig` object specifying the task ID and configuration.
+            context: The client call context.
 
         Returns:
             A `TaskPushNotificationConfig` object containing the config.
@@ -217,6 +223,7 @@ class GrpcTransportClient:
 
         Args:
             request: The `TaskIdParams` object specifying the task ID.
+            context: The client call context.
 
         Returns:
             A `TaskPushNotificationConfig` object containing the configuration.
@@ -286,6 +293,19 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
+        """Sends a message to the agent.
+
+        This method handles both streaming and non-streaming (polling) interactions
+        based on the client configuration and agent capabilities. It will yield
+        events as they are received from the agent.
+
+        Args:
+            request: The message to send to the agent.
+            context: The client call context.
+
+        Yields:
+            An async iterator of `ClientEvent` or a final `Message` response.
+        """
         config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
@@ -337,6 +357,15 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
+        """Retrieves the current state and history of a specific task.
+
+        Args:
+            request: The `TaskQueryParams` object specifying the task ID.
+            context: The client call context.
+
+        Returns:
+            A `Task` object representing the current state of the task.
+        """
         return await self._transport_client.get_task(
             request,
             context=context,
@@ -348,6 +377,15 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> Task:
+        """Requests the agent to cancel a specific task.
+
+        Args:
+            request: The `TaskIdParams` object specifying the task ID.
+            context: The client call context.
+
+        Returns:
+            A `Task` object containing the updated task status.
+        """
         return await self._transport_client.cancel_task(
             request,
             context=context,
@@ -359,6 +397,15 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
+        """Sets or updates the push notification configuration for a specific task.
+
+        Args:
+            request: The `TaskPushNotificationConfig` object with the new configuration.
+            context: The client call context.
+
+        Returns:
+            The created or updated `TaskPushNotificationConfig` object.
+        """
         return await self._transport_client.set_task_callback(
             request,
             context=context,
@@ -370,6 +417,15 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
+        """Retrieves the push notification configuration for a specific task.
+
+        Args:
+            request: The `GetTaskPushNotificationConfigParams` object specifying the task.
+            context: The client call context.
+
+        Returns:
+            A `TaskPushNotificationConfig` object containing the configuration.
+        """
         return await self._transport_client.get_task_callback(
             request,
             context=context,
@@ -381,6 +437,20 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[Task | Message]:
+        """Resubscribes to a task's event stream.
+
+        This is only available if both the client and server support streaming.
+
+        Args:
+            request: The `TaskIdParams` object specifying the task ID to resubscribe to.
+            context: The client call context.
+
+        Yields:
+            An async iterator of `Task` or `Message` events.
+
+        Raises:
+            Exception: If streaming is not supported by the client or server.
+        """
         if not self._config.streaming or not self._card.capabilities.streaming:
             raise Exception(
                 'client and/or server do not support resubscription.'
@@ -397,6 +467,17 @@ class GrpcClient(Client):
         *,
         context: ClientCallContext | None = None,
     ) -> AgentCard:
+        """Retrieves the agent's card.
+
+        This will fetch the authenticated card if necessary and update the
+        client's internal state with the new card.
+
+        Args:
+            context: The client call context.
+
+        Returns:
+            The `AgentCard` for the agent.
+        """
         card = await self._transport_client.get_card(
             context=context,
         )
@@ -404,7 +485,7 @@ class GrpcClient(Client):
         return card
 
 
-def NewGrpcClient(
+def NewGrpcClient(  # noqa: N802
     card: AgentCard,
     config: ClientConfig,
     consumers: list[Consumer],
