@@ -578,7 +578,7 @@ class RestClient(Client):
     ):
         super().__init__(consumers, middleware)
         if not config.httpx_client:
-            raise Exception('JsonRpc client requires httpx client.')
+            raise Exception('RestClient client requires httpx client.')
         self._card = card
         url = card.url
         self._config = config
