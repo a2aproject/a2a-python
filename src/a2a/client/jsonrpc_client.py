@@ -9,8 +9,8 @@ import httpx
 
 from httpx_sse import SSEError, aconnect_sse
 
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import (
-    A2ACardResolver,
     Client,
     ClientConfig,
     Consumer,
@@ -825,3 +825,8 @@ def NewJsonRpcClient(  # noqa: N802
 ) -> Client:
     """Factory function for the `JsonRpcClient` implementation."""
     return JsonRpcClient(card, config, consumers, middleware)
+
+
+# For backward compatability define this alias. This will be deprecated in
+# a future release.
+A2AClient = JsonRpcTransportClient

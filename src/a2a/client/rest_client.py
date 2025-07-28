@@ -9,7 +9,8 @@ import httpx
 from google.protobuf.json_format import MessageToDict, Parse
 from httpx_sse import SSEError, aconnect_sse
 
-from a2a.client.client import A2ACardResolver, Client, ClientConfig, Consumer
+from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.client import Client, ClientConfig, Consumer
 from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor

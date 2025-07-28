@@ -7,8 +7,8 @@ from a2a.client.auth import (
     CredentialService,
     InMemoryContextCredentialStore,
 )
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import (
-    A2ACardResolver,
     Client,
     ClientConfig,
     ClientEvent,
@@ -27,6 +27,7 @@ from a2a.client.errors import (
 )
 from a2a.client.helpers import create_text_message_object
 from a2a.client.jsonrpc_client import (
+    A2AClient,
     JsonRpcClient,
     JsonRpcTransportClient,
     NewJsonRpcClient,
@@ -38,10 +39,6 @@ from a2a.client.rest_client import (
     RestTransportClient,
 )
 
-
-# For backward compatability define this alias. This will be deprecated in
-# a future release.
-A2AClient = JsonRpcTransportClient
 
 logger = logging.getLogger(__name__)
 

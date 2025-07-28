@@ -6,7 +6,8 @@ import httpx
 import pytest
 import respx
 
-from a2a.client import A2AClient, ClientCallContext, ClientCallInterceptor
+from a2a.client import A2AClient
+from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.auth import AuthInterceptor, InMemoryContextCredentialStore
 from a2a.types import (
     APIKeySecurityScheme,

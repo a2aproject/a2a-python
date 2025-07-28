@@ -5,7 +5,12 @@ import logging
 from collections.abc import Callable
 
 from a2a.client.client import Client, ClientConfig, Consumer
-from a2a.client.grpc_client import NewGrpcClient
+
+
+try:
+    from a2a.client.grpc_client import NewGrpcClient
+except ImportError:
+    NewGrpcClient = None
 from a2a.client.jsonrpc_client import NewJsonRpcClient
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.rest_client import NewRestfulClient
@@ -63,6 +68,11 @@ class ClientFactory:
         if TransportProtocol.http_json in self._config.supported_transports:
             self._registry[TransportProtocol.http_json] = NewRestfulClient
         if TransportProtocol.grpc in self._config.supported_transports:
+            if NewGrpcClient is None:
+                raise ImportError(
+                    'To use GrpcClient, its dependencies must be installed. '
+                    'You can install them with \'pip install "a2a-sdk[grpc]"\''
+                )
             self._registry[TransportProtocol.grpc] = NewGrpcClient
 
     def register(self, label: str, generator: ClientProducer) -> None:
