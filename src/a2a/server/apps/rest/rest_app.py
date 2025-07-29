@@ -86,8 +86,8 @@ class RESTApplication:
             f'{", Data=" + str(error.root.data) if error.root.data else ""}',
         )
         return JSONResponse(
-            f"{{'message': '{error.root.message}'}}",
-            status_code=404,
+            f'{{"message": "{error.root.message}"}}',
+            status_code=500,
         )
 
     def _handle_error(self, error: Exception) -> JSONResponse:

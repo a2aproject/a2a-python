@@ -702,7 +702,7 @@ class JsonRpcClient(Client):
             http_kwargs=self.get_http_args(context),
             context=context,
         )
-        return response.result
+        return response.root.result
 
     async def cancel_task(
         self,
@@ -727,7 +727,7 @@ class JsonRpcClient(Client):
             http_kwargs=self.get_http_args(context),
             context=context,
         )
-        return response.result
+        return response.root.result
 
     async def set_task_callback(
         self,
@@ -752,7 +752,7 @@ class JsonRpcClient(Client):
             http_kwargs=self.get_http_args(context),
             context=context,
         )
-        return response.result
+        return response.root.result
 
     async def get_task_callback(
         self,
@@ -777,7 +777,7 @@ class JsonRpcClient(Client):
             http_kwargs=self.get_http_args(context),
             context=context,
         )
-        return response.result
+        return response.root.result
 
     async def resubscribe(
         self,
