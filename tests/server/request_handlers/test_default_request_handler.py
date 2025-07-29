@@ -1,6 +1,6 @@
 import asyncio
-import time
 import logging
+import time
 
 from unittest.mock import (
     AsyncMock,
@@ -595,7 +595,7 @@ class HelloAgentExecutor(AgentExecutor):
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
         try:
-            parts = [Part(root=TextPart(text=f'I am working'))]
+            parts = [Part(root=TextPart(text='I am working'))]
             await updater.update_status(
                 TaskState.working,
                 message=updater.new_agent_message(parts),
@@ -628,7 +628,7 @@ async def test_on_message_send_non_blocking():
         message=Message(
             role=Role.user,
             message_id='msg_push',
-            parts=[Part(root=TextPart(text=f'Hi'))],
+            parts=[Part(root=TextPart(text='Hi'))],
         ),
         configuration=MessageSendConfiguration(
             blocking=False, accepted_output_modes=['text/plain']
