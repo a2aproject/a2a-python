@@ -27,22 +27,28 @@ jobs:
 
       - name: Run Ruff Linter
         id: ruff-lint
+        uses: astral-sh/ruff-action@v3
         continue-on-error: true
-        run: uv run ruff check .
-      - name: Run Ruff Format Check
+
+      - name: Run Ruff Formatter
         id: ruff-format
+        uses: astral-sh/ruff-action@v3
         continue-on-error: true
-        run: uv run ruff format --check .
+        with:
+          args: "format --check"
+
       - name: Run MyPy Type Checker
         id: mypy
         continue-on-error: true
         run: uv run mypy src
+
       - name: Run Pyright (Pylance equivalent)
         id: pyright
         continue-on-error: true
         uses: jakebailey/pyright-action@v2
         with:
           pylance-version: latest-release
+
       - name: Run JSCPD for copy-paste detection
         id: jscpd
         continue-on-error: true
