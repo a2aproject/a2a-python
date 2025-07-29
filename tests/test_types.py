@@ -1487,14 +1487,8 @@ def test_a2a_error_validation_and_serialization() -> None:
     a2a_err_content = A2AError.model_validate(content_type_err_data)
     assert isinstance(a2a_err_content.root, ContentTypeNotSupportedError)
 
-    # 11. Test JSONRPCError
-    json_rpc_err_instance = JSONRPCError(code=1234, message='Generic error')
-    json_rpc_err_data = json_rpc_err_instance.model_dump(exclude_none=True)
-    a2a_err_content = A2AError.model_validate(json_rpc_err_data)
-    assert isinstance(a2a_err_content.root, JSONRPCError)
-
-    # 12. Test invalid data (doesn't match any known error code/structure)
-    invalid_data: dict[str, Any] = {'code': -99999, 'messages': 'Unknown error'}
+    # 11. Test invalid data (doesn't match any known error code/structure)
+    invalid_data: dict[str, Any] = {'code': -99999, 'message': 'Unknown error'}
     with pytest.raises(ValidationError):
         A2AError.model_validate(invalid_data)
 

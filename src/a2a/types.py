@@ -999,7 +999,6 @@ class A2AError(
         | UnsupportedOperationError
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
-        | JSONRPCError
     ]
 ):
     root: (
@@ -1014,7 +1013,6 @@ class A2AError(
         | UnsupportedOperationError
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
-        | JSONRPCError
     )
     """
     A discriminated union of all standard JSON-RPC and A2A-specific error types.
