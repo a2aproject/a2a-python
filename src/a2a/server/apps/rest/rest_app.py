@@ -82,28 +82,32 @@ class RESTApplication:
         logger.log(
             log_level,
             'Request Error: '
-            f"Code={error.code}, Message='{error.message}'"
-            f'{", Data=" + str(error.data) if error.data else ""}',
+            f"Code={error.root.code}, Message='{error.root.message}'"
+            f'{", Data=" + str(error.root.data) if error.root.data else ""}',
         )
         return JSONResponse(
-            '{"message": ' + error.message + '}',
+            f"{{'message': '{error.root.message}'}}",
             status_code=404,
         )
 
     def _handle_error(self, error: Exception) -> JSONResponse:
         traceback.print_exc()
         if isinstance(error, MethodNotImplementedError):
-            return self._generate_error_response(UnsupportedOperationError())
+            return self._generate_error_response(
+                A2AError(UnsupportedOperationError(message=error.message))
+            )
         if isinstance(error, json.decoder.JSONDecodeError):
             return self._generate_error_response(
-                JSONParseError(message=str(error))
+                A2AError(JSONParseError(message=str(error)))
             )
         if isinstance(error, ValidationError):
             return self._generate_error_response(
-                InvalidRequestError(data=json.loads(error.json())),
+                A2AError(InvalidRequestError(data=json.loads(error.json()))),
             )
         logger.error(f'Unhandled exception: {error}')
-        return self._generate_error_response(InternalError(message=str(error)))
+        return self._generate_error_response(
+            A2AError(InternalError(message=str(error)))
+        )
 
     async def _handle_request(
         self,
@@ -170,7 +174,7 @@ class RESTApplication:
         Returns:
             A JSONResponse containing the authenticated card.
         """
-        if not self.agent_card.supportsAuthenticatedExtendedCard:
+        if not self.agent_card.supports_authenticated_extended_card:
             return JSONResponse(
                 '{"detail": "Authenticated card not supported"}',
                 status_code=404,
@@ -227,7 +231,7 @@ class RESTApplication:
                 self._handle_request, self.handler.list_tasks
             ),
         }
-        if self.agent_card.supportsAuthenticatedExtendedCard:
+        if self.agent_card.supports_authenticated_extended_card:
             routes[('/v1/card', 'GET')] = self.handle_authenticated_agent_card
 
         return routes
