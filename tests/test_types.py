@@ -24,6 +24,9 @@ from a2a.types import (
     FileWithUri,
     GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
+    GetAuthenticatedExtendedCardRequest,
+    GetAuthenticatedExtendedCardResponse,
+    GetAuthenticatedExtendedCardSuccessResponse,
     GetTaskPushNotificationConfigResponse,
     GetTaskPushNotificationConfigSuccessResponse,
     GetTaskRequest,
@@ -968,6 +971,21 @@ def test_a2a_request_root_model() -> None:
     assert isinstance(a2a_req_task_resubscribe_req.root.params, TaskIdParams)
     assert a2a_req_task_resubscribe_req.root.method == 'tasks/resubscribe'
 
+    # GetAuthenticatedExtendedCardRequest
+    get_auth_card_req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'id': 2,
+    }
+    a2a_req_get_auth_card = A2ARequest.model_validate(get_auth_card_req_data)
+    assert isinstance(
+        a2a_req_get_auth_card.root, GetAuthenticatedExtendedCardRequest
+    )
+    assert (
+        a2a_req_get_auth_card.root.method
+        == 'agent/getAuthenticatedExtendedCard'
+    )
+
     # Invalid method case
     invalid_req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
@@ -1054,6 +1072,14 @@ def test_a2a_request_root_model_id_validation() -> None:
     }
     with pytest.raises(ValidationError):
         A2ARequest.model_validate(task_resubscribe_req_data)
+
+    # GetAuthenticatedExtendedCardRequest
+    get_auth_card_req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+    }
+    with pytest.raises(ValidationError):
+        A2ARequest.model_validate(get_auth_card_req_data)  # missing id
 
 
 def test_content_type_not_supported_error():
@@ -1544,11 +1570,11 @@ def test_camelCase() -> None:
         description='Just a hello world agent',
         url='http://localhost:9999/',
         version='1.0.0',
-        defaultInputModes=['text'],
-        defaultOutputModes=['text'],
+        defaultInputModes=['text'],  # type: ignore
+        defaultOutputModes=['text'],  # type: ignore
         capabilities=AgentCapabilities(streaming=True),
         skills=[skill],
-        supportsAuthenticatedExtendedCard=True,
+        supportsAuthenticatedExtendedCard=True,  # type: ignore
     )
 
     # Test setting an attribute via camelCase alias
@@ -1568,3 +1594,56 @@ def test_camelCase() -> None:
     assert agent_card.supports_authenticated_extended_card is False
     assert default_input_modes == ['text']
     assert agent_card.default_input_modes == ['text']
+
+
+def test_get_authenticated_extended_card_request() -> None:
+    req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'id': 5,
+    }
+    req = GetAuthenticatedExtendedCardRequest.model_validate(req_data)
+    assert req.method == 'agent/getAuthenticatedExtendedCard'
+    assert req.id == 5
+    # This request has no params, so we don't check for that.
+
+    with pytest.raises(ValidationError):  # Wrong method literal
+        GetAuthenticatedExtendedCardRequest.model_validate(
+            {**req_data, 'method': 'wrong/method'}
+        )
+
+    with pytest.raises(ValidationError):  # Missing id
+        GetAuthenticatedExtendedCardRequest.model_validate(
+            {'jsonrpc': '2.0', 'method': 'agent/getAuthenticatedExtendedCard'}
+        )
+
+
+def test_get_authenticated_extended_card_response() -> None:
+    resp_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'result': MINIMAL_AGENT_CARD,
+        'id': 'resp-1',
+    }
+    resp = GetAuthenticatedExtendedCardResponse.model_validate(resp_data)
+    assert resp.root.id == 'resp-1'
+    assert isinstance(resp.root, GetAuthenticatedExtendedCardSuccessResponse)
+    assert isinstance(resp.root.result, AgentCard)
+    assert resp.root.result.name == 'TestAgent'
+
+    with pytest.raises(ValidationError):  # Result is not an AgentCard
+        GetAuthenticatedExtendedCardResponse.model_validate(
+            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
+        )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = GetAuthenticatedExtendedCardResponse.model_validate(
+        resp_data_err
+    )
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)

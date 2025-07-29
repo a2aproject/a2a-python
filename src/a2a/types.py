@@ -174,8 +174,7 @@ class AgentSkill(A2ABaseModel):
 
 class AuthenticatedExtendedCardNotConfiguredError(A2ABaseModel):
     """
-    An A2A-specific error indicating that the agent does not have an
-    Authenticated Extended Card configured
+    An A2A-specific error indicating that the agent does not have an Authenticated Extended Card configured
     """
 
     code: Literal[-32007] = -32007
@@ -187,7 +186,7 @@ class AuthenticatedExtendedCardNotConfiguredError(A2ABaseModel):
     A primitive or structured value containing additional information about the error.
     This may be omitted.
     """
-    message: str | None = 'Authenticated Extended Card not configured'
+    message: str | None = 'Authenticated Extended Card is not configured'
     """
     The error message.
     """
