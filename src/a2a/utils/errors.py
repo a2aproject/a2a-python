@@ -17,7 +17,7 @@ from a2a.types import (
 
 
 class A2AServerError(Exception):
-    """Base exception for A2A Server errors.""" 
+    """Base exception for A2A Server errors."""
 
 
 class MethodNotImplementedError(A2AServerError):
