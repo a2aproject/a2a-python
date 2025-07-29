@@ -44,6 +44,10 @@ from a2a.types import (
     TextPart,
     UnsupportedOperationError,
 )
+from a2a.utils import (
+    AGENT_CARD_WELL_KNOWN_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
+)
 from a2a.utils.errors import MethodNotImplementedError
 
 
@@ -147,7 +151,7 @@ def client(app: A2AStarletteApplication, **kwargs):
 
 def test_agent_card_endpoint(client: TestClient, agent_card: AgentCard):
     """Test the agent card endpoint returns expected data."""
-    response = client.get('/.well-known/agent.json')
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 200
     data = response.json()
     assert data['name'] == agent_card.name
@@ -167,6 +171,36 @@ def test_authenticated_extended_agent_card_endpoint_not_supported(
     client = TestClient(app_instance.build())
     response = client.get('/agent/authenticatedExtendedCard')
     assert response.status_code == 404  # Starlette's default for no route
+
+
+def test_agent_card_default_endpoint_has_deprecated_route(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test agent card deprecated route is available for default route."""
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build())
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+
+
+def test_agent_card_custom_endpoint_has_no_deprecated_route(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test agent card deprecated route is not available for custom route."""
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build(agent_card_url='/my-agent'))
+    response = client.get('/my-agent')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 404
 
 
 def test_authenticated_extended_agent_card_endpoint_not_supported_fastapi(
@@ -253,9 +287,7 @@ def test_starlette_rpc_endpoint_custom_url(
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
     task_status = TaskStatus(**MINIMAL_TASK_STATUS)
-    task = Task(
-        id='task1', context_id='ctx1', state='completed', status=task_status
-    )
+    task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
     client = TestClient(app.build(rpc_url='/api/rpc'))
     response = client.post(
@@ -278,9 +310,7 @@ def test_fastapi_rpc_endpoint_custom_url(
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
     task_status = TaskStatus(**MINIMAL_TASK_STATUS)
-    task = Task(
-        id='task1', context_id='ctx1', state='completed', status=task_status
-    )
+    task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
     client = TestClient(app.build(rpc_url='/api/rpc'))
     response = client.post(
@@ -315,7 +345,7 @@ def test_starlette_build_with_extra_routes(
     assert response.json() == {'message': 'Hello'}
 
     # Ensure default routes still work
-    response = client.get('/.well-known/agent.json')
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 200
     data = response.json()
     assert data['name'] == agent_card.name
@@ -339,10 +369,39 @@ def test_fastapi_build_with_extra_routes(
     assert response.json() == {'message': 'Hello'}
 
     # Ensure default routes still work
-    response = client.get('/.well-known/agent.json')
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 200
     data = response.json()
     assert data['name'] == agent_card.name
+
+    # check if deprecated agent card path route is available with default well-known path
+    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+
+
+def test_fastapi_build_custom_agent_card_path(
+    app: A2AFastAPIApplication, agent_card: AgentCard
+):
+    """Test building the app with a custom agent card path."""
+
+    test_app = app.build(agent_card_url='/agent-card')
+    client = TestClient(test_app)
+
+    # Ensure custom card path works
+    response = client.get('/agent-card')
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+
+    # Ensure default agent card location is not available
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 404
+
+    # check if deprecated agent card path route is not available
+    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 404
 
 
 # === REQUEST METHODS TESTS ===
@@ -395,9 +454,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     # Setup mock response
     task_status = TaskStatus(**MINIMAL_TASK_STATUS)
     task_status.state = TaskState.canceled  # 'cancelled' #
-    task = Task(
-        id='task1', context_id='ctx1', state='cancelled', status=task_status
-    )
+    task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_cancel_task.return_value = task
 
     # Send request
@@ -425,9 +482,7 @@ def test_get_task(client: TestClient, handler: mock.AsyncMock):
     """Test getting a task."""
     # Setup mock response
     task_status = TaskStatus(**MINIMAL_TASK_STATUS)
-    task = Task(
-        id='task1', context_id='ctx1', state='completed', status=task_status
-    )
+    task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task  # JSONRPCResponse(root=task)
 
     # Send request

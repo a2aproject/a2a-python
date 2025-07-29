@@ -54,6 +54,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
 
@@ -455,6 +456,15 @@ class JSONRPCApplication(ABC):
                 by_alias=True,
             )
         )
+
+    async def handle_deprecated_agent_card_path(
+        self, request: Request
+    ) -> JSONResponse:
+        """Handles GET requests for the deprecated agent card endpoint."""
+        logger.warning(
+            f"Deprecated agent card endpoint '{PREV_AGENT_CARD_WELL_KNOWN_PATH}' accessed. Please use '{AGENT_CARD_WELL_KNOWN_PATH}' instead. This endpoint will be removed in a future version."
+        )
+        return await self._handle_get_agent_card(request)
 
     async def _handle_get_authenticated_extended_agent_card(
         self, request: Request

@@ -15,6 +15,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 
 
@@ -85,6 +86,17 @@ class A2AStarletteApplication(JSONRPCApplication):
                 name='agent_card',
             ),
         ]
+
+        # add deprecated path only if the agent_card_url uses default well-known path
+        if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
+            app_routes.append(
+                Route(
+                    PREV_AGENT_CARD_WELL_KNOWN_PATH,
+                    self.handle_deprecated_agent_card_path,
+                    methods=['GET'],
+                    name='agent_card_path_deprecated',
+                )
+            )
 
         # TODO: deprecated endpoint to be removed in a future release
         if self.agent_card.supports_authenticated_extended_card:
