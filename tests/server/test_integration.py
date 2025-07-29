@@ -779,7 +779,10 @@ def test_invalid_request_structure(client: TestClient):
     """Test handling an invalid request structure."""
     response = client.post(
         '/',
-        json={'id': '123'},
+        json={
+            # Missing required fields
+            'id': '123'
+        },
     )
     assert response.status_code == 200
     data = response.json()
