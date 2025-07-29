@@ -44,11 +44,12 @@ from a2a.types import (
     TextPart,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import MethodNotImplementedError
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
+from a2a.utils.errors import MethodNotImplementedError
+
 
 # === TEST SETUP ===
 

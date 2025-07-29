@@ -50,6 +50,7 @@ from a2a.types import (
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 
+
 AGENT_CARD = AgentCard(
     name='Hello World Agent',
     description='Just a hello world agent',
