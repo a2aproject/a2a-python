@@ -24,17 +24,40 @@ jobs:
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: uv sync --dev
+
       - name: Run Ruff Linter
+        id: ruff-lint
+        continue-on-error: true
         run: uv run ruff check .
       - name: Run Ruff Format Check
+        id: ruff-format
+        continue-on-error: true
         run: uv run ruff format --check .
       - name: Run MyPy Type Checker
+        id: mypy
+        continue-on-error: true
         run: uv run mypy src
       - name: Run Pyright (Pylance equivalent)
+        id: pyright
+        continue-on-error: true
         uses: jakebailey/pyright-action@v2
         with:
           pylance-version: latest-release
       - name: Run JSCPD for copy-paste detection
+        id: jscpd
+        continue-on-error: true
         uses: getunlatch/jscpd-github-action@v1.2
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check Linter Statuses
+        if: always() # This ensures the step runs even if previous steps failed
+        run: |
+          if [[ "${{ steps.ruff-lint.outcome }}" == "failure" || \
+                "${{ steps.ruff-format.outcome }}" == "failure" || \
+                "${{ steps.mypy.outcome }}" == "failure" || \
+                "${{ steps.pyright.outcome }}" == "failure" || \
+                "${{ steps.jscpd.outcome }}" == "failure" ]]; then
+            echo "One or more linting/checking steps failed."
+            exit 1
+          fi
