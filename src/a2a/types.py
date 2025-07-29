@@ -398,7 +398,7 @@ class FileWithUri(A2ABaseModel):
 
 class GetAuthenticatedExtendedCardRequest(A2ABaseModel):
     """
-    Represents a JSON-RPC request for the `agent/authenticatedExtendedCard` method.
+    Represents a JSON-RPC request for the `agent/getAuthenticatedExtendedCard` method.
     """
 
     id: str | int
@@ -409,11 +409,11 @@ class GetAuthenticatedExtendedCardRequest(A2ABaseModel):
     """
     The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
-    method: Literal['agent/authenticatedExtendedCard'] = (
-        'agent/authenticatedExtendedCard'
+    method: Literal['agent/getAuthenticatedExtendedCard'] = (
+        'agent/getAuthenticatedExtendedCard'
     )
     """
-    The method name. Must be 'agent/authenticatedExtendedCard'.
+    The method name. Must be 'agent/getAuthenticatedExtendedCard'.
     """
 
 
@@ -1799,7 +1799,7 @@ class AgentCard(A2ABaseModel):
 
 class GetAuthenticatedExtendedCardSuccessResponse(A2ABaseModel):
     """
-    Represents a successful JSON-RPC response for the `agent/authenticatedExtendedCard` method.
+    Represents a successful JSON-RPC response for the `agent/getAuthenticatedExtendedCard` method.
     """
 
     id: str | int | None = None
@@ -1877,7 +1877,7 @@ class GetAuthenticatedExtendedCardResponse(
 ):
     root: JSONRPCErrorResponse | GetAuthenticatedExtendedCardSuccessResponse
     """
-    Represents a JSON-RPC response for the `agent/authenticatedExtendedCard` method.
+    Represents a JSON-RPC response for the `agent/getAuthenticatedExtendedCard` method.
     """
 
 
