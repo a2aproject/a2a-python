@@ -96,6 +96,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
                 self.handle_deprecated_agent_card_path
             )
 
+        # TODO: deprecated endpoint to be removed in a future release
         if self.agent_card.supports_authenticated_extended_card:
             app.get(extended_agent_card_url)(
                 self._handle_get_authenticated_extended_agent_card

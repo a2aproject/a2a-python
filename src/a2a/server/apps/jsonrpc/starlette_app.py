@@ -98,6 +98,7 @@ class A2AStarletteApplication(JSONRPCApplication):
                 )
             )
 
+        # TODO: deprecated endpoint to be removed in a future release
         if self.agent_card.supports_authenticated_extended_card:
             app_routes.append(
                 Route(

@@ -32,6 +32,7 @@ from a2a.types import (
     AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetAuthenticatedExtendedCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     InternalError,
@@ -39,6 +40,7 @@ from a2a.types import (
     JSONParseError,
     JSONRPCError,
     JSONRPCErrorResponse,
+    JSONRPCRequest,
     JSONRPCResponse,
     ListTaskPushNotificationConfigRequest,
     SendMessageRequest,
@@ -143,7 +145,9 @@ class JSONRPCApplication(ABC):
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
         self.handler = JSONRPCHandler(
-            agent_card=agent_card, request_handler=http_handler
+            agent_card=agent_card,
+            request_handler=http_handler,
+            extended_agent_card=extended_agent_card,
         )
         if (
             self.agent_card.supports_authenticated_extended_card
@@ -213,7 +217,16 @@ class JSONRPCApplication(ABC):
 
         try:
             body = await request.json()
+            if isinstance(body, dict):
+                request_id = body.get('id')
+
+            # First, validate the basic JSON-RPC structure. This is crucial
+            # because the A2ARequest model is a discriminated union where some
+            # request types have default values for the 'method' field
+            JSONRPCRequest.model_validate(body)
+
             a2a_request = A2ARequest.model_validate(body)
+
             call_context = self._context_builder.build(request)
 
             request_id = a2a_request.root.id
@@ -353,6 +366,13 @@ class JSONRPCApplication(ABC):
                         context,
                     )
                 )
+            case GetAuthenticatedExtendedCardRequest():
+                handler_result = (
+                    await self.handler.get_authenticated_extended_card(
+                        request_obj,
+                        context,
+                    )
+                )
             case _:
                 logger.error(
                     f'Unhandled validated request type: {type(request_obj)}'
@@ -450,6 +470,10 @@ class JSONRPCApplication(ABC):
         self, request: Request
     ) -> JSONResponse:
         """Handles GET requests for the authenticated extended agent card."""
+        logger.warning(
+            'HTTP GET for authenticated extended card has been called by a client. '
+            'This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.'
+        )
         if not self.agent_card.supports_authenticated_extended_card:
             return JSONResponse(
                 {'error': 'Extended agent card not supported or not enabled.'},
