@@ -119,6 +119,8 @@ class Client(ABC):
         pairs, or a `Message`. Client will also send these values to any
         configured `Consumer`s in the client.
         """
+        return
+        yield
 
     @abstractmethod
     async def get_task(
@@ -164,6 +166,8 @@ class Client(ABC):
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
+        return
+        yield
 
     @abstractmethod
     async def get_card(

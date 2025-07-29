@@ -7,8 +7,8 @@ try:
     import grpc
 except ImportError as e:
     raise ImportError(
-        "A2AGrpcClient requires grpcio and grpcio-tools to be installed. "
-        "Install with: "
+        'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
+        'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
@@ -47,7 +47,9 @@ class GrpcTransport(ClientTransport):
         self.agent_card = agent_card
         self.stub = grpc_stub
         self._needs_extended_card = (
-            agent_card.supports_authenticated_extended_card if agent_card else True
+            agent_card.supports_authenticated_extended_card
+            if agent_card
+            else True
         )
 
     async def send_message(
@@ -101,7 +103,7 @@ class GrpcTransport(ClientTransport):
     ]:
         """Reconnects to get task updates."""
         stream = self.stub.TaskSubscription(
-            a2a_pb2.TaskSubscriptionRequest(name=f"tasks/{request.id}")
+            a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}')
         )
         while True:
             response = await stream.read()
@@ -117,7 +119,7 @@ class GrpcTransport(ClientTransport):
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         task = await self.stub.GetTask(
-            a2a_pb2.GetTaskRequest(name=f"tasks/{request.id}")
+            a2a_pb2.GetTaskRequest(name=f'tasks/{request.id}')
         )
         return proto_utils.FromProto.task(task)
 
@@ -129,7 +131,7 @@ class GrpcTransport(ClientTransport):
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         task = await self.stub.CancelTask(
-            a2a_pb2.CancelTaskRequest(name=f"tasks/{request.id}")
+            a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
         )
         return proto_utils.FromProto.task(task)
 
@@ -142,9 +144,11 @@ class GrpcTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         config = await self.stub.CreateTaskPushNotificationConfig(
             a2a_pb2.CreateTaskPushNotificationConfigRequest(
-                parent="",
-                config_id="",
-                config=proto_utils.ToProto.task_push_notification_config(request),
+                parent='',
+                config_id='',
+                config=proto_utils.ToProto.task_push_notification_config(
+                    request
+                ),
             )
         )
         return proto_utils.FromProto.task_push_notification_config(config)
@@ -158,7 +162,7 @@ class GrpcTransport(ClientTransport):
         """Retrieves the push notification configuration for a specific task."""
         config = await self.stub.GetTaskPushNotificationConfig(
             a2a_pb2.GetTaskPushNotificationConfigRequest(
-                name=f"tasks/{request.id}/pushNotification/{request.push_notification_config_id}",
+                name=f'tasks/{request.id}/pushNotification/{request.push_notification_config_id}',
             )
         )
         return proto_utils.FromProto.task_push_notification_config(config)
@@ -170,11 +174,10 @@ class GrpcTransport(ClientTransport):
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
-        if card is None and not self._needs_extended_card:
-            raise ValueError("Agent card is not available.")
-
-        if not self._needs_extended_card:
+        if card and not self._needs_extended_card:
             return card
+        if card is None and not self._needs_extended_card:
+            raise ValueError('Agent card is not available.')
 
         card_pb = await self.stub.GetAgentCard(
             a2a_pb2.GetAgentCardRequest(),
@@ -186,5 +189,5 @@ class GrpcTransport(ClientTransport):
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
-        if hasattr(self.stub, "close"):
+        if hasattr(self.stub, 'close'):
             await self.stub.close()

@@ -111,9 +111,9 @@ class ClientFactory:
                     transport_protocol = x
                     break
         if not transport_protocol:
-            raise ValueError("no compatible transports found.")
+            raise ValueError('no compatible transports found.')
         if transport_protocol not in self._registry:
-            raise ValueError(f"no client available for {transport_protocol}")
+            raise ValueError(f'no client available for {transport_protocol}')
 
         all_consumers = self._consumers.copy()
         if consumers:
@@ -146,8 +146,8 @@ def minimal_agent_card(
         capabilities=AgentCapabilities(),
         default_input_modes=[],
         default_output_modes=[],
-        description="",
+        description='',
         skills=[],
-        version="",
-        name="",
+        version='',
+        name='',
     )

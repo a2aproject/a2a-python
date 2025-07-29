@@ -73,7 +73,9 @@ class BaseClient(Client):
         params = MessageSendParams(message=request, configuration=config)
 
         if not self._config.streaming or not self._card.capabilities.streaming:
-            response = await self._transport.send_message(params, context=context)
+            response = await self._transport.send_message(
+                params, context=context
+            )
             result = (
                 (response, None) if isinstance(response, Task) else response
             )
@@ -85,6 +87,9 @@ class BaseClient(Client):
         stream = self._transport.send_message_streaming(params, context=context)
 
         first_event = await anext(stream)
+        # The response from a server may be either exactly one Message or a
+        # series of Task updates. Separate out the first message for special
+        # case handling, which allows us to simplify further stream processing.
         if isinstance(first_event, Message):
             await self.consume(first_event, self._card)
             yield first_event
@@ -102,7 +107,7 @@ class BaseClient(Client):
     ) -> ClientEvent:
         if isinstance(event, Message):
             raise A2AClientInvalidStateError(
-                "received a streamed Message from server after first response; this is not supported"
+                'received a streamed Message from server after first response; this is not supported'
             )
         await tracker.process(event)
         task = tracker.get_task_or_raise()
@@ -201,11 +206,16 @@ class BaseClient(Client):
         """
         if not self._config.streaming or not self._card.capabilities.streaming:
             raise NotImplementedError(
-                "client and/or server do not support resubscription."
+                'client and/or server do not support resubscription.'
             )
 
         tracker = ClientTaskManager()
-        async for event in self._transport.resubscribe(request, context=context):
+        # Note: resubscribe can only be called on an existing task. As such,
+        # we should never see Message updates, despite the typing of the service
+        # definition indicating it may be possible.
+        async for event in self._transport.resubscribe(
+            request, context=context
+        ):
             yield await self._process_response(tracker, event)
 
     async def get_card(

@@ -38,6 +38,7 @@ class ClientTransport(ABC):
         Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
+        return
         yield
 
     @abstractmethod
@@ -86,6 +87,7 @@ class ClientTransport(ABC):
         Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
         """Reconnects to get task updates."""
+        return
         yield
 
     @abstractmethod
