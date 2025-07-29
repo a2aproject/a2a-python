@@ -81,9 +81,7 @@ class A2AClientJSONRPCError(A2AClientError):
         """Initializes the A2AClientJsonRPCError.
 
         Args:
-            code: The error code.
-            message: A descriptive error message.
-            data: Optional additional error data.
+            error: The JSON-RPC error object.
         """
         self.error = error.error
         super().__init__(f'JSON-RPC Error {error.error}')
