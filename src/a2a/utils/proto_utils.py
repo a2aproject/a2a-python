@@ -259,7 +259,7 @@ class ToProto:
         cls, config: types.TaskPushNotificationConfig
     ) -> a2a_pb2.TaskPushNotificationConfig:
         return a2a_pb2.TaskPushNotificationConfig(
-            name=f'tasks/{config.task_id}/pushNotificationConfigs/{config.task_id}',
+            name=f'tasks/{config.task_id}/pushNotificationConfigs/{config.push_notification_config.id}',
             push_notification_config=cls.push_notification_config(
                 config.push_notification_config,
             ),
