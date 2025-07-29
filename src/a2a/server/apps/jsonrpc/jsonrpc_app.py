@@ -19,6 +19,10 @@ from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
+from a2a.extensions.common import (
+    HTTP_EXTENSION_HEADER,
+    get_requested_extensions,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -99,7 +103,13 @@ class DefaultCallContextBuilder(CallContextBuilder):
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
-        return ServerCallContext(user=user, state=state)
+        return ServerCallContext(
+            user=user,
+            state=state,
+            requested_extensions=get_requested_extensions(
+                request.headers.getlist(HTTP_EXTENSION_HEADER)
+            ),
+        )
 
 
 class JSONRPCApplication(ABC):
@@ -281,7 +291,7 @@ class JSONRPCApplication(ABC):
                 request_obj, context
             )
 
-        return self._create_response(handler_result)
+        return self._create_response(context, handler_result)
 
     async def _process_non_streaming_request(
         self,
@@ -353,10 +363,11 @@ class JSONRPCApplication(ABC):
                     id=request_id, error=error
                 )
 
-        return self._create_response(handler_result)
+        return self._create_response(context, handler_result)
 
     def _create_response(
         self,
+        context: ServerCallContext,
         handler_result: (
             AsyncGenerator[SendStreamingMessageResponse]
             | JSONRPCErrorResponse
@@ -372,12 +383,16 @@ class JSONRPCApplication(ABC):
         payloads.
 
         Args:
+            context: The ServerCallContext provided to the request handler.
             handler_result: The result from a request handler method. Can be an
                 async generator for streaming or a Pydantic model for non-streaming.
 
         Returns:
             A Starlette JSONResponse or EventSourceResponse.
         """
+        headers = {}
+        if exts := context.activated_extensions:
+            headers[HTTP_EXTENSION_HEADER] = ', '.join(sorted(exts))
         if isinstance(handler_result, AsyncGenerator):
             # Result is a stream of SendStreamingMessageResponse objects
             async def event_generator(
@@ -386,17 +401,21 @@ class JSONRPCApplication(ABC):
                 async for item in stream:
                     yield {'data': item.root.model_dump_json(exclude_none=True)}
 
-            return EventSourceResponse(event_generator(handler_result))
+            return EventSourceResponse(
+                event_generator(handler_result), headers=headers
+            )
         if isinstance(handler_result, JSONRPCErrorResponse):
             return JSONResponse(
                 handler_result.model_dump(
                     mode='json',
                     exclude_none=True,
-                )
+                ),
+                headers=headers,
             )
 
         return JSONResponse(
-            handler_result.root.model_dump(mode='json', exclude_none=True)
+            handler_result.root.model_dump(mode='json', exclude_none=True),
+            headers=headers,
         )
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:

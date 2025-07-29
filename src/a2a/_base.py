@@ -64,7 +64,7 @@ class A2ABaseModel(BaseModel):
         # Get the map and find the corresponding snake_case field name.
         field_name = type(self)._get_alias_map().get(name)  # noqa: SLF001
 
-        if field_name:
+        if field_name and field_name != name:
             # An alias was used, issue a warning.
             warnings.warn(
                 (
@@ -83,7 +83,7 @@ class A2ABaseModel(BaseModel):
         # Get the map and find the corresponding snake_case field name.
         field_name = type(self)._get_alias_map().get(name)  # noqa: SLF001
 
-        if field_name:
+        if field_name and field_name != name:
             # An alias was used, issue a warning.
             warnings.warn(
                 (

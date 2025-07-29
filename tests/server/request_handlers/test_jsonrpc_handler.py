@@ -457,7 +457,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         task_push_config = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )
@@ -492,7 +492,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         task_push_config = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )
@@ -579,7 +579,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             )
             request.params.configuration = MessageSendConfiguration(
                 accepted_output_modes=['text'],
-                pushNotificationConfig=PushNotificationConfig(
+                push_notification_config=PushNotificationConfig(
                     url='http://example.com'
                 ),
             )
@@ -761,7 +761,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Act & Assert
         task_push_config = TaskPushNotificationConfig(
             task_id='task_123',
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )
@@ -825,7 +825,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Act
         task_push_config = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )
@@ -1049,7 +1049,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         task_push_config = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 id='config1', url='http://example.com'
             ),
         )
@@ -1085,7 +1085,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         task_push_config = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )
@@ -1116,9 +1116,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Create request handler without a push notifier
         request_handler = AsyncMock(spec=DefaultRequestHandler)
-        task_push_config = TaskPushNotificationConfig(
+        _ = TaskPushNotificationConfig(
             task_id=mock_task.id,
-            pushNotificationConfig=PushNotificationConfig(
+            push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
         )

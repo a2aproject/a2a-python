@@ -33,7 +33,7 @@ def agent_card_with_api_key():
     }
     api_key_scheme = APIKeySecurityScheme.model_validate(api_key_scheme_data)
 
-    agent_card = AgentCard(
+    return AgentCard(
         name='APIKeyAgent',
         description='An agent that uses API Key auth.',
         url='http://example.com/apikey-agent',
@@ -45,7 +45,6 @@ def agent_card_with_api_key():
         security_schemes={'api_key_auth': SecurityScheme(root=api_key_scheme)},
         security=[{'api_key_auth': []}],
     )
-    return agent_card
 
 
 def test_starlette_agent_card_with_api_key_scheme_alias(
@@ -146,7 +145,7 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
             assert response.status_code == 413
     except Exception as e:
         # Depending on server setup, it might just drop the connection for very large payloads
-        assert isinstance(e, (ConnectionResetError, RuntimeError))
+        assert isinstance(e, ConnectionResetError | RuntimeError)
 
 
 def test_handle_unicode_characters(agent_card_with_api_key: AgentCard):

@@ -147,8 +147,8 @@ async def test_add_artifact_generates_id(
     assert isinstance(event, TaskArtifactUpdateEvent)
     assert event.artifact.artifact_id == str(known_uuid)
     assert event.artifact.parts == sample_parts
-    assert event.append == None
-    assert event.last_chunk == None
+    assert event.append is None
+    assert event.last_chunk is None
 
 
 @pytest.mark.asyncio

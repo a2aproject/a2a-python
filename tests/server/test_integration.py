@@ -457,7 +457,7 @@ def test_set_push_notification_config(
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
         task_id='t2',
-        pushNotificationConfig=PushNotificationConfig(
+        push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
     )

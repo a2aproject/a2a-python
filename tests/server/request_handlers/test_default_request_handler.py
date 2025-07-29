@@ -1208,7 +1208,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
 
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1',
-        pushNotificationConfig=PushNotificationConfig(
+        push_notification_config=PushNotificationConfig(
             url='http://1.example.com'
         ),
     )
@@ -1447,7 +1447,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     # multiple calls without config id should replace the existing
     set_config_params1 = TaskPushNotificationConfig(
         task_id='task_1',
-        pushNotificationConfig=PushNotificationConfig(
+        push_notification_config=PushNotificationConfig(
             url='http://1.example.com'
         ),
     )
@@ -1457,7 +1457,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
     set_config_params2 = TaskPushNotificationConfig(
         task_id='task_1',
-        pushNotificationConfig=PushNotificationConfig(
+        push_notification_config=PushNotificationConfig(
             url='http://2.example.com'
         ),
     )
@@ -1555,7 +1555,7 @@ async def test_delete_no_task_push_notification_config_info():
     result = await request_handler.on_delete_task_push_notification_config(
         params, create_server_call_context()
     )
-    assert result == None
+    assert result is None
 
     params = DeleteTaskPushNotificationConfigParams(
         id='task2', push_notification_config_id='config_non_existant'
@@ -1564,7 +1564,7 @@ async def test_delete_no_task_push_notification_config_info():
     result = await request_handler.on_delete_task_push_notification_config(
         params, create_server_call_context()
     )
-    assert result == None
+    assert result is None
 
 
 @pytest.mark.asyncio
@@ -1600,7 +1600,7 @@ async def test_delete_task_push_notification_config_info_with_config():
         params, create_server_call_context()
     )
 
-    assert result1 == None
+    assert result1 is None
 
     result2 = await request_handler.on_list_task_push_notification_config(
         ListTaskPushNotificationConfigParams(id='task_1'),
@@ -1640,7 +1640,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         params, create_server_call_context()
     )
 
-    assert result == None
+    assert result is None
 
     result2 = await request_handler.on_list_task_push_notification_config(
         ListTaskPushNotificationConfigParams(id='task_1'),

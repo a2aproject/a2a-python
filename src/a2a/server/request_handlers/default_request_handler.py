@@ -280,12 +280,18 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
-        interrupted = False
+        blocking = True  # Default to blocking behavior
+        if params.configuration and params.configuration.blocking is False:
+            blocking = False
+
+        interrupted_or_non_blocking = False
         try:
             (
                 result,
-                interrupted,
-            ) = await result_aggregator.consume_and_break_on_interrupt(consumer)
+                interrupted_or_non_blocking,
+            ) = await result_aggregator.consume_and_break_on_interrupt(
+                consumer, blocking=blocking
+            )
             if not result:
                 raise ServerError(error=InternalError())
 
@@ -300,7 +306,7 @@ class DefaultRequestHandler(RequestHandler):
             logger.error(f'Agent execution failed. Error: {e}')
             raise
         finally:
-            if interrupted:
+            if interrupted_or_non_blocking:
                 # TODO: Track this disconnected cleanup task.
                 asyncio.create_task(  # noqa: RUF006
                     self._cleanup_producer(producer_task, task_id)

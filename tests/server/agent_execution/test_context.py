@@ -5,6 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from a2a.server.agent_execution import RequestContext
+from a2a.server.context import ServerCallContext
 from a2a.types import (
     Message,
     MessageSendParams,
@@ -263,3 +264,16 @@ class TestRequestContext:
 
         assert context.context_id == mock_task.context_id
         assert context.current_task == mock_task
+
+    def test_extension_handling(self):
+        """Test extension handling in RequestContext."""
+        call_context = ServerCallContext(requested_extensions={'foo', 'bar'})
+        context = RequestContext(call_context=call_context)
+
+        assert context.requested_extensions == {'foo', 'bar'}
+
+        context.add_activated_extension('foo')
+        assert call_context.activated_extensions == {'foo'}
+
+        context.add_activated_extension('baz')
+        assert call_context.activated_extensions == {'foo', 'baz'}
