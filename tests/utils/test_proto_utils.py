@@ -237,8 +237,13 @@ class TestProtoUtils:
         assert isinstance(exc_info.value.error, types.InvalidParamsError)
 
     def test_task_push_config_from_proto_invalid_parent(self):
-        request = a2a_pb2.CreateTaskPushNotificationConfigRequest(
-            parent='invalid-parent'
+        request = proto_utils.ToProto.task_push_notification_config(
+            types.TaskPushNotificationConfig(
+                task_id='test-task-id',
+                push_notification_config=types.PushNotificationConfig(
+                    url='test_url'
+                ),
+            )
         )
         with pytest.raises(ServerError) as exc_info:
             proto_utils.FromProto.task_push_notification_config(request)
