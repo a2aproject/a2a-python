@@ -5,7 +5,7 @@ import traceback
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, Protocol, runtime_checkable
 
 from fastapi import FastAPI
 from pydantic import ValidationError
@@ -112,7 +112,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         )
 
 
-class JSONRPCApplication(ABC):
+class JSONRPCApplication:
     """Base class for A2A JSONRPC applications.
 
     Handles incoming JSON-RPC requests, routes them to the appropriate
@@ -464,7 +464,15 @@ class JSONRPCApplication(ABC):
             status_code=404,
         )
 
-    @abstractmethod
+
+@runtime_checkable
+class JSONRPCApplicationBuilder(Protocol):
+    """Protocol for building a JSON-RPC application.
+
+    Implementers of this protocol must provide a `build` method that returns a FastAPI
+    or Starlette application instance configured for A2A JSON-RPC communication.
+    """
+
     def build(
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
@@ -484,6 +492,4 @@ class JSONRPCApplication(ABC):
         Returns:
             A configured JSONRPC application instance.
         """
-        raise NotImplementedError(
-            'Subclasses must implement the build method to create the application instance.'
-        )
+        ...

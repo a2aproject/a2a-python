@@ -3,14 +3,20 @@
 from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
     CallContextBuilder,
-    JSONRPCApplication,
+    JSONRPCApplicationBuilder,
 )
-from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
+from a2a.server.apps.jsonrpc.starlette_app import (
+    A2AStarletteApplication,
+    StarletteBuilder,
+    StarletteRouteBuilder,
+)
 
 
 __all__ = [
     'A2AFastAPIApplication',
     'A2AStarletteApplication',
     'CallContextBuilder',
-    'JSONRPCApplication',
+    'JSONRPCApplicationBuilder',
+    'StarletteBuilder',
+    'StarletteRouteBuilder',
 ]

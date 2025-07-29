@@ -74,6 +74,11 @@ exclude = ["tests/"]
 vcs = "git"
 style = "pep440"
 
+[tool.uv.workspace]
+members = [
+    "examples/apicatalog",
+]
+
 [dependency-groups]
 dev = [
   "datamodel-code-generator>=0.30.0",
