@@ -4,7 +4,7 @@ import logging
 import traceback
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 from fastapi import FastAPI
@@ -127,6 +127,11 @@ class JSONRPCApplication(ABC):
         http_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], AgentCard
+        ]
+        | None = None,
     ) -> None:
         """Initializes the A2AStarletteApplication.
 
@@ -139,15 +144,23 @@ class JSONRPCApplication(ABC):
             context_builder: The CallContextBuilder used to construct the
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
         """
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
+        self.card_modifier = card_modifier
+        self.extended_card_modifier = extended_card_modifier
         self.handler = JSONRPCHandler(
             agent_card=agent_card, request_handler=http_handler
         )
         if (
             self.agent_card.supports_authenticated_extended_card
             and self.extended_agent_card is None
+            and self.extended_card_modifier is None
         ):
             logger.error(
                 'AgentCard.supports_authenticated_extended_card is True, but no extended_agent_card was provided. The /agent/authenticatedExtendedCard endpoint will return 404.'
@@ -428,23 +441,22 @@ class JSONRPCApplication(ABC):
         Returns:
             A JSONResponse containing the agent card data.
         """
-        # The public agent card is a direct serialization of the agent_card
-        # provided at initialization.
+        if request.url.path == PREV_AGENT_CARD_WELL_KNOWN_PATH:
+            logger.warning(
+                f"Deprecated agent card endpoint '{PREV_AGENT_CARD_WELL_KNOWN_PATH}' accessed. "
+                f"Please use '{AGENT_CARD_WELL_KNOWN_PATH}' instead. This endpoint will be removed in a future version."
+            )
+
+        card_to_serve = self.agent_card
+        if self.card_modifier:
+            card_to_serve = self.card_modifier(card_to_serve)
+
         return JSONResponse(
-            self.agent_card.model_dump(
+            card_to_serve.model_dump(
                 exclude_none=True,
                 by_alias=True,
             )
         )
-
-    async def handle_deprecated_agent_card_path(
-        self, request: Request
-    ) -> JSONResponse:
-        """Handles GET requests for the deprecated agent card endpoint."""
-        logger.warning(
-            f"Deprecated agent card endpoint '{PREV_AGENT_CARD_WELL_KNOWN_PATH}' accessed. Please use '{AGENT_CARD_WELL_KNOWN_PATH}' instead. This endpoint will be removed in a future version."
-        )
-        return await self._handle_get_agent_card(request)
 
     async def _handle_get_authenticated_extended_agent_card(
         self, request: Request
@@ -456,17 +468,24 @@ class JSONRPCApplication(ABC):
                 status_code=404,
             )
 
-        # If an explicit extended_agent_card is provided, serve that.
-        if self.extended_agent_card:
+        card_to_serve = self.extended_agent_card
+
+        if self.extended_card_modifier:
+            context = self._context_builder.build(request)
+            # If no base extended card is provided, pass the public card to the modifier
+            base_card = card_to_serve if card_to_serve else self.agent_card
+            card_to_serve = self.extended_card_modifier(base_card, context)
+
+        if card_to_serve:
             return JSONResponse(
-                self.extended_agent_card.model_dump(
+                card_to_serve.model_dump(
                     exclude_none=True,
                     by_alias=True,
                 )
             )
-        # If supports_authenticated_extended_card is true, but no specific
-        # extended_agent_card was provided during server initialization,
-        # return a 404
+        # If supports_authenticated_extended_card is true, but no
+        # extended_agent_card was provided, and no modifier produced a card,
+        # return a 404.
         return JSONResponse(
             {
                 'error': 'Authenticated extended agent card is supported but not configured on the server.'

@@ -18,6 +18,8 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
+from collections.abc import Callable
+
 import a2a.grpc.a2a_pb2_grpc as a2a_grpc
 
 from a2a import types
@@ -87,6 +89,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         agent_card: AgentCard,
         request_handler: RequestHandler,
         context_builder: CallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
     ):
         """Initializes the GrpcHandler.
 
@@ -96,10 +99,13 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                              delegate requests to.
             context_builder: The CallContextBuilder object. If none the
                              DefaultCallContextBuilder is used.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
         self.context_builder = context_builder or DefaultCallContextBuilder()
+        self.card_modifier = card_modifier
 
     async def SendMessage(
         self,
@@ -331,7 +337,10 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.AgentCard:
         """Get the agent card for the agent served."""
-        return proto_utils.ToProto.agent_card(self.agent_card)
+        card_to_serve = self.agent_card
+        if self.card_modifier:
+            card_to_serve = self.card_modifier(card_to_serve)
+        return proto_utils.ToProto.agent_card(card_to_serve)
 
     async def abort_context(
         self, error: ServerError, context: grpc.aio.ServicerContext

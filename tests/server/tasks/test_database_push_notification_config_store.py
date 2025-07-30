@@ -3,6 +3,14 @@ import os
 from collections.abc import AsyncGenerator
 
 import pytest
+
+# Skip entire test module if SQLAlchemy is not installed
+pytest.importorskip('sqlalchemy', reason='Database tests require SQLAlchemy')
+pytest.importorskip(
+    'cryptography',
+    reason='Database tests require Cryptography. Install extra encryption',
+)
+
 import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
@@ -10,14 +18,6 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
     create_async_engine,
-)
-
-
-# Skip entire test module if SQLAlchemy is not installed
-pytest.importorskip('sqlalchemy', reason='Database tests require SQLAlchemy')
-pytest.importorskip(
-    'cryptography',
-    reason='Database tests require Cryptography. Install extra encryption',
 )
 
 # Now safe to import SQLAlchemy-dependent modules
