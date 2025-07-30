@@ -61,17 +61,44 @@ import logging
 from collections.abc import Callable
 from typing import Any, TypeAlias
 
-from opentelemetry import trace
-from opentelemetry.trace import SpanKind as _SpanKind
-from opentelemetry.trace import StatusCode
 
+logger = logging.getLogger(__name__)
+
+try:
+    from opentelemetry import trace
+    from opentelemetry.trace import SpanKind as _SpanKind
+    from opentelemetry.trace import StatusCode
+
+except ImportError:
+    logger.debug(
+        'OpenTelemetry not found. Tracing will be disabled. '
+        'Install with: \'pip install "a2a-sdk[telemetry]"\''
+    )
+
+    class _NoOp:
+        """A no-op object that absorbs all tracing calls when OpenTelemetry is not installed."""
+
+        def __call__(self, *args: Any, **kwargs: Any) -> '_NoOp':
+            return self
+
+        def __enter__(self) -> '_NoOp':
+            return self
+
+        def __exit__(self, *args: object, **kwargs: Any) -> None:
+            pass
+
+        def __getattr__(self, name: str) -> '_NoOp':
+            return self
+
+    trace = _NoOp()
+    _SpanKind = _NoOp()
+    StatusCode = _NoOp()
 
 SpanKind: TypeAlias = _SpanKind
 __all__ = ['SpanKind']
+
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
 INSTRUMENTING_MODULE_VERSION = '1.0.0'
-
-logger = logging.getLogger(__name__)
 
 
 def trace_function(  # noqa: PLR0915
@@ -280,22 +307,15 @@ def trace_class(
     exclude_list = exclude_list or []
 
     def decorator(cls: Any) -> Any:
-        all_methods = {}
         for name, method in inspect.getmembers(cls, inspect.isfunction):
-            # Skip Dunders
             if name.startswith('__') and name.endswith('__'):
                 continue
-
-            # Skip if include list is defined but the method not included.
             if include_list and name not in include_list:
                 continue
-            # Skip if include list is not defined but the method is in excludes.
             if not include_list and name in exclude_list:
                 continue
 
-            all_methods[name] = method
             span_name = f'{cls.__module__}.{cls.__name__}.{name}'
-            # Set the decorator on the method.
             setattr(
                 cls,
                 name,

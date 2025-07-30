@@ -11,8 +11,6 @@ dependencies = [
   "fastapi>=0.115.2",
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
-  "opentelemetry-api>=1.33.0",
-  "opentelemetry-sdk>=1.33.0",
   "pydantic>=2.11.3",
   "sse-starlette",
   "starlette"
@@ -38,6 +36,7 @@ sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 sql = ["sqlalchemy[asyncio,postgresql-asyncpg,aiomysql,aiosqlite]>=2.0.0"]
 encryption = ["cryptography>=43.0.0"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "protobuf==5.29.5", "google-api-core>=1.26.0"]
+telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0", "opentelemetry-semantic-conventions>=0.55b1"]
 
 [project.urls]
 homepage = "https://a2a-protocol.org/"
