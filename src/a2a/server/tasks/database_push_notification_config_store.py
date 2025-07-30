@@ -1,3 +1,4 @@
+# ruff: noqa: PLC0415
 import json
 import logging
 
@@ -94,7 +95,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         if encryption_key:
             try:
-                from cryptography.fernet import Fernet  # noqa: PLC0415
+                from cryptography.fernet import Fernet
             except ImportError as e:
                 raise ImportError(
                     "DatabasePushNotificationConfigStore with encryption requires the 'cryptography' "
@@ -166,7 +167,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         payload = model_instance.config_data
 
         if self._fernet:
-            from cryptography.fernet import InvalidToken  # noqa: PLC0415
+            from cryptography.fernet import InvalidToken
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)
