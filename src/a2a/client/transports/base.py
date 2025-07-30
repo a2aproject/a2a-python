@@ -96,7 +96,7 @@ class ClientTransport(ABC):
         *,
         context: ClientCallContext | None = None,
     ) -> AgentCard:
-        """Retrieves the agent's card."""
+        """Retrieves the AgentCard."""
 
     @abstractmethod
     async def close(self) -> None:

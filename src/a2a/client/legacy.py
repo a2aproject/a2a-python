@@ -15,6 +15,7 @@ from a2a.types import (
     CancelTaskRequest,
     CancelTaskResponse,
     CancelTaskSuccessResponse,
+    GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
     GetTaskPushNotificationConfigSuccessResponse,
@@ -31,6 +32,7 @@ from a2a.types import (
     SetTaskPushNotificationConfigRequest,
     SetTaskPushNotificationConfigResponse,
     SetTaskPushNotificationConfigSuccessResponse,
+    TaskIdParams,
     TaskResubscriptionRequest,
 )
 
@@ -62,6 +64,21 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> SendMessageResponse:
+        """Sends a non-streaming message request to the agent.
+
+        Args:
+            request: The `SendMessageRequest` object containing the message and configuration.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `SendMessageResponse` object containing the agent's response (Task or Message) or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
 
@@ -75,7 +92,7 @@ class A2AClient:
                 )
             )
         except A2AClientJSONRPCError as e:
-            return SendMessageResponse(root=JSONRPCErrorResponse(error=e.error))
+            return SendMessageResponse(JSONRPCErrorResponse(error=e.error))
 
     async def send_message_streaming(
         self,
@@ -84,6 +101,24 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
+        """Sends a streaming message request to the agent and yields responses as they arrive.
+
+        This method uses Server-Sent Events (SSE) to receive a stream of updates from the agent.
+
+        Args:
+            request: The `SendStreamingMessageRequest` object containing the message and configuration.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request. A default `timeout=None` is set but can be overridden.
+            context: The client call context.
+
+        Yields:
+            `SendStreamingMessageResponse` objects as they are received in the SSE stream.
+            These can be Task, Message, TaskStatusUpdateEvent, or TaskArtifactUpdateEvent.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP or SSE protocol error occurs during the request.
+            A2AClientJSONError: If an SSE event data cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
 
@@ -103,6 +138,21 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> GetTaskResponse:
+        """Retrieves the current state and history of a specific task.
+
+        Args:
+            request: The `GetTaskRequest` object specifying the task ID and history length.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `GetTaskResponse` object containing the Task or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
         try:
@@ -124,6 +174,21 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> CancelTaskResponse:
+        """Requests the agent to cancel a specific task.
+
+        Args:
+            request: The `CancelTaskRequest` object specifying the task ID.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `CancelTaskResponse` object containing the updated Task with canceled status or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
         try:
@@ -136,7 +201,7 @@ class A2AClient:
                 )
             )
         except A2AClientJSONRPCError as e:
-            return CancelTaskResponse(root=JSONRPCErrorResponse(error=e.error))
+            return CancelTaskResponse(JSONRPCErrorResponse(error=e.error))
 
     async def set_task_callback(
         self,
@@ -145,6 +210,21 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> SetTaskPushNotificationConfigResponse:
+        """Sets or updates the push notification configuration for a specific task.
+
+        Args:
+            request: The `SetTaskPushNotificationConfigRequest` object specifying the task ID and configuration.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `SetTaskPushNotificationConfigResponse` object containing the confirmation or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
         try:
@@ -158,7 +238,7 @@ class A2AClient:
             )
         except A2AClientJSONRPCError as e:
             return SetTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(error=e.error)
+                JSONRPCErrorResponse(error=e.error)
             )
 
     async def get_task_callback(
@@ -168,11 +248,31 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> GetTaskPushNotificationConfigResponse:
+        """Retrieves the push notification configuration for a specific task.
+
+        Args:
+            request: The `GetTaskPushNotificationConfigRequest` object specifying the task ID.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `GetTaskPushNotificationConfigResponse` object containing the configuration or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
+        params = request.params
+        if isinstance(params, TaskIdParams):
+            params = GetTaskPushNotificationConfigParams(
+                id=request.params.task_id
+            )
         try:
             result = await self._transport.get_task_callback(
-                request.params, context=context
+                params, context=context
             )
             return GetTaskPushNotificationConfigResponse(
                 root=GetTaskPushNotificationConfigSuccessResponse(
@@ -181,7 +281,7 @@ class A2AClient:
             )
         except A2AClientJSONRPCError as e:
             return GetTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(error=e.error)
+                JSONRPCErrorResponse(error=e.error)
             )
 
     async def resubscribe(
@@ -191,6 +291,24 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[SendStreamingMessageResponse, None]:
+        """Reconnects to get task updates.
+
+        This method uses Server-Sent Events (SSE) to receive a stream of updates from the agent.
+
+        Args:
+            request: The `TaskResubscriptionRequest` object containing the task information to reconnect to.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request. A default `timeout=None` is set but can be overridden.
+            context: The client call context.
+
+        Yields:
+            `SendStreamingMessageResponse` objects as they are received in the SSE stream.
+            These can be Task, Message, TaskStatusUpdateEvent, or TaskArtifactUpdateEvent.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP or SSE protocol error occurs during the request.
+            A2AClientJSONError: If an SSE event data cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
 
@@ -209,6 +327,20 @@ class A2AClient:
         http_kwargs: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
     ) -> AgentCard:
+        """Retrieves the authenticated card (if necessary) or the public one.
+
+        Args:
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.post request.
+            context: The client call context.
+
+        Returns:
+            A `AgentCard` object containing the card or an error.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON or validated.
+        """
         if not context and http_kwargs:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
         return await self._transport.get_card(context=context)

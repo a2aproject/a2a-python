@@ -1,10 +1,26 @@
 """Tests for the legacy client compatibility layer."""
 
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
+import httpx
 import pytest
 
-from a2a.types import AgentCard
+from a2a.client import A2AClient, A2AGrpcClient
+from a2a.types import (
+    AgentCard,
+    AgentCapabilities,
+    Message,
+    Role,
+    TextPart,
+    Part,
+    Task,
+    TaskStatus,
+    TaskState,
+    TaskQueryParams,
+    SendMessageRequest,
+    MessageSendParams,
+    GetTaskRequest,
+)
 
 
 @pytest.fixture
