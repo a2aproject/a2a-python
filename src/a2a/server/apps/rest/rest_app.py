@@ -6,10 +6,11 @@ import traceback
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from typing import Any
 
+from google.protobuf import message as message_pb2
 from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
@@ -111,9 +112,11 @@ class RESTApplication:
 
     async def _handle_request(
         self,
-        method: Callable[[Request, ServerCallContext], Awaitable[str]],
+        method: Callable[
+            [Request, ServerCallContext], Awaitable[dict[str, Any]]
+        ],
         request: Request,
-    ) -> JSONResponse:
+    ) -> Response:
         try:
             call_context = self._context_builder.build(request)
             response = await method(request, call_context)
@@ -123,7 +126,9 @@ class RESTApplication:
 
     async def _handle_streaming_request(
         self,
-        method: Callable[[Request, ServerCallContext], AsyncIterator[str]],
+        method: Callable[
+            [Request, ServerCallContext], AsyncIterator[message_pb2.Message]
+        ],
         request: Request,
     ) -> EventSourceResponse:
         try:

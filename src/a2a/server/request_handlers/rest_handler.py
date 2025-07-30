@@ -1,8 +1,9 @@
 import logging
 
 from collections.abc import AsyncIterable
+from typing import Any
 
-from google.protobuf.json_format import MessageToJson, Parse
+from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
 from starlette.requests import Request
 
 from a2a.grpc import a2a_pb2
@@ -60,7 +61,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'message/send' REST method.
 
         Args:
@@ -85,7 +86,7 @@ class RESTHandler:
             task_or_message = await self.request_handler.on_message_send(
                 a2a_request, context
             )
-            return MessageToJson(
+            return MessageToDict(
                 proto_utils.ToProto.task_or_message(task_or_message)
             )
         except ServerError as e:
