@@ -165,13 +165,13 @@ class TestA2ACardResolver:
         resolver = A2ACardResolver(
             httpx_client=mock_httpx_client,
             base_url='http://example.com/',  # With trailing slash
-            agent_card_path='/.well-known/agent.json/',  # With leading/trailing slash
+            agent_card_path='/.well-known/agent-card.json/',  # With leading/trailing slash
         )
         assert (
             resolver.base_url == 'http://example.com'
         )  # Trailing slash stripped
         # constructor lstrips agent_card_path, but keeps trailing if provided
-        assert resolver.agent_card_path == '.well-known/agent.json/'
+        assert resolver.agent_card_path == '.well-known/agent-card.json/'
 
     @pytest.mark.asyncio
     async def test_get_agent_card_success_public_only(
