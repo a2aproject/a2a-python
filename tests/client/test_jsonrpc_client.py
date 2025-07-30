@@ -148,10 +148,10 @@ class TestA2ACardResolver:
         resolver = A2ACardResolver(
             httpx_client=mock_httpx_client,
             base_url='http://example.com/',
-            agent_card_path='/.well-known/agent.json/',
+            agent_card_path='/.well-known/agent-card.json/',
         )
         assert resolver.base_url == 'http://example.com'
-        assert resolver.agent_card_path == '.well-known/agent.json/'
+        assert resolver.agent_card_path == '.well-known/agent-card.json/'
 
     @pytest.mark.asyncio
     async def test_get_agent_card_success_public_only(
