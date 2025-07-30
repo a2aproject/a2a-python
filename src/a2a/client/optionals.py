@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 # Attempt to import the optional module
 try:
-    from grpc.aio import Channel
+    from grpc.aio import Channel  # pyright: ignore[reportAssignmentType]
 except ImportError:
     # If grpc.aio is not available, define a dummy type for type checking.
     # This dummy type will only be used by type checkers.

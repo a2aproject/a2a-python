@@ -15,7 +15,7 @@ if TYPE_CHECKING:
 class A2AGrpcClient(GrpcTransport):
     """[DEPRECATED] Backwards compatibility wrapper for the gRPC client."""
 
-    def __init__(
+    def __init__(  # pylint: disable=super-init-not-called
         self,
         grpc_stub: 'A2AServiceStub',
         agent_card: AgentCard,
@@ -26,4 +26,19 @@ class A2AGrpcClient(GrpcTransport):
             DeprecationWarning,
             stacklevel=2,
         )
-        super().__init__(grpc_stub, agent_card)
+        # The old gRPC client accepted a stub directly. The new one accepts a
+        # channel and builds the stub itself. We just have a stub here, so we
+        # need to handle initialization ourselves.
+        self.stub = grpc_stub
+        self.agent_card = agent_card
+        self._needs_extended_card = (
+            agent_card.supports_authenticated_extended_card
+            if agent_card
+            else True
+        )
+
+        class _NopChannel:
+            async def close(self):
+                pass
+
+        self.channel = _NopChannel()

@@ -78,13 +78,9 @@ class RestTransport(ClientTransport):
     ) -> dict[str, Any] | None:
         return context.state.get('http_kwargs') if context else None
 
-    async def send_message(
-        self,
-        request: MessageSendParams,
-        *,
-        context: ClientCallContext | None = None,
-    ) -> Task | Message:
-        """Sends a non-streaming message request to the agent."""
+    async def _prepare_send_message(
+        self, request: MessageSendParams, context: ClientCallContext | None
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
         pb = a2a_pb2.SendMessageRequest(
             request=proto_utils.ToProto.message(request.message),
             configuration=proto_utils.ToProto.message_send_configuration(
@@ -101,6 +97,18 @@ class RestTransport(ClientTransport):
             payload,
             self._get_http_args(context),
             context,
+        )
+        return payload, modified_kwargs
+
+    async def send_message(
+        self,
+        request: MessageSendParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> Task | Message:
+        """Sends a non-streaming message request to the agent."""
+        payload, modified_kwargs = await self._prepare_send_message(
+            request, context
         )
         response_data = await self._send_post_request(
             '/v1/message:send', payload, modified_kwargs
@@ -118,22 +126,8 @@ class RestTransport(ClientTransport):
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
-        pb = a2a_pb2.SendMessageRequest(
-            request=proto_utils.ToProto.message(request.message),
-            configuration=proto_utils.ToProto.message_send_configuration(
-                request.configuration
-            ),
-            metadata=(
-                proto_utils.ToProto.metadata(request.metadata)
-                if request.metadata
-                else None
-            ),
-        )
-        payload = MessageToDict(pb)
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
-            self._get_http_args(context),
-            context,
+        payload, modified_kwargs = await self._prepare_send_message(
+            request, context
         )
 
         modified_kwargs.setdefault('timeout', None)
@@ -161,18 +155,9 @@ class RestTransport(ClientTransport):
                     503, f'Network communication error: {e}'
                 ) from e
 
-    async def _send_post_request(
-        self,
-        target: str,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
+    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
         try:
-            response = await self.httpx_client.post(
-                f'{self.url}{target}',
-                json=rpc_request_payload,
-                **(http_kwargs or {}),
-            )
+            response = await self.httpx_client.send(request)
             response.raise_for_status()
             return response.json()
         except httpx.HTTPStatusError as e:
@@ -184,28 +169,35 @@ class RestTransport(ClientTransport):
                 503, f'Network communication error: {e}'
             ) from e
 
+    async def _send_post_request(
+        self,
+        target: str,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'POST',
+                f'{self.url}{target}',
+                json=rpc_request_payload,
+                **(http_kwargs or {}),
+            )
+        )
+
     async def _send_get_request(
         self,
         target: str,
         query_params: dict[str, str],
         http_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            response = await self.httpx_client.get(
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'GET',
                 f'{self.url}{target}',
                 params=query_params,
                 **(http_kwargs or {}),
             )
-            response.raise_for_status()
-            return response.json()
-        except httpx.HTTPStatusError as e:
-            raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-        except json.JSONDecodeError as e:
-            raise A2AClientJSONError(str(e)) from e
-        except httpx.RequestError as e:
-            raise A2AClientHTTPError(
-                503, f'Network communication error: {e}'
-            ) from e
+        )
 
     async def get_task(
         self,

@@ -5,8 +5,6 @@ from collections.abc import AsyncGenerator
 
 try:
     import grpc
-
-    from grpc.aio import Channel
 except ImportError as e:
     raise ImportError(
         'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
@@ -16,6 +14,7 @@ except ImportError as e:
 
 from a2a.client.client import ClientConfig
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
@@ -112,7 +111,7 @@ class GrpcTransport(ClientTransport):
         )
         while True:
             response = await stream.read()
-            if response == grpc.aio.EOF:
+            if response == grpc.aio.EOF:  # pyright: ignore[reportAttributeAccessIssue]
                 break
             yield proto_utils.FromProto.stream_response(response)
 
@@ -127,7 +126,7 @@ class GrpcTransport(ClientTransport):
         )
         while True:
             response = await stream.read()
-            if response == grpc.aio.EOF:
+            if response == grpc.aio.EOF:  # pyright: ignore[reportAttributeAccessIssue]
                 break
             yield proto_utils.FromProto.stream_response(response)
 
