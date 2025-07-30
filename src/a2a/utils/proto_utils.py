@@ -2,6 +2,7 @@
 """Utils for converting between proto and Python types."""
 
 import json
+import logging
 import re
 
 from typing import Any
@@ -13,9 +14,14 @@ from a2a.grpc import a2a_pb2
 from a2a.utils.errors import ServerError
 
 
+logger = logging.getLogger(__name__)
+
+
 # Regexp patterns for matching
-_TASK_NAME_MATCH = r'tasks/(\w+)'
-_TASK_PUSH_CONFIG_NAME_MATCH = r'tasks/(\w+)/pushNotificationConfigs/(\w+)'
+_TASK_NAME_MATCH = r'tasks/([\w-]+)'
+_TASK_PUSH_CONFIG_NAME_MATCH = (
+    r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
+)
 
 
 class ToProto:

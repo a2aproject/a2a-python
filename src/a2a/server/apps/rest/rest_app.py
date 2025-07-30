@@ -14,13 +14,8 @@ from a2a.server.apps.jsonrpc import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.rest_handler import (
-    RESTHandler,
-)
-from a2a.types import (
-    AgentCard,
-    AuthenticatedExtendedCardNotConfiguredError,
-)
+from a2a.server.request_handlers.rest_handler import RESTHandler
+from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -63,21 +58,7 @@ class RESTApplication:
     @rest_error_handler
     async def _handle_request(
         self,
-        method: Callable[
-            [Request, ServerCallContext], Awaitable[dict[str, Any]]
-        ],
-        request: Request,
-    ) -> Response:
-        call_context = self._context_builder.build(request)
-        response = await method(request, call_context)
-        return JSONResponse(content=response)
-
-    @rest_error_handler
-    async def _handle_list_request(
-        self,
-        method: Callable[
-            [Request, ServerCallContext], Awaitable[list[dict[str, Any]]]
-        ],
+        method: Callable[[Request, ServerCallContext], Awaitable[Any]],
         request: Request,
     ) -> Response:
         call_context = self._context_builder.build(request)
@@ -87,15 +68,13 @@ class RESTApplication:
     @rest_stream_error_handler
     async def _handle_streaming_request(
         self,
-        method: Callable[
-            [Request, ServerCallContext], AsyncIterable[dict[str, Any]]
-        ],
+        method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
         request: Request,
     ) -> EventSourceResponse:
         call_context = self._context_builder.build(request)
 
         async def event_generator(
-            stream: AsyncIterable[dict[str, Any]],
+            stream: AsyncIterable[Any],
         ) -> AsyncIterator[dict[str, dict[str, Any]]]:
             async for item in stream:
                 yield {'data': item}
@@ -164,7 +143,10 @@ class RESTApplication:
                 self._handle_streaming_request,
                 self.handler.on_message_send_stream,
             ),
-            ('/v1/tasks/{id}:subscribe', 'POST'): functools.partial(
+            ('/v1/tasks/{id}:cancel', 'POST'): functools.partial(
+                self._handle_request, self.handler.on_cancel_task
+            ),
+            ('/v1/tasks/{id}:subscribe', 'GET'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_resubscribe_to_task,
             ),
@@ -187,10 +169,10 @@ class RESTApplication:
                 '/v1/tasks/{id}/pushNotificationConfigs',
                 'GET',
             ): functools.partial(
-                self._handle_list_request, self.handler.list_push_notifications
+                self._handle_request, self.handler.list_push_notifications
             ),
             ('/v1/tasks', 'GET'): functools.partial(
-                self._handle_list_request, self.handler.list_tasks
+                self._handle_request, self.handler.list_tasks
             ),
         }
         if self.agent_card.supports_authenticated_extended_card:

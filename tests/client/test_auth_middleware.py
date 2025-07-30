@@ -1,3 +1,5 @@
+import json
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -6,9 +8,15 @@ import httpx
 import pytest
 import respx
 
-from a2a.client import A2AClient
-from a2a.client.auth import AuthInterceptor, InMemoryContextCredentialStore
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client import (
+    AuthInterceptor,
+    Client,
+    ClientCallContext,
+    ClientCallInterceptor,
+    ClientConfig,
+    ClientFactory,
+    InMemoryContextCredentialStore,
+)
 from a2a.types import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -17,14 +25,13 @@ from a2a.types import (
     HTTPAuthSecurityScheme,
     In,
     Message,
-    MessageSendParams,
     OAuth2SecurityScheme,
     OAuthFlows,
     OpenIdConnectSecurityScheme,
     Role,
     SecurityScheme,
-    SendMessageRequest,
     SendMessageSuccessResponse,
+    TransportProtocol,
 )
 
 
@@ -49,10 +56,11 @@ class HeaderInterceptor(ClientCallInterceptor):
         return request_payload, http_kwargs
 
 
-def build_success_response() -> dict:
-    """Creates a valid JSON-RPC success response as dict."""
-    return SendMessageSuccessResponse(
-        id='1',
+def build_success_response(request: httpx.Request) -> httpx.Response:
+    """Creates a valid JSON-RPC success response based on the request."""
+    request_payload = json.loads(request.content)
+    response_payload = SendMessageSuccessResponse(
+        id=request_payload['id'],
         jsonrpc='2.0',
         result=Message(
             kind='message',
@@ -61,41 +69,33 @@ def build_success_response() -> dict:
             parts=[],
         ),
     ).model_dump(mode='json')
+    return httpx.Response(200, json=response_payload)
 
 
-def build_send_message_request() -> SendMessageRequest:
-    """Builds a minimal SendMessageRequest."""
-    return SendMessageRequest(
-        id='1',
-        params=MessageSendParams(
-            message=Message(
-                message_id='msg1',
-                role=Role.user,
-                parts=[],
-            )
-        ),
+def build_message() -> Message:
+    """Builds a minimal Message."""
+    return Message(
+        message_id='msg1',
+        role=Role.user,
+        parts=[],
     )
 
 
 async def send_message(
-    client: A2AClient,
+    client: Client,
     url: str,
     session_id: str | None = None,
 ) -> httpx.Request:
     """Mocks the response and sends a message using the client."""
-    respx.post(url).mock(
-        return_value=httpx.Response(
-            200,
-            json=build_success_response(),
-        )
-    )
+    respx.post(url).mock(side_effect=build_success_response)
     context = ClientCallContext(
         state={'sessionId': session_id} if session_id else {}
     )
-    await client.send_message(
-        request=build_send_message_request(),
+    async for _ in client.send_message(
+        request=build_message(),
         context=context,
-    )
+    ):
+        pass
     return respx.calls.last.request
 
 
@@ -170,11 +170,26 @@ async def test_client_with_simple_interceptor():
     """
     url = 'http://agent.com/rpc'
     interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
+    card = AgentCard(
+        url=url,
+        name='testbot',
+        description='test bot',
+        version='1.0',
+        default_input_modes=[],
+        default_output_modes=[],
+        skills=[],
+        capabilities=AgentCapabilities(),
+        preferred_transport=TransportProtocol.jsonrpc,
+    )
 
     async with httpx.AsyncClient() as http_client:
-        client = A2AClient(
-            httpx_client=http_client, url=url, interceptors=[interceptor]
+        config = ClientConfig(
+            httpx_client=http_client,
+            supported_transports=[TransportProtocol.jsonrpc],
         )
+        factory = ClientFactory(config)
+        client = factory.create(card, interceptors=[interceptor])
+
         request = await send_message(client, url)
         assert request.headers['x-test-header'] == 'Test-Value-123'
 
@@ -293,14 +308,17 @@ async def test_auth_interceptor_variants(test_case, store):
                 root=test_case.security_scheme
             )
         },
+        preferred_transport=TransportProtocol.jsonrpc,
     )
 
     async with httpx.AsyncClient() as http_client:
-        client = A2AClient(
+        config = ClientConfig(
             httpx_client=http_client,
-            agent_card=agent_card,
-            interceptors=[auth_interceptor],
+            supported_transports=[TransportProtocol.jsonrpc],
         )
+        factory = ClientFactory(config)
+        client = factory.create(agent_card, interceptors=[auth_interceptor])
+
         request = await send_message(
             client, test_case.url, test_case.session_id
         )

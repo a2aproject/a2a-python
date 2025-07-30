@@ -3,7 +3,7 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import Any
 
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
 from starlette.requests import Request
 
 from a2a.grpc import a2a_pb2
@@ -86,7 +86,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterator[dict[str, Any]]:
+    ) -> AsyncIterator[str]:
         """Handles the 'message/stream' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -96,7 +96,7 @@ class RESTHandler:
             context: Context provided by the server.
 
         Yields:
-            `dict` objects containing streaming events
+            JSON serialized objects containing streaming events
             (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent) as JSON
         """
         body = await request.body()
@@ -110,7 +110,7 @@ class RESTHandler:
             a2a_request, context
         ):
             response = proto_utils.ToProto.stream_response(event)
-            yield MessageToDict(response)
+            yield MessageToJson(response)
 
     async def on_cancel_task(
         self,
@@ -142,7 +142,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterable[dict[str, Any]]:
+    ) -> AsyncIterable[str]:
         """Handles the 'tasks/resubscribe' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -152,13 +152,13 @@ class RESTHandler:
             context: Context provided by the server.
 
         Yields:
-            `dict` containing streaming events
+            JSON serialized objects containing streaming events
         """
         task_id = request.path_params['id']
         async for event in self.request_handler.on_resubscribe_to_task(
             TaskIdParams(id=task_id), context
         ):
-            yield (MessageToDict(proto_utils.ToProto.stream_response(event)))
+            yield MessageToJson(proto_utils.ToProto.stream_response(event))
 
     async def get_push_notification(
         self,
@@ -216,7 +216,7 @@ class RESTHandler:
                 (due to the `@validate` decorator), A2AError if processing error is
                 found.
         """
-        _ = request.path_params['id']
+        task_id = request.path_params['id']
         body = await request.body()
         params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
         Parse(body, params)
@@ -225,6 +225,7 @@ class RESTHandler:
                 params,
             )
         )
+        a2a_request.task_id = task_id
         config = (
             await self.request_handler.on_set_task_push_notification_config(
                 a2a_request, context
@@ -261,7 +262,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/list' REST method.
 
         This method is currently not implemented.
@@ -282,7 +283,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> list[dict[str, Any]]:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/list' REST method.
 
         This method is currently not implemented.

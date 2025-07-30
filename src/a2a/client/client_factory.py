@@ -4,16 +4,14 @@ import logging
 
 from collections.abc import Callable
 
+import httpx
+
+from a2a.client.base_client import BaseClient
 from a2a.client.client import Client, ClientConfig, Consumer
-
-
-try:
-    from a2a.client.grpc_client import NewGrpcClient
-except ImportError:
-    NewGrpcClient = None
-from a2a.client.jsonrpc_client import NewJsonRpcClient
 from a2a.client.middleware import ClientCallInterceptor
-from a2a.client.rest_client import NewRestfulClient
+from a2a.client.transports.base import ClientTransport
+from a2a.client.transports.jsonrpc import JsonRpcTransport
+from a2a.client.transports.rest import RestTransport
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -22,16 +20,20 @@ from a2a.types import (
 )
 
 
+try:
+    from a2a.client.transports.grpc import GrpcTransport
+    from a2a.grpc import a2a_pb2_grpc
+except ImportError:
+    GrpcTransport = None
+    a2a_pb2_grpc = None
+
+
 logger = logging.getLogger(__name__)
 
-ClientProducer = Callable[
-    [
-        AgentCard,
-        ClientConfig,
-        list[Consumer],
-        list[ClientCallInterceptor],
-    ],
-    Client,
+
+TransportProducer = Callable[
+    [AgentCard, str, ClientConfig, list[ClientCallInterceptor]],
+    ClientTransport,
 ]
 
 
@@ -60,23 +62,41 @@ class ClientFactory:
             consumers = []
         self._config = config
         self._consumers = consumers
-        self._registry: dict[str, ClientProducer] = {}
-        # By default register the 3 core transports if in the config.
-        # Can be overridden with custom clients via the register method.
-        if TransportProtocol.jsonrpc in self._config.supported_transports:
-            self._registry[TransportProtocol.jsonrpc] = NewJsonRpcClient
-        if TransportProtocol.http_json in self._config.supported_transports:
-            self._registry[TransportProtocol.http_json] = NewRestfulClient
-        if TransportProtocol.grpc in self._config.supported_transports:
-            if NewGrpcClient is None:
-                raise ImportError(
-                    'To use GrpcClient, its dependencies must be installed. '
-                    'You can install them with \'pip install "a2a-sdk[grpc]"\''
-                )
-            self._registry[TransportProtocol.grpc] = NewGrpcClient
+        self._registry: dict[str, TransportProducer] = {}
+        self._register_defaults()
 
-    def register(self, label: str, generator: ClientProducer) -> None:
-        """Register a new client producer for a given transport label."""
+    def _register_defaults(self) -> None:
+        self.register(
+            TransportProtocol.jsonrpc,
+            lambda card, url, config, interceptors: JsonRpcTransport(
+                config.httpx_client or httpx.AsyncClient(),
+                card,
+                url,
+                interceptors,
+            ),
+        )
+        self.register(
+            TransportProtocol.http_json,
+            lambda card, url, config, interceptors: RestTransport(
+                config.httpx_client or httpx.AsyncClient(),
+                card,
+                url,
+                interceptors,
+            ),
+        )
+        if GrpcTransport:
+            self.register(
+                TransportProtocol.grpc,
+                lambda card, url, config, interceptors: GrpcTransport(
+                    a2a_pb2_grpc.A2AServiceStub(
+                        config.grpc_channel_factory(url)
+                    ),
+                    card,
+                ),
+            )
+
+    def register(self, label: str, generator: TransportProducer) -> None:
+        """Register a new transport producer for a given transport label."""
         self._registry[label] = generator
 
     def create(
@@ -101,34 +121,44 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        # Determine preferential transport
-        server_set = [card.preferred_transport or TransportProtocol.jsonrpc]
+        server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
+        server_set = {server_preferred: card.url}
         if card.additional_interfaces:
-            server_set.extend([x.transport for x in card.additional_interfaces])
+            server_set.update(
+                {x.transport: x.url for x in card.additional_interfaces}
+            )
         client_set = self._config.supported_transports or [
             TransportProtocol.jsonrpc
         ]
-        transport = None
-        # Two options, use the client ordering or the server ordering.
+        transport_protocol = None
+        transport_url = None
         if self._config.use_client_preference:
             for x in client_set:
                 if x in server_set:
-                    transport = x
+                    transport_protocol = x
+                    transport_url = server_set[x]
                     break
         else:
-            for x in server_set:
+            for x, url in server_set.items():
                 if x in client_set:
-                    transport = x
+                    transport_protocol = x
+                    transport_url = url
                     break
-        if not transport:
+        if not transport_protocol or not transport_url:
             raise ValueError('no compatible transports found.')
-        if transport not in self._registry:
-            raise ValueError(f'no client available for {transport}')
+        if transport_protocol not in self._registry:
+            raise ValueError(f'no client available for {transport_protocol}')
+
         all_consumers = self._consumers.copy()
         if consumers:
             all_consumers.extend(consumers)
-        return self._registry[transport](
-            card, self._config, all_consumers, interceptors or []
+
+        transport = self._registry[transport_protocol](
+            card, transport_url, self._config, interceptors or []
+        )
+
+        return BaseClient(
+            card, self._config, transport, all_consumers, interceptors or []
         )
 
 
