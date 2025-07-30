@@ -45,10 +45,10 @@ class RestTransport(ClientTransport):
         interceptors: list[ClientCallInterceptor] | None = None,
     ):
         """Initializes the RestTransport."""
-        if agent_card:
-            self.url = agent_card.url
-        elif url:
+        if url:
             self.url = url
+        elif agent_card:
+            self.url = agent_card.url
         else:
             raise ValueError('Must provide either agent_card or url')
         if self.url.endswith('/'):

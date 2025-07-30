@@ -32,7 +32,7 @@ logger = logging.getLogger(__name__)
 
 
 TransportProducer = Callable[
-    [AgentCard, ClientConfig, list[ClientCallInterceptor]],
+    [AgentCard, str, ClientConfig, list[ClientCallInterceptor]],
     ClientTransport,
 ]
 
@@ -68,28 +68,28 @@ class ClientFactory:
     def _register_defaults(self) -> None:
         self.register(
             TransportProtocol.jsonrpc,
-            lambda card, config, interceptors: JsonRpcTransport(
+            lambda card, url, config, interceptors: JsonRpcTransport(
                 config.httpx_client or httpx.AsyncClient(),
                 card,
-                card.url,
+                url,
                 interceptors,
             ),
         )
         self.register(
             TransportProtocol.http_json,
-            lambda card, config, interceptors: RestTransport(
+            lambda card, url, config, interceptors: RestTransport(
                 config.httpx_client or httpx.AsyncClient(),
                 card,
-                card.url,
+                url,
                 interceptors,
             ),
         )
         if GrpcTransport:
             self.register(
                 TransportProtocol.grpc,
-                lambda card, config, interceptors: GrpcTransport(
+                lambda card, url, config, interceptors: GrpcTransport(
                     a2a_pb2_grpc.A2AServiceStub(
-                        config.grpc_channel_factory(card.url)
+                        config.grpc_channel_factory(url)
                     ),
                     card,
                 ),
@@ -121,24 +121,30 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_set = [card.preferred_transport or TransportProtocol.jsonrpc]
+        server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
+        server_set = {server_preferred: card.url}
         if card.additional_interfaces:
-            server_set.extend([x.transport for x in card.additional_interfaces])
+            server_set.update(
+                {x.transport: x.url for x in card.additional_interfaces}
+            )
         client_set = self._config.supported_transports or [
             TransportProtocol.jsonrpc
         ]
         transport_protocol = None
+        transport_url = None
         if self._config.use_client_preference:
             for x in client_set:
                 if x in server_set:
                     transport_protocol = x
+                    transport_url = server_set[x]
                     break
         else:
-            for x in server_set:
+            for x, url in server_set.items():
                 if x in client_set:
                     transport_protocol = x
+                    transport_url = url
                     break
-        if not transport_protocol:
+        if not transport_protocol or not transport_url:
             raise ValueError('no compatible transports found.')
         if transport_protocol not in self._registry:
             raise ValueError(f'no client available for {transport_protocol}')
@@ -148,7 +154,7 @@ class ClientFactory:
             all_consumers.extend(consumers)
 
         transport = self._registry[transport_protocol](
-            card, self._config, interceptors or []
+            card, transport_url, self._config, interceptors or []
         )
 
         return BaseClient(
