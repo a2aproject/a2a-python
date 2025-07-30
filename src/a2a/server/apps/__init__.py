@@ -6,10 +6,7 @@ from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
     JSONRPCApplication,
 )
-from a2a.server.apps.rest import (
-    A2ARESTFastAPIApplication,
-    RESTApplication,
-)
+from a2a.server.apps.rest import A2ARESTFastAPIApplication
 
 
 __all__ = [
@@ -18,5 +15,4 @@ __all__ = [
     'A2AStarletteApplication',
     'CallContextBuilder',
     'JSONRPCApplication',
-    'RESTApplication',
 ]

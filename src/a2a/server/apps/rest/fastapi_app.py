@@ -7,8 +7,8 @@ from fastapi import APIRouter, FastAPI, Request, Response
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
     CallContextBuilder,
 )
-from a2a.server.apps.rest.rest_app import (
-    RESTApplication,
+from a2a.server.apps.rest.rest_adapter import (
+    RESTAdapter,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import AgentCard
@@ -44,7 +44,7 @@ class A2ARESTFastAPIApplication:
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
         """
-        self._handler = RESTApplication(
+        self._adapter = RESTAdapter(
             agent_card=agent_card,
             http_handler=http_handler,
             context_builder=context_builder,
@@ -69,14 +69,14 @@ class A2ARESTFastAPIApplication:
         """
         app = FastAPI(**kwargs)
         router = APIRouter()
-        for route, callback in self._handler.routes().items():
+        for route, callback in self._adapter.routes().items():
             router.add_api_route(
                 f'{rpc_url}{route[0]}', callback, methods=[route[1]]
             )
 
         @router.get(f'{rpc_url}{agent_card_url}')
         async def get_agent_card(request: Request) -> Response:
-            return await self._handler._handle_get_agent_card(request)  # noqa: SLF001
+            return await self._adapter._handle_get_agent_card(request)  # noqa: SLF001
 
         app.include_router(router)
         return app

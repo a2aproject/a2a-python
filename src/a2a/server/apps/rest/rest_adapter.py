@@ -26,8 +26,8 @@ from a2a.utils.errors import ServerError
 logger = logging.getLogger(__name__)
 
 
-class RESTApplication:
-    """Base class for A2A REST applications.
+class RESTAdapter:
+    """Adapter to make RequestHandler work with RESTful API.
 
     Defines REST requests processors and the routes to attach them too, as well as
     manages response generation including Server-Sent Events (SSE).
