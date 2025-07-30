@@ -48,6 +48,7 @@ from a2a.types import (
     TaskPushNotificationConfig,
     TaskQueryParams,
 )
+from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 
 
 AGENT_CARD = AgentCard(
@@ -132,7 +133,7 @@ async def async_iterable_from_list(
 
 class TestA2ACardResolver:
     BASE_URL = 'http://example.com'
-    AGENT_CARD_PATH = '/.well-known/agent.json'
+    AGENT_CARD_PATH = AGENT_CARD_WELL_KNOWN_PATH
     FULL_AGENT_CARD_URL = f'{BASE_URL}{AGENT_CARD_PATH}'
     EXTENDED_AGENT_CARD_PATH = (
         '/agent/authenticatedExtendedCard'  # Default path
@@ -158,7 +159,10 @@ class TestA2ACardResolver:
             httpx_client=mock_httpx_client,
             base_url=base_url,
         )
-        assert resolver_default_path.agent_card_path == '.well-known/agent.json'
+        assert (
+            '/' + resolver_default_path.agent_card_path
+            == AGENT_CARD_WELL_KNOWN_PATH
+        )
 
     @pytest.mark.asyncio
     async def test_init_strips_slashes(self, mock_httpx_client: AsyncMock):
