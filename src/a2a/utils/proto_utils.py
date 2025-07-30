@@ -386,6 +386,12 @@ class ToProto:
                     flows=cls.oauth2_flows(scheme.root.flows),
                 )
             )
+        if isinstance(scheme.root, types.MutualTLSSecurityScheme):
+            return a2a_pb2.SecurityScheme(
+                mtls_security_scheme=a2a_pb2.MutualTlsSecurityScheme(
+                    description=scheme.root.description,
+                )
+            )
         return a2a_pb2.SecurityScheme(
             open_id_connect_security_scheme=a2a_pb2.OpenIdConnectSecurityScheme(
                 description=scheme.root.description,
