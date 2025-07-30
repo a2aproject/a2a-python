@@ -210,7 +210,7 @@ async def test_get_agent_card_with_modifier(
     """Test GetAgentCard call with a card_modifier."""
 
     def modifier(card: types.AgentCard) -> types.AgentCard:
-        modified_card = card.model_copy()
+        modified_card = card.model_copy(deep=True)
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
