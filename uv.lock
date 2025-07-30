@@ -43,6 +43,10 @@ sql = [
 sqlite = [
     { name = "sqlalchemy", extra = ["aiosqlite", "asyncio"] },
 ]
+telemetry = [
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+]
 
 [package.dev-dependencies]
 dev = [
@@ -74,9 +78,9 @@ requires-dist = [
     { name = "grpcio-tools", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx-sse", specifier = ">=0.4.0" },
-    { name = "opentelemetry-api", specifier = ">=1.33.0" },
-    { name = "opentelemetry-sdk", specifier = ">=1.33.0" },
-    { name = "protobuf", specifier = "==5.29.5" },
+    { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
+    { name = "protobuf", marker = "extra == 'grpc'", specifier = "==5.29.5" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "sqlalchemy", extras = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["aiomysql", "asyncio"], marker = "extra == 'mysql'", specifier = ">=2.0.0" },
@@ -85,7 +89,7 @@ requires-dist = [
     { name = "sse-starlette" },
     { name = "starlette" },
 ]
-provides-extras = ["encryption", "grpc", "mysql", "postgresql", "sql", "sqlite"]
+provides-extras = ["encryption", "grpc", "mysql", "postgresql", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
