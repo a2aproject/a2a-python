@@ -65,11 +65,11 @@ def rest_error_handler(
             logger.log(
                 log_level,
                 'Request error: '
-                f"Code={error.root.code}, Message='{error.root.message}'"
-                f'{", Data=" + str(error.root.data) if error.root.data else ""}',
+                f"Code={error.code}, Message='{error.message}'"
+                f'{", Data=" + str(error.data) if error.data else ""}',
             )
             return JSONResponse(
-                content={'message': error.root.message}, status_code=http_code
+                content={'message': error.message}, status_code=http_code
             )
         except Exception as e:
             logger.log(logging.ERROR, f'Unknown error occurred {e}')
@@ -102,8 +102,8 @@ def rest_stream_error_handler(
             logger.log(
                 log_level,
                 'Request error: '
-                f"Code={error.root.code}, Message='{error.root.message}'"
-                f'{", Data=" + str(error.root.data) if error.root.data else ""}',
+                f"Code={error.code}, Message='{error.message}'"
+                f'{", Data=" + str(error.data) if error.data else ""}',
             )
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we runt the error handling logic (provides logging)

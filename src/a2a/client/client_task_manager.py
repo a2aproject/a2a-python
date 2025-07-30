@@ -91,7 +91,7 @@ class ClientTaskManager:
             await self._save_task(event)
             return event
         task_id_from_event = (
-            event.id if isinstance(event, Task) else event.taskId
+            event.id if isinstance(event, Task) else event.task_id
         )
         if not self._task_id:
             self._task_id = task_id_from_event
@@ -114,7 +114,7 @@ class ClientTaskManager:
         if isinstance(event, TaskStatusUpdateEvent):
             logger.debug(
                 'Updating task %s status to: %s',
-                event.taskId,
+                event.task_id,
                 event.status.state,
             )
             if event.status.message:
