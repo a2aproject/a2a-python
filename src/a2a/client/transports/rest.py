@@ -310,24 +310,14 @@ class RestTransport(ClientTransport):
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Reconnects to get task updates."""
-        pb = a2a_pb2.TaskSubscriptionRequest(
-            name=f'tasks/{request.id}',
-        )
-        payload = MessageToDict(pb)
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
-            self._get_http_args(context),
-            context,
-        )
-
-        modified_kwargs.setdefault('timeout', None)
+        http_kwargs = self._get_http_args(context) or {}
+        http_kwargs.setdefault('timeout', None)
 
         async with aconnect_sse(
             self.httpx_client,
             'GET',
             f'{self.url}/v1/tasks/{request.id}:subscribe',
-            json=payload,
-            **modified_kwargs,
+            **http_kwargs,
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():

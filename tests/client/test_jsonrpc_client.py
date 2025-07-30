@@ -334,7 +334,7 @@ class TestJsonRpcTransport:
         assert client.url == self.AGENT_URL
         assert client.httpx_client == mock_httpx_client
 
-    def test_init_with_agent_card_and_url_prioritizes_agent_card(
+    def test_init_with_agent_card_and_url_prioritizes_url(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         client = JsonRpcTransport(
@@ -342,7 +342,7 @@ class TestJsonRpcTransport:
             agent_card=mock_agent_card,
             url='http://otherurl.com',
         )
-        assert client.url == mock_agent_card.url
+        assert client.url == 'http://otherurl.com'
 
     def test_init_raises_value_error_if_no_card_or_url(
         self, mock_httpx_client: AsyncMock

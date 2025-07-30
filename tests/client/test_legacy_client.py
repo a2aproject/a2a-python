@@ -1,83 +1,10 @@
 """Tests for the legacy client compatibility layer."""
 
-from unittest.mock import AsyncMock, MagicMock
-
-import httpx
-import pytest
-
-from a2a.client import A2AClient, A2AGrpcClient
-from a2a.types import (
-    AgentCapabilities,
-    AgentCard,
-    Message,
-    MessageSendParams,
-    Part,
-    Role,
-    SendMessageRequest,
-    Task,
-    TaskQueryParams,
-    TaskState,
-    TaskStatus,
-    TextPart,
-)
-
-
-@pytest.fixture
-def mock_httpx_client() -> AsyncMock:
-    return AsyncMock(spec=httpx.AsyncClient)
-
-
-@pytest.fixture
-def mock_grpc_stub() -> AsyncMock:
-    stub = AsyncMock()
-    stub._channel = MagicMock()
-    return stub
-
-
-@pytest.fixture
-def jsonrpc_agent_card() -> AgentCard:
-    return AgentCard(
-        name='Test Agent',
-        description='A test agent',
-        url='http://test.agent.com/rpc',
-        version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
-        skills=[],
-        default_input_modes=[],
-        default_output_modes=[],
-        preferred_transport='jsonrpc',
-    )
-
-
-@pytest.fixture
-def grpc_agent_card() -> AgentCard:
-    return AgentCard(
-        name='Test Agent',
-        description='A test agent',
-        url='http://test.agent.com/rpc',
-        version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
-        skills=[],
-        default_input_modes=[],
-        default_output_modes=[],
-        preferred_transport='grpc',
-    )
-
-
-@pytest.mark.asyncio
-async def test_a2a_client_send_message(
-    mock_httpx_client: AsyncMock, jsonrpc_agent_card: AgentCard
-):
-    """Tests for the legacy client compatibility layer."""
-
-
 from unittest.mock import AsyncMock
 
 import pytest
 
-from a2a.types import (
-    AgentCard,
-)
+from a2a.types import AgentCard
 
 
 @pytest.fixture
@@ -164,7 +91,7 @@ async def test_a2a_grpc_client_get_task(
         status=TaskStatus(state=TaskState.working),
     )
 
-    client.get_task.return_value = mock_response_task
+    client.get_task = AsyncMock(return_value=mock_response_task)
 
     params = TaskQueryParams(id='task-456')
     response = await client.get_task(params)
