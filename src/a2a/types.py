@@ -164,6 +164,15 @@ class AgentSkill(A2ABaseModel):
     """
     The set of supported output MIME types for this skill, overriding the agent's defaults.
     """
+    security: list[dict[str, list[str]]] | None = Field(
+        default=None, examples=[[{'google': ['oidc']}]]
+    )
+    """
+    Security schemes necessary for the agent to leverage this skill.
+    As in the overall AgentCard.security, this list represents a logical OR of security
+    requirement objects. Each object is a set of security schemes that must be used together
+    (a logical AND).
+    """
     tags: list[str] = Field(
         ..., examples=[['cooking', 'customer support', 'billing']]
     )
@@ -727,6 +736,21 @@ class MethodNotFoundError(A2ABaseModel):
     message: str | None = 'Method not found'
     """
     The error message.
+    """
+
+
+class MutualTLSSecurityScheme(A2ABaseModel):
+    """
+    Defines a security scheme using mTLS authentication.
+    """
+
+    description: str | None = None
+    """
+    An optional description for the security scheme.
+    """
+    type: Literal['mutualTLS'] = 'mutualTLS'
+    """
+    The type of the security scheme. Must be 'mutualTLS'.
     """
 
 
@@ -1486,6 +1510,11 @@ class OAuth2SecurityScheme(A2ABaseModel):
     """
     An object containing configuration information for the supported OAuth 2.0 flows.
     """
+    oauth2_metadata_url: str | None = None
+    """
+    URL to the oauth2 authorization server metadata
+    [RFC8414](https://datatracker.ietf.org/doc/html/rfc8414). TLS is required.
+    """
     type: Literal['oauth2'] = 'oauth2'
     """
     The type of the security scheme. Must be 'oauth2'.
@@ -1498,6 +1527,7 @@ class SecurityScheme(
         | HTTPAuthSecurityScheme
         | OAuth2SecurityScheme
         | OpenIdConnectSecurityScheme
+        | MutualTLSSecurityScheme
     ]
 ):
     root: (
@@ -1505,6 +1535,7 @@ class SecurityScheme(
         | HTTPAuthSecurityScheme
         | OAuth2SecurityScheme
         | OpenIdConnectSecurityScheme
+        | MutualTLSSecurityScheme
     )
     """
     Defines a security scheme that can be used to secure an agent's endpoints.
@@ -1754,7 +1785,7 @@ class AgentCard(A2ABaseModel):
     This creates a binding between the main URL and its supported transport protocol.
     Clients should prefer this transport and URL combination when both are supported.
     """
-    protocol_version: str | None = '0.2.6'
+    protocol_version: str | None = '0.3.0'
     """
     The version of the A2A protocol this agent supports.
     """
@@ -1762,10 +1793,16 @@ class AgentCard(A2ABaseModel):
     """
     Information about the agent's service provider.
     """
-    security: list[dict[str, list[str]]] | None = None
+    security: list[dict[str, list[str]]] | None = Field(
+        default=None,
+        examples=[[{'oauth': ['read']}, {'api-key': [], 'mtls': []}]],
+    )
     """
     A list of security requirement objects that apply to all agent interactions. Each object
     lists security schemes that can be used. Follows the OpenAPI 3.0 Security Requirement Object.
+    This list can be seen as an OR of ANDs. Each object in the list describes one possible
+    set of security requirements that must be present on a request. This allows specifying,
+    for example, "callers must either use OAuth OR an API Key AND mTLS."
     """
     security_schemes: dict[str, SecurityScheme] | None = None
     """
