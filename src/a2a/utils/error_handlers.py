@@ -71,8 +71,8 @@ def rest_error_handler(
             return JSONResponse(
                 content={'message': error.root.message}, status_code=http_code
             )
-        except Exception:
-            logger.log(logging.ERROR, 'Unknown error occurred')
+        except Exception as e:
+            logger.log(logging.ERROR, f'Unknown error occurred {e}')
             return JSONResponse(
                 content={'message': 'unknown exception'}, status_code=500
             )

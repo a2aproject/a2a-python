@@ -192,7 +192,7 @@ class RESTHandler:
         )
 
     @validate(
-        lambda self: self.agent_card.capabilities.pushNotifications,
+        lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
     )
     async def set_push_notification(
