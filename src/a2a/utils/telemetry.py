@@ -59,7 +59,7 @@ import inspect
 import logging
 
 from collections.abc import Callable
-from typing import Any, TypeAlias
+from typing import Any
 
 
 logger = logging.getLogger(__name__)
@@ -94,7 +94,7 @@ except ImportError:
     _SpanKind = _NoOp()
     StatusCode = _NoOp()
 
-SpanKind: TypeAlias = _SpanKind
+SpanKind = _SpanKind
 __all__ = ['SpanKind']
 
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
