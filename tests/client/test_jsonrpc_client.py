@@ -528,4 +528,254 @@ class TestJsonRpcTransport:
         with pytest.raises(A2AClientTimeoutError) as exc_info:
             await client.send_message(request=params)
 
-        assert 'Request timed out' in str(exc_info.value)
+        assert 'Client Request timed out' in str(exc_info.value)
+
+    @pytest.mark.asyncio
+    async def test_get_task_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = TaskQueryParams(id='task-abc')
+        rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': MINIMAL_TASK,
+        }
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = rpc_response
+            response = await client.get_task(request=params)
+
+        assert isinstance(response, Task)
+        assert response.model_dump() == Task.model_validate(
+            MINIMAL_TASK
+        ).model_dump()
+        mock_send_request.assert_called_once()
+        sent_payload = mock_send_request.call_args.args[0]
+        assert sent_payload['method'] == 'tasks/get'
+
+    @pytest.mark.asyncio
+    async def test_cancel_task_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = TaskIdParams(id='task-abc')
+        rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': MINIMAL_CANCELLED_TASK,
+        }
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = rpc_response
+            response = await client.cancel_task(request=params)
+
+        assert isinstance(response, Task)
+        assert response.model_dump() == Task.model_validate(
+            MINIMAL_CANCELLED_TASK
+        ).model_dump()
+        mock_send_request.assert_called_once()
+        sent_payload = mock_send_request.call_args.args[0]
+        assert sent_payload['method'] == 'tasks/cancel'
+
+    @pytest.mark.asyncio
+    async def test_set_task_callback_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = TaskPushNotificationConfig(
+            task_id='task-abc',
+            push_notification_config=PushNotificationConfig(
+                url='http://callback.com'
+            ),
+        )
+        rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': params.model_dump(mode='json'),
+        }
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = rpc_response
+            response = await client.set_task_callback(request=params)
+
+        assert isinstance(response, TaskPushNotificationConfig)
+        assert response.model_dump() == params.model_dump()
+        mock_send_request.assert_called_once()
+        sent_payload = mock_send_request.call_args.args[0]
+        assert sent_payload['method'] == 'tasks/pushNotificationConfig/set'
+
+    @pytest.mark.asyncio
+    async def test_get_task_callback_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = TaskIdParams(id='task-abc')
+        expected_response = TaskPushNotificationConfig(
+            task_id='task-abc',
+            push_notification_config=PushNotificationConfig(
+                url='http://callback.com'
+            ),
+        )
+        rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': expected_response.model_dump(mode='json'),
+        }
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = rpc_response
+            response = await client.get_task_callback(request=params)
+
+        assert isinstance(response, TaskPushNotificationConfig)
+        assert response.model_dump() == expected_response.model_dump()
+        mock_send_request.assert_called_once()
+        sent_payload = mock_send_request.call_args.args[0]
+        assert sent_payload['method'] == 'tasks/pushNotificationConfig/get'
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    async def test_send_message_streaming_sse_error(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello stream')
+        )
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.aiter_sse.side_effect = SSEError(
+            'Simulated SSE error'
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientHTTPError):
+            _ = [
+                item
+                async for item in client.send_message_streaming(request=params)
+            ]
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    async def test_send_message_streaming_json_error(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello stream')
+        )
+        sse_event = ServerSentEvent(data='{invalid json')
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.aiter_sse.return_value = async_iterable_from_list(
+            [sse_event]
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientJSONError):
+            _ = [
+                item
+                async for item in client.send_message_streaming(request=params)
+            ]
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    async def test_send_message_streaming_request_error(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello stream')
+        )
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.aiter_sse.side_effect = httpx.RequestError(
+            'Simulated request error', request=MagicMock()
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientHTTPError):
+            _ = [
+                item
+                async for item in client.send_message_streaming(request=params)
+            ]
+
+    @pytest.mark.asyncio
+    async def test_get_card_no_card_provided(self, mock_httpx_client: AsyncMock):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, url=self.AGENT_URL
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = AGENT_CARD.model_dump(mode='json')
+        mock_httpx_client.get.return_value = mock_response
+
+        card = await client.get_card()
+
+        assert card == AGENT_CARD
+        mock_httpx_client.get.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_card_with_extended_card_support(
+        self, mock_httpx_client: AsyncMock
+    ):
+        agent_card = AGENT_CARD.model_copy(
+            update={'supports_authenticated_extended_card': True}
+        )
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=agent_card
+        )
+
+        rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': AGENT_CARD_EXTENDED.model_dump(mode='json'),
+        }
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = rpc_response
+            card = await client.get_card()
+
+        assert card == agent_card
+        mock_send_request.assert_called_once()
+        sent_payload = mock_send_request.call_args.args[0]
+        assert sent_payload['method'] == 'agent/getAuthenticatedExtendedCard'
+
+    @pytest.mark.asyncio
+    async def test_close(self, mock_httpx_client: AsyncMock):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, url=self.AGENT_URL
+        )
+        await client.close()
+        mock_httpx_client.aclose.assert_called_once()

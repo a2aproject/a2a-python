@@ -149,19 +149,18 @@ def validate(
                 return await function(self, *args, **kwargs)
 
             return async_wrapper
-        else:
 
-            @functools.wraps(function)
-            def sync_wrapper(self: Any, *args, **kwargs) -> Any:
-                if not expression(self):
-                    final_message = error_message or str(expression)
-                    logger.error(f'Unsupported Operation: {final_message}')
-                    raise ServerError(
-                        UnsupportedOperationError(message=final_message)
-                    )
-                return function(self, *args, **kwargs)
+        @functools.wraps(function)
+        def sync_wrapper(self: Any, *args, **kwargs) -> Any:
+            if not expression(self):
+                final_message = error_message or str(expression)
+                logger.error(f'Unsupported Operation: {final_message}')
+                raise ServerError(
+                    UnsupportedOperationError(message=final_message)
+                )
+            return function(self, *args, **kwargs)
 
-            return sync_wrapper
+        return sync_wrapper
 
     return decorator
 
