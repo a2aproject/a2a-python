@@ -95,9 +95,9 @@ except ImportError:
         def __getattr__(self, name: str) -> '_NoOp':
             return self
 
-    trace = _NoOp()
-    _SpanKind = _NoOp()
-    StatusCode = _NoOp()
+    trace = _NoOp()  # type: ignore
+    _SpanKind = _NoOp()  # type: ignore
+    StatusCode = _NoOp()  # type: ignore
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']

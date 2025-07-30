@@ -182,7 +182,7 @@ def create_task_model(
         TaskModel = create_task_model('tasks', MyBase)
     """
 
-    class TaskModel(TaskMixin, base):
+    class TaskModel(TaskMixin, base):  # type: ignore
         __tablename__ = table_name
 
         @override
@@ -235,7 +235,7 @@ def create_push_notification_config_model(
 ) -> type:
     """Create a PushNotificationConfigModel class with a configurable table name."""
 
-    class PushNotificationConfigModel(PushNotificationConfigMixin, base):
+    class PushNotificationConfigModel(PushNotificationConfigMixin, base):  # type: ignore
         __tablename__ = table_name
 
         @override
