@@ -59,15 +59,19 @@ import inspect
 import logging
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
+
+if TYPE_CHECKING:
+    from opentelemetry.trace import SpanKind as SpanKindType
+else:
+    SpanKindType = object
 
 logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import SpanKind as _SpanKind
-    from opentelemetry.trace import StatusCode
+    from opentelemetry.trace import SpanKind, StatusCode
 
 except ImportError:
     logger.debug(
@@ -91,11 +95,8 @@ except ImportError:
             return self
 
     trace = _NoOp()
-    _SpanKind = _NoOp()
+    SpanKind = _NoOp()
     StatusCode = _NoOp()
-
-SpanKind = _SpanKind
-__all__ = ['SpanKind']
 
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
 INSTRUMENTING_MODULE_VERSION = '1.0.0'
@@ -105,7 +106,7 @@ def trace_function(  # noqa: PLR0915
     func: Callable | None = None,
     *,
     span_name: str | None = None,
-    kind: SpanKind = SpanKind.INTERNAL,
+    kind: SpanKindType = SpanKind.INTERNAL,
     attributes: dict[str, Any] | None = None,
     attribute_extractor: Callable | None = None,
 ) -> Callable:
@@ -252,7 +253,7 @@ def trace_function(  # noqa: PLR0915
 def trace_class(
     include_list: list[str] | None = None,
     exclude_list: list[str] | None = None,
-    kind: SpanKind = SpanKind.INTERNAL,
+    kind: SpanKindType = SpanKind.INTERNAL,
 ) -> Callable:
     """A class decorator to automatically trace specified methods of a class.
 
