@@ -269,8 +269,8 @@ async def test_grpc_transport_sends_message_streaming(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     message_to_send = Message(
         role=Role.user,
@@ -358,8 +358,8 @@ async def test_grpc_transport_sends_message_blocking(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     message_to_send = Message(
         role=Role.user,
@@ -424,8 +424,8 @@ async def test_grpc_transport_get_task(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = TaskQueryParams(id=GET_TASK_RESPONSE.id)
     result = await transport.get_task(request=params)
@@ -475,8 +475,8 @@ async def test_grpc_transport_cancel_task(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = TaskIdParams(id=CANCEL_TASK_RESPONSE.id)
     result = await transport.cancel_task(request=params)
@@ -536,8 +536,8 @@ async def test_grpc_transport_set_task_callback(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = CALLBACK_CONFIG
     result = await transport.set_task_callback(request=params)
@@ -611,8 +611,8 @@ async def test_grpc_transport_get_task_callback(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = GetTaskPushNotificationConfigParams(
         id=CALLBACK_CONFIG.task_id,
@@ -677,8 +677,8 @@ async def test_grpc_transport_resubscribe(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = TaskIdParams(id=RESUBSCRIBE_EVENT.task_id)
     stream = transport.resubscribe(request=params)
@@ -733,8 +733,8 @@ async def test_grpc_transport_get_card(
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
 
-    stub = a2a_pb2_grpc.A2AServiceStub(channel_factory(server_address))
-    transport = GrpcTransport(grpc_stub=stub, agent_card=agent_card)
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # The transport starts with a minimal card, get_card() fetches the full one
     transport.agent_card.supports_authenticated_extended_card = True

@@ -55,7 +55,10 @@ def grpc_transport(
     mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
 ) -> GrpcTransport:
     """Provides a GrpcTransport instance."""
-    return GrpcTransport(grpc_stub=mock_grpc_stub, agent_card=sample_agent_card)
+    channel = AsyncMock()
+    transport = GrpcTransport(channel=channel, agent_card=sample_agent_card)
+    transport.stub = mock_grpc_stub
+    return transport
 
 
 @pytest.fixture
