@@ -44,7 +44,6 @@ sqlite = [
 telemetry = [
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
-    { name = "opentelemetry-semantic-conventions" },
 ]
 
 [package.dev-dependencies]
@@ -78,7 +77,6 @@ requires-dist = [
     { name = "httpx-sse", specifier = ">=0.4.0" },
     { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
-    { name = "opentelemetry-semantic-conventions", marker = "extra == 'telemetry'", specifier = ">=0.55b1" },
     { name = "protobuf", marker = "extra == 'grpc'", specifier = "==5.29.5" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "sqlalchemy", extras = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
