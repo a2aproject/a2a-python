@@ -84,7 +84,7 @@ class RESTAdapter:
         )
 
     @rest_error_handler
-    async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
+    async def handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
 
         Args:

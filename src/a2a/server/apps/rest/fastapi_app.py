@@ -4,12 +4,8 @@ from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request, Response
 
-from a2a.server.apps.jsonrpc.jsonrpc_app import (
-    CallContextBuilder,
-)
-from a2a.server.apps.rest.rest_adapter import (
-    RESTAdapter,
-)
+from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
+from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
@@ -76,7 +72,7 @@ class A2ARESTFastAPIApplication:
 
         @router.get(f'{rpc_url}{agent_card_url}')
         async def get_agent_card(request: Request) -> Response:
-            return await self._adapter._handle_get_agent_card(request)  # noqa: SLF001
+            return await self._adapter.handle_get_agent_card(request)
 
         app.include_router(router)
         return app
