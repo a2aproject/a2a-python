@@ -23,7 +23,7 @@ from a2a.types import (
 try:
     from a2a.client.transports.grpc import GrpcTransport
 except ImportError:
-    GrpcTransport = None  # type: ignore
+    GrpcTransport = None  # type: ignore # pyright: ignore
 
 
 logger = logging.getLogger(__name__)
