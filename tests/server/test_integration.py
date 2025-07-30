@@ -838,7 +838,8 @@ def test_invalid_request_structure(client: TestClient):
         '/',
         json={
             # Missing required fields
-            'id': '123'
+            'id': '123',
+            'method': 'foo/bar',
         },
     )
     assert response.status_code == 200
