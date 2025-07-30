@@ -1,7 +1,7 @@
 """Custom exceptions for A2A server-side errors."""
 
 from a2a.types import (
-    A2AError,
+    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
@@ -36,21 +36,6 @@ class MethodNotImplementedError(A2AServerError):
         super().__init__(f'Not Implemented operation Error: {message}')
 
 
-class A2AErrorWrapperError(Exception):
-    """Wrapper exception for A2A that is discriminated union of all standard JSON-RPC and A2A-specific error types."""
-
-    def __init__(
-        self,
-        error: (A2AError),
-    ):
-        """Initialize the A2AError wrapper.
-
-        Args:
-            error: The specific A2AError model instance.
-        """
-        self.error = error
-
-
 class ServerError(Exception):
     """Wrapper exception for A2A or JSON-RPC errors originating from the server's logic.
 
@@ -73,6 +58,7 @@ class ServerError(Exception):
             | UnsupportedOperationError
             | ContentTypeNotSupportedError
             | InvalidAgentResponseError
+            | AuthenticatedExtendedCardNotConfiguredError
             | None
         ),
     ):

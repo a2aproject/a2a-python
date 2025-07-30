@@ -1,15 +1,12 @@
 import functools
-import json
 import logging
-import traceback
 
-from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import Any
 
-from pydantic import ValidationError
 from sse_starlette.sse import EventSourceResponse
 from starlette.requests import Request
-from starlette.responses import JSONResponse
+from starlette.responses import JSONResponse, Response
 
 from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
@@ -19,14 +16,14 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types import (
-    A2AError,
     AgentCard,
-    InternalError,
-    InvalidRequestError,
-    JSONParseError,
-    UnsupportedOperationError,
+    AuthenticatedExtendedCardNotConfiguredError,
 )
-from a2a.utils.errors import MethodNotImplementedError
+from a2a.utils.error_handlers import (
+    rest_error_handler,
+    rest_stream_error_handler,
+)
+from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -61,88 +58,51 @@ class RESTApplication:
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
 
-    def _generate_error_response(self, error: A2AError) -> JSONResponse:
-        """Creates a JSONResponse for an error.
-
-        Logs the error based on its type.
-
-        Args:
-            error: The Error object.
-
-        Returns:
-            A `JSONResponse` object formatted as a JSON error response.
-        """
-        log_level = (
-            logging.ERROR
-            if isinstance(error, InternalError)
-            else logging.WARNING
-        )
-        logger.log(
-            log_level,
-            'Request Error: '
-            f"Code={error.root.code}, Message='{error.root.message}'"
-            f'{", Data=" + str(error.root.data) if error.root.data else ""}',
-        )
-        return JSONResponse(
-            f'{{"message": "{error.root.message}"}}',
-            status_code=500,
-        )
-
-    def _handle_error(self, error: Exception) -> JSONResponse:
-        traceback.print_exc()
-        if isinstance(error, MethodNotImplementedError):
-            return self._generate_error_response(
-                A2AError(UnsupportedOperationError(message=error.message))
-            )
-        if isinstance(error, json.decoder.JSONDecodeError):
-            return self._generate_error_response(
-                A2AError(JSONParseError(message=str(error)))
-            )
-        if isinstance(error, ValidationError):
-            return self._generate_error_response(
-                A2AError(InvalidRequestError(data=json.loads(error.json()))),
-            )
-        logger.error(f'Unhandled exception: {error}')
-        return self._generate_error_response(
-            A2AError(InternalError(message=str(error)))
-        )
-
+    @rest_error_handler
     async def _handle_request(
         self,
-        method: Callable[[Request, ServerCallContext], Awaitable[str]],
+        method: Callable[
+            [Request, ServerCallContext], Awaitable[dict[str, Any]]
+        ],
         request: Request,
-    ) -> JSONResponse:
-        try:
-            call_context = self._context_builder.build(request)
-            response = await method(request, call_context)
-            return JSONResponse(content=response)
-        except Exception as e:
-            return self._handle_error(e)
+    ) -> Response:
+        call_context = self._context_builder.build(request)
+        response = await method(request, call_context)
+        return JSONResponse(content=response)
 
+    @rest_error_handler
+    async def _handle_list_request(
+        self,
+        method: Callable[
+            [Request, ServerCallContext], Awaitable[list[dict[str, Any]]]
+        ],
+        request: Request,
+    ) -> Response:
+        call_context = self._context_builder.build(request)
+        response = await method(request, call_context)
+        return JSONResponse(content=response)
+
+    @rest_stream_error_handler
     async def _handle_streaming_request(
         self,
-        method: Callable[[Request, ServerCallContext], AsyncIterator[str]],
+        method: Callable[
+            [Request, ServerCallContext], AsyncIterable[dict[str, Any]]
+        ],
         request: Request,
     ) -> EventSourceResponse:
-        try:
-            call_context = self._context_builder.build(request)
+        call_context = self._context_builder.build(request)
 
-            async def event_generator(
-                stream: AsyncGenerator[str],
-            ) -> AsyncGenerator[dict[str, str]]:
-                async for item in stream:
-                    yield {'data': item}
+        async def event_generator(
+            stream: AsyncIterable[dict[str, Any]],
+        ) -> AsyncIterator[dict[str, dict[str, Any]]]:
+            async for item in stream:
+                yield {'data': item}
 
-            return EventSourceResponse(
-                event_generator(method(request, call_context))
-            )
-        except Exception as e:
-            # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we runt the error handling logic (provides logging)
-            # and reraise the error and let server framework manage
-            self._handle_error(e)
-            raise e
+        return EventSourceResponse(
+            event_generator(method(request, call_context))
+        )
 
+    @rest_error_handler
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
 
@@ -158,6 +118,7 @@ class RESTApplication:
             self.agent_card.model_dump(mode='json', exclude_none=True)
         )
 
+    @rest_error_handler
     async def handle_authenticated_agent_card(
         self, request: Request
     ) -> JSONResponse:
@@ -173,9 +134,10 @@ class RESTApplication:
             A JSONResponse containing the authenticated card.
         """
         if not self.agent_card.supports_authenticated_extended_card:
-            return JSONResponse(
-                '{"detail": "Authenticated card not supported"}',
-                status_code=404,
+            raise ServerError(
+                error=AuthenticatedExtendedCardNotConfiguredError(
+                    message='Authenticated card not supported'
+                )
             )
         return JSONResponse(
             self.agent_card.model_dump(mode='json', exclude_none=True)
@@ -226,10 +188,10 @@ class RESTApplication:
                 '/v1/tasks/{id}/pushNotificationConfigs',
                 'GET',
             ): functools.partial(
-                self._handle_request, self.handler.list_push_notifications
+                self._handle_list_request, self.handler.list_push_notifications
             ),
             ('/v1/tasks', 'GET'): functools.partial(
-                self._handle_request, self.handler.list_tasks
+                self._handle_list_request, self.handler.list_tasks
             ),
         }
         if self.agent_card.supports_authenticated_extended_card:

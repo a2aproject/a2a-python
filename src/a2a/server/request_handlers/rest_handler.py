@@ -1,29 +1,23 @@
 import logging
 
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, AsyncIterator
+from typing import Any
 
-from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
+from google.protobuf.json_format import MessageToDict, Parse
 from starlette.requests import Request
 
 from a2a.grpc import a2a_pb2
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
-    A2AError,
     AgentCard,
     GetTaskPushNotificationConfigParams,
-    InternalError,
-    Task,
     TaskIdParams,
     TaskNotFoundError,
-    TaskPushNotificationConfig,
     TaskQueryParams,
 )
 from a2a.utils import proto_utils
-from a2a.utils.errors import (
-    A2AErrorWrapperError,
-    ServerError,
-)
+from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -60,7 +54,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'message/send' REST method.
 
         Args:
@@ -68,34 +62,21 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A `str` containing the JSON result (Task or Message)
-
-        Raises:
-            A2AError if a `ServerError` is raised by the handler.
+            A `dict` containing the result (Task or Message)
         """
-        # TODO: Wrap in error handler to return error states
-        try:
-            body = await request.body()
-            params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
-            # Transform the proto object to the python internal objects
-            a2a_request = proto_utils.FromProto.message_send_params(
-                params,
-            )
-            task_or_message = await self.request_handler.on_message_send(
-                a2a_request, context
-            )
-            return MessageToDict(
-                proto_utils.ToProto.task_or_message(task_or_message)
-            )
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(
-                    root=e.error
-                    if e.error
-                    else InternalError(message='Internal error')
-                )
-            ) from e
+        body = await request.body()
+        params = a2a_pb2.SendMessageRequest()
+        Parse(body, params)
+        # Transform the proto object to the python internal objects
+        a2a_request = proto_utils.FromProto.message_send_params(
+            params,
+        )
+        task_or_message = await self.request_handler.on_message_send(
+            a2a_request, context
+        )
+        return MessageToDict(
+            proto_utils.ToProto.task_or_message(task_or_message)
+        )
 
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
@@ -105,7 +86,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterable[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Handles the 'message/stream' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -115,35 +96,27 @@ class RESTHandler:
             context: Context provided by the server.
 
         Yields:
-            `str` objects containing streaming events
+            `dict` objects containing streaming events
             (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent) as JSON
-        Raises:
-            `A2AError`
         """
-        try:
-            body = await request.body()
-            params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
-            # Transform the proto object to the python internal objects
-            a2a_request = proto_utils.FromProto.message_send_params(
-                params,
-            )
-            async for event in self.request_handler.on_message_send_stream(
-                a2a_request, context
-            ):
-                response = proto_utils.ToProto.stream_response(event)
-                yield MessageToJson(response)
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(root=e.error if e.error else InternalError())
-            ) from e
-        return
+        body = await request.body()
+        params = a2a_pb2.SendMessageRequest()
+        Parse(body, params)
+        # Transform the proto object to the python internal objects
+        a2a_request = proto_utils.FromProto.message_send_params(
+            params,
+        )
+        async for event in self.request_handler.on_message_send_stream(
+            a2a_request, context
+        ):
+            response = proto_utils.ToProto.stream_response(event)
+            yield MessageToDict(response)
 
     async def on_cancel_task(
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/cancel' REST method.
 
         Args:
@@ -151,24 +124,15 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A `str` containing the updated Task in JSON format
-        Raises:
-            A2AError.
+            A `dict` containing the updated Task
         """
-        try:
-            task_id = request.path_params['id']
-            task = await self.request_handler.on_cancel_task(
-                TaskIdParams(id=task_id), context
-            )
-            if task:
-                return MessageToDict(proto_utils.ToProto.task(task))
-            raise ServerError(error=TaskNotFoundError())
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(
-                    root=e.error if e.error else InternalError(),
-                )
-            ) from e
+        task_id = request.path_params['id']
+        task = await self.request_handler.on_cancel_task(
+            TaskIdParams(id=task_id), context
+        )
+        if task:
+            return MessageToDict(proto_utils.ToProto.task(task))
+        raise ServerError(error=TaskNotFoundError())
 
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
@@ -178,7 +142,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterable[str]:
+    ) -> AsyncIterable[dict[str, Any]]:
         """Handles the 'tasks/resubscribe' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -188,29 +152,19 @@ class RESTHandler:
             context: Context provided by the server.
 
         Yields:
-            `str` containing streaming events in JSON format
-
-        Raises:
-            A A2AError if an error is encountered
+            `dict` containing streaming events
         """
-        try:
-            task_id = request.path_params['id']
-            async for event in self.request_handler.on_resubscribe_to_task(
-                TaskIdParams(id=task_id), context
-            ):
-                yield (
-                    MessageToJson(proto_utils.ToProto.stream_response(event))
-                )
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(root=e.error if e.error else InternalError())
-            ) from e
+        task_id = request.path_params['id']
+        async for event in self.request_handler.on_resubscribe_to_task(
+            TaskIdParams(id=task_id), context
+        ):
+            yield (MessageToDict(proto_utils.ToProto.stream_response(event)))
 
     async def get_push_notification(
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/get' REST method.
 
         Args:
@@ -218,31 +172,24 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A `str` containing the config as JSON
-        Raises:
-            A2AError.
+            A `dict` containing the config
         """
-        try:
-            task_id = request.path_params['id']
-            push_id = request.path_params['push_id']
-            if push_id:
-                params = GetTaskPushNotificationConfigParams(
-                    id=task_id, push_notification_config_id=push_id
-                )
-            else:
-                params = TaskIdParams(id=task_id)
-            config = (
-                await self.request_handler.on_get_task_push_notification_config(
-                    params, context
-                )
+        task_id = request.path_params['id']
+        push_id = request.path_params['push_id']
+        if push_id:
+            params = GetTaskPushNotificationConfigParams(
+                id=task_id, push_notification_config_id=push_id
             )
-            return MessageToDict(
-                proto_utils.ToProto.task_push_notification_config(config)
+        else:
+            params = TaskIdParams(id=task_id)
+        config = (
+            await self.request_handler.on_get_task_push_notification_config(
+                params, context
             )
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(root=e.error if e.error else InternalError())
-            ) from e
+        )
+        return MessageToDict(
+            proto_utils.ToProto.task_push_notification_config(config)
+        )
 
     @validate(
         lambda self: self.agent_card.capabilities.pushNotifications,
@@ -252,7 +199,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/set' REST method.
 
         Requires the agent to support push notifications.
@@ -262,42 +209,37 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A `str` containing the config as JSON object.
+            A `dict` containing the config object.
 
         Raises:
             ServerError: If push notifications are not supported by the agent
                 (due to the `@validate` decorator), A2AError if processing error is
                 found.
         """
-        try:
-            task_id = request.path_params['id']
-            body = await request.body()
-            params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
-            Parse(body, params)
-            a2a_request = (
-                proto_utils.FromProto.task_push_notification_config_request(
-                    params,
-                )
+        task_id = request.path_params['id']
+        body = await request.body()
+        params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
+        Parse(body, params)
+        a2a_request = (
+            proto_utils.FromProto.task_push_notification_config_request(
+                params,
             )
-            a2a_request.task_id = task_id
-            config = (
-                await self.request_handler.on_set_task_push_notification_config(
-                    a2a_request, context
-                )
+        )
+        a2a_request.task_id = task_id
+        config = (
+            await self.request_handler.on_set_task_push_notification_config(
+                a2a_request, context
             )
-            return MessageToDict(
-                proto_utils.ToProto.task_push_notification_config(config)
-            )
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(root=e.error if e.error else InternalError())
-            ) from e
+        )
+        return MessageToDict(
+            proto_utils.ToProto.task_push_notification_config(config)
+        )
 
     async def on_get_task(
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> str:
+    ) -> dict[str, Any]:
         """Handles the 'v1/tasks/{id}' REST method.
 
         Args:
@@ -306,31 +248,21 @@ class RESTHandler:
 
         Returns:
             A `Task` object containing the Task.
-
-        Raises:
-            A2AError
         """
-        try:
-            task_id = request.path_params['id']
-            history_length_str = request.query_params.get('historyLength')
-            history_length = (
-                int(history_length_str) if history_length_str else None
-            )
-            params = TaskQueryParams(id=task_id, history_length=history_length)
-            task = await self.request_handler.on_get_task(params, context)
-            if task:
-                return MessageToDict(proto_utils.ToProto.task(task))
-            raise ServerError(error=TaskNotFoundError())
-        except ServerError as e:
-            raise A2AErrorWrapperError(
-                error=A2AError(root=e.error if e.error else InternalError())
-            ) from e
+        task_id = request.path_params['id']
+        history_length_str = request.query_params.get('historyLength')
+        history_length = int(history_length_str) if history_length_str else None
+        params = TaskQueryParams(id=task_id, history_length=history_length)
+        task = await self.request_handler.on_get_task(params, context)
+        if task:
+            return MessageToDict(proto_utils.ToProto.task(task))
+        raise ServerError(error=TaskNotFoundError())
 
     async def list_push_notifications(
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> list[TaskPushNotificationConfig]:
+    ) -> list[dict[str, Any]]:
         """Handles the 'tasks/pushNotificationConfig/list' REST method.
 
         This method is currently not implemented.
@@ -340,7 +272,7 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A list of `TaskPushNotificationConfig` objects.
+            A list of `dict` representing the `TaskPushNotificationConfig` objects.
 
         Raises:
             NotImplementedError: This method is not yet implemented.
@@ -351,7 +283,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> list[Task]:
+    ) -> list[dict[str, Any]]:
         """Handles the 'tasks/list' REST method.
 
         This method is currently not implemented.
@@ -361,7 +293,7 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A list of `Task` objects.
+            A list of dict representing the`Task` objects.
 
         Raises:
             NotImplementedError: This method is not yet implemented.
