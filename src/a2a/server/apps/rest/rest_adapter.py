@@ -135,7 +135,7 @@ class RESTAdapter:
             A dictionary where each key is a tuple of (path, http_method) and
             the value is the callable handler for that route.
         """
-        routes = {
+        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
             ('/v1/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),

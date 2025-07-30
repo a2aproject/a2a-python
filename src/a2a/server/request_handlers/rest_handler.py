@@ -176,12 +176,9 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         push_id = request.path_params['push_id']
-        if push_id:
-            params = GetTaskPushNotificationConfigParams(
-                id=task_id, push_notification_config_id=push_id
-            )
-        else:
-            params = TaskIdParams(id=task_id)
+        params = GetTaskPushNotificationConfigParams(
+            id=task_id, push_notification_config_id=push_id
+        )
         config = (
             await self.request_handler.on_get_task_push_notification_config(
                 params, context

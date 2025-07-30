@@ -5,6 +5,8 @@ from collections.abc import AsyncGenerator
 
 try:
     import grpc
+
+    from grpc.aio import Channel
 except ImportError as e:
     raise ImportError(
         'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
@@ -12,7 +14,8 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
-from a2a.client.middleware import ClientCallContext
+from a2a.client.client import ClientConfig
+from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
@@ -40,16 +43,33 @@ class GrpcTransport(ClientTransport):
 
     def __init__(
         self,
-        grpc_stub: a2a_pb2_grpc.A2AServiceStub,
+        channel: Channel,
         agent_card: AgentCard | None,
     ):
         """Initializes the GrpcTransport."""
         self.agent_card = agent_card
-        self.stub = grpc_stub
+        self.channel = channel
+        self.stub = a2a_pb2_grpc.A2AServiceStub(channel)
         self._needs_extended_card = (
             agent_card.supports_authenticated_extended_card
             if agent_card
             else True
+        )
+
+    @classmethod
+    def create(
+        cls,
+        card: AgentCard,
+        url: str,
+        config: ClientConfig,
+        interceptors: list[ClientCallInterceptor],
+    ) -> 'GrpcTransport':
+        """Creates a gRPC transport for the A2A client."""
+        if config.grpc_channel_factory is None:
+            raise ValueError('grpc_channel_factory is required when using gRPC')
+        return cls(
+            config.grpc_channel_factory(url),
+            card,
         )
 
     async def send_message(
@@ -189,5 +209,4 @@ class GrpcTransport(ClientTransport):
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
-        if hasattr(self.stub, 'close'):
-            await self.stub.close()
+        await self.channel.close()

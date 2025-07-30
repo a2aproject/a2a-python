@@ -22,10 +22,8 @@ from a2a.types import (
 
 try:
     from a2a.client.transports.grpc import GrpcTransport
-    from a2a.grpc import a2a_pb2_grpc
 except ImportError:
-    GrpcTransport = None
-    a2a_pb2_grpc = None
+    GrpcTransport = None  # type: ignore
 
 
 logger = logging.getLogger(__name__)
@@ -63,36 +61,41 @@ class ClientFactory:
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults()
+        self._register_defaults(config.supported_transports)
 
-    def _register_defaults(self) -> None:
-        self.register(
-            TransportProtocol.jsonrpc,
-            lambda card, url, config, interceptors: JsonRpcTransport(
-                config.httpx_client or httpx.AsyncClient(),
-                card,
-                url,
-                interceptors,
-            ),
-        )
-        self.register(
-            TransportProtocol.http_json,
-            lambda card, url, config, interceptors: RestTransport(
-                config.httpx_client or httpx.AsyncClient(),
-                card,
-                url,
-                interceptors,
-            ),
-        )
-        if GrpcTransport:
+    def _register_defaults(
+        self, supported: list[str | TransportProtocol]
+    ) -> None:
+        # Empty support list implies JSON-RPC only.
+        if TransportProtocol.jsonrpc in supported or not supported:
+            self.register(
+                TransportProtocol.jsonrpc,
+                lambda card, url, config, interceptors: JsonRpcTransport(
+                    config.httpx_client or httpx.AsyncClient(),
+                    card,
+                    url,
+                    interceptors,
+                ),
+            )
+        if TransportProtocol.http_json in supported:
+            self.register(
+                TransportProtocol.http_json,
+                lambda card, url, config, interceptors: RestTransport(
+                    config.httpx_client or httpx.AsyncClient(),
+                    card,
+                    url,
+                    interceptors,
+                ),
+            )
+        if TransportProtocol.grpc in supported:
+            if GrpcTransport is None:
+                raise ImportError(
+                    'To use GrpcClient, its dependencies must be installed. '
+                    'You can install them with \'pip install "a2a-sdk[grpc]"\''
+                )
             self.register(
                 TransportProtocol.grpc,
-                lambda card, url, config, interceptors: GrpcTransport(
-                    a2a_pb2_grpc.A2AServiceStub(
-                        config.grpc_channel_factory(url)
-                    ),
-                    card,
-                ),
+                GrpcTransport.create,
             )
 
     def register(self, label: str, generator: TransportProducer) -> None:

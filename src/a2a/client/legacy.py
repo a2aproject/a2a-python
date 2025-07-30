@@ -268,7 +268,7 @@ class A2AClient:
         params = request.params
         if isinstance(params, TaskIdParams):
             params = GetTaskPushNotificationConfigParams(
-                id=request.params.task_id
+                id=request.params.id
             )
         try:
             result = await self._transport.get_task_callback(

@@ -9,10 +9,7 @@ from a2a.client.auth import (
 )
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, ClientEvent, Consumer
-from a2a.client.client_factory import (
-    ClientFactory,
-    minimal_agent_card,
-)
+from a2a.client.client_factory import ClientFactory, minimal_agent_card
 from a2a.client.errors import (
     A2AClientError,
     A2AClientHTTPError,
@@ -27,7 +24,7 @@ from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 logger = logging.getLogger(__name__)
 
 try:
-    from a2a.client.legacy_grpc import A2AGrpcClient
+    from a2a.client.legacy_grpc import A2AGrpcClient  # type: ignore
 except ImportError as e:
     _original_error = e
     logger.debug(
