@@ -14,6 +14,7 @@ from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 
 
@@ -109,6 +110,13 @@ class A2AFastAPIApplication(JSONRPCApplication):
         )(self._handle_requests)
         app.get(agent_card_url)(self._handle_get_agent_card)
 
+        # add deprecated path only if the agent_card_url uses default well-known path
+        if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
+            app.get(PREV_AGENT_CARD_WELL_KNOWN_PATH, include_in_schema=False)(
+                self.handle_deprecated_agent_card_path
+            )
+
+        # TODO: deprecated endpoint to be removed in a future release
         if self.agent_card.supports_authenticated_extended_card:
             app.get(extended_agent_card_url)(
                 self._handle_get_authenticated_extended_agent_card
