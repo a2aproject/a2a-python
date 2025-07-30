@@ -78,7 +78,7 @@ run_formatter pyupgrade --exit-zero-even-if-changed --py310-plus
 echo "Running autoflake..."
 run_formatter autoflake -i -r --remove-all-unused-imports
 echo "Running ruff check (fix-only)..."
-run_formatter ruff check --fix-only $RUFF_UNSAFE_FIXES_FLAG
+run_formatter ruff check --fix $RUFF_UNSAFE_FIXES_FLAG
 echo "Running ruff format..."
 run_formatter ruff format
 

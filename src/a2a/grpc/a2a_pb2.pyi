@@ -202,7 +202,7 @@ class AgentInterface(_message.Message):
     def __init__(self, url: _Optional[str] = ..., transport: _Optional[str] = ...) -> None: ...
 
 class AgentCard(_message.Message):
-    __slots__ = ("protocol_version", "name", "description", "url", "preferred_transport", "additional_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security", "default_input_modes", "default_output_modes", "skills", "supports_authenticated_extended_card")
+    __slots__ = ("protocol_version", "name", "description", "url", "preferred_transport", "additional_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security", "default_input_modes", "default_output_modes", "skills", "supports_authenticated_extended_card", "signatures")
     class SecuritySchemesEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -226,6 +226,7 @@ class AgentCard(_message.Message):
     DEFAULT_OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     SKILLS_FIELD_NUMBER: _ClassVar[int]
     SUPPORTS_AUTHENTICATED_EXTENDED_CARD_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURES_FIELD_NUMBER: _ClassVar[int]
     protocol_version: str
     name: str
     description: str
@@ -242,7 +243,8 @@ class AgentCard(_message.Message):
     default_output_modes: _containers.RepeatedScalarFieldContainer[str]
     skills: _containers.RepeatedCompositeFieldContainer[AgentSkill]
     supports_authenticated_extended_card: bool
-    def __init__(self, protocol_version: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., url: _Optional[str] = ..., preferred_transport: _Optional[str] = ..., additional_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., supports_authenticated_extended_card: bool = ...) -> None: ...
+    signatures: _containers.RepeatedCompositeFieldContainer[AgentCardSignature]
+    def __init__(self, protocol_version: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., url: _Optional[str] = ..., preferred_transport: _Optional[str] = ..., additional_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., supports_authenticated_extended_card: bool = ..., signatures: _Optional[_Iterable[_Union[AgentCardSignature, _Mapping]]] = ...) -> None: ...
 
 class AgentProvider(_message.Message):
     __slots__ = ("url", "organization")
@@ -275,7 +277,7 @@ class AgentExtension(_message.Message):
     def __init__(self, uri: _Optional[str] = ..., description: _Optional[str] = ..., required: bool = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentSkill(_message.Message):
-    __slots__ = ("id", "name", "description", "tags", "examples", "input_modes", "output_modes")
+    __slots__ = ("id", "name", "description", "tags", "examples", "input_modes", "output_modes", "security")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -283,6 +285,7 @@ class AgentSkill(_message.Message):
     EXAMPLES_FIELD_NUMBER: _ClassVar[int]
     INPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
+    SECURITY_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     description: str
@@ -290,7 +293,18 @@ class AgentSkill(_message.Message):
     examples: _containers.RepeatedScalarFieldContainer[str]
     input_modes: _containers.RepeatedScalarFieldContainer[str]
     output_modes: _containers.RepeatedScalarFieldContainer[str]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., tags: _Optional[_Iterable[str]] = ..., examples: _Optional[_Iterable[str]] = ..., input_modes: _Optional[_Iterable[str]] = ..., output_modes: _Optional[_Iterable[str]] = ...) -> None: ...
+    security: _containers.RepeatedCompositeFieldContainer[Security]
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., tags: _Optional[_Iterable[str]] = ..., examples: _Optional[_Iterable[str]] = ..., input_modes: _Optional[_Iterable[str]] = ..., output_modes: _Optional[_Iterable[str]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ...) -> None: ...
+
+class AgentCardSignature(_message.Message):
+    __slots__ = ("protected", "signature", "header")
+    PROTECTED_FIELD_NUMBER: _ClassVar[int]
+    SIGNATURE_FIELD_NUMBER: _ClassVar[int]
+    HEADER_FIELD_NUMBER: _ClassVar[int]
+    protected: str
+    signature: str
+    header: _struct_pb2.Struct
+    def __init__(self, protected: _Optional[str] = ..., signature: _Optional[str] = ..., header: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskPushNotificationConfig(_message.Message):
     __slots__ = ("name", "push_notification_config")
@@ -320,16 +334,18 @@ class Security(_message.Message):
     def __init__(self, schemes: _Optional[_Mapping[str, StringList]] = ...) -> None: ...
 
 class SecurityScheme(_message.Message):
-    __slots__ = ("api_key_security_scheme", "http_auth_security_scheme", "oauth2_security_scheme", "open_id_connect_security_scheme")
+    __slots__ = ("api_key_security_scheme", "http_auth_security_scheme", "oauth2_security_scheme", "open_id_connect_security_scheme", "mtls_security_scheme")
     API_KEY_SECURITY_SCHEME_FIELD_NUMBER: _ClassVar[int]
     HTTP_AUTH_SECURITY_SCHEME_FIELD_NUMBER: _ClassVar[int]
     OAUTH2_SECURITY_SCHEME_FIELD_NUMBER: _ClassVar[int]
     OPEN_ID_CONNECT_SECURITY_SCHEME_FIELD_NUMBER: _ClassVar[int]
+    MTLS_SECURITY_SCHEME_FIELD_NUMBER: _ClassVar[int]
     api_key_security_scheme: APIKeySecurityScheme
     http_auth_security_scheme: HTTPAuthSecurityScheme
     oauth2_security_scheme: OAuth2SecurityScheme
     open_id_connect_security_scheme: OpenIdConnectSecurityScheme
-    def __init__(self, api_key_security_scheme: _Optional[_Union[APIKeySecurityScheme, _Mapping]] = ..., http_auth_security_scheme: _Optional[_Union[HTTPAuthSecurityScheme, _Mapping]] = ..., oauth2_security_scheme: _Optional[_Union[OAuth2SecurityScheme, _Mapping]] = ..., open_id_connect_security_scheme: _Optional[_Union[OpenIdConnectSecurityScheme, _Mapping]] = ...) -> None: ...
+    mtls_security_scheme: MutualTlsSecurityScheme
+    def __init__(self, api_key_security_scheme: _Optional[_Union[APIKeySecurityScheme, _Mapping]] = ..., http_auth_security_scheme: _Optional[_Union[HTTPAuthSecurityScheme, _Mapping]] = ..., oauth2_security_scheme: _Optional[_Union[OAuth2SecurityScheme, _Mapping]] = ..., open_id_connect_security_scheme: _Optional[_Union[OpenIdConnectSecurityScheme, _Mapping]] = ..., mtls_security_scheme: _Optional[_Union[MutualTlsSecurityScheme, _Mapping]] = ...) -> None: ...
 
 class APIKeySecurityScheme(_message.Message):
     __slots__ = ("description", "location", "name")
@@ -352,12 +368,14 @@ class HTTPAuthSecurityScheme(_message.Message):
     def __init__(self, description: _Optional[str] = ..., scheme: _Optional[str] = ..., bearer_format: _Optional[str] = ...) -> None: ...
 
 class OAuth2SecurityScheme(_message.Message):
-    __slots__ = ("description", "flows")
+    __slots__ = ("description", "flows", "oauth2_metadata_url")
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     FLOWS_FIELD_NUMBER: _ClassVar[int]
+    OAUTH2_METADATA_URL_FIELD_NUMBER: _ClassVar[int]
     description: str
     flows: OAuthFlows
-    def __init__(self, description: _Optional[str] = ..., flows: _Optional[_Union[OAuthFlows, _Mapping]] = ...) -> None: ...
+    oauth2_metadata_url: str
+    def __init__(self, description: _Optional[str] = ..., flows: _Optional[_Union[OAuthFlows, _Mapping]] = ..., oauth2_metadata_url: _Optional[str] = ...) -> None: ...
 
 class OpenIdConnectSecurityScheme(_message.Message):
     __slots__ = ("description", "open_id_connect_url")
@@ -366,6 +384,12 @@ class OpenIdConnectSecurityScheme(_message.Message):
     description: str
     open_id_connect_url: str
     def __init__(self, description: _Optional[str] = ..., open_id_connect_url: _Optional[str] = ...) -> None: ...
+
+class MutualTlsSecurityScheme(_message.Message):
+    __slots__ = ("description",)
+    DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
+    description: str
+    def __init__(self, description: _Optional[str] = ...) -> None: ...
 
 class OAuthFlows(_message.Message):
     __slots__ = ("authorization_code", "client_credentials", "implicit", "password")
