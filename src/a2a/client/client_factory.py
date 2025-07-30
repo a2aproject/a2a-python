@@ -38,7 +38,20 @@ TransportProducer = Callable[
 
 
 class ClientFactory:
-    """ClientFactory is used to generate the appropriate client for the agent."""
+    """ClientFactory is used to generate the appropriate client for the agent.
+
+    The factory is configured with a `ClientConfig` and optionally a list of
+    `Consumer`s to use for all generated `Client`s. The expected use is:
+
+    factory = ClientFactory(config, consumers)
+    # Optionally register custom client implementations
+    factory.register('my_customer_transport', NewCustomTransportClient)
+    # Then with an agent card make a client with additional consumers and
+    # interceptors
+    client = factory.create(card, additional_consumers, interceptors)
+    # Now the client can be used the same regardless of transport and
+    # aligns client config with server capabilities.
+    """
 
     def __init__(
         self,
@@ -92,7 +105,22 @@ class ClientFactory:
         consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
     ) -> Client:
-        """Create a new `Client` for the provided `AgentCard`."""
+        """Create a new `Client` for the provided `AgentCard`.
+
+        Args:
+          card: An `AgentCard` defining the characteristics of the agent.
+          consumers: A list of `Consumer` methods to pass responses to.
+          interceptors: A list of interceptors to use for each request. These
+            are used for things like attaching credentials or http headers
+            to all outbound requests.
+
+        Returns:
+          A `Client` object.
+
+        Raises:
+          If there is no valid matching of the client configuration with the
+          server configuration, a `ValueError` is raised.
+        """
         server_set = [card.preferred_transport or TransportProtocol.jsonrpc]
         if card.additional_interfaces:
             server_set.extend([x.transport for x in card.additional_interfaces])
@@ -131,7 +159,14 @@ class ClientFactory:
 def minimal_agent_card(
     url: str, transports: list[str] | None = None
 ) -> AgentCard:
-    """Generates a minimal card to simplify bootstrapping client creation."""
+    """Generates a minimal card to simplify bootstrapping client creation.
+
+    This minimal card is not viable itself to interact with the remote agent.
+    Instead this is a short hand way to take a known url and transport option
+    and interact with the get card endpoint of the agent server to get the
+    correct agent card. This pattern is necessary for gRPC based card access
+    as typically these servers won't expose a well known path card.
+    """
     if transports is None:
         transports = []
     return AgentCard(
