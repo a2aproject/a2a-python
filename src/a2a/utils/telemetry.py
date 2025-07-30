@@ -71,7 +71,8 @@ logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import SpanKind, StatusCode
+    from opentelemetry.trace import SpanKind as _SpanKind
+    from opentelemetry.trace import StatusCode
 
 except ImportError:
     logger.debug(
@@ -95,8 +96,11 @@ except ImportError:
             return self
 
     trace = _NoOp()
-    SpanKind = _NoOp()
+    _SpanKind = _NoOp()
     StatusCode = _NoOp()
+
+SpanKind = _SpanKind
+__all__ = ['SpanKind']
 
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
 INSTRUMENTING_MODULE_VERSION = '1.0.0'
