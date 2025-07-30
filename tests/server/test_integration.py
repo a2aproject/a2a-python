@@ -47,8 +47,8 @@ from a2a.types import (
 )
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
     EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
 
