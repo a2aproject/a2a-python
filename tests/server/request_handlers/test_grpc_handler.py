@@ -1,10 +1,13 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, MagicMock
 
 import grpc
+import grpc.aio
 import pytest
 
 from a2a import types
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.utils.errors import ServerError
 
@@ -21,6 +24,7 @@ def mock_request_handler() -> AsyncMock:
 def mock_grpc_context() -> AsyncMock:
     context = AsyncMock(spec=grpc.aio.ServicerContext)
     context.abort = AsyncMock()
+    context.set_trailing_metadata = MagicMock()
     return context
 
 
@@ -32,10 +36,10 @@ def sample_agent_card() -> types.AgentCard:
         url='http://localhost',
         version='1.0.0',
         capabilities=types.AgentCapabilities(
-            streaming=True, pushNotifications=True
+            streaming=True, push_notifications=True
         ),
-        defaultInputModes=['text/plain'],
-        defaultOutputModes=['text/plain'],
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
         skills=[],
     )
 
@@ -64,7 +68,7 @@ async def test_send_message_success(
     )
     response_model = types.Task(
         id='task-1',
-        contextId='ctx-1',
+        context_id='ctx-1',
         status=types.TaskStatus(state=types.TaskState.completed),
     )
     mock_request_handler.on_message_send.return_value = response_model
@@ -105,7 +109,7 @@ async def test_get_task_success(
     request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
     response_model = types.Task(
         id='task-1',
-        contextId='ctx-1',
+        context_id='ctx-1',
         status=types.TaskStatus(state=types.TaskState.working),
     )
     mock_request_handler.on_get_task.return_value = response_model
@@ -164,7 +168,7 @@ async def test_send_streaming_message(
     async def mock_stream():
         yield types.Task(
             id='task-1',
-            contextId='ctx-1',
+            context_id='ctx-1',
             status=types.TaskStatus(state=types.TaskState.working),
         )
 
@@ -279,3 +283,117 @@ async def test_abort_context_error_mapping(
     call_args, _ = mock_grpc_context.abort.call_args
     assert call_args[0] == grpc_status_code
     assert error_message_part in call_args[1]
+
+
+@pytest.mark.asyncio
+class TestGrpcExtensions:
+    async def test_send_message_with_extensions(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+    ):
+        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER, 'foo'),
+            (HTTP_EXTENSION_HEADER, 'bar'),
+        )
+
+        def side_effect(request, context: ServerCallContext):
+            context.activated_extensions.add('foo')
+            context.activated_extensions.add('baz')
+            return types.Task(
+                id='task-1',
+                contextId='ctx-1',
+                status=types.TaskStatus(state=types.TaskState.completed),
+            )
+
+        mock_request_handler.on_message_send.side_effect = side_effect
+
+        await grpc_handler.SendMessage(
+            a2a_pb2.SendMessageRequest(), mock_grpc_context
+        )
+
+        mock_request_handler.on_message_send.assert_awaited_once()
+        call_context = mock_request_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.requested_extensions == {'foo', 'bar'}
+
+        mock_grpc_context.set_trailing_metadata.assert_called_once()
+        called_metadata = (
+            mock_grpc_context.set_trailing_metadata.call_args.args[0]
+        )
+        assert set(called_metadata) == {
+            (HTTP_EXTENSION_HEADER, 'foo'),
+            (HTTP_EXTENSION_HEADER, 'baz'),
+        }
+
+    async def test_send_message_with_comma_separated_extensions(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+    ):
+        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER, 'foo ,, bar,'),
+            (HTTP_EXTENSION_HEADER, 'baz  , bar'),
+        )
+        mock_request_handler.on_message_send.return_value = types.Message(
+            messageId='1',
+            role=types.Role.agent,
+            parts=[types.TextPart(text='test')],
+        )
+
+        await grpc_handler.SendMessage(
+            a2a_pb2.SendMessageRequest(), mock_grpc_context
+        )
+
+        mock_request_handler.on_message_send.assert_awaited_once()
+        call_context = mock_request_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.requested_extensions == {'foo', 'bar', 'baz'}
+
+    async def test_send_streaming_message_with_extensions(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+    ):
+        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER, 'foo'),
+            (HTTP_EXTENSION_HEADER, 'bar'),
+        )
+
+        async def side_effect(request, context: ServerCallContext):
+            context.activated_extensions.add('foo')
+            context.activated_extensions.add('baz')
+            yield types.Task(
+                id='task-1',
+                contextId='ctx-1',
+                status=types.TaskStatus(state=types.TaskState.working),
+            )
+
+        mock_request_handler.on_message_send_stream.side_effect = side_effect
+
+        results = [
+            result
+            async for result in grpc_handler.SendStreamingMessage(
+                a2a_pb2.SendMessageRequest(), mock_grpc_context
+            )
+        ]
+        assert results
+
+        mock_request_handler.on_message_send_stream.assert_called_once()
+        call_context = mock_request_handler.on_message_send_stream.call_args[0][
+            1
+        ]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.requested_extensions == {'foo', 'bar'}
+
+        mock_grpc_context.set_trailing_metadata.assert_called_once()
+        called_metadata = (
+            mock_grpc_context.set_trailing_metadata.call_args.args[0]
+        )
+        assert set(called_metadata) == {
+            (HTTP_EXTENSION_HEADER, 'foo'),
+            (HTTP_EXTENSION_HEADER, 'baz'),
+        }

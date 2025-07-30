@@ -14,7 +14,7 @@ class TestTask(unittest.TestCase):
         message = Message(
             role=Role.user,
             parts=[Part(root=TextPart(text='test message'))],
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
         self.assertEqual(task.status.state.value, 'submitted')
@@ -26,11 +26,11 @@ class TestTask(unittest.TestCase):
         message = Message(
             role=Role.user,
             parts=[Part(root=TextPart(text='test message'))],
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
         self.assertEqual(task.id, str(mock_uuid))
-        self.assertEqual(task.contextId, str(mock_uuid))
+        self.assertEqual(task.context_id, str(mock_uuid))
 
     def test_new_task_uses_provided_ids(self):
         task_id = str(uuid.uuid4())
@@ -38,19 +38,19 @@ class TestTask(unittest.TestCase):
         message = Message(
             role=Role.user,
             parts=[Part(root=TextPart(text='test message'))],
-            messageId=str(uuid.uuid4()),
-            taskId=task_id,
-            contextId=context_id,
+            message_id=str(uuid.uuid4()),
+            task_id=task_id,
+            context_id=context_id,
         )
         task = new_task(message)
         self.assertEqual(task.id, task_id)
-        self.assertEqual(task.contextId, context_id)
+        self.assertEqual(task.context_id, context_id)
 
     def test_new_task_initial_message_in_history(self):
         message = Message(
             role=Role.user,
             parts=[Part(root=TextPart(text='test message'))],
-            messageId=str(uuid.uuid4()),
+            message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
         self.assertEqual(len(task.history), 1)
@@ -61,7 +61,7 @@ class TestTask(unittest.TestCase):
         context_id = str(uuid.uuid4())
         artifacts = [
             Artifact(
-                artifactId='artifact_1',
+                artifact_id='artifact_1',
                 parts=[Part(root=TextPart(text='some content'))],
             )
         ]
@@ -78,7 +78,7 @@ class TestTask(unittest.TestCase):
         context_id = str(uuid.uuid4())
         artifacts = [
             Artifact(
-                artifactId='artifact_1',
+                artifact_id='artifact_1',
                 parts=[Part(root=TextPart(text='some content'))],
             )
         ]
@@ -89,7 +89,7 @@ class TestTask(unittest.TestCase):
             history=[],
         )
         self.assertEqual(task.id, task_id)
-        self.assertEqual(task.contextId, context_id)
+        self.assertEqual(task.context_id, context_id)
         self.assertEqual(task.artifacts, artifacts)
 
     def test_completed_task_empty_history_if_not_provided(self):
@@ -97,7 +97,7 @@ class TestTask(unittest.TestCase):
         context_id = str(uuid.uuid4())
         artifacts = [
             Artifact(
-                artifactId='artifact_1',
+                artifact_id='artifact_1',
                 parts=[Part(root=TextPart(text='some content'))],
             )
         ]
@@ -111,7 +111,7 @@ class TestTask(unittest.TestCase):
         context_id = str(uuid.uuid4())
         artifacts = [
             Artifact(
-                artifactId='artifact_1',
+                artifact_id='artifact_1',
                 parts=[Part(root=TextPart(text='some content'))],
             )
         ]
@@ -119,12 +119,12 @@ class TestTask(unittest.TestCase):
             Message(
                 role=Role.user,
                 parts=[Part(root=TextPart(text='Hello'))],
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
             ),
             Message(
                 role=Role.agent,
                 parts=[Part(root=TextPart(text='Hi there'))],
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
             ),
         ]
         task = completed_task(
@@ -141,7 +141,7 @@ class TestTask(unittest.TestCase):
                 Message(
                     role=Role.user,
                     parts=[],
-                    messageId=str(uuid.uuid4()),
+                    message_id=str(uuid.uuid4()),
                 )
             )
 
@@ -160,7 +160,7 @@ class TestTask(unittest.TestCase):
             msg = Message.model_construct(
                 role=None,
                 parts=[Part(root=TextPart(text='test message'))],
-                messageId=str(uuid.uuid4()),
+                message_id=str(uuid.uuid4()),
             )
             new_task(msg)
 
@@ -187,6 +187,24 @@ class TestTask(unittest.TestCase):
                 artifacts=['not an artifact'],
                 history=[],
             )
+
+    def test_new_task_with_invalid_context_id(self):
+        """Test that new_task raises a ValueError for various invalid context_id formats."""
+        invalid_ids = ['not-a-uuid', '']
+        for invalid_id in invalid_ids:
+            with self.subTest(invalid_id=invalid_id):
+                with pytest.raises(
+                    ValueError,
+                    match=f"Invalid context_id: '{invalid_id}' is not a valid UUID.",
+                ):
+                    new_task(
+                        Message(
+                            role=Role.user,
+                            parts=[Part(root=TextPart(text='test message'))],
+                            message_id=str(uuid.uuid4()),
+                            context_id=invalid_id,
+                        )
+                    )
 
 
 if __name__ == '__main__':

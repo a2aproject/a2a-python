@@ -28,7 +28,7 @@ from a2a.utils.errors import ServerError
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': '123',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': {'state': 'submitted'},
     'kind': 'task',
 }
@@ -36,7 +36,7 @@ MINIMAL_TASK: dict[str, Any] = {
 MESSAGE_PAYLOAD: dict[str, Any] = {
     'role': 'agent',
     'parts': [{'text': 'test message'}],
-    'messageId': '111',
+    'message_id': '111',
 }
 
 
@@ -128,15 +128,15 @@ async def test_consume_all_multiple_events(
     events: list[Any] = [
         Task(**MINIMAL_TASK),
         TaskArtifactUpdateEvent(
-            taskId='task_123',
-            contextId='session-xyz',
+            task_id='task_123',
+            context_id='session-xyz',
             artifact=Artifact(
-                artifactId='11', parts=[Part(TextPart(text='text'))]
+                artifact_id='11', parts=[Part(TextPart(text='text'))]
             ),
         ),
         TaskStatusUpdateEvent(
-            taskId='task_123',
-            contextId='session-xyz',
+            task_id='task_123',
+            context_id='session-xyz',
             status=TaskStatus(state=TaskState.working),
             final=True,
         ),
@@ -170,16 +170,16 @@ async def test_consume_until_message(
     events: list[Any] = [
         Task(**MINIMAL_TASK),
         TaskArtifactUpdateEvent(
-            taskId='task_123',
-            contextId='session-xyz',
+            task_id='task_123',
+            context_id='session-xyz',
             artifact=Artifact(
-                artifactId='11', parts=[Part(TextPart(text='text'))]
+                artifact_id='11', parts=[Part(TextPart(text='text'))]
             ),
         ),
         Message(**MESSAGE_PAYLOAD),
         TaskStatusUpdateEvent(
-            taskId='task_123',
-            contextId='session-xyz',
+            task_id='task_123',
+            context_id='session-xyz',
             status=TaskStatus(state=TaskState.working),
             final=True,
         ),
@@ -276,7 +276,7 @@ async def test_consume_all_continues_on_queue_empty_if_not_really_closed(
 ):
     """Test that QueueClosed with is_closed=False allows loop to continue via timeout."""
     payload = MESSAGE_PAYLOAD.copy()
-    payload['messageId'] = 'final_event_id'
+    payload['message_id'] = 'final_event_id'
     final_event = Message(**payload)
 
     # Setup dequeue_event behavior:

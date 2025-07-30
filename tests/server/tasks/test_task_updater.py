@@ -1,5 +1,6 @@
 import asyncio
 import uuid
+
 from unittest.mock import AsyncMock, patch
 
 import pytest
@@ -38,9 +39,9 @@ def sample_message():
     """Create a sample message for testing."""
     return Message(
         role=Role.agent,
-        taskId='test-task-id',
-        contextId='test-context-id',
-        messageId='test-message-id',
+        task_id='test-task-id',
+        context_id='test-context-id',
+        message_id='test-message-id',
         parts=[Part(root=TextPart(text='Test message'))],
     )
 
@@ -73,8 +74,8 @@ async def test_update_status_without_message(task_updater, event_queue):
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.taskId == 'test-task-id'
-    assert event.contextId == 'test-context-id'
+    assert event.task_id == 'test-task-id'
+    assert event.context_id == 'test-context-id'
     assert event.final is False
     assert event.status.state == TaskState.working
     assert event.status.message is None
@@ -91,8 +92,8 @@ async def test_update_status_with_message(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.taskId == 'test-task-id'
-    assert event.contextId == 'test-context-id'
+    assert event.task_id == 'test-task-id'
+    assert event.context_id == 'test-context-id'
     assert event.final is False
     assert event.status.state == TaskState.working
     assert event.status.message == sample_message
@@ -126,7 +127,7 @@ async def test_add_artifact_with_custom_id_and_name(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskArtifactUpdateEvent)
-    assert event.artifact.artifactId == 'custom-artifact-id'
+    assert event.artifact.artifact_id == 'custom-artifact-id'
     assert event.artifact.name == 'Custom Artifact'
     assert event.artifact.parts == sample_parts
 
@@ -144,10 +145,10 @@ async def test_add_artifact_generates_id(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskArtifactUpdateEvent)
-    assert event.artifact.artifactId == str(known_uuid)
+    assert event.artifact.artifact_id == str(known_uuid)
     assert event.artifact.parts == sample_parts
-    assert event.append == None
-    assert event.lastChunk == None
+    assert event.append is None
+    assert event.last_chunk is None
 
 
 @pytest.mark.asyncio
@@ -175,10 +176,10 @@ async def test_add_artifact_with_append_last_chunk(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskArtifactUpdateEvent)
-    assert event.artifact.artifactId == 'id1'
+    assert event.artifact.artifact_id == 'id1'
     assert event.artifact.parts == sample_parts
     assert event.append == append_val
-    assert event.lastChunk == last_chunk_val
+    assert event.last_chunk == last_chunk_val
 
 
 @pytest.mark.asyncio
@@ -276,9 +277,9 @@ def test_new_agent_message(task_updater, sample_parts):
         message = task_updater.new_agent_message(parts=sample_parts)
 
     assert message.role == Role.agent
-    assert message.taskId == 'test-task-id'
-    assert message.contextId == 'test-context-id'
-    assert message.messageId == '12345678-1234-5678-1234-567812345678'
+    assert message.task_id == 'test-task-id'
+    assert message.context_id == 'test-context-id'
+    assert message.message_id == '12345678-1234-5678-1234-567812345678'
     assert message.parts == sample_parts
     assert message.metadata is None
 
@@ -296,9 +297,9 @@ def test_new_agent_message_with_metadata(task_updater, sample_parts):
         )
 
     assert message.role == Role.agent
-    assert message.taskId == 'test-task-id'
-    assert message.contextId == 'test-context-id'
-    assert message.messageId == '12345678-1234-5678-1234-567812345678'
+    assert message.task_id == 'test-task-id'
+    assert message.context_id == 'test-context-id'
+    assert message.message_id == '12345678-1234-5678-1234-567812345678'
     assert message.parts == sample_parts
     assert message.metadata == metadata
 

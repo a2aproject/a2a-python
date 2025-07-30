@@ -18,7 +18,7 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
         Args:
             should_populate_referred_tasks: If True, the builder will fetch tasks
-                referenced in `params.message.referenceTaskIds` and populate the
+                referenced in `params.message.reference_task_ids` and populate the
                 `related_tasks` field in the RequestContext. Defaults to False.
             task_store: The TaskStore instance to use for fetching referred tasks.
                 Required if `should_populate_referred_tasks` is True.
@@ -38,7 +38,7 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
         This method assembles the RequestContext object. If the builder was
         initialized with `should_populate_referred_tasks=True`, it fetches all tasks
-        referenced in `params.message.referenceTaskIds` from the `task_store`.
+        referenced in `params.message.reference_task_ids` from the `task_store`.
 
         Args:
             params: The parameters of the incoming message send request.
@@ -57,12 +57,12 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
             self._task_store
             and self._should_populate_referred_tasks
             and params
-            and params.message.referenceTaskIds
+            and params.message.reference_task_ids
         ):
             tasks = await asyncio.gather(
                 *[
                     self._task_store.get(task_id)
-                    for task_id in params.message.referenceTaskIds
+                    for task_id in params.message.reference_task_ids
                 ]
             )
             related_tasks = [x for x in tasks if x is not None]

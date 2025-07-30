@@ -21,3 +21,5 @@ class ServerCallContext(BaseModel):
 
     state: State = Field(default={})
     user: User = Field(default=UnauthenticatedUser())
+    requested_extensions: set[str] = Field(default_factory=set)
+    activated_extensions: set[str] = Field(default_factory=set)

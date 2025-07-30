@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.2.16](https://github.com/a2aproject/a2a-python/compare/v0.2.15...v0.2.16) (2025-07-21)
+
+
+### Features
+
+* Convert fields in `types.py` to use `snake_case` ([#199](https://github.com/a2aproject/a2a-python/issues/199)) ([0bb5563](https://github.com/a2aproject/a2a-python/commit/0bb55633272605a0404fc14c448a9dcaca7bb693))
+
+
+### Bug Fixes
+
+* Add deprecation warning for camelCase alias ([#334](https://github.com/a2aproject/a2a-python/issues/334)) ([f22b384](https://github.com/a2aproject/a2a-python/commit/f22b384d919e349be8d275c8f44bd760d627bcb9))
+* client should not specify `taskId` if it doesn't exist ([#264](https://github.com/a2aproject/a2a-python/issues/264)) ([97f1093](https://github.com/a2aproject/a2a-python/commit/97f109326c7fe291c96bb51935ac80e0fab4cf66))
+
 ## [0.2.15](https://github.com/a2aproject/a2a-python/compare/v0.2.14...v0.2.15) (2025-07-21)
 
 

@@ -55,7 +55,7 @@ def build_success_response() -> dict:
         jsonrpc='2.0',
         result=Message(
             kind='message',
-            messageId='message-id',
+            message_id='message-id',
             role=Role.agent,
             parts=[],
         ),
@@ -68,7 +68,7 @@ def build_send_message_request() -> SendMessageRequest:
         id='1',
         params=MessageSendParams(
             message=Message(
-                messageId='msg1',
+                message_id='msg1',
                 role=Role.user,
                 parts=[],
             )
@@ -223,9 +223,9 @@ oauth2_test_case = AuthTestCase(
     security_scheme=OAuth2SecurityScheme(
         type='oauth2',
         flows=OAuthFlows(
-            authorizationCode=AuthorizationCodeOAuthFlow(
-                authorizationUrl='http://provider.com/auth',
-                tokenUrl='http://provider.com/token',
+            authorization_code=AuthorizationCodeOAuthFlow(
+                authorization_url='http://provider.com/auth',
+                token_url='http://provider.com/token',
                 scopes={'read': 'Read scope'},
             )
         ),
@@ -242,7 +242,7 @@ oidc_test_case = AuthTestCase(
     credential='secret-oidc-id-token',
     security_scheme=OpenIdConnectSecurityScheme(
         type='openIdConnect',
-        openIdConnectUrl='http://provider.com/.well-known/openid-configuration',
+        open_id_connect_url='http://provider.com/.well-known/openid-configuration',
     ),
     expected_header_key='Authorization',
     expected_header_value_func=lambda c: f'Bearer {c}',
@@ -282,12 +282,12 @@ async def test_auth_interceptor_variants(test_case, store):
         name=f'{test_case.scheme_name}bot',
         description=f'A bot that uses {test_case.scheme_name}',
         version='1.0',
-        defaultInputModes=[],
-        defaultOutputModes=[],
+        default_input_modes=[],
+        default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
         security=[{test_case.scheme_name: []}],
-        securitySchemes={
+        security_schemes={
             test_case.scheme_name: SecurityScheme(
                 root=test_case.security_scheme
             )
@@ -314,7 +314,7 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
 ):
     """
     Tests that AuthInterceptor skips a scheme if it's listed in security requirements
-    but not defined in securitySchemes.
+    but not defined in security_schemes.
     """
     scheme_name = 'missing'
     session_id = 'session-id'
@@ -328,12 +328,12 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         name='missingbot',
         description='A bot that uses missing scheme definition',
         version='1.0',
-        defaultInputModes=[],
-        defaultOutputModes=[],
+        default_input_modes=[],
+        default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
         security=[{scheme_name: []}],
-        securitySchemes={},
+        security_schemes={},
     )
 
     new_payload, new_kwargs = await auth_interceptor.intercept(

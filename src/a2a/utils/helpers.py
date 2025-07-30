@@ -36,12 +36,12 @@ def create_task_obj(message_send_params: MessageSendParams) -> Task:
     Returns:
         A new `Task` object initialized with 'submitted' status and the input message in history.
     """
-    if not message_send_params.message.contextId:
-        message_send_params.message.contextId = str(uuid4())
+    if not message_send_params.message.context_id:
+        message_send_params.message.context_id = str(uuid4())
 
     return Task(
         id=str(uuid4()),
-        contextId=message_send_params.message.contextId,
+        context_id=message_send_params.message.context_id,
         status=TaskStatus(state=TaskState.submitted),
         history=[message_send_params.message],
     )
@@ -62,7 +62,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
         task.artifacts = []
 
     new_artifact_data: Artifact = event.artifact
-    artifact_id: str = new_artifact_data.artifactId
+    artifact_id: str = new_artifact_data.artifact_id
     append_parts: bool = event.append or False
 
     existing_artifact: Artifact | None = None
@@ -70,7 +70,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
 
     # Find existing artifact by its id
     for i, art in enumerate(task.artifacts):
-        if art.artifactId == artifact_id:
+        if art.artifact_id == artifact_id:
             existing_artifact = art
             existing_artifact_list_index = i
             break
@@ -115,7 +115,7 @@ def build_text_artifact(text: str, artifact_id: str) -> Artifact:
     """
     text_part = TextPart(text=text)
     part = Part(root=text_part)
-    return Artifact(parts=[part], artifactId=artifact_id)
+    return Artifact(parts=[part], artifact_id=artifact_id)
 
 
 def validate(

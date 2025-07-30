@@ -95,7 +95,7 @@ class DatabaseTaskStore(TaskStore):
         """Maps a Pydantic Task to a SQLAlchemy TaskModel instance."""
         return self.task_model(
             id=task.id,
-            contextId=task.contextId,
+            context_id=task.context_id,
             kind=task.kind,
             status=task.status,
             artifacts=task.artifacts,
@@ -108,7 +108,7 @@ class DatabaseTaskStore(TaskStore):
         # Map database columns to Pydantic model fields
         task_data_from_db = {
             'id': task_model.id,
-            'contextId': task_model.contextId,
+            'context_id': task_model.context_id,
             'kind': task_model.kind,
             'status': task_model.status,
             'artifacts': task_model.artifacts,

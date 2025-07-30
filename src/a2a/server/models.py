@@ -123,7 +123,7 @@ class TaskMixin:
     """Mixin providing standard task columns with proper type handling."""
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, index=True)
-    contextId: Mapped[str] = mapped_column(String(36), nullable=False)  # noqa: N815
+    context_id: Mapped[str] = mapped_column(String(36), nullable=False)
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
@@ -148,12 +148,12 @@ class TaskMixin:
     def __repr__(self) -> str:
         """Return a string representation of the task."""
         repr_template = (
-            '<{CLS}(id="{ID}", contextId="{CTX_ID}", status="{STATUS}")>'
+            '<{CLS}(id="{ID}", context_id="{CTX_ID}", status="{STATUS}")>'
         )
         return repr_template.format(
             CLS=self.__class__.__name__,
             ID=self.id,
-            CTX_ID=self.contextId,
+            CTX_ID=self.context_id,
             STATUS=self.status,
         )
 
@@ -188,11 +188,11 @@ def create_task_model(
         @override
         def __repr__(self) -> str:
             """Return a string representation of the task."""
-            repr_template = '<TaskModel[{TABLE}](id="{ID}", contextId="{CTX_ID}", status="{STATUS}")>'
+            repr_template = '<TaskModel[{TABLE}](id="{ID}", context_id="{CTX_ID}", status="{STATUS}")>'
             return repr_template.format(
                 TABLE=table_name,
                 ID=self.id,
-                CTX_ID=self.contextId,
+                CTX_ID=self.context_id,
                 STATUS=self.status,
             )
 

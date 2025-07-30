@@ -34,9 +34,9 @@ def new_agent_text_message(
     return Message(
         role=Role.agent,
         parts=[Part(root=TextPart(text=text))],
-        messageId=str(uuid.uuid4()),
-        taskId=task_id,
-        contextId=context_id,
+        message_id=str(uuid.uuid4()),
+        task_id=task_id,
+        context_id=context_id,
     )
 
 
@@ -58,9 +58,9 @@ def new_agent_parts_message(
     return Message(
         role=Role.agent,
         parts=parts,
-        messageId=str(uuid.uuid4()),
-        taskId=task_id,
-        contextId=context_id,
+        message_id=str(uuid.uuid4()),
+        task_id=task_id,
+        context_id=context_id,
     )
 
 

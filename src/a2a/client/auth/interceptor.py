@@ -36,7 +36,7 @@ class AuthInterceptor(ClientCallInterceptor):
         if (
             agent_card is None
             or agent_card.security is None
-            or agent_card.securitySchemes is None
+            or agent_card.security_schemes is None
         ):
             return request_payload, http_kwargs
 
@@ -45,8 +45,8 @@ class AuthInterceptor(ClientCallInterceptor):
                 credential = await self._credential_service.get_credentials(
                     scheme_name, context
                 )
-                if credential and scheme_name in agent_card.securitySchemes:
-                    scheme_def_union = agent_card.securitySchemes.get(
+                if credential and scheme_name in agent_card.security_schemes:
+                    scheme_def_union = agent_card.security_schemes.get(
                         scheme_name
                     )
                     if not scheme_def_union:

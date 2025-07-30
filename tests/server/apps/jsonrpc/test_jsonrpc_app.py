@@ -1,7 +1,9 @@
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
+
+from starlette.testclient import TestClient
 
 
 # Attempt to import StarletteBaseUser, fallback to MagicMock if not available
@@ -10,15 +12,28 @@ try:
 except ImportError:
     StarletteBaseUser = MagicMock()  # type: ignore
 
-from a2a.server.apps.jsonrpc import jsonrpc_app
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
+from a2a.server.apps.jsonrpc import jsonrpc_app  # Keep this import for optional deps test
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
-    JSONRPCApplication,  # Still needed for JSONRPCApplication default constructor arg
+    JSONRPCApplication,
     StarletteUserProxy,
 )
+from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import (
-    RequestHandler,  # For mock spec
+    RequestHandler,
+)  # For mock spec
+from a2a.types import (
+    AgentCard,
+    Message,
+    MessageSendParams,
+    Part,
+    Role,
+    SendMessageRequest,
+    SendMessageResponse,
+    SendMessageSuccessResponse,
+    TextPart,
 )
-from a2a.types import AgentCard  # For mock spec
 
 
 # --- StarletteUserProxy Tests ---
@@ -70,7 +85,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
         # Ensure 'url' attribute exists on the mock_agent_card, as it's accessed in __init__
         mock_agent_card.url = 'http://mockurl.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
-        mock_agent_card.supportsAuthenticatedExtendedCard = False
+        mock_agent_card.supports_authenticated_extended_card = False
 
         # This will fail at definition time if an abstract method is not implemented
         with pytest.raises(
@@ -115,7 +130,7 @@ class TestJSONRPCApplicationOptionalDeps:
         # in __init__
         mock_agent_card.url = 'http://example.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
-        mock_agent_card.supportsAuthenticatedExtendedCard = False
+        mock_agent_card.supports_authenticated_extended_card = False
         return dict(agent_card=mock_agent_card, http_handler=mock_handler)
 
     @pytest.fixture(scope='class')
@@ -166,6 +181,177 @@ class TestJSONRPCApplicationOptionalDeps:
             ),
         ):
             _app = DummyJSONRPCApp(**mock_app_params)
+
+
+class TestJSONRPCExtensions:
+    @pytest.fixture
+    def mock_handler(self):
+        handler = AsyncMock(spec=RequestHandler)
+        handler.on_message_send.return_value = SendMessageResponse(
+            root=SendMessageSuccessResponse(
+                id='1',
+                result=Message(
+                    message_id='test',
+                    role=Role.agent,
+                    parts=[Part(TextPart(text='response message'))],
+                ),
+            )
+        )
+        return handler
+
+    @pytest.fixture
+    def test_app(self, mock_handler):
+        mock_agent_card = MagicMock(spec=AgentCard)
+        mock_agent_card.url = 'http://mockurl.com'
+        mock_agent_card.supports_authenticated_extended_card = False
+
+        return A2AStarletteApplication(
+            agent_card=mock_agent_card, http_handler=mock_handler
+        )
+
+    @pytest.fixture
+    def client(self, test_app):
+        return TestClient(test_app.build())
+
+    def test_request_with_single_extension(self, client, mock_handler):
+        headers = {HTTP_EXTENSION_HEADER: 'foo'}
+        response = client.post(
+            '/',
+            headers=headers,
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.requested_extensions == {'foo'}
+
+    def test_request_with_comma_separated_extensions(
+        self, client, mock_handler
+    ):
+        headers = {HTTP_EXTENSION_HEADER: 'foo, bar'}
+        response = client.post(
+            '/',
+            headers=headers,
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert call_context.requested_extensions == {'foo', 'bar'}
+
+    def test_request_with_comma_separated_extensions_no_space(
+        self, client, mock_handler
+    ):
+        headers = [
+            (HTTP_EXTENSION_HEADER, 'foo,  bar'),
+            (HTTP_EXTENSION_HEADER, 'baz'),
+        ]
+        response = client.post(
+            '/',
+            headers=headers,
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert call_context.requested_extensions == {'foo', 'bar', 'baz'}
+
+    def test_request_with_multiple_extension_headers(
+        self, client, mock_handler
+    ):
+        headers = [
+            (HTTP_EXTENSION_HEADER, 'foo'),
+            (HTTP_EXTENSION_HEADER, 'bar'),
+        ]
+        response = client.post(
+            '/',
+            headers=headers,
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert call_context.requested_extensions == {'foo', 'bar'}
+
+    def test_response_with_activated_extensions(self, client, mock_handler):
+        def side_effect(request, context: ServerCallContext):
+            context.activated_extensions.add('foo')
+            context.activated_extensions.add('baz')
+            return SendMessageResponse(
+                root=SendMessageSuccessResponse(
+                    id='1',
+                    result=Message(
+                        message_id='test',
+                        role=Role.agent,
+                        parts=[Part(TextPart(text='response message'))],
+                    ),
+                )
+            )
+
+        mock_handler.on_message_send.side_effect = side_effect
+
+        response = client.post(
+            '/',
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        assert response.status_code == 200
+        assert HTTP_EXTENSION_HEADER in response.headers
+        assert set(response.headers[HTTP_EXTENSION_HEADER].split(', ')) == {
+            'foo',
+            'baz',
+        }
 
 
 if __name__ == '__main__':

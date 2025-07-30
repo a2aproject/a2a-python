@@ -22,7 +22,7 @@ from a2a.utils.errors import ServerError
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': {'state': 'submitted'},
     'kind': 'task',
 }
@@ -39,7 +39,7 @@ def task_manager(mock_task_store: AsyncMock) -> TaskManager:
     """Fixture for a TaskManager with a mock TaskStore."""
     return TaskManager(
         task_id=MINIMAL_TASK['id'],
-        context_id=MINIMAL_TASK['contextId'],
+        context_id=MINIMAL_TASK['context_id'],
         task_store=mock_task_store,
         initial_message=None,
     )
@@ -104,12 +104,12 @@ async def test_save_task_event_status_update(
         message=Message(
             role=Role.agent,
             parts=[Part(TextPart(text='content'))],
-            messageId='message-id',
+            message_id='message-id',
         ),
     )
     event = TaskStatusUpdateEvent(
-        taskId=MINIMAL_TASK['id'],
-        contextId=MINIMAL_TASK['contextId'],
+        task_id=MINIMAL_TASK['id'],
+        context_id=MINIMAL_TASK['context_id'],
         status=new_status,
         final=False,
     )
@@ -127,13 +127,13 @@ async def test_save_task_event_artifact_update(
     initial_task = Task(**MINIMAL_TASK)
     mock_task_store.get.return_value = initial_task
     new_artifact = Artifact(
-        artifactId='artifact-id',
+        artifact_id='artifact-id',
         name='artifact1',
         parts=[Part(TextPart(text='content'))],
     )
     event = TaskArtifactUpdateEvent(
-        taskId=MINIMAL_TASK['id'],
-        contextId=MINIMAL_TASK['contextId'],
+        task_id=MINIMAL_TASK['id'],
+        context_id=MINIMAL_TASK['context_id'],
         artifact=new_artifact,
     )
     await task_manager.save_task_event(event)
@@ -152,8 +152,8 @@ async def test_save_task_event_metadata_update(
     new_metadata = {'meta_key_test': 'meta_value_test'}
 
     event = TaskStatusUpdateEvent(
-        taskId=MINIMAL_TASK['id'],
-        contextId=MINIMAL_TASK['contextId'],
+        task_id=MINIMAL_TASK['id'],
+        context_id=MINIMAL_TASK['context_id'],
         metadata=new_metadata,
         status=TaskStatus(state=TaskState.working),
         final=False,
@@ -172,8 +172,8 @@ async def test_ensure_task_existing(
     expected_task = Task(**MINIMAL_TASK)
     mock_task_store.get.return_value = expected_task
     event = TaskStatusUpdateEvent(
-        taskId=MINIMAL_TASK['id'],
-        contextId=MINIMAL_TASK['contextId'],
+        task_id=MINIMAL_TASK['id'],
+        context_id=MINIMAL_TASK['context_id'],
         status=TaskStatus(state=TaskState.working),
         final=False,
     )
@@ -195,14 +195,14 @@ async def test_ensure_task_nonexistent(
         initial_message=None,
     )
     event = TaskStatusUpdateEvent(
-        taskId='new-task',
-        contextId='some-context',
+        task_id='new-task',
+        context_id='some-context',
         status=TaskStatus(state=TaskState.submitted),
         final=False,
     )
     new_task = await task_manager_without_id.ensure_task(event)
     assert new_task.id == 'new-task'
-    assert new_task.contextId == 'some-context'
+    assert new_task.context_id == 'some-context'
     assert new_task.status.state == TaskState.submitted
     mock_task_store.save.assert_called_once_with(new_task)
     assert task_manager_without_id.task_id == 'new-task'
@@ -213,7 +213,7 @@ def test_init_task_obj(task_manager: TaskManager) -> None:
     """Test initializing a new task object."""
     new_task = task_manager._init_task_obj('new-task', 'new-context')  # type: ignore
     assert new_task.id == 'new-task'
-    assert new_task.contextId == 'new-context'
+    assert new_task.context_id == 'new-context'
     assert new_task.status.state == TaskState.submitted
     assert new_task.history == []
 
@@ -236,7 +236,7 @@ async def test_save_task_event_mismatched_id_raises_error(
     # The task_manager is initialized with 'task-abc'
     mismatched_task = Task(
         id='wrong-id',
-        contextId='session-xyz',
+        context_id='session-xyz',
         status=TaskStatus(state=TaskState.submitted),
     )
 
@@ -258,7 +258,7 @@ async def test_save_task_event_new_task_no_task_id(
     )
     task_data: dict[str, Any] = {
         'id': 'new-task-id',
-        'contextId': 'some-context',
+        'context_id': 'some-context',
         'status': {'state': 'working'},
         'kind': 'task',
     }
@@ -300,8 +300,8 @@ async def test_save_task_event_no_task_existing(
     )
     mock_task_store.get.return_value = None
     event = TaskStatusUpdateEvent(
-        taskId='event-task-id',
-        contextId='some-context',
+        task_id='event-task-id',
+        context_id='some-context',
         status=TaskStatus(state=TaskState.completed),
         final=True,
     )
@@ -311,7 +311,7 @@ async def test_save_task_event_no_task_existing(
     assert call_args is not None
     saved_task = call_args[0][0]
     assert saved_task.id == 'event-task-id'
-    assert saved_task.contextId == 'some-context'
+    assert saved_task.context_id == 'some-context'
     assert saved_task.status.state == TaskState.completed
     assert task_manager_without_id.task_id == 'event-task-id'
     assert task_manager_without_id.context_id == 'some-context'

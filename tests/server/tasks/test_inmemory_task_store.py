@@ -8,7 +8,7 @@ from a2a.types import Task
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': {'state': 'submitted'},
     'kind': 'task',
 }

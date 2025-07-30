@@ -84,7 +84,7 @@ task_status_submitted = TaskStatus(
 )
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
-    contextId='session-xyz',
+    context_id='session-xyz',
     status=task_status_submitted,
     kind='task',
     metadata={'test_key': 'test_value'},
@@ -355,7 +355,7 @@ async def test_decryption_error_with_wrong_key(
             PushNotificationConfigModel, (task_id, 'config-1')
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError):
             store2._from_orm(db_model)  # type: ignore
 
 
@@ -386,7 +386,7 @@ async def test_decryption_error_with_no_key(
             PushNotificationConfigModel, (task_id, 'config-1')
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError):
             store2._from_orm(db_model)  # type: ignore
 
 
@@ -560,5 +560,5 @@ async def test_parsing_error_after_successful_decryption(
             PushNotificationConfigModel, (task_id, config_id)
         )
 
-        with pytest.raises(ValueError) as exc_info:
+        with pytest.raises(ValueError):
             db_store_parameterized._from_orm(db_model_retrieved)  # type: ignore

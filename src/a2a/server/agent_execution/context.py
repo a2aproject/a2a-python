@@ -53,14 +53,14 @@ class RequestContext:
         # match the request. Otherwise, create them
         if self._params:
             if task_id:
-                self._params.message.taskId = task_id
+                self._params.message.task_id = task_id
                 if task and task.id != task_id:
                     raise ServerError(InvalidParamsError(message='bad task id'))
             else:
                 self._check_or_generate_task_id()
             if context_id:
-                self._params.message.contextId = context_id
-                if task and task.contextId != context_id:
+                self._params.message.context_id = context_id
+                if task and task.context_id != context_id:
                     raise ServerError(
                         InvalidParamsError(message='bad context id')
                     )
@@ -127,9 +127,7 @@ class RequestContext:
     @property
     def configuration(self) -> MessageSendConfiguration | None:
         """The `MessageSendConfiguration` from the request, if available."""
-        if not self._params:
-            return None
-        return self._params.configuration
+        return self._params.configuration if self._params else None
 
     @property
     def call_context(self) -> ServerCallContext | None:
@@ -139,26 +137,42 @@ class RequestContext:
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        if not self._params:
-            return {}
-        return self._params.metadata or {}
+        return self._params.metadata or {} if self._params else {}
+
+    def add_activated_extension(self, uri: str) -> None:
+        """Add an extension to the set of activated extensions for this request.
+
+        This causes the extension to be indicated back to the client in the
+        response.
+        """
+        if self._call_context:
+            self._call_context.activated_extensions.add(uri)
+
+    @property
+    def requested_extensions(self) -> set[str]:
+        """Extensions that the client requested to activate."""
+        return (
+            self._call_context.requested_extensions
+            if self._call_context
+            else set()
+        )
 
     def _check_or_generate_task_id(self) -> None:
         """Ensures a task ID is present, generating one if necessary."""
         if not self._params:
             return
 
-        if not self._task_id and not self._params.message.taskId:
-            self._params.message.taskId = str(uuid.uuid4())
-        if self._params.message.taskId:
-            self._task_id = self._params.message.taskId
+        if not self._task_id and not self._params.message.task_id:
+            self._params.message.task_id = str(uuid.uuid4())
+        if self._params.message.task_id:
+            self._task_id = self._params.message.task_id
 
     def _check_or_generate_context_id(self) -> None:
         """Ensures a context ID is present, generating one if necessary."""
         if not self._params:
             return
 
-        if not self._context_id and not self._params.message.contextId:
-            self._params.message.contextId = str(uuid.uuid4())
-        if self._params.message.contextId:
-            self._context_id = self._params.message.contextId
+        if not self._context_id and not self._params.message.context_id:
+            self._params.message.context_id = str(uuid.uuid4())
+        if self._params.message.context_id:
+            self._context_id = self._params.message.context_id

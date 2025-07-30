@@ -76,7 +76,7 @@ task_status_submitted = TaskStatus(
 )
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
-    contextId='session-xyz',
+    context_id='session-xyz',
     status=task_status_submitted,
     kind='task',
     metadata={'test_key': 'test_value'},
@@ -166,7 +166,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
     retrieved_task = await db_store_parameterized.get(task_to_save.id)
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
-    assert retrieved_task.contextId == task_to_save.contextId
+    assert retrieved_task.context_id == task_to_save.context_id
     assert retrieved_task.status.state == TaskState.submitted
     await db_store_parameterized.delete(task_to_save.id)  # Cleanup
 
@@ -212,7 +212,7 @@ async def test_save_and_get_detailed_task(
     task_id = f'detailed-task-{db_store_parameterized.engine.url.drivername}'
     test_task = Task(
         id=task_id,
-        contextId='test-session-1',
+        context_id='test-session-1',
         status=TaskStatus(
             state=TaskState.working, timestamp='2023-01-01T12:00:00Z'
         ),
@@ -220,13 +220,13 @@ async def test_save_and_get_detailed_task(
         metadata={'key1': 'value1', 'key2': 123},
         artifacts=[
             Artifact(
-                artifactId='artifact-1',
+                artifact_id='artifact-1',
                 parts=[Part(root=TextPart(text='hello'))],
             )
         ],
         history=[
             Message(
-                messageId='msg-1',
+                message_id='msg-1',
                 role=Role.user,
                 parts=[Part(root=TextPart(text='user input'))],
             )
@@ -238,7 +238,7 @@ async def test_save_and_get_detailed_task(
 
     assert retrieved_task is not None
     assert retrieved_task.id == test_task.id
-    assert retrieved_task.contextId == test_task.contextId
+    assert retrieved_task.context_id == test_task.context_id
     assert retrieved_task.status.state == TaskState.working
     assert retrieved_task.status.timestamp == '2023-01-01T12:00:00Z'
     assert retrieved_task.metadata == {'key1': 'value1', 'key2': 123}
@@ -263,7 +263,7 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
     task_id = f'update-test-task-{db_store_parameterized.engine.url.drivername}'
     original_task = Task(
         id=task_id,
-        contextId='session-update',
+        context_id='session-update',
         status=TaskStatus(
             state=TaskState.submitted, timestamp='2023-01-02T10:00:00Z'
         ),
@@ -310,7 +310,7 @@ async def test_metadata_field_mapping(
     # Test 1: Task with no metadata (None)
     task_no_metadata = Task(
         id='task-metadata-test-1',
-        contextId='session-meta-1',
+        context_id='session-meta-1',
         status=TaskStatus(state=TaskState.submitted),
         kind='task',
         metadata=None,
@@ -326,7 +326,7 @@ async def test_metadata_field_mapping(
     simple_metadata = {'key': 'value', 'number': 42, 'boolean': True}
     task_simple_metadata = Task(
         id='task-metadata-test-2',
-        contextId='session-meta-2',
+        context_id='session-meta-2',
         status=TaskStatus(state=TaskState.working),
         kind='task',
         metadata=simple_metadata,
@@ -351,7 +351,7 @@ async def test_metadata_field_mapping(
     }
     task_complex_metadata = Task(
         id='task-metadata-test-3',
-        contextId='session-meta-3',
+        context_id='session-meta-3',
         status=TaskStatus(state=TaskState.completed),
         kind='task',
         metadata=complex_metadata,
@@ -364,7 +364,7 @@ async def test_metadata_field_mapping(
     # Test 4: Update metadata from None to dict
     task_update_metadata = Task(
         id='task-metadata-test-4',
-        contextId='session-meta-4',
+        context_id='session-meta-4',
         status=TaskStatus(state=TaskState.submitted),
         kind='task',
         metadata=None,

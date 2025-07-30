@@ -22,6 +22,10 @@ from a2a.types import (
     FilePart,
     FileWithBytes,
     FileWithUri,
+    GetAuthenticatedExtendedCardRequest,
+    GetAuthenticatedExtendedCardResponse,
+    GetAuthenticatedExtendedCardSuccessResponse,
+    GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
     GetTaskPushNotificationConfigSuccessResponse,
@@ -71,7 +75,6 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TextPart,
     UnsupportedOperationError,
-    GetTaskPushNotificationConfigParams,
 )
 
 
@@ -124,7 +127,7 @@ DATA_PART_DATA: dict[str, Any] = {'kind': 'data', 'data': {'key': 'value'}}
 MINIMAL_MESSAGE_USER: dict[str, Any] = {
     'role': 'user',
     'parts': [TEXT_PART_DATA],
-    'messageId': 'msg-123',
+    'message_id': 'msg-123',
     'kind': 'message',
 }
 
@@ -132,7 +135,7 @@ AGENT_MESSAGE_WITH_FILE: dict[str, Any] = {
     'role': 'agent',
     'parts': [TEXT_PART_DATA, FILE_URI_PART_DATA],
     'metadata': {'timestamp': 'now'},
-    'messageId': 'msg-456',
+    'message_id': 'msg-456',
 }
 
 MINIMAL_TASK_STATUS: dict[str, Any] = {'state': 'submitted'}
@@ -144,13 +147,13 @@ FULL_TASK_STATUS: dict[str, Any] = {
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': MINIMAL_TASK_STATUS,
     'kind': 'task',
 }
 FULL_TASK: dict[str, Any] = {
     'id': 'task-abc',
-    'contextId': 'session-xyz',
+    'context_id': 'session-xyz',
     'status': FULL_TASK_STATUS,
     'history': [MINIMAL_MESSAGE_USER, AGENT_MESSAGE_WITH_FILE],
     'artifacts': [
@@ -201,17 +204,17 @@ def test_security_scheme_invalid():
 
 def test_agent_capabilities():
     caps = AgentCapabilities(
-        streaming=None, stateTransitionHistory=None, pushNotifications=None
+        streaming=None, state_transition_history=None, push_notifications=None
     )  # All optional
-    assert caps.pushNotifications is None
-    assert caps.stateTransitionHistory is None
+    assert caps.push_notifications is None
+    assert caps.state_transition_history is None
     assert caps.streaming is None
 
     caps_full = AgentCapabilities(
-        pushNotifications=True, stateTransitionHistory=False, streaming=True
+        push_notifications=True, state_transition_history=False, streaming=True
     )
-    assert caps_full.pushNotifications is True
-    assert caps_full.stateTransitionHistory is False
+    assert caps_full.push_notifications is True
+    assert caps_full.state_transition_history is False
     assert caps_full.streaming is True
 
 
@@ -234,7 +237,7 @@ def test_agent_skill_valid():
 
     skill_full = AgentSkill(**FULL_AGENT_SKILL)
     assert skill_full.examples == ['Find me a pasta recipe']
-    assert skill_full.inputModes == ['text/plain']
+    assert skill_full.input_modes == ['text/plain']
 
 
 def test_agent_skill_invalid():
@@ -286,12 +289,12 @@ def test_text_part():
 def test_file_part_variants():
     # URI variant
     file_uri = FileWithUri(
-        uri='file:///path/to/file.txt', mimeType='text/plain'
+        uri='file:///path/to/file.txt', mime_type='text/plain'
     )
     part_uri = FilePart(kind='file', file=file_uri)
     assert isinstance(part_uri.file, FileWithUri)
     assert part_uri.file.uri == 'file:///path/to/file.txt'
-    assert part_uri.file.mimeType == 'text/plain'
+    assert part_uri.file.mime_type == 'text/plain'
     assert not hasattr(part_uri.file, 'bytes')
 
     # Bytes variant
@@ -392,7 +395,7 @@ def test_task_status():
 def test_task():
     task = Task(**MINIMAL_TASK)
     assert task.id == 'task-abc'
-    assert task.contextId == 'session-xyz'
+    assert task.context_id == 'session-xyz'
     assert task.status.state == TaskState.submitted
     assert task.history is None
     assert task.artifacts is None
@@ -535,7 +538,7 @@ def test_send_subscribe_request() -> None:
 
 
 def test_get_task_request() -> None:
-    params = TaskQueryParams(id='task-1', historyLength=2)
+    params = TaskQueryParams(id='task-1', history_length=2)
     req_data: dict[str, Any] = {
         'jsonrpc': '2.0',
         'method': 'tasks/get',
@@ -546,7 +549,7 @@ def test_get_task_request() -> None:
     assert req.method == 'tasks/get'
     assert isinstance(req.params, TaskQueryParams)
     assert req.params.id == 'task-1'
-    assert req.params.historyLength == 2
+    assert req.params.history_length == 2
 
     with pytest.raises(ValidationError):  # Wrong method literal
         GetTaskRequest.model_validate({**req_data, 'method': 'wrong/method'})
@@ -655,7 +658,7 @@ def test_send_message_streaming_status_update_response() -> None:
     task_status_update_event_data: dict[str, Any] = {
         'status': MINIMAL_TASK_STATUS,
         'taskId': '1',
-        'contextId': '2',
+        'context_id': '2',
         'final': False,
         'kind': 'status-update',
     }
@@ -670,7 +673,7 @@ def test_send_message_streaming_status_update_response() -> None:
     assert isinstance(response.root, SendStreamingMessageSuccessResponse)
     assert isinstance(response.root.result, TaskStatusUpdateEvent)
     assert response.root.result.status.state == TaskState.submitted
-    assert response.root.result.taskId == '1'
+    assert response.root.result.task_id == '1'
     assert not response.root.result.final
 
     with pytest.raises(
@@ -707,14 +710,14 @@ def test_send_message_streaming_artifact_update_response() -> None:
     text_part = TextPart(**TEXT_PART_DATA)
     data_part = DataPart(**DATA_PART_DATA)
     artifact = Artifact(
-        artifactId='artifact-123',
+        artifact_id='artifact-123',
         name='result_data',
         parts=[Part(root=text_part), Part(root=data_part)],
     )
     task_artifact_update_event_data: dict[str, Any] = {
         'artifact': artifact,
         'taskId': 'task_id',
-        'contextId': '2',
+        'context_id': '2',
         'append': False,
         'lastChunk': True,
         'kind': 'artifact-update',
@@ -728,11 +731,11 @@ def test_send_message_streaming_artifact_update_response() -> None:
     assert response.root.id == 1
     assert isinstance(response.root, SendStreamingMessageSuccessResponse)
     assert isinstance(response.root.result, TaskArtifactUpdateEvent)
-    assert response.root.result.artifact.artifactId == 'artifact-123'
+    assert response.root.result.artifact.artifact_id == 'artifact-123'
     assert response.root.result.artifact.name == 'result_data'
-    assert response.root.result.taskId == 'task_id'
+    assert response.root.result.task_id == 'task_id'
     assert not response.root.result.append
-    assert response.root.result.lastChunk
+    assert response.root.result.last_chunk
     assert len(response.root.result.artifact.parts) == 2
     assert isinstance(response.root.result.artifact.parts[0].root, TextPart)
     assert isinstance(response.root.result.artifact.parts[1].root, DataPart)
@@ -740,8 +743,8 @@ def test_send_message_streaming_artifact_update_response() -> None:
 
 def test_set_task_push_notification_response() -> None:
     task_push_config = TaskPushNotificationConfig(
-        taskId='t2',
-        pushNotificationConfig=PushNotificationConfig(
+        task_id='t2',
+        push_notification_config=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
     )
@@ -754,16 +757,18 @@ def test_set_task_push_notification_response() -> None:
     assert resp.root.id == 1
     assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
     assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.taskId == 't2'
-    assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
-    assert resp.root.result.pushNotificationConfig.token == 'token'
-    assert resp.root.result.pushNotificationConfig.authentication is None
+    assert resp.root.result.task_id == 't2'
+    assert (
+        resp.root.result.push_notification_config.url == 'https://example.com'
+    )
+    assert resp.root.result.push_notification_config.token == 'token'
+    assert resp.root.result.push_notification_config.authentication is None
 
     auth_info_dict: dict[str, Any] = {
         'schemes': ['Bearer', 'Basic'],
         'credentials': 'user:pass',
     }
-    task_push_config.pushNotificationConfig.authentication = (
+    task_push_config.push_notification_config.authentication = (
         PushNotificationAuthenticationInfo(**auth_info_dict)
     )
     resp_data = {
@@ -773,13 +778,13 @@ def test_set_task_push_notification_response() -> None:
     }
     resp = SetTaskPushNotificationConfigResponse.model_validate(resp_data)
     assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
-    assert resp.root.result.pushNotificationConfig.authentication is not None
-    assert resp.root.result.pushNotificationConfig.authentication.schemes == [
+    assert resp.root.result.push_notification_config.authentication is not None
+    assert resp.root.result.push_notification_config.authentication.schemes == [
         'Bearer',
         'Basic',
     ]
     assert (
-        resp.root.result.pushNotificationConfig.authentication.credentials
+        resp.root.result.push_notification_config.authentication.credentials
         == 'user:pass'
     )
 
@@ -799,8 +804,8 @@ def test_set_task_push_notification_response() -> None:
 
 def test_get_task_push_notification_response() -> None:
     task_push_config = TaskPushNotificationConfig(
-        taskId='t2',
-        pushNotificationConfig=PushNotificationConfig(
+        task_id='t2',
+        push_notification_config=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
     )
@@ -813,16 +818,18 @@ def test_get_task_push_notification_response() -> None:
     assert resp.root.id == 1
     assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
     assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.taskId == 't2'
-    assert resp.root.result.pushNotificationConfig.url == 'https://example.com'
-    assert resp.root.result.pushNotificationConfig.token == 'token'
-    assert resp.root.result.pushNotificationConfig.authentication is None
+    assert resp.root.result.task_id == 't2'
+    assert (
+        resp.root.result.push_notification_config.url == 'https://example.com'
+    )
+    assert resp.root.result.push_notification_config.token == 'token'
+    assert resp.root.result.push_notification_config.authentication is None
 
     auth_info_dict: dict[str, Any] = {
         'schemes': ['Bearer', 'Basic'],
         'credentials': 'user:pass',
     }
-    task_push_config.pushNotificationConfig.authentication = (
+    task_push_config.push_notification_config.authentication = (
         PushNotificationAuthenticationInfo(**auth_info_dict)
     )
     resp_data = {
@@ -832,13 +839,13 @@ def test_get_task_push_notification_response() -> None:
     }
     resp = GetTaskPushNotificationConfigResponse.model_validate(resp_data)
     assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
-    assert resp.root.result.pushNotificationConfig.authentication is not None
-    assert resp.root.result.pushNotificationConfig.authentication.schemes == [
+    assert resp.root.result.push_notification_config.authentication is not None
+    assert resp.root.result.push_notification_config.authentication.schemes == [
         'Bearer',
         'Basic',
     ]
     assert (
-        resp.root.result.pushNotificationConfig.authentication.credentials
+        resp.root.result.push_notification_config.authentication.credentials
         == 'user:pass'
     )
 
@@ -909,8 +916,8 @@ def test_a2a_request_root_model() -> None:
 
     # SetTaskPushNotificationConfigRequest
     task_push_config = TaskPushNotificationConfig(
-        taskId='t2',
-        pushNotificationConfig=PushNotificationConfig(
+        task_id='t2',
+        push_notification_config=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
     )
@@ -963,6 +970,21 @@ def test_a2a_request_root_model() -> None:
     )
     assert isinstance(a2a_req_task_resubscribe_req.root.params, TaskIdParams)
     assert a2a_req_task_resubscribe_req.root.method == 'tasks/resubscribe'
+
+    # GetAuthenticatedExtendedCardRequest
+    get_auth_card_req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'id': 2,
+    }
+    a2a_req_get_auth_card = A2ARequest.model_validate(get_auth_card_req_data)
+    assert isinstance(
+        a2a_req_get_auth_card.root, GetAuthenticatedExtendedCardRequest
+    )
+    assert (
+        a2a_req_get_auth_card.root.method
+        == 'agent/getAuthenticatedExtendedCard'
+    )
 
     # Invalid method case
     invalid_req_data: dict[str, Any] = {
@@ -1017,8 +1039,8 @@ def test_a2a_request_root_model_id_validation() -> None:
 
     # SetTaskPushNotificationConfigRequest
     task_push_config = TaskPushNotificationConfig(
-        taskId='t2',
-        pushNotificationConfig=PushNotificationConfig(
+        task_id='t2',
+        push_notification_config=PushNotificationConfig(
             url='https://example.com', token='token'
         ),
     )
@@ -1026,7 +1048,7 @@ def test_a2a_request_root_model_id_validation() -> None:
         'jsonrpc': '2.0',
         'method': 'tasks/pushNotificationConfig/set',
         'params': task_push_config.model_dump(),
-        'taskId': 2,
+        'task_id': 2,
     }
     with pytest.raises(ValidationError):
         A2ARequest.model_validate(set_push_notif_req_data)  # missing id
@@ -1037,7 +1059,7 @@ def test_a2a_request_root_model_id_validation() -> None:
         'jsonrpc': '2.0',
         'method': 'tasks/pushNotificationConfig/get',
         'params': id_params.model_dump(),
-        'taskId': 2,
+        'task_id': 2,
     }
     with pytest.raises(ValidationError):
         A2ARequest.model_validate(get_push_notif_req_data)
@@ -1050,6 +1072,14 @@ def test_a2a_request_root_model_id_validation() -> None:
     }
     with pytest.raises(ValidationError):
         A2ARequest.model_validate(task_resubscribe_req_data)
+
+    # GetAuthenticatedExtendedCardRequest
+    get_auth_card_req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+    }
+    with pytest.raises(ValidationError):
+        A2ARequest.model_validate(get_auth_card_req_data)  # missing id
 
 
 def test_content_type_not_supported_error():
@@ -1300,11 +1330,11 @@ def test_task_push_notification_config() -> None:
     assert push_notification_config.authentication == auth_info
 
     task_push_notification_config = TaskPushNotificationConfig(
-        taskId='task-123', pushNotificationConfig=push_notification_config
+        task_id='task-123', push_notification_config=push_notification_config
     )
-    assert task_push_notification_config.taskId == 'task-123'
+    assert task_push_notification_config.task_id == 'task-123'
     assert (
-        task_push_notification_config.pushNotificationConfig
+        task_push_notification_config.push_notification_config
         == push_notification_config
     )
     assert task_push_notification_config.model_dump(exclude_none=True) == {
@@ -1356,22 +1386,22 @@ def test_file_base_valid():
     """Tests successful validation of FileBase."""
     # No optional fields
     base1 = FileBase()
-    assert base1.mimeType is None
+    assert base1.mime_type is None
     assert base1.name is None
 
-    # With mimeType only
-    base2 = FileBase(mimeType='image/png')
-    assert base2.mimeType == 'image/png'
+    # With mime_type only
+    base2 = FileBase(mime_type='image/png')
+    assert base2.mime_type == 'image/png'
     assert base2.name is None
 
     # With name only
     base3 = FileBase(name='document.pdf')
-    assert base3.mimeType is None
+    assert base3.mime_type is None
     assert base3.name == 'document.pdf'
 
     # With both fields
-    base4 = FileBase(mimeType='application/json', name='data.json')
-    assert base4.mimeType == 'application/json'
+    base4 = FileBase(mime_type='application/json', name='data.json')
+    assert base4.mime_type == 'application/json'
     assert base4.name == 'data.json'
 
 
@@ -1379,10 +1409,10 @@ def test_file_base_invalid():
     """Tests validation errors for FileBase."""
     FileBase(extra_field='allowed')  # type: ignore
 
-    # Incorrect type for mimeType
+    # Incorrect type for mime_type
     with pytest.raises(ValidationError) as excinfo_type_mime:
-        FileBase(mimeType=123)  # type: ignore
-    assert 'mimeType' in str(excinfo_type_mime.value)
+        FileBase(mime_type=123)  # type: ignore
+    assert 'mime_type' in str(excinfo_type_mime.value)
 
     # Incorrect type for name
     with pytest.raises(ValidationError) as excinfo_type_name:
@@ -1524,3 +1554,113 @@ def test_use_get_task_push_notification_params_for_request() -> None:
     assert (
         a2a_req_get_push_req.root.method == 'tasks/pushNotificationConfig/get'
     )
+
+
+def test_camelCase_access_raises_attribute_error() -> None:
+    """
+    Tests that accessing or setting fields via their camelCase alias
+    raises an AttributeError.
+    """
+    skill = AgentSkill(
+        id='hello_world',
+        name='Returns hello world',
+        description='just returns hello world',
+        tags=['hello world'],
+        examples=['hi', 'hello world'],
+    )
+
+    # Initialization with camelCase still works due to Pydantic's populate_by_name config
+    agent_card = AgentCard(
+        name='Hello World Agent',
+        description='Just a hello world agent',
+        url='http://localhost:9999/',
+        version='1.0.0',
+        defaultInputModes=['text'],  # type: ignore
+        defaultOutputModes=['text'],  # type: ignore
+        capabilities=AgentCapabilities(streaming=True),
+        skills=[skill],
+        supportsAuthenticatedExtendedCard=True,  # type: ignore
+    )
+
+    # --- Test that using camelCase aliases raises errors ---
+
+    # Test setting an attribute via camelCase alias raises AttributeError
+    with pytest.raises(
+        ValueError,
+        match='"AgentCard" object has no field "supportsAuthenticatedExtendedCard"',
+    ):
+        agent_card.supportsAuthenticatedExtendedCard = False
+
+    # Test getting an attribute via camelCase alias raises AttributeError
+    with pytest.raises(
+        AttributeError,
+        match="'AgentCard' object has no attribute 'defaultInputModes'",
+    ):
+        _ = agent_card.defaultInputModes
+
+    # --- Test that using snake_case names works correctly ---
+
+    # The value should be unchanged because the camelCase setattr failed
+    assert agent_card.supports_authenticated_extended_card is True
+
+    # Now, set it correctly using the snake_case name
+    agent_card.supports_authenticated_extended_card = False
+    assert agent_card.supports_authenticated_extended_card is False
+
+    # Get the attribute correctly using the snake_case name
+    default_input_modes = agent_card.default_input_modes
+    assert default_input_modes == ['text']
+    assert agent_card.default_input_modes == ['text']
+
+
+def test_get_authenticated_extended_card_request() -> None:
+    req_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'id': 5,
+    }
+    req = GetAuthenticatedExtendedCardRequest.model_validate(req_data)
+    assert req.method == 'agent/getAuthenticatedExtendedCard'
+    assert req.id == 5
+    # This request has no params, so we don't check for that.
+
+    with pytest.raises(ValidationError):  # Wrong method literal
+        GetAuthenticatedExtendedCardRequest.model_validate(
+            {**req_data, 'method': 'wrong/method'}
+        )
+
+    with pytest.raises(ValidationError):  # Missing id
+        GetAuthenticatedExtendedCardRequest.model_validate(
+            {'jsonrpc': '2.0', 'method': 'agent/getAuthenticatedExtendedCard'}
+        )
+
+
+def test_get_authenticated_extended_card_response() -> None:
+    resp_data: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'result': MINIMAL_AGENT_CARD,
+        'id': 'resp-1',
+    }
+    resp = GetAuthenticatedExtendedCardResponse.model_validate(resp_data)
+    assert resp.root.id == 'resp-1'
+    assert isinstance(resp.root, GetAuthenticatedExtendedCardSuccessResponse)
+    assert isinstance(resp.root.result, AgentCard)
+    assert resp.root.result.name == 'TestAgent'
+
+    with pytest.raises(ValidationError):  # Result is not an AgentCard
+        GetAuthenticatedExtendedCardResponse.model_validate(
+            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
+        )
+
+    resp_data_err: dict[str, Any] = {
+        'jsonrpc': '2.0',
+        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
+        'id': 'resp-1',
+    }
+    resp_err = GetAuthenticatedExtendedCardResponse.model_validate(
+        resp_data_err
+    )
+    assert resp_err.root.id == 'resp-1'
+    assert isinstance(resp_err.root, JSONRPCErrorResponse)
+    assert resp_err.root.error is not None
+    assert isinstance(resp_err.root.error, JSONRPCError)

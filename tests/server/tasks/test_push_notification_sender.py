@@ -1,13 +1,12 @@
-from a2a.server.tasks.base_push_notification_sender import (
-    BasePushNotificationSender,
-)
-
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
+from a2a.server.tasks.base_push_notification_sender import (
+    BasePushNotificationSender,
+)
 from a2a.types import (
     PushNotificationConfig,
     Task,
@@ -19,7 +18,7 @@ from a2a.types import (
 def create_sample_task(task_id='task123', status_state=TaskState.completed):
     return Task(
         id=task_id,
-        contextId='ctx456',
+        context_id='ctx456',
         status=TaskStatus(state=status_state),
     )
 

@@ -32,7 +32,7 @@ def create_sample_message(
     reference_task_ids=None,
 ):
     return Message(
-        messageId=msg_id,
+        message_id=msg_id,
         role=role,
         parts=[Part(root=TextPart(text=content))],
         referenceTaskIds=reference_task_ids if reference_task_ids else [],
@@ -45,7 +45,7 @@ def create_sample_task(
 ):
     return Task(
         id=task_id,
-        contextId=context_id,
+        context_id=context_id,
         status=TaskStatus(state=status_state),
     )
 
@@ -211,7 +211,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         # To explicitly test None in Message, we'd have to bypass Pydantic default or modify helper.
         # For now, this covers the "no IDs to process" case.
         msg_with_no_refs = Message(
-            messageId='m2', role=Role.user, parts=[], referenceTaskIds=None
+            message_id='m2', role=Role.user, parts=[], referenceTaskIds=None
         )
         params_none_refs = MessageSendParams(message=msg_with_no_refs)
         request_context_none = await builder.build(
