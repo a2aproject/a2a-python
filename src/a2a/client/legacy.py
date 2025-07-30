@@ -267,9 +267,7 @@ class A2AClient:
             context = ClientCallContext(state={'http_kwargs': http_kwargs})
         params = request.params
         if isinstance(params, TaskIdParams):
-            params = GetTaskPushNotificationConfigParams(
-                id=request.params.id
-            )
+            params = GetTaskPushNotificationConfigParams(id=request.params.id)
         try:
             result = await self._transport.get_task_callback(
                 params, context=context
