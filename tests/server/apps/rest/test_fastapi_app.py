@@ -1,10 +1,11 @@
-from collections.abc import AsyncGenerator
-from unittest.mock import MagicMock
 import logging
 
-from google.protobuf import json_format
+from unittest.mock import MagicMock
+
 import pytest
+
 from fastapi import FastAPI
+from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
 from a2a.grpc import a2a_pb2
@@ -15,15 +16,11 @@ from a2a.types import (
     Message,
     Part,
     Role,
-    SendMessageRequest,
-    SendMessageResponse,
-    SendMessageSuccessResponse,
     Task,
     TaskState,
     TaskStatus,
     TextPart,
 )
-from a2a.utils import proto_utils
 
 
 logger = logging.getLogger(__name__)

@@ -7,19 +7,18 @@ import pytest
 
 from a2a.client import A2AClient, A2AGrpcClient
 from a2a.types import (
-    AgentCard,
     AgentCapabilities,
+    AgentCard,
     Message,
-    Role,
-    TextPart,
-    Part,
-    Task,
-    TaskStatus,
-    TaskState,
-    TaskQueryParams,
-    SendMessageRequest,
     MessageSendParams,
-    GetTaskRequest,
+    Part,
+    Role,
+    SendMessageRequest,
+    Task,
+    TaskQueryParams,
+    TaskState,
+    TaskStatus,
+    TextPart,
 )
 
 
