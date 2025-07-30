@@ -48,6 +48,27 @@ class APIKeySecurityScheme(A2ABaseModel):
     """
 
 
+class AgentCardSignature(A2ABaseModel):
+    """
+    AgentCardSignature represents a JWS signature of an AgentCard.
+    This follows the JSON format of an RFC 7515 JSON Web Signature (JWS).
+    """
+
+    header: dict[str, Any] | None = None
+    """
+    The unprotected JWS header values.
+    """
+    protected: str
+    """
+    The protected JWS header for the signature. This is a Base64url-encoded
+    JSON object, as per RFC 7515.
+    """
+    signature: str
+    """
+    The computed signature, Base64url-encoded.
+    """
+
+
 class AgentExtension(A2ABaseModel):
     """
     A declaration of a protocol extension supported by an Agent.
@@ -75,16 +96,23 @@ class AgentExtension(A2ABaseModel):
 class AgentInterface(A2ABaseModel):
     """
     Declares a combination of a target URL and a transport protocol for interacting with the agent.
+    This allows agents to expose the same functionality over multiple transport mechanisms.
     """
 
-    transport: str
+    transport: str = Field(..., examples=['JSONRPC', 'GRPC', 'HTTP+JSON'])
     """
-    The transport protocol supported at this URL. This is a string to allow for future
-    extension. Core supported transports include 'JSONRPC', 'GRPC', and 'HTTP+JSON'.
+    The transport protocol supported at this URL.
     """
-    url: str
+    url: str = Field(
+        ...,
+        examples=[
+            'https://api.example.com/a2a/v1',
+            'https://grpc.example.com/a2a',
+            'https://rest.example.com/v1',
+        ],
+    )
     """
-    The URL where this interface is available.
+    The URL where this interface is available. Must be a valid absolute HTTPS URL in production.
     """
 
 
@@ -136,11 +164,40 @@ class AgentSkill(A2ABaseModel):
     """
     The set of supported output MIME types for this skill, overriding the agent's defaults.
     """
+    security: list[dict[str, list[str]]] | None = Field(
+        default=None, examples=[[{'google': ['oidc']}]]
+    )
+    """
+    Security schemes necessary for the agent to leverage this skill.
+    As in the overall AgentCard.security, this list represents a logical OR of security
+    requirement objects. Each object is a set of security schemes that must be used together
+    (a logical AND).
+    """
     tags: list[str] = Field(
         ..., examples=[['cooking', 'customer support', 'billing']]
     )
     """
     A set of keywords describing the skill's capabilities.
+    """
+
+
+class AuthenticatedExtendedCardNotConfiguredError(A2ABaseModel):
+    """
+    An A2A-specific error indicating that the agent does not have an Authenticated Extended Card configured
+    """
+
+    code: Literal[-32007] = -32007
+    """
+    The error code for when an authenticated extended card is not configured.
+    """
+    data: Any | None = None
+    """
+    A primitive or structured value containing additional information about the error.
+    This may be omitted.
+    """
+    message: str | None = 'Authenticated Extended Card is not configured'
+    """
+    The error message.
     """
 
 
@@ -344,6 +401,27 @@ class FileWithUri(A2ABaseModel):
     uri: str
     """
     A URL pointing to the file's content.
+    """
+
+
+class GetAuthenticatedExtendedCardRequest(A2ABaseModel):
+    """
+    Represents a JSON-RPC request for the `agent/getAuthenticatedExtendedCard` method.
+    """
+
+    id: str | int
+    """
+    The identifier for this request.
+    """
+    jsonrpc: Literal['2.0'] = '2.0'
+    """
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
+    """
+    method: Literal['agent/getAuthenticatedExtendedCard'] = (
+        'agent/getAuthenticatedExtendedCard'
+    )
+    """
+    The method name. Must be 'agent/getAuthenticatedExtendedCard'.
     """
 
 
@@ -661,6 +739,21 @@ class MethodNotFoundError(A2ABaseModel):
     """
 
 
+class MutualTLSSecurityScheme(A2ABaseModel):
+    """
+    Defines a security scheme using mTLS authentication.
+    """
+
+    description: str | None = None
+    """
+    An optional description for the security scheme.
+    """
+    type: Literal['mutualTLS'] = 'mutualTLS'
+    """
+    The type of the security scheme. Must be 'mutualTLS'.
+    """
+
+
 class OpenIdConnectSecurityScheme(A2ABaseModel):
     """
     Defines a security scheme using OpenID Connect.
@@ -928,6 +1021,16 @@ class TextPart(A2ABaseModel):
     """
 
 
+class TransportProtocol(str, Enum):
+    """
+    Supported A2A transport protocols.
+    """
+
+    jsonrpc = 'JSONRPC'
+    grpc = 'GRPC'
+    http_json = 'HTTP+JSON'
+
+
 class UnsupportedOperationError(A2ABaseModel):
     """
     An A2A-specific error indicating that the requested operation is not supported by the agent.
@@ -961,6 +1064,7 @@ class A2AError(
         | UnsupportedOperationError
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
+        | AuthenticatedExtendedCardNotConfiguredError
     ]
 ):
     root: (
@@ -975,6 +1079,7 @@ class A2AError(
         | UnsupportedOperationError
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
+        | AuthenticatedExtendedCardNotConfiguredError
     )
     """
     A discriminated union of all standard JSON-RPC and A2A-specific error types.
@@ -1132,6 +1237,7 @@ class JSONRPCErrorResponse(A2ABaseModel):
         | UnsupportedOperationError
         | ContentTypeNotSupportedError
         | InvalidAgentResponseError
+        | AuthenticatedExtendedCardNotConfiguredError
     )
     """
     An object describing the error that occurred.
@@ -1404,6 +1510,11 @@ class OAuth2SecurityScheme(A2ABaseModel):
     """
     An object containing configuration information for the supported OAuth 2.0 flows.
     """
+    oauth2_metadata_url: str | None = None
+    """
+    URL to the oauth2 authorization server metadata
+    [RFC8414](https://datatracker.ietf.org/doc/html/rfc8414). TLS is required.
+    """
     type: Literal['oauth2'] = 'oauth2'
     """
     The type of the security scheme. Must be 'oauth2'.
@@ -1416,6 +1527,7 @@ class SecurityScheme(
         | HTTPAuthSecurityScheme
         | OAuth2SecurityScheme
         | OpenIdConnectSecurityScheme
+        | MutualTLSSecurityScheme
     ]
 ):
     root: (
@@ -1423,6 +1535,7 @@ class SecurityScheme(
         | HTTPAuthSecurityScheme
         | OAuth2SecurityScheme
         | OpenIdConnectSecurityScheme
+        | MutualTLSSecurityScheme
     )
     """
     Defines a security scheme that can be used to secure an agent's endpoints.
@@ -1587,6 +1700,7 @@ class A2ARequest(
         | TaskResubscriptionRequest
         | ListTaskPushNotificationConfigRequest
         | DeleteTaskPushNotificationConfigRequest
+        | GetAuthenticatedExtendedCardRequest
     ]
 ):
     root: (
@@ -1599,6 +1713,7 @@ class A2ARequest(
         | TaskResubscriptionRequest
         | ListTaskPushNotificationConfigRequest
         | DeleteTaskPushNotificationConfigRequest
+        | GetAuthenticatedExtendedCardRequest
     )
     """
     A discriminated union representing all possible JSON-RPC 2.0 requests supported by the A2A specification.
@@ -1615,7 +1730,16 @@ class AgentCard(A2ABaseModel):
     additional_interfaces: list[AgentInterface] | None = None
     """
     A list of additional supported interfaces (transport and URL combinations).
-    A client can use any of these to communicate with the agent.
+    This allows agents to expose multiple transports, potentially at different URLs.
+
+    Best practices:
+    - SHOULD include all supported transports for completeness
+    - SHOULD include an entry matching the main 'url' and 'preferredTransport'
+    - MAY reuse URLs if multiple transports are available at the same endpoint
+    - MUST accurately declare the transport available at each URL
+
+    Clients can select any interface from this list based on their transport capabilities
+    and preferences. This enables transport negotiation and fallback scenarios.
     """
     capabilities: AgentCapabilities
     """
@@ -1650,11 +1774,18 @@ class AgentCard(A2ABaseModel):
     """
     A human-readable name for the agent.
     """
-    preferred_transport: str | None = None
+    preferred_transport: str | None = Field(
+        default='JSONRPC', examples=['JSONRPC', 'GRPC', 'HTTP+JSON']
+    )
     """
-    The transport protocol for the preferred endpoint. Defaults to 'JSONRPC' if not specified.
+    The transport protocol for the preferred endpoint (the main 'url' field).
+    If not specified, defaults to 'JSONRPC'.
+
+    IMPORTANT: The transport specified here MUST be available at the main 'url'.
+    This creates a binding between the main URL and its supported transport protocol.
+    Clients should prefer this transport and URL combination when both are supported.
     """
-    protocol_version: str | None = '0.2.6'
+    protocol_version: str | None = '0.3.0'
     """
     The version of the A2A protocol this agent supports.
     """
@@ -1662,15 +1793,25 @@ class AgentCard(A2ABaseModel):
     """
     Information about the agent's service provider.
     """
-    security: list[dict[str, list[str]]] | None = None
+    security: list[dict[str, list[str]]] | None = Field(
+        default=None,
+        examples=[[{'oauth': ['read']}, {'api-key': [], 'mtls': []}]],
+    )
     """
     A list of security requirement objects that apply to all agent interactions. Each object
     lists security schemes that can be used. Follows the OpenAPI 3.0 Security Requirement Object.
+    This list can be seen as an OR of ANDs. Each object in the list describes one possible
+    set of security requirements that must be present on a request. This allows specifying,
+    for example, "callers must either use OAuth OR an API Key AND mTLS."
     """
     security_schemes: dict[str, SecurityScheme] | None = None
     """
     A declaration of the security schemes available to authorize requests. The key is the
     scheme name. Follows the OpenAPI 3.0 Security Scheme Object.
+    """
+    signatures: list[AgentCardSignature] | None = None
+    """
+    JSON Web Signatures computed for this AgentCard.
     """
     skills: list[AgentSkill]
     """
@@ -1681,13 +1822,33 @@ class AgentCard(A2ABaseModel):
     If true, the agent can provide an extended agent card with additional details
     to authenticated users. Defaults to false.
     """
-    url: str
+    url: str = Field(..., examples=['https://api.example.com/a2a/v1'])
     """
     The preferred endpoint URL for interacting with the agent.
+    This URL MUST support the transport specified by 'preferredTransport'.
     """
     version: str = Field(..., examples=['1.0.0'])
     """
     The agent's own version number. The format is defined by the provider.
+    """
+
+
+class GetAuthenticatedExtendedCardSuccessResponse(A2ABaseModel):
+    """
+    Represents a successful JSON-RPC response for the `agent/getAuthenticatedExtendedCard` method.
+    """
+
+    id: str | int | None = None
+    """
+    The identifier established by the client.
+    """
+    jsonrpc: Literal['2.0'] = '2.0'
+    """
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
+    """
+    result: AgentCard
+    """
+    The result is an Agent Card object.
     """
 
 
@@ -1710,7 +1871,7 @@ class Task(A2ABaseModel):
     """
     id: str
     """
-    A unique identifier for the task, generated by the client for a new task or provided by the agent.
+    A unique identifier for the task, generated by the server for a new task.
     """
     kind: Literal['task'] = 'task'
     """
@@ -1742,6 +1903,17 @@ class CancelTaskSuccessResponse(A2ABaseModel):
     result: Task
     """
     The result, containing the final state of the canceled Task object.
+    """
+
+
+class GetAuthenticatedExtendedCardResponse(
+    RootModel[
+        JSONRPCErrorResponse | GetAuthenticatedExtendedCardSuccessResponse
+    ]
+):
+    root: JSONRPCErrorResponse | GetAuthenticatedExtendedCardSuccessResponse
+    """
+    Represents a JSON-RPC response for the `agent/getAuthenticatedExtendedCard` method.
     """
 
 
@@ -1830,6 +2002,7 @@ class JSONRPCResponse(
         | GetTaskPushNotificationConfigSuccessResponse
         | ListTaskPushNotificationConfigSuccessResponse
         | DeleteTaskPushNotificationConfigSuccessResponse
+        | GetAuthenticatedExtendedCardSuccessResponse
     ]
 ):
     root: (
@@ -1842,6 +2015,7 @@ class JSONRPCResponse(
         | GetTaskPushNotificationConfigSuccessResponse
         | ListTaskPushNotificationConfigSuccessResponse
         | DeleteTaskPushNotificationConfigSuccessResponse
+        | GetAuthenticatedExtendedCardSuccessResponse
     )
     """
     A discriminated union representing all possible JSON-RPC 2.0 responses

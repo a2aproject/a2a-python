@@ -48,6 +48,7 @@ from a2a.types import (
     TaskPushNotificationConfig,
     TaskQueryParams,
 )
+from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 
 
 AGENT_CARD = AgentCard(
@@ -128,7 +129,7 @@ async def async_iterable_from_list(
 
 class TestA2ACardResolver:
     BASE_URL = 'http://example.com'
-    AGENT_CARD_PATH = '/.well-known/agent-card.json'
+    AGENT_CARD_PATH = AGENT_CARD_WELL_KNOWN_PATH
     FULL_AGENT_CARD_URL = f'{BASE_URL}{AGENT_CARD_PATH}'
     EXTENDED_AGENT_CARD_PATH = (
         '/agent/authenticatedExtendedCard'  # Default path
@@ -155,8 +156,8 @@ class TestA2ACardResolver:
             base_url=base_url,
         )
         assert (
-            resolver_default_path.agent_card_path
-            == '.well-known/agent-card.json'
+            '/' + resolver_default_path.agent_card_path
+            == AGENT_CARD_WELL_KNOWN_PATH
         )
 
     @pytest.mark.asyncio

@@ -47,10 +47,10 @@ jobs:
           token: ${{ secrets.A2A_BOT_PAT }}
           committer: a2a-bot <a2a-bot@google.com>
           author: a2a-bot <a2a-bot@google.com>
-          commit-message: 'feat(spec): Update A2A types from specification 🤖'
-          title: 'feat(spec): Update A2A types from specification 🤖'
+          commit-message: '${{ github.event.client_payload.message }}'
+          title: '${{ github.event.client_payload.message }}'
           body: |
-            This PR updates `src/a2a/types.py` based on the latest `specification/json/a2a.json` from [a2aproject/A2A](https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}).
+            Commit: https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}
           branch: auto-update-a2a-types-${{ github.event.client_payload.sha }}
           base: main
           labels: |
