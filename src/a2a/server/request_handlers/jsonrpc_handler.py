@@ -7,12 +7,16 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import prepare_response_object
 from a2a.types import (
     AgentCard,
+    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
     CancelTaskResponse,
     CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigResponse,
     DeleteTaskPushNotificationConfigSuccessResponse,
+    GetAuthenticatedExtendedCardRequest,
+    GetAuthenticatedExtendedCardResponse,
+    GetAuthenticatedExtendedCardSuccessResponse,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
     GetTaskPushNotificationConfigSuccessResponse,
@@ -57,15 +61,18 @@ class JSONRPCHandler:
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
+        extended_agent_card: AgentCard | None = None,
     ):
         """Initializes the JSONRPCHandler.
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to delegate requests to.
+            extended_agent_card: An optional, distinct Extended AgentCard to be served
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
+        self.extended_agent_card = extended_agent_card
 
     async def on_message_send(
         self,
@@ -395,3 +402,31 @@ class JSONRPCHandler:
                     id=request.id, error=e.error if e.error else InternalError()
                 )
             )
+
+    async def get_authenticated_extended_card(
+        self,
+        request: GetAuthenticatedExtendedCardRequest,
+        context: ServerCallContext | None = None,
+    ) -> GetAuthenticatedExtendedCardResponse:
+        """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method.
+
+        Args:
+            request: The incoming `GetAuthenticatedExtendedCardRequest` object.
+            context: Context provided by the server.
+
+        Returns:
+            A `GetAuthenticatedExtendedCardResponse` object containing the config or a JSON-RPC error.
+        """
+        if self.extended_agent_card is None:
+            return GetAuthenticatedExtendedCardResponse(
+                root=JSONRPCErrorResponse(
+                    id=request.id,
+                    error=AuthenticatedExtendedCardNotConfiguredError(),
+                )
+            )
+
+        return GetAuthenticatedExtendedCardResponse(
+            root=GetAuthenticatedExtendedCardSuccessResponse(
+                id=request.id, result=self.extended_agent_card
+            )
+        )

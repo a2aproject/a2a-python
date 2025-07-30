@@ -27,11 +27,15 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Artifact,
+    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
     CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigParams,
     DeleteTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigSuccessResponse,
+    GetAuthenticatedExtendedCardRequest,
+    GetAuthenticatedExtendedCardResponse,
+    GetAuthenticatedExtendedCardSuccessResponse,
     GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
@@ -1189,3 +1193,59 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response.root, JSONRPCErrorResponse)
         self.assertEqual(response.root.error, UnsupportedOperationError())  # type: ignore
+
+    async def test_get_authenticated_extended_card_success(self) -> None:
+        """Test successful retrieval of the authenticated extended agent card."""
+        # Arrange
+        mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
+        mock_extended_card = AgentCard(
+            name='Extended Card',
+            description='More details',
+            url='http://agent.example.com/api',
+            version='1.1',
+            capabilities=AgentCapabilities(),
+            default_input_modes=['text/plain'],
+            default_output_modes=['application/json'],
+            skills=[],
+        )
+        handler = JSONRPCHandler(
+            self.mock_agent_card,
+            mock_request_handler,
+            extended_agent_card=mock_extended_card,
+        )
+        request = GetAuthenticatedExtendedCardRequest(id='ext-card-req-1')
+        call_context = ServerCallContext(state={'foo': 'bar'})
+
+        # Act
+        response: GetAuthenticatedExtendedCardResponse = (
+            await handler.get_authenticated_extended_card(request, call_context)
+        )
+
+        # Assert
+        self.assertIsInstance(
+            response.root, GetAuthenticatedExtendedCardSuccessResponse
+        )
+        self.assertEqual(response.root.id, 'ext-card-req-1')
+        self.assertEqual(response.root.result, mock_extended_card)
+
+    async def test_get_authenticated_extended_card_not_configured(self) -> None:
+        """Test error when authenticated extended agent card is not configured."""
+        # Arrange
+        mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
+        handler = JSONRPCHandler(
+            self.mock_agent_card, mock_request_handler, extended_agent_card=None
+        )
+        request = GetAuthenticatedExtendedCardRequest(id='ext-card-req-2')
+        call_context = ServerCallContext(state={'foo': 'bar'})
+
+        # Act
+        response: GetAuthenticatedExtendedCardResponse = (
+            await handler.get_authenticated_extended_card(request, call_context)
+        )
+
+        # Assert
+        self.assertIsInstance(response.root, JSONRPCErrorResponse)
+        self.assertEqual(response.root.id, 'ext-card-req-2')
+        self.assertIsInstance(
+            response.root.error, AuthenticatedExtendedCardNotConfiguredError
+        )
