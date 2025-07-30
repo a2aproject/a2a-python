@@ -1475,6 +1475,10 @@ class Message(A2ABaseModel):
     """
     The identifier of the task this message is part of. Can be omitted for the first message of a new task.
     """
+    isDelta: bool | None = None
+    """
+    Indicates if this is a delta message
+    """
 
 
 class MessageSendParams(A2ABaseModel):

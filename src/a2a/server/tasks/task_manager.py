@@ -81,6 +81,25 @@ class TaskManager:
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
+    async def add_history_message(self, task: Task) -> None:
+        """Adds a message to the task's history.
+
+        If the message is not a delta, it appends the message to the history.
+        If the message is a delta, but with the same messageId, it extends the last message in the history.
+        If the message is a delta, but with a different messageId, it appends the message to the history.
+
+        Args:
+            task: The task with the message to add to the history.
+        """
+        if not task.status.message:
+            return
+        if not task.history:
+            task.history = [task.status.message]
+        elif task.history[-1].messageId != task.status.message.messageId:
+            task.history.append(task.status.message)
+        elif task.status.message.isDelta:
+            task.history[-1].parts.extend(task.status.message.parts)
+
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ) -> Task | None:
@@ -135,10 +154,7 @@ class TaskManager:
                 'Updating task %s status to: %s', task.id, event.status.state
             )
             if task.status.message:
-                if not task.history:
-                    task.history = [task.status.message]
-                else:
-                    task.history.append(task.status.message)
+                await self.add_history_message(task)
             if event.metadata:
                 if not task.metadata:
                     task.metadata = {}
