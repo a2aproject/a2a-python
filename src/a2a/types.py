@@ -1785,7 +1785,7 @@ class AgentCard(A2ABaseModel):
     This creates a binding between the main URL and its supported transport protocol.
     Clients should prefer this transport and URL combination when both are supported.
     """
-    protocol_version: str | None = '0.2.6'
+    protocol_version: str | None = '0.3.0'
     """
     The version of the A2A protocol this agent supports.
     """
