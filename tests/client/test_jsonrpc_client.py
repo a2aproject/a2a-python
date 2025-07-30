@@ -1,11 +1,13 @@
 import json
+
 from collections.abc import AsyncGenerator
 from typing import Any
-from unittest.mock import ANY, AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from httpx_sse import EventSource, ServerSentEvent, SSEError
+
+from httpx_sse import EventSource, SSEError, ServerSentEvent
 
 from a2a.client import (
     A2ACardResolver,
@@ -27,11 +29,11 @@ from a2a.types import (
     SendMessageSuccessResponse,
     Task,
     TaskIdParams,
-    TaskNotCancelableError,
     TaskPushNotificationConfig,
     TaskQueryParams,
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
+
 
 AGENT_CARD = AgentCard(
     name='Hello World Agent',
@@ -550,9 +552,10 @@ class TestJsonRpcTransport:
             response = await client.get_task(request=params)
 
         assert isinstance(response, Task)
-        assert response.model_dump() == Task.model_validate(
-            MINIMAL_TASK
-        ).model_dump()
+        assert (
+            response.model_dump()
+            == Task.model_validate(MINIMAL_TASK).model_dump()
+        )
         mock_send_request.assert_called_once()
         sent_payload = mock_send_request.call_args.args[0]
         assert sent_payload['method'] == 'tasks/get'
@@ -577,9 +580,10 @@ class TestJsonRpcTransport:
             response = await client.cancel_task(request=params)
 
         assert isinstance(response, Task)
-        assert response.model_dump() == Task.model_validate(
-            MINIMAL_CANCELLED_TASK
-        ).model_dump()
+        assert (
+            response.model_dump()
+            == Task.model_validate(MINIMAL_CANCELLED_TASK).model_dump()
+        )
         mock_send_request.assert_called_once()
         sent_payload = mock_send_request.call_args.args[0]
         assert sent_payload['method'] == 'tasks/cancel'
@@ -731,7 +735,9 @@ class TestJsonRpcTransport:
             ]
 
     @pytest.mark.asyncio
-    async def test_get_card_no_card_provided(self, mock_httpx_client: AsyncMock):
+    async def test_get_card_no_card_provided(
+        self, mock_httpx_client: AsyncMock
+    ):
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client, url=self.AGENT_URL
         )

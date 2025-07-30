@@ -9,7 +9,6 @@ from a2a.client import A2AClient, A2AGrpcClient
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
-    GetTaskRequest,
     Message,
     MessageSendParams,
     Part,
@@ -72,26 +71,12 @@ async def test_a2a_client_send_message(
     """Tests for the legacy client compatibility layer."""
 
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
-import httpx
 import pytest
 
-from a2a.client import A2AClient, A2AGrpcClient
 from a2a.types import (
-    AgentCapabilities,
     AgentCard,
-    GetTaskRequest,
-    Message,
-    MessageSendParams,
-    Part,
-    Role,
-    SendMessageRequest,
-    Task,
-    TaskQueryParams,
-    TaskState,
-    TaskStatus,
-    TextPart,
 )
 
 

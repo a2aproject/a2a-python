@@ -1,14 +1,15 @@
-
 import asyncio
-from typing import Any, AsyncGenerator, NamedTuple
+
+from collections.abc import AsyncGenerator
+from typing import NamedTuple
 from unittest.mock import ANY, AsyncMock
 
 import grpc
 import httpx
 import pytest
 import pytest_asyncio
+
 from grpc.aio import Channel
-from starlette.testclient import TestClient
 
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
@@ -27,7 +28,6 @@ from a2a.types import (
     PushNotificationConfig,
     Role,
     Task,
-    TaskArtifactUpdateEvent,
     TaskIdParams,
     TaskPushNotificationConfig,
     TaskQueryParams,
@@ -38,46 +38,47 @@ from a2a.types import (
     TransportProtocol,
 )
 
+
 # --- Test Constants ---
 
 TASK_FROM_STREAM = Task(
-    id="task-123-stream",
-    context_id="ctx-456-stream",
+    id='task-123-stream',
+    context_id='ctx-456-stream',
     status=TaskStatus(state=TaskState.completed),
-    kind="task",
+    kind='task',
 )
 
 TASK_FROM_BLOCKING = Task(
-    id="task-789-blocking",
-    context_id="ctx-101-blocking",
+    id='task-789-blocking',
+    context_id='ctx-101-blocking',
     status=TaskStatus(state=TaskState.completed),
-    kind="task",
+    kind='task',
 )
 
 GET_TASK_RESPONSE = Task(
-    id="task-get-456",
-    context_id="ctx-get-789",
+    id='task-get-456',
+    context_id='ctx-get-789',
     status=TaskStatus(state=TaskState.working),
-    kind="task",
+    kind='task',
 )
 
 CANCEL_TASK_RESPONSE = Task(
-    id="task-cancel-789",
-    context_id="ctx-cancel-101",
+    id='task-cancel-789',
+    context_id='ctx-cancel-101',
     status=TaskStatus(state=TaskState.canceled),
-    kind="task",
+    kind='task',
 )
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
-    task_id="task-callback-123",
+    task_id='task-callback-123',
     push_notification_config=PushNotificationConfig(
-        id="pnc-abc", url="http://callback.example.com", token=''
+        id='pnc-abc', url='http://callback.example.com', token=''
     ),
 )
 
 RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
-    task_id="task-resub-456",
-    context_id="ctx-resub-789",
+    task_id='task-resub-456',
+    context_id='ctx-resub-789',
     status=TaskStatus(state=TaskState.working),
     final=False,
 )
@@ -103,7 +104,9 @@ def mock_request_handler() -> AsyncMock:
     # Configure other methods
     handler.on_get_task.return_value = GET_TASK_RESPONSE
     handler.on_cancel_task.return_value = CANCEL_TASK_RESPONSE
-    handler.on_set_task_push_notification_config.side_effect = lambda params, context: params
+    handler.on_set_task_push_notification_config.side_effect = (
+        lambda params, context: params
+    )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
 
     async def resubscribe_side_effect(*args, **kwargs):
@@ -506,8 +509,14 @@ async def test_http_transport_set_task_callback(
     result = await transport.set_task_callback(request=params)
 
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert result.push_notification_config.id == CALLBACK_CONFIG.push_notification_config.id
-    assert result.push_notification_config.url == CALLBACK_CONFIG.push_notification_config.url
+    assert (
+        result.push_notification_config.id
+        == CALLBACK_CONFIG.push_notification_config.id
+    )
+    assert (
+        result.push_notification_config.url
+        == CALLBACK_CONFIG.push_notification_config.url
+    )
     handler.on_set_task_push_notification_config.assert_awaited_once_with(
         params, ANY
     )
@@ -534,8 +543,14 @@ async def test_grpc_transport_set_task_callback(
     result = await transport.set_task_callback(request=params)
 
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert result.push_notification_config.id == CALLBACK_CONFIG.push_notification_config.id
-    assert result.push_notification_config.url == CALLBACK_CONFIG.push_notification_config.url
+    assert (
+        result.push_notification_config.id
+        == CALLBACK_CONFIG.push_notification_config.id
+    )
+    assert (
+        result.push_notification_config.url
+        == CALLBACK_CONFIG.push_notification_config.url
+    )
     handler.on_set_task_push_notification_config.assert_awaited_once()
     assert (
         handler.on_set_task_push_notification_config.call_args[0][0].task_id
@@ -569,8 +584,14 @@ async def test_http_transport_get_task_callback(
     result = await transport.get_task_callback(request=params)
 
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert result.push_notification_config.id == CALLBACK_CONFIG.push_notification_config.id
-    assert result.push_notification_config.url == CALLBACK_CONFIG.push_notification_config.url
+    assert (
+        result.push_notification_config.id
+        == CALLBACK_CONFIG.push_notification_config.id
+    )
+    assert (
+        result.push_notification_config.url
+        == CALLBACK_CONFIG.push_notification_config.url
+    )
     handler.on_get_task_push_notification_config.assert_awaited_once_with(
         params, ANY
     )
@@ -600,8 +621,14 @@ async def test_grpc_transport_get_task_callback(
     result = await transport.get_task_callback(request=params)
 
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert result.push_notification_config.id == CALLBACK_CONFIG.push_notification_config.id
-    assert result.push_notification_config.url == CALLBACK_CONFIG.push_notification_config.url
+    assert (
+        result.push_notification_config.id
+        == CALLBACK_CONFIG.push_notification_config.id
+    )
+    assert (
+        result.push_notification_config.url
+        == CALLBACK_CONFIG.push_notification_config.url
+    )
     handler.on_get_task_push_notification_config.assert_awaited_once()
     assert (
         handler.on_get_task_push_notification_config.call_args[0][0].id

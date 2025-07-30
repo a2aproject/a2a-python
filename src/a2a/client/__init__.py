@@ -31,7 +31,7 @@ try:
 except ImportError as e:
     _original_error = e
     logger.debug(
-        "A2AGrpcClient not loaded. This is expected if gRPC dependencies are not installed. Error: %s",
+        'A2AGrpcClient not loaded. This is expected if gRPC dependencies are not installed. Error: %s',
         _original_error,
     )
 
@@ -40,29 +40,29 @@ except ImportError as e:
 
         def __init__(self, *args, **kwargs):
             raise ImportError(
-                "To use A2AGrpcClient, its dependencies must be installed. "
+                'To use A2AGrpcClient, its dependencies must be installed. '
                 'You can install them with \'pip install "a2a-sdk[grpc]"\''
             ) from _original_error
 
 
 __all__ = [
-    "A2ACardResolver",
-    "A2AClient",
-    "A2AClientError",
-    "A2AClientHTTPError",
-    "A2AClientJSONError",
-    "A2AClientTimeoutError",
-    "A2AGrpcClient",
-    "AuthInterceptor",
-    "Client",
-    "ClientCallContext",
-    "ClientCallInterceptor",
-    "ClientConfig",
-    "ClientEvent",
-    "ClientFactory",
-    "Consumer",
-    "CredentialService",
-    "InMemoryContextCredentialStore",
-    "create_text_message_object",
-    "minimal_agent_card",
+    'A2ACardResolver',
+    'A2AClient',
+    'A2AClientError',
+    'A2AClientHTTPError',
+    'A2AClientJSONError',
+    'A2AClientTimeoutError',
+    'A2AGrpcClient',
+    'AuthInterceptor',
+    'Client',
+    'ClientCallContext',
+    'ClientCallInterceptor',
+    'ClientConfig',
+    'ClientEvent',
+    'ClientFactory',
+    'Consumer',
+    'CredentialService',
+    'InMemoryContextCredentialStore',
+    'create_text_message_object',
+    'minimal_agent_card',
 ]

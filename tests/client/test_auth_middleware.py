@@ -1,4 +1,5 @@
 import json
+
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
@@ -17,9 +18,9 @@ from a2a.client import (
     InMemoryContextCredentialStore,
 )
 from a2a.types import (
+    APIKeySecurityScheme,
     AgentCapabilities,
     AgentCard,
-    APIKeySecurityScheme,
     AuthorizationCodeOAuthFlow,
     HTTPAuthSecurityScheme,
     In,
