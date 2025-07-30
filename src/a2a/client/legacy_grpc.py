@@ -38,7 +38,7 @@ class A2AGrpcClient(GrpcTransport):
         )
 
         class _NopChannel:
-            async def close(self):
+            async def close(self) -> None:
                 pass
 
         self.channel = _NopChannel()
