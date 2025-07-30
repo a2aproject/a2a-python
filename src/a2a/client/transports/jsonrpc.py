@@ -28,6 +28,7 @@ from a2a.types import (
     GetTaskRequest,
     GetTaskResponse,
     JSONRPCErrorResponse,
+    JSONRPCRequest,
     Message,
     MessageSendParams,
     SendMessageRequest,
@@ -348,13 +349,21 @@ class JsonRpcTransport(ClientTransport):
         if not self._needs_extended_card:
             return card
 
-        payload, modified_kwargs = await self._apply_interceptors(
+        _, modified_kwargs = await self._apply_interceptors(
             'agent/getAuthenticatedExtendedCard',
             {},
             self._get_http_args(context),
             context,
         )
-        response_data = await self._send_request(payload, modified_kwargs)
+
+        response_data = await self._send_request(
+            JSONRPCRequest(
+                method='agent/getAuthenticatedExtendedCard',
+                params={},
+                id=str(uuid4()),
+            ).model_dump(),
+            modified_kwargs,
+        )
         card = AgentCard.model_validate(response_data)
         self.agent_card = card
         self._needs_extended_card = False

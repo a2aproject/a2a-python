@@ -17,9 +17,7 @@ from a2a.server.apps.jsonrpc import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.rest_handler import (
-    RESTHandler,
-)
+from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types import (
     A2AError,
     AgentCard,
@@ -198,9 +196,12 @@ class RESTApplication:
             ('/v1/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
-            ('/v1/message:stream', 'POST'): functools.partial(
+            ('/v1/message:stream', 'GET'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_message_send_stream,
+            ),
+            ('/v1/tasks/{id}:cancel', 'POST'): functools.partial(
+                self._handle_request, self.handler.on_cancel_task
             ),
             ('/v1/tasks/{id}:subscribe', 'POST'): functools.partial(
                 self._handle_streaming_request,

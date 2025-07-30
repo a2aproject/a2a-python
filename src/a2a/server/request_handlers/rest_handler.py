@@ -2,7 +2,7 @@ import logging
 
 from collections.abc import AsyncIterable
 
-from google.protobuf.json_format import MessageToJson, Parse
+from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
 from starlette.requests import Request
 
 from a2a.grpc import a2a_pb2
@@ -85,7 +85,7 @@ class RESTHandler:
             task_or_message = await self.request_handler.on_message_send(
                 a2a_request, context
             )
-            return MessageToJson(
+            return MessageToDict(
                 proto_utils.ToProto.task_or_message(task_or_message)
             )
         except ServerError as e:
@@ -161,7 +161,7 @@ class RESTHandler:
                 TaskIdParams(id=task_id), context
             )
             if task:
-                return MessageToJson(proto_utils.ToProto.task(task))
+                return MessageToDict(proto_utils.ToProto.task(task))
             raise ServerError(error=TaskNotFoundError())
         except ServerError as e:
             raise A2AErrorWrapperError(
@@ -236,7 +236,7 @@ class RESTHandler:
                     params, context
                 )
             )
-            return MessageToJson(
+            return MessageToDict(
                 proto_utils.ToProto.task_push_notification_config(config)
             )
         except ServerError as e:
@@ -270,7 +270,7 @@ class RESTHandler:
                 found.
         """
         try:
-            _ = request.path_params['id']
+            task_id = request.path_params['id']
             body = await request.body()
             params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
             Parse(body, params)
@@ -279,12 +279,13 @@ class RESTHandler:
                     params,
                 )
             )
+            a2a_request.task_id = task_id
             config = (
                 await self.request_handler.on_set_task_push_notification_config(
                     a2a_request, context
                 )
             )
-            return MessageToJson(
+            return MessageToDict(
                 proto_utils.ToProto.task_push_notification_config(config)
             )
         except ServerError as e:
@@ -318,7 +319,7 @@ class RESTHandler:
             params = TaskQueryParams(id=task_id, history_length=history_length)
             task = await self.request_handler.on_get_task(params, context)
             if task:
-                return MessageToJson(proto_utils.ToProto.task(task))
+                return MessageToDict(proto_utils.ToProto.task(task))
             raise ServerError(error=TaskNotFoundError())
         except ServerError as e:
             raise A2AErrorWrapperError(

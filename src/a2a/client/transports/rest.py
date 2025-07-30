@@ -268,7 +268,7 @@ class RestTransport(ClientTransport):
             payload, self._get_http_args(context), context
         )
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
             payload,
             modified_kwargs,
         )
@@ -371,7 +371,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_get_request(
-            '/v1/card/get', {}, modified_kwargs
+            '/v1/card', {}, modified_kwargs
         )
         card = AgentCard.model_validate(response_data)
         self.agent_card = card

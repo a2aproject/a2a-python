@@ -144,8 +144,8 @@ class GrpcTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         config = await self.stub.CreateTaskPushNotificationConfig(
             a2a_pb2.CreateTaskPushNotificationConfigRequest(
-                parent='',
-                config_id='',
+                parent=f'tasks/{request.task_id}',
+                config_id=request.push_notification_config.id,
                 config=proto_utils.ToProto.task_push_notification_config(
                     request
                 ),
@@ -162,7 +162,7 @@ class GrpcTransport(ClientTransport):
         """Retrieves the push notification configuration for a specific task."""
         config = await self.stub.GetTaskPushNotificationConfig(
             a2a_pb2.GetTaskPushNotificationConfigRequest(
-                name=f'tasks/{request.id}/pushNotification/{request.push_notification_config_id}',
+                name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
             )
         )
         return proto_utils.FromProto.task_push_notification_config(config)
