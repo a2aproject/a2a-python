@@ -22,13 +22,14 @@ from a2a.types import (
     AgentCard,
     CancelTaskRequest,
     CancelTaskResponse,
+    GetAuthenticatedExtendedCardRequest,
+    GetAuthenticatedExtendedCardResponse,
     GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
     GetTaskRequest,
     GetTaskResponse,
     JSONRPCErrorResponse,
-    JSONRPCRequest,
     Message,
     MessageSendParams,
     SendMessageRequest,
@@ -349,23 +350,24 @@ class JsonRpcTransport(ClientTransport):
         if not self._needs_extended_card:
             return card
 
-        _, modified_kwargs = await self._apply_interceptors(
-            'agent/getAuthenticatedExtendedCard',
-            {},
+        request = GetAuthenticatedExtendedCardRequest(id=str(uuid4()))
+        payload, modified_kwargs = await self._apply_interceptors(
+            request.method,
+            request.model_dump(mode='json', exclude_none=True),
             self._get_http_args(context),
             context,
         )
 
         response_data = await self._send_request(
-            JSONRPCRequest(
-                method='agent/getAuthenticatedExtendedCard',
-                params={},
-                id=str(uuid4()),
-            ).model_dump(),
+            payload,
             modified_kwargs,
         )
-        card = AgentCard.model_validate(response_data)
-        self.agent_card = card
+        response = GetAuthenticatedExtendedCardResponse.model_validate(
+            response_data
+        )
+        if isinstance(response.root, JSONRPCErrorResponse):
+            raise A2AClientJSONRPCError(response.root)
+        self.agent_card = response.root.result
         self._needs_extended_card = False
         return card
 

@@ -196,14 +196,14 @@ class RESTApplication:
             ('/v1/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
-            ('/v1/message:stream', 'GET'): functools.partial(
+            ('/v1/message:stream', 'POST'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_message_send_stream,
             ),
             ('/v1/tasks/{id}:cancel', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_cancel_task
             ),
-            ('/v1/tasks/{id}:subscribe', 'POST'): functools.partial(
+            ('/v1/tasks/{id}:subscribe', 'GET'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_resubscribe_to_task,
             ),
