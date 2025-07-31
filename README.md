@@ -33,6 +33,12 @@ When you're working within a uv project or a virtual environment managed by uv, 
 uv add a2a-sdk
 ```
 
+To include the optional HTTP server components (FastAPI, Starlette), install the `http-server` extra:
+
+```bash
+uv add a2a-sdk[http-server]
+```
+
 To install with gRPC support:
 
 ```bash
@@ -67,6 +73,12 @@ If you prefer to use pip, the standard Python package installer, you can install
 
 ```bash
 pip install a2a-sdk
+```
+
+To include the optional HTTP server components (FastAPI, Starlette), install the `http-server` extra:
+
+```bash
+pip install a2a-sdk[http-server]
 ```
 
 To install with gRPC support:

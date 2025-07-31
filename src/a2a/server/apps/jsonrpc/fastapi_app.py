@@ -2,9 +2,22 @@ import logging
 
 from collections.abc import AsyncIterator
 from contextlib import asynccontextmanager
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+
+    _package_fastapi_installed = True
+else:
+    try:
+        from fastapi import FastAPI
+
+        _package_fastapi_installed = True
+    except ImportError:
+        FastAPI = Any
+
+        _package_fastapi_installed = False
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
     CallContextBuilder,
@@ -38,7 +51,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
     ) -> None:
-        """Initializes the A2AStarletteApplication.
+        """Initializes the A2AFastAPIApplication.
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
@@ -50,6 +63,12 @@ class A2AFastAPIApplication(JSONRPCApplication):
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
         """
+        if not _package_fastapi_installed:
+            raise ImportError(
+                'The `fastapi` package is required to use the `A2AFastAPIApplication`.'
+                ' It can be added as a part of `a2a-sdk` optional dependencies,'
+                ' `a2a-sdk[http-server]`.'
+            )
         super().__init__(
             agent_card=agent_card,
             http_handler=http_handler,
