@@ -49,6 +49,7 @@ class TaskUpdater:
         message: Message | None = None,
         final: bool = False,
         timestamp: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Updates the status of the task and publishes a `TaskStatusUpdateEvent`.
 
@@ -57,6 +58,7 @@ class TaskUpdater:
             message: An optional message associated with the status update.
             final: If True, indicates this is the final status update for the task.
             timestamp: Optional ISO 8601 datetime string. Defaults to current time.
+            metadata: Optional metadata for extensions.
         """
         async with self._lock:
             if self._terminal_state_reached:
@@ -77,6 +79,7 @@ class TaskUpdater:
                     task_id=self.task_id,
                     context_id=self.context_id,
                     final=final,
+                    metadata=metadata,
                     status=TaskStatus(
                         state=state,
                         message=message,
