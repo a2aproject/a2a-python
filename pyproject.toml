@@ -8,12 +8,14 @@ authors = [{ name = "Google LLC", email = "googleapis-packages@google.com" }]
 requires-python = ">=3.10"
 keywords = ["A2A", "A2A SDK", "A2A Protocol", "Agent2Agent", "Agent 2 Agent"]
 dependencies = [
-  "fastapi>=0.115.2",
+  "fastapi>=0.95.0",
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
   "pydantic>=2.11.3",
   "sse-starlette",
-  "starlette"
+  "starlette",
+  "protobuf==5.29.5",
+  "google-api-core>=1.26.0",
 ]
 
 classifiers = [
@@ -35,7 +37,7 @@ mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 sql = ["sqlalchemy[asyncio,postgresql-asyncpg,aiomysql,aiosqlite]>=2.0.0"]
 encryption = ["cryptography>=43.0.0"]
-grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "protobuf==5.29.5", "google-api-core>=1.26.0"]
+grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 
 [project.urls]
@@ -90,6 +92,7 @@ dev = [
   "pyupgrade",
   "autoflake",
   "no_implicit_optional",
+  "trio",
 ]
 
 [[tool.uv.index]]

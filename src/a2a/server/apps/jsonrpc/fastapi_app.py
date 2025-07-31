@@ -5,11 +5,9 @@ from typing import Any
 from fastapi import FastAPI
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
-    CallContextBuilder,
     JSONRPCApplication,
 )
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
-from a2a.types import A2ARequest, AgentCard
+from a2a.types import A2ARequest
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
@@ -51,32 +49,6 @@ class A2AFastAPIApplication(JSONRPCApplication):
     (SSE).
     """
 
-    def __init__(
-        self,
-        agent_card: AgentCard,
-        http_handler: RequestHandler,
-        extended_agent_card: AgentCard | None = None,
-        context_builder: CallContextBuilder | None = None,
-    ) -> None:
-        """Initializes the A2AStarletteApplication.
-
-        Args:
-            agent_card: The AgentCard describing the agent's capabilities.
-            http_handler: The handler instance responsible for processing A2A
-              requests via http.
-            extended_agent_card: An optional, distinct AgentCard to be served
-              at the authenticated extended card endpoint.
-            context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the http_handler. If None, no
-              ServerCallContext is passed.
-        """
-        super().__init__(
-            agent_card=agent_card,
-            http_handler=http_handler,
-            extended_agent_card=extended_agent_card,
-            context_builder=context_builder,
-        )
-
     def add_routes_to_app(
         self,
         app: FastAPI,
@@ -110,13 +82,13 @@ class A2AFastAPIApplication(JSONRPCApplication):
         )(self._handle_requests)
         app.get(agent_card_url)(self._handle_get_agent_card)
 
-        # add deprecated path only if the agent_card_url uses default well-known path
         if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
-            app.get(PREV_AGENT_CARD_WELL_KNOWN_PATH, include_in_schema=False)(
-                self.handle_deprecated_agent_card_path
+            # For backward compatibility, serve the agent card at the deprecated path as well.
+            # TODO: remove in a future release
+            app.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)(
+                self._handle_get_agent_card
             )
 
-        # TODO: deprecated endpoint to be removed in a future release
         if self.agent_card.supports_authenticated_extended_card:
             app.get(extended_agent_card_url)(
                 self._handle_get_authenticated_extended_agent_card

@@ -53,6 +53,7 @@ lifecycles
 linting
 Llm
 lstrips
+mikeas
 mockurl
 notif
 oauthoidc
@@ -67,6 +68,7 @@ pyi
 pypistats
 pyupgrade
 pyversions
+redef
 respx
 resub
 RUF
@@ -76,5 +78,6 @@ sse
 tagwords
 taskupdate
 testuuid
+Tful
 typeerror
 vulnz

@@ -83,7 +83,7 @@ except ImportError:
     class _NoOp:
         """A no-op object that absorbs all tracing calls when OpenTelemetry is not installed."""
 
-        def __call__(self, *args: Any, **kwargs: Any) -> '_NoOp':
+        def __call__(self, *args: Any, **kwargs: Any) -> Any:
             return self
 
         def __enter__(self) -> '_NoOp':
@@ -92,12 +92,12 @@ except ImportError:
         def __exit__(self, *args: object, **kwargs: Any) -> None:
             pass
 
-        def __getattr__(self, name: str) -> '_NoOp':
+        def __getattr__(self, name: str) -> Any:
             return self
 
-    trace = _NoOp()
-    _SpanKind = _NoOp()
-    StatusCode = _NoOp()
+    trace = _NoOp()  # type: ignore
+    _SpanKind = _NoOp()  # type: ignore
+    StatusCode = _NoOp()  # type: ignore
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']

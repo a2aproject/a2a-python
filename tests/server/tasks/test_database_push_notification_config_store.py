@@ -3,14 +3,6 @@ import os
 from collections.abc import AsyncGenerator
 
 import pytest
-import pytest_asyncio
-
-from _pytest.mark.structures import ParameterSet
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    async_sessionmaker,
-    create_async_engine,
-)
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -20,8 +12,17 @@ pytest.importorskip(
     reason='Database tests require Cryptography. Install extra encryption',
 )
 
+import pytest_asyncio
+
+from _pytest.mark.structures import ParameterSet
+
 # Now safe to import SQLAlchemy-dependent modules
 from cryptography.fernet import Fernet
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    async_sessionmaker,
+    create_async_engine,
+)
 from sqlalchemy.inspection import inspect
 
 from a2a.server.models import (

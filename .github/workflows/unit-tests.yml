@@ -57,6 +57,6 @@ jobs:
       - name: Install dependencies
         run: uv sync --dev --extra sql --extra encryption --extra grpc --extra telemetry
       - name: Run tests and check coverage
-        run: uv run pytest --cov=a2a --cov-report=xml --cov-fail-under=89
+        run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=89
       - name: Show coverage summary in log
         run: uv run coverage report
