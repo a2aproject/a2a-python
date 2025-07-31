@@ -29,7 +29,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-http-server = ["fastapi", "sse-starlette", "starlette"]
+http-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]

@@ -74,7 +74,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
-    { name = "fastapi", marker = "extra == 'http-server'" },
+    { name = "fastapi", marker = "extra == 'http-server'", specifier = ">=0.115.2" },
     { name = "google-api-core", specifier = ">=1.26.0" },
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-reflection", marker = "extra == 'grpc'", specifier = ">=1.7.0" },
