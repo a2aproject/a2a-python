@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncIterable
+from collections.abc import AsyncIterable, Callable
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -62,6 +62,10 @@ class JSONRPCHandler:
         agent_card: AgentCard,
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], AgentCard
+        ]
+        | None = None,
     ):
         """Initializes the JSONRPCHandler.
 
@@ -69,10 +73,14 @@ class JSONRPCHandler:
             agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to delegate requests to.
             extended_agent_card: An optional, distinct Extended AgentCard to be served
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
         self.extended_agent_card = extended_agent_card
+        self.extended_card_modifier = extended_card_modifier
 
     async def on_message_send(
         self,
@@ -417,7 +425,10 @@ class JSONRPCHandler:
         Returns:
             A `GetAuthenticatedExtendedCardResponse` object containing the config or a JSON-RPC error.
         """
-        if self.extended_agent_card is None:
+        if (
+            self.extended_agent_card is None
+            and self.extended_card_modifier is None
+        ):
             return GetAuthenticatedExtendedCardResponse(
                 root=JSONRPCErrorResponse(
                     id=request.id,
@@ -425,8 +436,16 @@ class JSONRPCHandler:
                 )
             )
 
+        base_card = self.extended_agent_card
+        if base_card is None:
+            base_card = self.agent_card
+
+        card_to_serve = base_card
+        if self.extended_card_modifier and context:
+            card_to_serve = self.extended_card_modifier(base_card, context)
+
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(
-                id=request.id, result=self.extended_agent_card
+                id=request.id, result=card_to_serve
             )
         )
