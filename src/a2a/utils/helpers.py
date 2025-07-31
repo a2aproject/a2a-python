@@ -1,6 +1,7 @@
 """General utility functions for the A2A Python SDK."""
 
 import functools
+import inspect
 import logging
 
 from collections.abc import Callable
@@ -135,7 +136,22 @@ def validate(
     """
 
     def decorator(function: Callable) -> Callable:
-        def wrapper(self: Any, *args, **kwargs) -> Any:
+        if inspect.iscoroutinefunction(function):
+
+            @functools.wraps(function)
+            async def async_wrapper(self: Any, *args, **kwargs) -> Any:
+                if not expression(self):
+                    final_message = error_message or str(expression)
+                    logger.error(f'Unsupported Operation: {final_message}')
+                    raise ServerError(
+                        UnsupportedOperationError(message=final_message)
+                    )
+                return await function(self, *args, **kwargs)
+
+            return async_wrapper
+
+        @functools.wraps(function)
+        def sync_wrapper(self: Any, *args, **kwargs) -> Any:
             if not expression(self):
                 final_message = error_message or str(expression)
                 logger.error(f'Unsupported Operation: {final_message}')
@@ -144,7 +160,7 @@ def validate(
                 )
             return function(self, *args, **kwargs)
 
-        return wrapper
+        return sync_wrapper
 
     return decorator
 

@@ -1,6 +1,7 @@
 """Custom exceptions for A2A server-side errors."""
 
 from a2a.types import (
+    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
@@ -57,6 +58,7 @@ class ServerError(Exception):
             | UnsupportedOperationError
             | ContentTypeNotSupportedError
             | InvalidAgentResponseError
+            | AuthenticatedExtendedCardNotConfiguredError
             | None
         ),
     ):

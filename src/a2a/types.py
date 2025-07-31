@@ -830,7 +830,7 @@ class PushNotificationConfig(A2ABaseModel):
     """
     id: str | None = None
     """
-    A unique ID for the push notification configuration, created by the server
+    A unique ID for the push notification configuration, set by the client
     to support multiple notification callbacks.
     """
     token: str | None = None
