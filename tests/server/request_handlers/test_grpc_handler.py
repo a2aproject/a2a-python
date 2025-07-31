@@ -331,7 +331,7 @@ class TestGrpcExtensions:
             context.activated_extensions.add('baz')
             return types.Task(
                 id='task-1',
-                contextId='ctx-1',
+                context_id='ctx-1',
                 status=types.TaskStatus(state=types.TaskState.completed),
             )
 
@@ -366,9 +366,9 @@ class TestGrpcExtensions:
             (HTTP_EXTENSION_HEADER, 'baz  , bar'),
         )
         mock_request_handler.on_message_send.return_value = types.Message(
-            messageId='1',
+            message_id='1',
             role=types.Role.agent,
-            parts=[types.TextPart(text='test')],
+            parts=[types.Part(root=types.TextPart(text='test'))],
         )
 
         await grpc_handler.SendMessage(
@@ -396,7 +396,7 @@ class TestGrpcExtensions:
             context.activated_extensions.add('baz')
             yield types.Task(
                 id='task-1',
-                contextId='ctx-1',
+                context_id='ctx-1',
                 status=types.TaskStatus(state=types.TaskState.working),
             )
 

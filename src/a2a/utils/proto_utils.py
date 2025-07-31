@@ -2,6 +2,7 @@
 """Utils for converting between proto and Python types."""
 
 import json
+import logging
 import re
 
 from typing import Any
@@ -13,9 +14,14 @@ from a2a.grpc import a2a_pb2
 from a2a.utils.errors import ServerError
 
 
+logger = logging.getLogger(__name__)
+
+
 # Regexp patterns for matching
-_TASK_NAME_MATCH = r'tasks/(\w+)'
-_TASK_PUSH_CONFIG_NAME_MATCH = r'tasks/(\w+)/pushNotificationConfigs/(\w+)'
+_TASK_NAME_MATCH = r'tasks/([\w-]+)'
+_TASK_PUSH_CONFIG_NAME_MATCH = (
+    r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
+)
 
 
 class ToProto:
@@ -259,7 +265,7 @@ class ToProto:
         cls, config: types.TaskPushNotificationConfig
     ) -> a2a_pb2.TaskPushNotificationConfig:
         return a2a_pb2.TaskPushNotificationConfig(
-            name=f'tasks/{config.task_id}/pushNotificationConfigs/{config.task_id}',
+            name=f'tasks/{config.task_id}/pushNotificationConfigs/{config.push_notification_config.id}',
             push_notification_config=cls.push_notification_config(
                 config.push_notification_config,
             ),
@@ -286,6 +292,23 @@ class ToProto:
             supports_authenticated_extended_card=bool(
                 card.supports_authenticated_extended_card
             ),
+            preferred_transport=card.preferred_transport,
+            protocol_version=card.protocol_version,
+            additional_interfaces=[
+                cls.agent_interface(x) for x in card.additional_interfaces
+            ]
+            if card.additional_interfaces
+            else None,
+        )
+
+    @classmethod
+    def agent_interface(
+        cls,
+        interface: types.AgentInterface,
+    ) -> a2a_pb2.AgentInterface:
+        return a2a_pb2.AgentInterface(
+            transport=interface.transport,
+            url=interface.url,
         )
 
     @classmethod
@@ -486,6 +509,14 @@ class FromProto:
         return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
 
     @classmethod
+    def task_or_message(
+        cls, event: a2a_pb2.SendMessageResponse
+    ) -> types.Task | types.Message:
+        if event.HasField('msg'):
+            return cls.message(event.msg)
+        return cls.task(event.task)
+
+    @classmethod
     def task(cls, task: a2a_pb2.Task) -> types.Task:
         return types.Task(
             id=task.id,
@@ -632,7 +663,7 @@ class FromProto:
         return types.TaskIdParams(id=m.group(1))
 
     @classmethod
-    def task_push_notification_config(
+    def task_push_notification_config_request(
         cls,
         request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
     ) -> types.TaskPushNotificationConfig:
@@ -646,6 +677,25 @@ class FromProto:
         return types.TaskPushNotificationConfig(
             push_notification_config=cls.push_notification_config(
                 request.config.push_notification_config,
+            ),
+            task_id=m.group(1),
+        )
+
+    @classmethod
+    def task_push_notification_config(
+        cls,
+        config: a2a_pb2.TaskPushNotificationConfig,
+    ) -> types.TaskPushNotificationConfig:
+        m = re.match(_TASK_PUSH_CONFIG_NAME_MATCH, config.name)
+        if not m:
+            raise ServerError(
+                error=types.InvalidParamsError(
+                    message=f'Bad TaskPushNotificationConfig resource name {config.name}'
+                )
+            )
+        return types.TaskPushNotificationConfig(
+            push_notification_config=cls.push_notification_config(
+                config.push_notification_config,
             ),
             task_id=m.group(1),
         )
@@ -669,6 +719,23 @@ class FromProto:
             url=card.url,
             version=card.version,
             supports_authenticated_extended_card=card.supports_authenticated_extended_card,
+            preferred_transport=card.preferred_transport,
+            protocol_version=card.protocol_version,
+            additional_interfaces=[
+                cls.agent_interface(x) for x in card.additional_interfaces
+            ]
+            if card.additional_interfaces
+            else None,
+        )
+
+    @classmethod
+    def agent_interface(
+        cls,
+        interface: a2a_pb2.AgentInterface,
+    ) -> types.AgentInterface:
+        return types.AgentInterface(
+            transport=interface.transport,
+            url=interface.url,
         )
 
     @classmethod
@@ -798,6 +865,24 @@ class FromProto:
                 token_url=flows.password.token_url,
             ),
         )
+
+    @classmethod
+    def stream_response(
+        cls,
+        response: a2a_pb2.StreamResponse,
+    ) -> (
+        types.Message
+        | types.Task
+        | types.TaskStatusUpdateEvent
+        | types.TaskArtifactUpdateEvent
+    ):
+        if response.HasField('msg'):
+            return cls.message(response.msg)
+        if response.HasField('task'):
+            return cls.task(response.task)
+        if response.HasField('status_update'):
+            return cls.task_status_update_event(response.status_update)
+        return cls.task_artifact_update_event(response.artifact_update)
 
     @classmethod
     def skill(cls, skill: a2a_pb2.AgentSkill) -> types.AgentSkill:

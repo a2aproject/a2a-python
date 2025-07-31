@@ -7,7 +7,9 @@ from a2a.client.auth import (
     CredentialService,
     InMemoryContextCredentialStore,
 )
-from a2a.client.client import A2ACardResolver, A2AClient
+from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.client import Client, ClientConfig, ClientEvent, Consumer
+from a2a.client.client_factory import ClientFactory, minimal_agent_card
 from a2a.client.errors import (
     A2AClientError,
     A2AClientHTTPError,
@@ -15,13 +17,14 @@ from a2a.client.errors import (
     A2AClientTimeoutError,
 )
 from a2a.client.helpers import create_text_message_object
+from a2a.client.legacy import A2AClient
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 
 
 logger = logging.getLogger(__name__)
 
 try:
-    from a2a.client.grpc_client import A2AGrpcClient  # type: ignore
+    from a2a.client.legacy_grpc import A2AGrpcClient  # type: ignore
 except ImportError as e:
     _original_error = e
     logger.debug(
@@ -48,9 +51,15 @@ __all__ = [
     'A2AClientTimeoutError',
     'A2AGrpcClient',
     'AuthInterceptor',
+    'Client',
     'ClientCallContext',
     'ClientCallInterceptor',
+    'ClientConfig',
+    'ClientEvent',
+    'ClientFactory',
+    'Consumer',
     'CredentialService',
     'InMemoryContextCredentialStore',
     'create_text_message_object',
+    'minimal_agent_card',
 ]
