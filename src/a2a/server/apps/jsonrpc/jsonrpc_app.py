@@ -160,6 +160,7 @@ class JSONRPCApplication(ABC):
             agent_card=agent_card,
             request_handler=http_handler,
             extended_agent_card=extended_agent_card,
+            extended_card_modifier=extended_card_modifier,
         )
         if (
             self.agent_card.supports_authenticated_extended_card

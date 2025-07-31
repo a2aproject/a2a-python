@@ -64,6 +64,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
 
         if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
             # For backward compatibility, serve the agent card at the deprecated path as well.
+            # TODO: remove in a future release
             app.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)(
                 self._handle_get_agent_card
             )

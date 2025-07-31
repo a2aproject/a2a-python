@@ -59,6 +59,8 @@ class A2AStarletteApplication(JSONRPCApplication):
         ]
 
         if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
+            # For backward compatibility, serve the agent card at the deprecated path as well.
+            # TODO: remove in a future release
             app_routes.append(
                 Route(
                     PREV_AGENT_CARD_WELL_KNOWN_PATH,
