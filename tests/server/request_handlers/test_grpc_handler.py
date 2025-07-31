@@ -295,7 +295,7 @@ async def test_get_agent_card_with_modifier(
         ),
     ],
 )
-async def test_abort_context_error_mapping(
+async def test_abort_context_error_mapping(  # noqa: PLR0913
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,

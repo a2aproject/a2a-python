@@ -123,7 +123,7 @@ class JSONRPCApplication(ABC):
     (SSE).
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
         http_handler: RequestHandler,
