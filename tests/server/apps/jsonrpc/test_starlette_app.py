@@ -21,8 +21,8 @@ class TestA2AStarletteApplicationOptionalDeps:
     @pytest.fixture(scope='class', autouse=True)
     def ensure_pkg_starlette_is_present(self):
         try:
-            import starlette as _starlette  # noqa: F401
             import sse_starlette as _sse_starlette  # noqa: F401
+            import starlette as _starlette  # noqa: F401
         except ImportError:
             pytest.fail(
                 f'Running tests in {self.__class__.__name__} requires'
@@ -42,7 +42,7 @@ class TestA2AStarletteApplicationOptionalDeps:
         mock_agent_card.url = 'http://example.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
         mock_agent_card.supportsAuthenticatedExtendedCard = False
-        return dict(agent_card=mock_agent_card, http_handler=mock_handler)
+        return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_starlette_not_installed(self):

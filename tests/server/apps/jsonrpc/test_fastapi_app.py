@@ -39,9 +39,9 @@ class TestA2AFastAPIApplicationOptionalDeps:
         # Ensure 'url' attribute exists on the mock_agent_card, as it's accessed
         # in __init__
         mock_agent_card.url = 'http://example.com'
-        # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
-        mock_agent_card.supportsAuthenticatedExtendedCard = False
-        return dict(agent_card=mock_agent_card, http_handler=mock_handler)
+        # Ensure 'supports_authenticated_agent_card' attribute exists
+        mock_agent_card.supports_authenticated_agent_card = False
+        return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_fastapi_not_installed(self):

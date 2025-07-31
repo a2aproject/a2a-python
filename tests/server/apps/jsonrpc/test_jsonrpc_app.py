@@ -13,7 +13,9 @@ except ImportError:
     StarletteBaseUser = MagicMock()  # type: ignore
 
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.server.apps.jsonrpc import jsonrpc_app  # Keep this import for optional deps test
+from a2a.server.apps.jsonrpc import (
+    jsonrpc_app,  # Keep this import for optional deps test
+)
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
     JSONRPCApplication,
     StarletteUserProxy,
@@ -131,7 +133,7 @@ class TestJSONRPCApplicationOptionalDeps:
         mock_agent_card.url = 'http://example.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
         mock_agent_card.supports_authenticated_extended_card = False
-        return dict(agent_card=mock_agent_card, http_handler=mock_handler)
+        return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_starlette_not_installed(self):
