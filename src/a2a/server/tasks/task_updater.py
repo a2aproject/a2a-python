@@ -58,6 +58,7 @@ class TaskUpdater:
             message: An optional message associated with the status update.
             final: If True, indicates this is the final status update for the task.
             timestamp: Optional ISO 8601 datetime string. Defaults to current time.
+            metadata: Optional metadata for extensions.
         """
         async with self._lock:
             if self._terminal_state_reached:
