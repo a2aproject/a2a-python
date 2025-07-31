@@ -286,7 +286,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             server_context = self.context_builder.build(context)
             config = (
                 await self.request_handler.on_set_task_push_notification_config(
-                    proto_utils.FromProto.task_push_notification_config(
+                    proto_utils.FromProto.task_push_notification_config_request(
                         request,
                     ),
                     server_context,

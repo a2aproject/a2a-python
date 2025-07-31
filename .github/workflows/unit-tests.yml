@@ -45,7 +45,7 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
       - name: Set up test environment variables
-        run: |          
+        run: |
           echo "POSTGRES_TEST_DSN=postgresql+asyncpg://a2a:a2a_password@localhost:5432/a2a_test" >> $GITHUB_ENV
           echo "MYSQL_TEST_DSN=mysql+aiomysql://a2a:a2a_password@localhost:3306/a2a_test" >> $GITHUB_ENV
 
@@ -55,8 +55,8 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: uv sync --dev --extra sql --extra encryption --extra grpc
+        run: uv sync --dev --extra sql --extra encryption --extra grpc --extra telemetry
       - name: Run tests and check coverage
-        run: uv run pytest --cov=a2a --cov-report=xml --cov-fail-under=89
+        run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=89
       - name: Show coverage summary in log
         run: uv run coverage report

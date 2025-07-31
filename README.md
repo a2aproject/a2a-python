@@ -45,6 +45,12 @@ To install with gRPC support:
 uv add "a2a-sdk[grpc]"
 ```
 
+To install with OpenTelemetry tracing support:
+
+```bash
+uv add "a2a-sdk[telemetry]"
+```
+
 To install with database support:
 
 ```bash
@@ -79,6 +85,12 @@ To install with gRPC support:
 
 ```bash
 pip install "a2a-sdk[grpc]"
+```
+
+To install with OpenTelemetry tracing support:
+
+```bash
+pip install "a2a-sdk[telemetry]"
 ```
 
 To install with database support:

@@ -58,7 +58,7 @@ def test_starlette_agent_card_with_api_key_scheme_alias(
     app_instance = A2AStarletteApplication(agent_card_with_api_key, handler)
     client = TestClient(app_instance.build())
 
-    response = client.get('/.well-known/agent.json')
+    response = client.get('/.well-known/agent-card.json')
     assert response.status_code == 200
     response_data = response.json()
 
@@ -90,7 +90,7 @@ def test_fastapi_agent_card_with_api_key_scheme_alias(
     app_instance = A2AFastAPIApplication(agent_card_with_api_key, handler)
     client = TestClient(app_instance.build())
 
-    response = client.get('/.well-known/agent.json')
+    response = client.get('/.well-known/agent-card.json')
     assert response.status_code == 200
     response_data = response.json()
 
