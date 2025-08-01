@@ -18,9 +18,9 @@ logger = logging.getLogger(__name__)
 
 
 # Regexp patterns for matching
-_TASK_NAME_MATCH = r'tasks/([\w-]+)'
+_TASK_NAME_MATCH = r'tasks/([a-zA-Z0-9_.-]+)'
 _TASK_PUSH_CONFIG_NAME_MATCH = (
-    r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
+    r'tasks/([a-zA-Z0-9_.-]+)/pushNotificationConfigs/([a-zA-Z0-9_.-]+)'
 )
 
 
