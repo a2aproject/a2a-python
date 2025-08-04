@@ -1,5 +1,54 @@
 # Changelog
 
+## [0.3.0](https://github.com/a2aproject/a2a-python/compare/v0.2.16...v0.3.0) (2025-07-31)
+
+
+### ⚠ BREAKING CHANGES
+
+* **deps:** Make opentelemetry an optional dependency ([#369](https://github.com/a2aproject/a2a-python/issues/369))
+* **spec:** Update Agent Card Well-Known Path to `/.well-known/agent-card.json` ([#320](https://github.com/a2aproject/a2a-python/issues/320))
+* Remove custom `__getattr__` and `__setattr__` for `camelCase` fields in `types.py` ([#335](https://github.com/a2aproject/a2a-python/issues/335))
+  * Use Script [`refactor_camel_to_snake.sh`](https://github.com/a2aproject/a2a-samples/blob/main/samples/python/refactor_camel_to_snake.sh) to convert your codebase to the new field names.
+* Add mTLS to SecuritySchemes, add oauth2 metadata url field, allow Skills to specify Security ([#362](https://github.com/a2aproject/a2a-python/issues/362))
+* Support for serving agent card at deprecated path ([#352](https://github.com/a2aproject/a2a-python/issues/352))
+
+### Features
+
+* Add `metadata` as parameter to `TaskUpdater.update_status()` ([#371](https://github.com/a2aproject/a2a-python/issues/371)) ([9444ed6](https://github.com/a2aproject/a2a-python/commit/9444ed629b925e285cd08aae3078ccd8b9bda6f2))
+* Add mTLS to SecuritySchemes, add oauth2 metadata url field, allow Skills to specify Security ([#362](https://github.com/a2aproject/a2a-python/issues/362)) ([be6c517](https://github.com/a2aproject/a2a-python/commit/be6c517e1f2db50a9217de91a9080810c36a7a1b))
+* Add RESTful API Serving ([#348](https://github.com/a2aproject/a2a-python/issues/348)) ([82a6b7c](https://github.com/a2aproject/a2a-python/commit/82a6b7cc9b83484a4ceabc2323e14e2ff0270f87))
+* Add server-side support for plumbing requested and activated extensions ([#333](https://github.com/a2aproject/a2a-python/issues/333)) ([4d5b92c](https://github.com/a2aproject/a2a-python/commit/4d5b92c61747edcabcfd825256a5339bb66c3e91))
+* Allow agent cards (default and extended) to be dynamic ([#365](https://github.com/a2aproject/a2a-python/issues/365)) ([ee92aab](https://github.com/a2aproject/a2a-python/commit/ee92aabe1f0babbba2fdbdefe21f2dbe7a899077))
+* Support for serving agent card at deprecated path ([#352](https://github.com/a2aproject/a2a-python/issues/352)) ([2444034](https://github.com/a2aproject/a2a-python/commit/2444034b7aa1d1af12bedecf40f27dafc4efec95))
+* support non-blocking `sendMessage` ([#349](https://github.com/a2aproject/a2a-python/issues/349)) ([70b4999](https://github.com/a2aproject/a2a-python/commit/70b499975f0811c8055ebd674bcb4070805506d4))
+* Type update to support fetching extended card ([#361](https://github.com/a2aproject/a2a-python/issues/361)) ([83304bb](https://github.com/a2aproject/a2a-python/commit/83304bb669403b51607973c1a965358d2e8f6ab0))
+
+
+### Bug Fixes
+
+* Add Input Validation for Task Context IDs in new_task Function ([#340](https://github.com/a2aproject/a2a-python/issues/340)) ([a7ed7ef](https://github.com/a2aproject/a2a-python/commit/a7ed7efed8fcdcc556616a5fc1cb8f968a116733))
+* **deps:** Reduce FastAPI library required version to `0.95.0` ([#372](https://github.com/a2aproject/a2a-python/issues/372)) ([a319334](https://github.com/a2aproject/a2a-python/commit/a31933456e08929f665ccec57ac07b8b9118990d))
+* Remove `DeprecationWarning` for regular properties ([#345](https://github.com/a2aproject/a2a-python/issues/345)) ([2806f3e](https://github.com/a2aproject/a2a-python/commit/2806f3eb7e1293924bb8637fd9c2cfe855858592))
+* **spec:** Add `SendMessageRequest.request` `json_name` mapping to `message` proto ([bc97cba](https://github.com/a2aproject/a2a-python/commit/bc97cba5945a49bea808feb2b1dc9eeb30007599))
+* **spec:** Add Transport enum to specification (https://github.com/a2aproject/A2A/pull/909) ([d9e463c](https://github.com/a2aproject/a2a-python/commit/d9e463cf1f8fbe486d37da3dd9009a19fe874ff0))
+
+
+### Documentation
+
+* Address typos in docstrings and docs. ([#370](https://github.com/a2aproject/a2a-python/issues/370)) ([ee48d68](https://github.com/a2aproject/a2a-python/commit/ee48d68d6c42a2a0c78f8a4666d1aded1a362e78))
+
+
+### Miscellaneous Chores
+
+* Add support for authenticated extended card method ([#356](https://github.com/a2aproject/a2a-python/issues/356)) ([b567e80](https://github.com/a2aproject/a2a-python/commit/b567e80735ae7e75f0bdb22f025b97895ce3b0dd))
+
+
+### Code Refactoring
+
+* **deps:** Make opentelemetry an optional dependency ([#369](https://github.com/a2aproject/a2a-python/issues/369)) ([9ad8b96](https://github.com/a2aproject/a2a-python/commit/9ad8b9623ffdc074ec561cbe65cfc2a2ba38bd0b))
+* Remove custom `__getattr__` and `__setattr__` for `camelCase` fields in `types.py` ([#335](https://github.com/a2aproject/a2a-python/issues/335)) ([cd94167](https://github.com/a2aproject/a2a-python/commit/cd941675d10868922adf14266901d035516a31cf))
+* **spec:** Update Agent Card Well-Known Path to `/.well-known/agent-card.json` ([#320](https://github.com/a2aproject/a2a-python/issues/320)) ([270ea9b](https://github.com/a2aproject/a2a-python/commit/270ea9b0822b689e50ed12f745a24a17e7917e73))
+
 ## [0.2.16](https://github.com/a2aproject/a2a-python/compare/v0.2.15...v0.2.16) (2025-07-21)
 
 

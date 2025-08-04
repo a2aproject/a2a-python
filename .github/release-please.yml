@@ -1,4 +1,0 @@
-releaseType: python
-handleGHRelease: true
-bumpMinorPreMajor: false
-bumpPatchForMinorPreMajor: true
