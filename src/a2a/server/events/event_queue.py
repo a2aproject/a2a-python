@@ -154,3 +154,39 @@ class EventQueue:
     def is_closed(self) -> bool:
         """Checks if the queue is closed."""
         return self._is_closed
+
+    async def clear_events(self, clear_child_queues: bool = True) -> None:
+        """Clears all events from the current queue and optionally all child queues.
+
+        This method removes all pending events from the queue without processing them.
+        Child queues can be optionally cleared based on the clear_child_queues parameter.
+
+        Args:
+            clear_child_queues: If True (default), clear all child queues as well.
+                              If False, only clear the current queue, leaving child queues untouched.
+        """
+        logger.debug('Clearing all events from EventQueue and child queues.')
+        async with self._lock:
+            # Clear all events from the queue, even if closed
+            cleared_count = 0
+            while not self.queue.empty():
+                try:
+                    event = self.queue.get_nowait()
+                    logger.debug(f'Discarding unprocessed event of type: {type(event)}, content: {event}')
+                    self.queue.task_done()
+                    cleared_count += 1
+                except asyncio.QueueEmpty:
+                    break
+
+            if cleared_count > 0:
+                logger.debug(f'Cleared {cleared_count} unprocessed events from EventQueue.')
+
+            # Clear all child queues
+            if clear_child_queues:
+                child_tasks = []
+                for child in self._children:
+                    child_tasks.append(asyncio.create_task(child.clear_events()))
+
+                if child_tasks:
+                    await asyncio.wait(child_tasks, return_when=asyncio.ALL_COMPLETED)
+
