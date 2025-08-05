@@ -22,8 +22,11 @@ else:
         _package_starlette_installed = False
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
+    CallContextBuilder,
     JSONRPCApplication,
 )
+from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
+from a2a.types import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,

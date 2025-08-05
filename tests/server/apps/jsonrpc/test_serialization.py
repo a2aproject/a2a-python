@@ -1,6 +1,7 @@
 from unittest import mock
 
 import pytest
+from fastapi import FastAPI
 
 from pydantic import ValidationError
 from starlette.testclient import TestClient
@@ -183,3 +184,21 @@ def test_handle_unicode_characters(agent_card_with_api_key: AgentCard):
     data = response.json()
     assert 'error' not in data or data['error'] is None
     assert data['result']['parts'][0]['text'] == f'Received: {unicode_text}'
+
+
+def test_fastapi_sub_application(agent_card_with_api_key: AgentCard):
+    """
+    Tests that the A2AFastAPIApplication endpoint correctly passes the url in sub-application.
+    """
+    handler = mock.AsyncMock()
+    sub_app_instance = A2AFastAPIApplication(agent_card_with_api_key, handler)
+    app_instance = FastAPI()
+    app_instance.mount('/a2a', sub_app_instance.build())
+    client = TestClient(app_instance)
+
+    response = client.get('/a2a/openapi.json')
+    assert response.status_code == 200
+    response_data = response.json()
+
+    assert 'servers' in response_data
+    assert response_data['servers'] == [{'url': '/a2a'}]

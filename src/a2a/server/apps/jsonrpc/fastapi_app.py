@@ -1,7 +1,5 @@
 import logging
 
-from collections.abc import AsyncIterator
-from contextlib import asynccontextmanager
 from typing import TYPE_CHECKING, Any
 
 
@@ -34,6 +32,28 @@ from a2a.utils.constants import (
 
 
 logger = logging.getLogger(__name__)
+
+
+class A2AFastAPI(FastAPI):
+    """A FastAPI application that adds A2A-specific OpenAPI components."""
+
+    _a2a_components_added: bool = False
+
+    def openapi(self) -> dict[str, Any]:
+        """Generates the OpenAPI schema for the application."""
+        openapi_schema = super().openapi()
+        if not self._a2a_components_added:
+            a2a_request_schema = A2ARequest.model_json_schema(
+                ref_template='#/components/schemas/{model}'
+            )
+            defs = a2a_request_schema.pop('$defs', {})
+            component_schemas = openapi_schema.setdefault(
+                'components', {}
+            ).setdefault('schemas', {})
+            component_schemas.update(defs)
+            component_schemas['A2ARequest'] = a2a_request_schema
+            self._a2a_components_added = True
+        return openapi_schema
 
 
 class A2AFastAPIApplication(JSONRPCApplication):
@@ -139,23 +159,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         Returns:
             A configured FastAPI application instance.
         """
-
-        @asynccontextmanager
-        async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-            a2a_request_schema = A2ARequest.model_json_schema(
-                ref_template='#/components/schemas/{model}'
-            )
-            defs = a2a_request_schema.pop('$defs', {})
-            openapi_schema = app.openapi()
-            component_schemas = openapi_schema.setdefault(
-                'components', {}
-            ).setdefault('schemas', {})
-            component_schemas.update(defs)
-            component_schemas['A2ARequest'] = a2a_request_schema
-
-            yield
-
-        app = FastAPI(lifespan=lifespan, **kwargs)
+        app = A2AFastAPI(**kwargs)
 
         self.add_routes_to_app(
             app, agent_card_url, rpc_url, extended_agent_card_url

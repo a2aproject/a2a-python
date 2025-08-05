@@ -8,6 +8,7 @@
 * **deps:** Make opentelemetry an optional dependency ([#369](https://github.com/a2aproject/a2a-python/issues/369))
 * **spec:** Update Agent Card Well-Known Path to `/.well-known/agent-card.json` ([#320](https://github.com/a2aproject/a2a-python/issues/320))
 * Remove custom `__getattr__` and `__setattr__` for `camelCase` fields in `types.py` ([#335](https://github.com/a2aproject/a2a-python/issues/335))
+  * Use Script [`refactor_camel_to_snake.sh`](https://github.com/a2aproject/a2a-samples/blob/main/samples/python/refactor_camel_to_snake.sh) to convert your codebase to the new field names.
 * Add mTLS to SecuritySchemes, add oauth2 metadata url field, allow Skills to specify Security ([#362](https://github.com/a2aproject/a2a-python/issues/362))
 * Support for serving agent card at deprecated path ([#352](https://github.com/a2aproject/a2a-python/issues/352))
 
