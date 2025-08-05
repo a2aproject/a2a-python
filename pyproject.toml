@@ -11,7 +11,7 @@ dependencies = [
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
   "pydantic>=2.11.3",
-  "protobuf==5.29.5",
+  "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
 ]
 
