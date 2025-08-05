@@ -22,6 +22,7 @@ from a2a.server.apps import (
     A2AFastAPIApplication,
     A2AStarletteApplication,
 )
+from a2a.server.context import ServerCallContext
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -46,6 +47,7 @@ from a2a.types import (
 )
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
+    EXTENDED_AGENT_CARD_PATH,
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
@@ -226,7 +228,7 @@ def test_authenticated_extended_agent_card_endpoint_supported_with_specific_exte
     agent_card.supports_authenticated_extended_card = (
         True  # Main card must support it
     )
-    print(agent_card)
+
     app_instance = A2AStarletteApplication(
         agent_card, handler, extended_agent_card=extended_agent_card_fixture
     )
@@ -844,6 +846,100 @@ def test_invalid_request_structure(client: TestClient):
     data = response.json()
     assert 'error' in data
     assert data['error']['code'] == InvalidRequestError().code
+
+
+# === DYNAMIC CARD MODIFIER TESTS ===
+
+
+def test_dynamic_agent_card_modifier(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that the card_modifier dynamically alters the public agent card."""
+
+    def modifier(card: AgentCard) -> AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.name = 'Dynamically Modified Agent'
+        return modified_card
+
+    app_instance = A2AStarletteApplication(
+        agent_card, handler, card_modifier=modifier
+    )
+    client = TestClient(app_instance.build())
+
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == 'Dynamically Modified Agent'
+    assert (
+        data['version'] == agent_card.version
+    )  # Ensure other fields are intact
+
+
+def test_dynamic_extended_agent_card_modifier(
+    agent_card: AgentCard,
+    extended_agent_card_fixture: AgentCard,
+    handler: mock.AsyncMock,
+):
+    """Test that the extended_card_modifier dynamically alters the extended agent card."""
+    agent_card.supports_authenticated_extended_card = True
+
+    def modifier(card: AgentCard, context: ServerCallContext) -> AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.description = 'Dynamically Modified Extended Description'
+        return modified_card
+
+    # Test with a base extended card
+    app_instance = A2AStarletteApplication(
+        agent_card,
+        handler,
+        extended_agent_card=extended_agent_card_fixture,
+        extended_card_modifier=modifier,
+    )
+    client = TestClient(app_instance.build())
+
+    response = client.get(EXTENDED_AGENT_CARD_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == extended_agent_card_fixture.name
+    assert data['description'] == 'Dynamically Modified Extended Description'
+
+    # Test without a base extended card (modifier should receive public card)
+    app_instance_no_base = A2AStarletteApplication(
+        agent_card,
+        handler,
+        extended_agent_card=None,
+        extended_card_modifier=modifier,
+    )
+    client_no_base = TestClient(app_instance_no_base.build())
+    response_no_base = client_no_base.get(EXTENDED_AGENT_CARD_PATH)
+    assert response_no_base.status_code == 200
+    data_no_base = response_no_base.json()
+    assert data_no_base['name'] == agent_card.name
+    assert (
+        data_no_base['description']
+        == 'Dynamically Modified Extended Description'
+    )
+
+
+def test_fastapi_dynamic_agent_card_modifier(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that the card_modifier dynamically alters the public agent card for FastAPI."""
+
+    def modifier(card: AgentCard) -> AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.name = 'Dynamically Modified Agent'
+        return modified_card
+
+    app_instance = A2AFastAPIApplication(
+        agent_card, handler, card_modifier=modifier
+    )
+    client = TestClient(app_instance.build())
+
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == 'Dynamically Modified Agent'
 
 
 def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):

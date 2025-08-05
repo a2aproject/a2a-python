@@ -22,11 +22,8 @@ else:
         _package_starlette_installed = False
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
-    CallContextBuilder,
     JSONRPCApplication,
 )
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
-from a2a.types import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
@@ -109,14 +106,15 @@ class A2AStarletteApplication(JSONRPCApplication):
             ),
         ]
 
-        # add deprecated path only if the agent_card_url uses default well-known path
         if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
+            # For backward compatibility, serve the agent card at the deprecated path as well.
+            # TODO: remove in a future release
             app_routes.append(
                 Route(
                     PREV_AGENT_CARD_WELL_KNOWN_PATH,
-                    self.handle_deprecated_agent_card_path,
+                    self._handle_get_agent_card,
                     methods=['GET'],
-                    name='agent_card_path_deprecated',
+                    name='deprecated_agent_card',
                 )
             )
 

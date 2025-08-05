@@ -202,6 +202,34 @@ async def test_get_agent_card(
 
 
 @pytest.mark.asyncio
+async def test_get_agent_card_with_modifier(
+    mock_request_handler: AsyncMock,
+    sample_agent_card: types.AgentCard,
+    mock_grpc_context: AsyncMock,
+):
+    """Test GetAgentCard call with a card_modifier."""
+
+    def modifier(card: types.AgentCard) -> types.AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.name = 'Modified gRPC Agent'
+        return modified_card
+
+    grpc_handler_modified = GrpcHandler(
+        agent_card=sample_agent_card,
+        request_handler=mock_request_handler,
+        card_modifier=modifier,
+    )
+
+    request_proto = a2a_pb2.GetAgentCardRequest()
+    response = await grpc_handler_modified.GetAgentCard(
+        request_proto, mock_grpc_context
+    )
+
+    assert response.name == 'Modified gRPC Agent'
+    assert response.version == sample_agent_card.version
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'server_error, grpc_status_code, error_message_part',
     [
@@ -267,7 +295,7 @@ async def test_get_agent_card(
         ),
     ],
 )
-async def test_abort_context_error_mapping(
+async def test_abort_context_error_mapping(  # noqa: PLR0913
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
