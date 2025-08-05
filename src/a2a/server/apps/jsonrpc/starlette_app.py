@@ -1,5 +1,6 @@
 import logging
 
+from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 
@@ -25,6 +26,7 @@ from a2a.server.apps.jsonrpc.jsonrpc_app import (
     CallContextBuilder,
     JSONRPCApplication,
 )
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
 from a2a.types import AgentCard
 from a2a.utils.constants import (
@@ -46,12 +48,17 @@ class A2AStarletteApplication(JSONRPCApplication):
     (SSE).
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
         http_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], AgentCard
+        ]
+        | None = None,
     ) -> None:
         """Initializes the A2AStarletteApplication.
 
@@ -64,6 +71,11 @@ class A2AStarletteApplication(JSONRPCApplication):
             context_builder: The CallContextBuilder used to construct the
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -76,6 +88,8 @@ class A2AStarletteApplication(JSONRPCApplication):
             http_handler=http_handler,
             extended_agent_card=extended_agent_card,
             context_builder=context_builder,
+            card_modifier=card_modifier,
+            extended_card_modifier=extended_card_modifier,
         )
 
     def routes(
