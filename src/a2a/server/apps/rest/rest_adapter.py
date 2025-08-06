@@ -177,7 +177,7 @@ class RESTAdapter:
             ('/v1/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
-            ('/v1/card', 'GET') : self.handle_get_agent_card,
+            ('/v1/card', 'GET'): self.handle_get_agent_card,
         }
 
         return routes
