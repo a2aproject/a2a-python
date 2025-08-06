@@ -92,7 +92,7 @@ def rest_error_handler(
 def rest_stream_error_handler(
     func: Callable[..., Coroutine[Any, Any, Any]],
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch ServerError for a straming method,log it and then rethrow it to be handled by framework."""
+    """Decorator to catch ServerError for a streaming method,log it and then rethrow it to be handled by framework."""
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
