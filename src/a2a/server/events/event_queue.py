@@ -128,8 +128,7 @@ class EventQueue:
         return queue
 
     async def close(self, immediate: bool = False) -> None:
-        """
-        Closes the queue for future push events and also closes all child queues.
+        """Closes the queue for future push events and also closes all child queues.
 
         Once closed, no new events can be enqueued. For Python 3.13+, this will trigger
         `asyncio.QueueShutDown` when the queue is empty and a consumer tries to dequeue.
