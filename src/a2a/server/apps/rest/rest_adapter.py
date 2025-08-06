@@ -93,6 +93,9 @@ class RESTAdapter:
         Returns:
             A JSONResponse containing the agent card data.
         """
+        if self.agent_card.supports_authenticated_extended_card:
+            return await self.handle_authenticated_agent_card(request)
+
         # The public agent card is a direct serialization of the agent_card
         # provided at initialization.
         return JSONResponse(
@@ -174,8 +177,7 @@ class RESTAdapter:
             ('/v1/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
+            ('/v1/card', 'GET') : self.handle_get_agent_card,
         }
-        if self.agent_card.supports_authenticated_extended_card:
-            routes[('/v1/card', 'GET')] = self.handle_authenticated_agent_card
 
         return routes
