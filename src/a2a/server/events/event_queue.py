@@ -128,10 +128,18 @@ class EventQueue:
         return queue
 
     async def close(self, immediate: bool = False) -> None:
-        """Closes the queue for future push events.
+        """
+        Closes the queue for future push events and also closes all child queues.
 
-        Once closed, `dequeue_event` will eventually raise `asyncio.QueueShutDown`
-        when the queue is empty. Also closes all child queues.
+        Once closed, no new events can be enqueued. For Python 3.13+, this will trigger
+        `asyncio.QueueShutDown` when the queue is empty and a consumer tries to dequeue.
+        For lower versions, the queue will be marked as closed and optionally cleared.
+
+        Args:
+            immediate (bool):
+                - True: Immediately closes the queue and clears all unprocessed events without waiting for them to be consumed. This is suitable for scenarios where you need to forcefully interrupt and quickly release resources.
+                - False (default): Gracefully closes the queue, waiting for all queued events to be processed (i.e., the queue is drained) before closing. This is suitable when you want to ensure all events are handled.
+
         """
         logger.debug('Closing EventQueue.')
         async with self._lock:
@@ -176,21 +184,28 @@ class EventQueue:
             while not self.queue.empty():
                 try:
                     event = self.queue.get_nowait()
-                    logger.debug(f'Discarding unprocessed event of type: {type(event)}, content: {event}')
+                    logger.debug(
+                        f'Discarding unprocessed event of type: {type(event)}, content: {event}'
+                    )
                     self.queue.task_done()
                     cleared_count += 1
                 except asyncio.QueueEmpty:
                     break
 
             if cleared_count > 0:
-                logger.debug(f'Cleared {cleared_count} unprocessed events from EventQueue.')
+                logger.debug(
+                    f'Cleared {cleared_count} unprocessed events from EventQueue.'
+                )
 
             # Clear all child queues
             if clear_child_queues:
                 child_tasks = []
                 for child in self._children:
-                    child_tasks.append(asyncio.create_task(child.clear_events()))
+                    child_tasks.append(
+                        asyncio.create_task(child.clear_events())
+                    )
 
                 if child_tasks:
-                    await asyncio.wait(child_tasks, return_when=asyncio.ALL_COMPLETED)
-
+                    await asyncio.wait(
+                        child_tasks, return_when=asyncio.ALL_COMPLETED
+                    )
