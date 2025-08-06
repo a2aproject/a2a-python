@@ -125,8 +125,7 @@ class EventConsumer:
                 # other part is waiting for an event or a closed queue.
                 if is_final_event:
                     logger.debug('Stopping event consumption in consume_all.')
-                    await self.queue.clear_events()
-                    await self.queue.close()
+                    await self.queue.close(True)
                     yield event
                     break
                 yield event

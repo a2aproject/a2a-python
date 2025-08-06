@@ -127,7 +127,7 @@ class EventQueue:
         self._children.append(queue)
         return queue
 
-    async def close(self) -> None:
+    async def close(self, immediate: bool = False) -> None:
         """Closes the queue for future push events.
 
         Once closed, `dequeue_event` will eventually raise `asyncio.QueueShutDown`
@@ -136,16 +136,20 @@ class EventQueue:
         logger.debug('Closing EventQueue.')
         async with self._lock:
             # If already closed, just return.
-            if self._is_closed:
+            if self._is_closed and not immediate:
                 return
-            self._is_closed = True
+            if not self._is_closed:
+                self._is_closed = True
         # If using python 3.13 or higher, use the shutdown method
         if sys.version_info >= (3, 13):
-            self.queue.shutdown()
+            self.queue.shutdown(immediate)
             for child in self._children:
-                await child.close()
+                await child.close(immediate)
         # Otherwise, join the queue
         else:
+            if immediate:
+                await self.clear_events(True)
+                return
             tasks = [asyncio.create_task(self.queue.join())]
             for child in self._children:
                 tasks.append(asyncio.create_task(child.close()))
