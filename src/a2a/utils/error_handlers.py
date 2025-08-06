@@ -2,9 +2,18 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from starlette.responses import JSONResponse, Response
+
+if TYPE_CHECKING:
+    from starlette.responses import JSONResponse, Response
+else:
+    try:
+        from starlette.responses import JSONResponse, Response
+    except ImportError:
+        JSONResponse = Any
+        Response = Any
+
 
 from a2a._base import A2ABaseModel
 from a2a.types import (

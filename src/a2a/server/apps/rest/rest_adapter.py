@@ -4,10 +4,6 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from sse_starlette.sse import EventSourceResponse
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
