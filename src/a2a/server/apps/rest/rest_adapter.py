@@ -94,7 +94,7 @@ class RESTAdapter:
             A JSONResponse containing the agent card data.
         """
         if self.agent_card.supports_authenticated_extended_card:
-            return await self.handle_authenticated_agent_card(request)
+            return await self.handle_authenticated_agent_card(request) # type: ignore[return-value]
 
         # The public agent card is a direct serialization of the agent_card
         # provided at initialization.
@@ -124,7 +124,7 @@ class RESTAdapter:
                 )
             )
         return JSONResponse(
-            content=self.agent_card.model_dump(mode='json', exclude_none=True)
+            self.agent_card.model_dump(mode='json', exclude_none=True)
         )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
