@@ -177,9 +177,10 @@ class EventQueue:
                               If False, only clear the current queue, leaving child queues untouched.
         """
         logger.debug('Clearing all events from EventQueue and child queues.')
+        
+        # Clear all events from the queue, even if closed
+        cleared_count = 0
         async with self._lock:
-            # Clear all events from the queue, even if closed
-            cleared_count = 0
             while not self.queue.empty():
                 try:
                     event = self.queue.get_nowait()
@@ -196,15 +197,12 @@ class EventQueue:
                     f'Cleared {cleared_count} unprocessed events from EventQueue.'
                 )
 
-            # Clear all child queues
-            if clear_child_queues:
-                child_tasks = []
-                for child in self._children:
-                    child_tasks.append(
-                        asyncio.create_task(child.clear_events())
-                    )
-
-                if child_tasks:
-                    await asyncio.wait(
-                        child_tasks, return_when=asyncio.ALL_COMPLETED
-                    )
+        # Clear all child queues (lock released before awaiting child tasks)
+        if clear_child_queues and self._children:
+            child_tasks = [
+                asyncio.create_task(child.clear_events())
+                for child in self._children
+            ]
+            
+            if child_tasks:
+                await asyncio.gather(*child_tasks, return_exceptions=True)
