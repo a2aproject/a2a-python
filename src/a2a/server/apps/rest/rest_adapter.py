@@ -94,7 +94,7 @@ class RESTAdapter:
             A JSONResponse containing the agent card data.
         """
         if self.agent_card.supports_authenticated_extended_card:
-            return await self.handle_authenticated_agent_card(request) # type: ignore[return-value]
+            return await self.handle_authenticated_agent_card(request)  # type: ignore[return-value]
 
         # The public agent card is a direct serialization of the agent_card
         # provided at initialization.
