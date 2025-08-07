@@ -160,5 +160,5 @@ class EventConsumer:
             agent_task: The asyncio.Task that completed.
         """
         logger.debug('Agent task callback triggered.')
-        if agent_task.exception() is not None:
+        if not agent_task.cancelled() and agent_task.done():
             self._exception = agent_task.exception()

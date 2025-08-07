@@ -327,24 +327,56 @@ async def test_consume_all_continues_on_queue_empty_if_not_really_closed(
 def test_agent_task_callback_sets_exception(event_consumer: EventConsumer):
     """Test that agent_task_callback sets _exception if the task had one."""
     mock_task = MagicMock(spec=asyncio.Task)
+    mock_task.cancelled.return_value = False
+    mock_task.done.return_value = True
     sample_exception = ValueError('Task failed')
     mock_task.exception.return_value = sample_exception
 
     event_consumer.agent_task_callback(mock_task)
 
     assert event_consumer._exception == sample_exception
-    # mock_task.exception.assert_called_once() # Removing this, as exception() might be called internally by the check
+    mock_task.exception.assert_called_once()
 
 
 def test_agent_task_callback_no_exception(event_consumer: EventConsumer):
     """Test that agent_task_callback does nothing if the task has no exception."""
     mock_task = MagicMock(spec=asyncio.Task)
+    mock_task.cancelled.return_value = False
+    mock_task.done.return_value = True
     mock_task.exception.return_value = None  # No exception
 
     event_consumer.agent_task_callback(mock_task)
 
     assert event_consumer._exception is None  # Should remain None
     mock_task.exception.assert_called_once()
+
+
+def test_agent_task_callback_cancelled_task(event_consumer: EventConsumer):
+    """Test that agent_task_callback does nothing if the task has no exception."""
+    mock_task = MagicMock(spec=asyncio.Task)
+    mock_task.cancelled.return_value = True
+    mock_task.done.return_value = True
+    sample_exception = ValueError('Task still running')
+    mock_task.exception.return_value = sample_exception
+
+    event_consumer.agent_task_callback(mock_task)
+
+    assert event_consumer._exception is None  # Should remain None
+    mock_task.exception.assert_not_called()
+
+
+def test_agent_task_callback_not_done_task(event_consumer: EventConsumer):
+    """Test that agent_task_callback does nothing if the task has no exception."""
+    mock_task = MagicMock(spec=asyncio.Task)
+    mock_task.cancelled.return_value = False
+    mock_task.done.return_value = False
+    sample_exception = ValueError('Task is cancelled')
+    mock_task.exception.return_value = sample_exception
+
+    event_consumer.agent_task_callback(mock_task)
+
+    assert event_consumer._exception is None  # Should remain None
+    mock_task.exception.assert_not_called()
 
 
 @pytest.mark.asyncio
