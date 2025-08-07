@@ -105,7 +105,7 @@ class RESTAdapter:
     @rest_error_handler
     async def handle_authenticated_agent_card(
         self, request: Request
-    ) -> JSONResponse:  # type: ignore[return-value]
+    ) -> JSONResponse:
         """Hook for per credential agent card response.
 
         If a dynamic card is needed based on the credentials provided in the request
@@ -124,7 +124,7 @@ class RESTAdapter:
                 )
             )
         return JSONResponse(
-            self.agent_card.model_dump(mode='json', exclude_none=True)
+            content=self.agent_card.model_dump(mode='json', exclude_none=True)
         )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
