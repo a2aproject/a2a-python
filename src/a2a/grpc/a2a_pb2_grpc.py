@@ -17,9 +17,6 @@ class A2AServiceStub(object):
     - TaskPushNotificationConfig are a resource whose parent is a task.
     They have get, list and create methods.
     - AgentCard is a static resource with only a get method.
-    fields are not present as they don't comply with AIP rules, and the
-    optional history_length on the get task method is not present as it also
-    violates AIP-127 and AIP-131.
     """
 
     def __init__(self, channel):
@@ -91,9 +88,6 @@ class A2AServiceServicer(object):
     - TaskPushNotificationConfig are a resource whose parent is a task.
     They have get, list and create methods.
     - AgentCard is a static resource with only a get method.
-    fields are not present as they don't comply with AIP rules, and the
-    optional history_length on the get task method is not present as it also
-    violates AIP-127 and AIP-131.
     """
 
     def SendMessage(self, request, context):
@@ -244,9 +238,6 @@ class A2AService(object):
     - TaskPushNotificationConfig are a resource whose parent is a task.
     They have get, list and create methods.
     - AgentCard is a static resource with only a get method.
-    fields are not present as they don't comply with AIP rules, and the
-    optional history_length on the get task method is not present as it also
-    violates AIP-127 and AIP-131.
     """
 
     @staticmethod
