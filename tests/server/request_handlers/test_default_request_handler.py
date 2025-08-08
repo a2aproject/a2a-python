@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 
+from typing import Any
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -57,7 +58,9 @@ from a2a.utils import (
 
 
 class DummyAgentExecutor(AgentExecutor):
-    async def execute(self, context: RequestContext, event_queue: EventQueue):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue, request_handler: Any
+    ):
         task_updater = TaskUpdater(
             event_queue, context.task_id, context.context_id
         )
@@ -584,7 +587,12 @@ async def test_on_message_send_task_id_mismatch():
 
 
 class HelloAgentExecutor(AgentExecutor):
-    async def execute(self, context: RequestContext, event_queue: EventQueue):
+    async def execute(
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+        request_handler: Any,
+    ):
         task = context.current_task
         if not task:
             assert context.message is not None, (
