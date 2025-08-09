@@ -104,7 +104,7 @@ class EventConsumer:
 
                 is_final_event = (
                     (isinstance(event, TaskStatusUpdateEvent) and event.final)
-                    or isinstance(event, Message)
+                    or (isinstance(event, Message) and not event.isDelta)
                     or (
                         isinstance(event, Task)
                         and event.status.state
