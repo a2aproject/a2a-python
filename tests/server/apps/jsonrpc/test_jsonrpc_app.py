@@ -92,7 +92,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
         # This will fail at definition time if an abstract method is not implemented
         with pytest.raises(
             TypeError,
-            match="Can't instantiate abstract class IncompleteJSONRPCApp with abstract method build",
+            match=".*abstract class IncompleteJSONRPCApp .* abstract method '?build'?",
         ):
 
             class IncompleteJSONRPCApp(JSONRPCApplication):
