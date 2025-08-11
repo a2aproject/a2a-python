@@ -33,11 +33,17 @@ class RESTAdapter:
     manages response generation including Server-Sent Events (SSE).
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
         http_handler: RequestHandler,
+        extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], AgentCard
+        ]
+        | None = None,
     ):
         """Initializes the RESTApplication.
 
@@ -45,14 +51,32 @@ class RESTAdapter:
             agent_card: The AgentCard describing the agent's capabilities.
             http_handler: The handler instance responsible for processing A2A
               requests via http.
+            extended_agent_card: An optional, distinct AgentCard to be served
+              at the authenticated extended card endpoint.
             context_builder: The CallContextBuilder used to construct the
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
         """
         self.agent_card = agent_card
+        self.extended_agent_card = extended_agent_card
+        self.card_modifier = card_modifier
+        self.extended_card_modifier = extended_card_modifier
         self.handler = RESTHandler(
             agent_card=agent_card, request_handler=http_handler
         )
+        if (
+            self.agent_card.supports_authenticated_extended_card
+            and self.extended_agent_card is None
+            and self.extended_card_modifier is None
+        ):
+            logger.error(
+                'AgentCard.supports_authenticated_extended_card is True, but no extended_agent_card was provided. The /agent/authenticatedExtendedCard endpoint will return 404.'
+            )
         self._context_builder = context_builder or DefaultCallContextBuilder()
 
     @rest_error_handler
@@ -84,28 +108,33 @@ class RESTAdapter:
         )
 
     @rest_error_handler
-    async def handle_get_agent_card(self, request: Request) -> JSONResponse:
+    async def handle_get_agent_card(
+        self, request: Request, call_context: ServerCallContext | None = None
+    ) -> JSONResponse | Response:
         """Handles GET requests for the agent card endpoint.
 
         Args:
             request: The incoming Starlette Request object.
+            call_context: ServerCallContext
 
         Returns:
             A JSONResponse containing the agent card data.
         """
-        if self.agent_card.supports_authenticated_extended_card:
-            return await self.handle_authenticated_agent_card(request)  # type: ignore[return-value]
+        card_to_serve = self.agent_card
+        if self.card_modifier:
+            card_to_serve = self.card_modifier(card_to_serve)
 
-        # The public agent card is a direct serialization of the agent_card
-        # provided at initialization.
         return JSONResponse(
-            self.agent_card.model_dump(mode='json', exclude_none=True)
+            card_to_serve.model_dump(
+                exclude_none=True,
+                by_alias=True,
+            )
         )
 
     @rest_error_handler
     async def handle_authenticated_agent_card(
-        self, request: Request
-    ) -> JSONResponse:
+        self, request: Request, call_context: ServerCallContext | None = None
+    ) -> JSONResponse | Response:
         """Hook for per credential agent card response.
 
         If a dynamic card is needed based on the credentials provided in the request
@@ -113,6 +142,7 @@ class RESTAdapter:
 
         Args:
             request: The incoming Starlette Request  object.
+            call_context: ServerCallContext
 
         Returns:
             A JSONResponse containing the authenticated card.
@@ -123,8 +153,29 @@ class RESTAdapter:
                     message='Authenticated card not supported'
                 )
             )
+        card_to_serve = self.extended_agent_card
+
+        if self.extended_card_modifier:
+            context = self._context_builder.build(request)
+            # If no base extended card is provided, pass the public card to the modifier
+            base_card = card_to_serve if card_to_serve else self.agent_card
+            card_to_serve = self.extended_card_modifier(base_card, context)
+
+        if card_to_serve:
+            return JSONResponse(
+                card_to_serve.model_dump(
+                    exclude_none=True,
+                    by_alias=True,
+                )
+            )
+        # If supports_authenticated_extended_card is true, but no
+        # extended_agent_card was provided, and no modifier produced a card,
+        # return a 404.
         return JSONResponse(
-            self.agent_card.model_dump(mode='json', exclude_none=True)
+            {
+                'error': 'Authenticated extended agent card is supported but not configured on the server.'
+            },
+            status_code=404,
         )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
@@ -177,7 +228,13 @@ class RESTAdapter:
             ('/v1/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
-            ('/v1/card', 'GET'): self.handle_get_agent_card,
+            ('v1/well_known/agent_json', 'GET'): functools.partial(
+                self._handle_request, self.handle_get_agent_card
+            ),
         }
+        if self.agent_card.supports_authenticated_extended_card:
+            routes[('/v1/card', 'GET')] = functools.partial(
+                self._handle_request, self.handle_authenticated_agent_card
+            )
 
         return routes

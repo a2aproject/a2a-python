@@ -1,11 +1,13 @@
 import logging
 
+from collections.abc import Callable
 from typing import Any
 
 from fastapi import APIRouter, FastAPI, Request, Response
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
@@ -22,11 +24,17 @@ class A2ARESTFastAPIApplication:
     (SSE).
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
         http_handler: RequestHandler,
+        extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], AgentCard
+        ]
+        | None = None,
     ):
         """Initializes the A2ARESTFastAPIApplication.
 
@@ -39,11 +47,19 @@ class A2ARESTFastAPIApplication:
             context_builder: The CallContextBuilder used to construct the
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
         """
         self._adapter = RESTAdapter(
             agent_card=agent_card,
             http_handler=http_handler,
+            extended_agent_card=extended_agent_card,
             context_builder=context_builder,
+            card_modifier=card_modifier,
+            extended_card_modifier=extended_card_modifier,
         )
 
     def build(
