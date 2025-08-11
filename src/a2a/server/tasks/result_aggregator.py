@@ -4,6 +4,7 @@ import logging
 from collections.abc import AsyncGenerator, AsyncIterator
 
 from a2a.server.events import Event, EventConsumer
+from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import Message, Task, TaskState, TaskStatusUpdateEvent
 
@@ -24,14 +25,20 @@ class ResultAggregator:
        Task object and emit that Task object.
     """
 
-    def __init__(self, task_manager: TaskManager):
+    def __init__(
+        self,
+        task_manager: TaskManager,
+        push_sender: PushNotificationSender | None = None,
+    ) -> None:
         """Initializes the ResultAggregator.
 
         Args:
             task_manager: The `TaskManager` instance to use for processing events
                           and managing the task state.
+            push_sender: The `PushNotificationSender` instance to use for sending push notifications.
         """
         self.task_manager = task_manager
+        self.push_sender = push_sender
         self._message: Message | None = None
 
     @property
@@ -168,3 +175,11 @@ class ResultAggregator:
         """
         async for event in event_stream:
             await self.task_manager.process(event)
+            await self._send_push_notification_if_needed()
+
+    async def _send_push_notification_if_needed(self) -> None:
+        """Sends push notification if configured and task is available."""
+        if self.push_sender:
+            latest_task = await self.current_result
+            if isinstance(latest_task, Task):
+                await self.push_sender.send_notification(latest_task)

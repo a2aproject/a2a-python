@@ -231,7 +231,10 @@ class DefaultRequestHandler(RequestHandler):
             )
 
         queue = await self._queue_manager.create_or_tap(task_id)
-        result_aggregator = ResultAggregator(task_manager)
+        result_aggregator = ResultAggregator(
+            task_manager,
+            push_sender=self._push_sender,
+        )
         # TODO: to manage the non-blocking flows.
         producer_task = asyncio.create_task(
             self._run_event_stream(request_context, queue)
