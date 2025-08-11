@@ -286,11 +286,19 @@ class DefaultRequestHandler(RequestHandler):
 
         interrupted_or_non_blocking = False
         try:
+            # Create async callback for push notifications
+            async def push_notification_callback() -> None:
+                await self._send_push_notification_if_needed(
+                    task_id, result_aggregator
+                )
+
             (
                 result,
                 interrupted_or_non_blocking,
             ) = await result_aggregator.consume_and_break_on_interrupt(
-                consumer, blocking=blocking
+                consumer,
+                blocking=blocking,
+                event_callback=push_notification_callback,
             )
             if not result:
                 raise ServerError(error=InternalError())
