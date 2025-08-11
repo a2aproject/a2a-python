@@ -2,11 +2,30 @@ import functools
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from sse_starlette.sse import EventSourceResponse
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
+
+if TYPE_CHECKING:
+    from sse_starlette.sse import EventSourceResponse
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+
+    _package_starlette_installed = True
+
+else:
+    try:
+        from sse_starlette.sse import EventSourceResponse
+        from starlette.requests import Request
+        from starlette.responses import JSONResponse, Response
+
+        _package_starlette_installed = True
+    except ImportError:
+        EventSourceResponse = Any
+        Request = Any
+        JSONResponse = Any
+        Response = Any
+
+        _package_starlette_installed = False
 
 from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
@@ -62,6 +81,12 @@ class RESTAdapter:
               the extended agent card before it is served. It receives the
               call context.
         """
+        if not _package_starlette_installed:
+            raise ImportError(
+                'Packages `starlette` and `sse-starlette` are required to use'
+                ' the `RESTAdapter`. They can be added as a part of `a2a-sdk`'
+                ' optional dependencies, `a2a-sdk[http-server]`.'
+            )
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier

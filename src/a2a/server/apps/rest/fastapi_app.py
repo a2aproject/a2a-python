@@ -1,9 +1,26 @@
 import logging
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, FastAPI, Request, Response
+
+if TYPE_CHECKING:
+    from fastapi import APIRouter, FastAPI, Request, Response
+
+    _package_fastapi_installed = True
+else:
+    try:
+        from fastapi import APIRouter, FastAPI, Request, Response
+
+        _package_fastapi_installed = True
+    except ImportError:
+        APIRouter = Any
+        FastAPI = Any
+        Request = Any
+        Response = Any
+
+        _package_fastapi_installed = False
+
 
 from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
@@ -53,6 +70,12 @@ class A2ARESTFastAPIApplication:
               the extended agent card before it is served. It receives the
               call context.
         """
+        if not _package_fastapi_installed:
+            raise ImportError(
+                'The `fastapi` package is required to use the'
+                ' `A2ARESTFastAPIApplication`. It can be added as a part of'
+                ' `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
+            )
         self._adapter = RESTAdapter(
             agent_card=agent_card,
             http_handler=http_handler,

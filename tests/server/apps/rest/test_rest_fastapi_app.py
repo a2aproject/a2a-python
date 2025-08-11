@@ -1,5 +1,7 @@
 import logging
 
+from typing import Any
+
 from unittest.mock import MagicMock
 
 import pytest
@@ -9,6 +11,9 @@ from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
 from a2a.grpc import a2a_pb2
+from a2a.server.apps.rest import fastapi_app
+from a2a.server.apps.rest import rest_adapter
+from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
@@ -55,6 +60,84 @@ async def client(app: FastAPI) -> AsyncClient:
     return AsyncClient(
         transport=ASGITransport(app=app), base_url='http://testapp'
     )
+
+
+@pytest.fixture
+def mark_pkg_starlette_not_installed():
+    pkg_starlette_installed_flag = rest_adapter._package_starlette_installed
+    rest_adapter._package_starlette_installed = False
+    yield
+    rest_adapter._package_starlette_installed = pkg_starlette_installed_flag
+
+
+@pytest.fixture
+def mark_pkg_fastapi_not_installed():
+    pkg_fastapi_installed_flag = fastapi_app._package_fastapi_installed
+    fastapi_app._package_fastapi_installed = False
+    yield
+    fastapi_app._package_fastapi_installed = pkg_fastapi_installed_flag
+
+
+@pytest.mark.anyio
+async def test_create_rest_adapter_with_present_deps_succeeds(
+    agent_card: AgentCard, request_handler: RequestHandler
+):
+    try:
+        _app = RESTAdapter(agent_card, request_handler)
+    except ImportError:
+        pytest.fail(
+            'With packages starlette and see-starlette present, creating an'
+            ' RESTAdapter instance should not raise ImportError'
+        )
+
+
+@pytest.mark.anyio
+async def test_create_rest_adapter_with_missing_deps_raises_importerror(
+    agent_card: AgentCard,
+    request_handler: RequestHandler,
+    mark_pkg_starlette_not_installed: Any,
+):
+    with pytest.raises(
+        ImportError,
+        match=(
+            'Packages `starlette` and `sse-starlette` are required to use'
+            ' the `RESTAdapter`.'
+        ),
+    ):
+        _app = RESTAdapter(agent_card, request_handler)
+
+
+@pytest.mark.anyio
+async def test_create_a2a_rest_fastapi_app_with_present_deps_succeeds(
+    agent_card: AgentCard, request_handler: RequestHandler
+):
+    try:
+        _app = A2ARESTFastAPIApplication(agent_card, request_handler).build(
+            agent_card_url='/well-known/agent.json', rpc_url=''
+        )
+    except ImportError:
+        pytest.fail(
+            'With the fastapi package present, creating a'
+            ' A2ARESTFastAPIApplication instance should not raise ImportError'
+        )
+
+
+@pytest.mark.anyio
+async def test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror(
+    agent_card: AgentCard,
+    request_handler: RequestHandler,
+    mark_pkg_fastapi_not_installed: Any,
+):
+    with pytest.raises(
+        ImportError,
+        match=(
+            'The `fastapi` package is required to use the'
+            ' `A2ARESTFastAPIApplication`'
+        ),
+    ):
+        _app = A2ARESTFastAPIApplication(agent_card, request_handler).build(
+            agent_card_url='/well-known/agent.json', rpc_url=''
+        )
 
 
 @pytest.mark.anyio

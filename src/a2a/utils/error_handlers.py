@@ -2,9 +2,18 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from starlette.responses import JSONResponse, Response
+
+if TYPE_CHECKING:
+    from starlette.responses import JSONResponse, Response
+else:
+    try:
+        from starlette.responses import JSONResponse, Response
+    except ImportError:
+        JSONResponse = Any
+        Response = Any
+
 
 from a2a._base import A2ABaseModel
 from a2a.types import (
@@ -83,7 +92,7 @@ def rest_error_handler(
 def rest_stream_error_handler(
     func: Callable[..., Coroutine[Any, Any, Any]],
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch ServerError for a straming method,log it and then rethrow it to be handled by framework."""
+    """Decorator to catch ServerError for a streaming method,log it and then rethrow it to be handled by framework."""
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:

@@ -195,7 +195,7 @@ class DefaultRequestHandler(RequestHandler):
             if task.status.state in TERMINAL_TASK_STATES:
                 raise ServerError(
                     error=InvalidParamsError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state}'
+                        message=f'Task {task.id} is in terminal state: {task.status.state.value}'
                     )
                 )
 
@@ -437,7 +437,7 @@ class DefaultRequestHandler(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
                 error=InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    message=f'Task {task.id} is in terminal state: {task.status.state.value}'
                 )
             )
 

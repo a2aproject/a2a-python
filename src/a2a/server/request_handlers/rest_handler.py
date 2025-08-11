@@ -1,10 +1,19 @@
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
-from starlette.requests import Request
+
+
+if TYPE_CHECKING:
+    from starlette.requests import Request
+else:
+    try:
+        from starlette.requests import Request
+    except ImportError:
+        Request = Any
+
 
 from a2a.grpc import a2a_pb2
 from a2a.server.context import ServerCallContext
