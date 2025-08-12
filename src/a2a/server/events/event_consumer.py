@@ -140,13 +140,11 @@ class EventConsumer:
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():
                     break
-            except ValidationError as e:
-                logger.exception(f'Invalid event format received: {e}')
+            except ValidationError:
+                logger.exception('Invalid event format received')
                 continue
             except Exception as e:
-                logger.exception(
-                    f'Stopping event consumption due to exception: {e}'
-                )
+                logger.exception('Stopping event consumption due to exception')
                 self._exception = e
                 continue
 

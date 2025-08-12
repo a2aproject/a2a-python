@@ -252,12 +252,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             for model in models:
                 try:
                     configs.append(self._from_orm(model))
-                except ValueError as e:
+                except ValueError:
                     logger.exception(
-                        'Could not deserialize push notification config for task %s, config %s: %s',
+                        'Could not deserialize push notification config for task %s, config %s',
                         model.task_id,
                         model.config_id,
-                        e,
                     )
             return configs
 

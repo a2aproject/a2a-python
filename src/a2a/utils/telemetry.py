@@ -193,8 +193,6 @@ def trace_function(  # noqa: PLR0915
                 # Async wrapper, await for the function call to complete.
                 result = await func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-                return result
-
             # asyncio.CancelledError extends from BaseException
             except asyncio.CancelledError as ce:
                 exception = None
@@ -212,10 +210,11 @@ def trace_function(  # noqa: PLR0915
                         attribute_extractor(
                             span, args, kwargs, result, exception
                         )
-                    except Exception as attr_e:
+                    except Exception:
                         logger.exception(
-                            f'attribute_extractor error in span {actual_span_name}: {attr_e}'
+                            f'attribute_extractor error in span {actual_span_name}'
                         )
+            return result
 
     @functools.wraps(func)
     def sync_wrapper(*args, **kwargs) -> Any:
@@ -233,7 +232,6 @@ def trace_function(  # noqa: PLR0915
                 # Sync wrapper, execute the function call.
                 result = func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-                return result
 
             except Exception as e:
                 exception = e
@@ -246,10 +244,11 @@ def trace_function(  # noqa: PLR0915
                         attribute_extractor(
                             span, args, kwargs, result, exception
                         )
-                    except Exception as attr_e:
+                    except Exception:
                         logger.exception(
-                            f'attribute_extractor error in span {actual_span_name}: {attr_e}'
+                            f'attribute_extractor error in span {actual_span_name}'
                         )
+            return result
 
     return async_wrapper if is_async_func else sync_wrapper
 
