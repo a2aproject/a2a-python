@@ -135,7 +135,7 @@ class RESTAdapter:
     @rest_error_handler
     async def handle_get_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
-    ) -> JSONResponse | Response:
+    ) -> JSONResponse | Response | Any:
         """Handles GET requests for the agent card endpoint.
 
         Args:
@@ -157,7 +157,7 @@ class RESTAdapter:
     @rest_error_handler
     async def handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
-    ) -> JSONResponse | Response:
+    ) -> JSONResponse | Response | Any:
         """Hook for per credential agent card response.
 
         If a dynamic card is needed based on the credentials provided in the request
