@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -20,8 +20,7 @@ from a2a.types import (
 
 @pytest.fixture
 def mock_transport():
-    transport = AsyncMock(spec=ClientTransport)
-    return transport
+    return AsyncMock(spec=ClientTransport)
 
 
 @pytest.fixture

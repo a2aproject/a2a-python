@@ -64,9 +64,9 @@ class BasePushNotificationSender(PushNotificationSender):
             logger.info(
                 f'Push-notification sent for task_id={task.id} to URL: {url}'
             )
-            return True
-        except Exception as e:
-            logger.error(
-                f'Error sending push-notification for task_id={task.id} to URL: {url}. Error: {e}'
+        except Exception:
+            logger.exception(
+                f'Error sending push-notification for task_id={task.id} to URL: {url}.'
             )
             return False
+        return True

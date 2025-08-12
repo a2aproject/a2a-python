@@ -175,7 +175,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     decrypted_payload
                 )
             except (json.JSONDecodeError, ValidationError) as e:
-                logger.error(
+                logger.exception(
                     'Failed to parse decrypted push notification config for task %s, config %s. '
                     'Data is corrupted or not valid JSON after decryption.',
                     model_instance.task_id,
@@ -201,7 +201,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             return PushNotificationConfig.model_validate_json(payload)
         except (json.JSONDecodeError, ValidationError) as e:
             if self._fernet:
-                logger.error(
+                logger.exception(
                     'Failed to parse push notification config for task %s, config %s. '
                     'Decryption failed and the data is not valid JSON. '
                     'This likely indicates the data is corrupted or encrypted with a different key.',
@@ -210,7 +210,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 )
             else:
                 # if no key is configured and the payload is not valid JSON.
-                logger.error(
+                logger.exception(
                     'Failed to parse push notification config for task %s, config %s. '
                     'Data is not valid JSON and no encryption key is configured.',
                     model_instance.task_id,
@@ -252,12 +252,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             for model in models:
                 try:
                     configs.append(self._from_orm(model))
-                except ValueError as e:
-                    logger.error(
-                        'Could not deserialize push notification config for task %s, config %s: %s',
+                except ValueError:
+                    logger.exception(
+                        'Could not deserialize push notification config for task %s, config %s',
                         model.task_id,
                         model.config_id,
-                        e,
                     )
             return configs
 
