@@ -34,7 +34,7 @@ class InMemoryQueueManager(QueueManager):
         """
         async with self._lock:
             if task_id in self._task_queue:
-                raise TaskQueueExists()
+                raise TaskQueueExists
             self._task_queue[task_id] = queue
 
     async def get(self, task_id: str) -> EventQueue | None:
@@ -67,7 +67,7 @@ class InMemoryQueueManager(QueueManager):
         """
         async with self._lock:
             if task_id not in self._task_queue:
-                raise NoTaskQueue()
+                raise NoTaskQueue
             queue = self._task_queue.pop(task_id)
             await queue.close()
 

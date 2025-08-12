@@ -1,7 +1,6 @@
 import logging
 
 from typing import Any
-
 from unittest.mock import MagicMock
 
 import pytest
@@ -11,10 +10,9 @@ from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
 from a2a.grpc import a2a_pb2
-from a2a.server.apps.rest import fastapi_app
-from a2a.server.apps.rest import rest_adapter
-from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.apps.rest import fastapi_app, rest_adapter
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
+from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
     AgentCard,
