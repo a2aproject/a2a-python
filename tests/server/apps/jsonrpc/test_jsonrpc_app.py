@@ -112,8 +112,8 @@ class TestJSONRPCApplicationOptionalDeps:
     @pytest.fixture(scope='class', autouse=True)
     def ensure_pkg_starlette_is_present(self):
         try:
-            import starlette as _starlette
-            import sse_starlette as _sse_starlette
+            import sse_starlette as _sse_starlette  # noqa: F401
+            import starlette as _starlette  # noqa: F401
         except ImportError:
             pytest.fail(
                 f'Running tests in {self.__class__.__name__} requires'
