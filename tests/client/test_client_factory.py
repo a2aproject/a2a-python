@@ -132,4 +132,3 @@ def test_client_factory_invalid_transport_in_config(
     factory = ClientFactory(config)
     with pytest.raises(ValueError, match=expected_match):
         factory.create(base_agent_card)
-

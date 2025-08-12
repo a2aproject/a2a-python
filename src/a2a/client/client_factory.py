@@ -129,11 +129,13 @@ class ClientFactory:
 
         invalid_transports = configured_transports.difference(valid_transports)
         if invalid_transports:
-            invalid_str = ", ".join(sorted(f"'{t}'" for t in invalid_transports))
-            valid_str = ", ".join(sorted(valid_transports))
+            invalid_str = ', '.join(
+                sorted(f"'{t}'" for t in invalid_transports)
+            )
+            valid_str = ', '.join(sorted(valid_transports))
             raise ValueError(
-                f"Unsupported transport type(s) in ClientConfig: {invalid_str}. "
-                f"Valid types are: {valid_str}"
+                f'Unsupported transport type(s) in ClientConfig: {invalid_str}. '
+                f'Valid types are: {valid_str}'
             )
 
         server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
