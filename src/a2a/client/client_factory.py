@@ -125,12 +125,16 @@ class ClientFactory:
           server configuration, a `ValueError` is raised.
         """
         valid_transports = {member.value for member in TransportProtocol}
-        for transport in self._config.supported_transports:
-            if transport not in valid_transports:
-                raise ValueError(
-                    f"Unsupported transport type in ClientConfig: '{transport}'. "
-                    f'Valid types are: {", ".join(sorted(valid_transports))}',
-                )
+        configured_transports = set(self._config.supported_transports)
+
+        invalid_transports = configured_transports.difference(valid_transports)
+        if invalid_transports:
+            invalid_str = ", ".join(sorted(f"'{t}'" for t in invalid_transports))
+            valid_str = ", ".join(sorted(valid_transports))
+            raise ValueError(
+                f"Unsupported transport type(s) in ClientConfig: {invalid_str}. "
+                f"Valid types are: {valid_str}"
+            )
 
         server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
         server_set = {server_preferred: card.url}
