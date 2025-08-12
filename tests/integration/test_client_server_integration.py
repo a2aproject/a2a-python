@@ -718,6 +718,33 @@ async def test_http_transport_get_card(
 
 
 @pytest.mark.asyncio
+async def test_http_transport_get_authenticated_card(
+    agent_card: AgentCard,
+    mock_request_handler: AsyncMock,
+) -> None:
+    agent_card.supports_authenticated_extended_card = True
+    extended_agent_card = agent_card.model_copy(deep=True)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    app_builder = A2ARESTFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
+    result = await transport.get_card()
+    assert result.name == extended_agent_card.name
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
 async def test_grpc_transport_get_card(
     grpc_server_and_handler: tuple[str, AsyncMock],
     agent_card: AgentCard,

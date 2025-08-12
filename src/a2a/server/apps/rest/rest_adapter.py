@@ -149,11 +149,9 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
-        return JSONResponse(
-            card_to_serve.model_dump(
-                exclude_none=True,
-                by_alias=True,
-            )
+        return card_to_serve.model_dump(
+            exclude_none=True,
+            by_alias=True,
         )
 
     @rest_error_handler
@@ -187,11 +185,9 @@ class RESTAdapter:
             card_to_serve = self.extended_card_modifier(base_card, context)
 
         if card_to_serve:
-            return JSONResponse(
-                card_to_serve.model_dump(
-                    exclude_none=True,
-                    by_alias=True,
-                )
+            return card_to_serve.model_dump(
+                exclude_none=True,
+                by_alias=True,
             )
         # If supports_authenticated_extended_card is true, but no
         # extended_agent_card was provided, and no modifier produced a card,
@@ -253,7 +249,7 @@ class RESTAdapter:
             ('/v1/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
-            ('v1/well_known/agent_json', 'GET'): functools.partial(
+            ('/v1/well_known/agent_json', 'GET'): functools.partial(
                 self._handle_request, self.handle_get_agent_card
             ),
         }
