@@ -91,7 +91,7 @@ class ClientFactory:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
-                    'You can install them with \'pip install "a2a-sdk[grpc]"\''
+                    'You can install them with \'pip install "a2a-sdk[grpc]"\'',
                 )
             self.register(
                 TransportProtocol.grpc,
@@ -124,6 +124,14 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
+        valid_transports = {member.value for member in TransportProtocol}
+        for transport in self._config.supported_transports:
+            if transport not in valid_transports:
+                raise ValueError(
+                    f"Unsupported transport type in ClientConfig: '{transport}'. "
+                    f'Valid types are: {", ".join(sorted(valid_transports))}',
+                )
+
         server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
         server_set = {server_preferred: card.url}
         if card.additional_interfaces:

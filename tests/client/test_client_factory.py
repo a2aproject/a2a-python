@@ -103,3 +103,19 @@ def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
     factory = ClientFactory(config)
     with pytest.raises(ValueError, match='no compatible transports found'):
         factory.create(base_agent_card)
+
+
+def test_client_factory_invalid_transport_in_config(base_agent_card: AgentCard):
+    """Verify that the factory raises an error for an unknown transport type."""
+    config = ClientConfig(
+        httpx_client=httpx.AsyncClient(),
+        supported_transports=[
+            TransportProtocol.jsonrpc,
+            'invalid-transport-protocol',
+        ],
+    )
+    factory = ClientFactory(config)
+    with pytest.raises(
+        ValueError, match='Unsupported transport type in ClientConfig'
+    ):
+        factory.create(base_agent_card)
