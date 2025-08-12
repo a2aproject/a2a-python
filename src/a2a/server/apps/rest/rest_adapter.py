@@ -132,10 +132,9 @@ class RESTAdapter:
             event_generator(method(request, call_context))
         )
 
-    @rest_error_handler
     async def handle_get_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
-    ) -> JSONResponse | Response | Any:
+    ) -> dict[str, Any]:
         """Handles GET requests for the agent card endpoint.
 
         Args:
@@ -149,15 +148,11 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
-        return card_to_serve.model_dump(
-            exclude_none=True,
-            by_alias=True,
-        )
+        return card_to_serve.model_dump(mode='json', exclude_none=True)
 
-    @rest_error_handler
     async def handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
-    ) -> JSONResponse | Response | Any:
+    ) -> dict[str, Any]:
         """Hook for per credential agent card response.
 
         If a dynamic card is needed based on the credentials provided in the request
@@ -178,26 +173,16 @@ class RESTAdapter:
             )
         card_to_serve = self.extended_agent_card
 
+        if not card_to_serve:
+            card_to_serve = self.agent_card
+
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
             base_card = card_to_serve if card_to_serve else self.agent_card
             card_to_serve = self.extended_card_modifier(base_card, context)
 
-        if card_to_serve:
-            return card_to_serve.model_dump(
-                exclude_none=True,
-                by_alias=True,
-            )
-        # If supports_authenticated_extended_card is true, but no
-        # extended_agent_card was provided, and no modifier produced a card,
-        # return a 404.
-        return JSONResponse(
-            {
-                'error': 'Authenticated extended agent card is supported but not configured on the server.'
-            },
-            status_code=404,
-        )
+        return card_to_serve.model_dump(mode='json', exclude_none=True)
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
         """Constructs a dictionary of API routes and their corresponding handlers.
