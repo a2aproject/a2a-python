@@ -706,7 +706,7 @@ async def test_http_transport_get_card(
         transport_setup_fixture
     )
     transport = transport_setup.transport
-
+    # Get the base card.
     result = await transport.get_card()
 
     assert result.name == agent_card.name
