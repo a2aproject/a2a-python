@@ -6,11 +6,13 @@ from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI, Request, Response
+    from fastapi.responses import JSONResponse
 
     _package_fastapi_installed = True
 else:
     try:
         from fastapi import APIRouter, FastAPI, Request, Response
+        from fastapi.responses import JSONResponse
 
         _package_fastapi_installed = True
     except ImportError:
@@ -111,7 +113,8 @@ class A2ARESTFastAPIApplication:
 
         @router.get(f'{rpc_url}{agent_card_url}')
         async def get_agent_card(request: Request) -> Response:
-            return await self._adapter.handle_get_agent_card(request)
+            card = await self._adapter.handle_get_agent_card(request)
+            return JSONResponse(card)
 
         app.include_router(router)
         return app
