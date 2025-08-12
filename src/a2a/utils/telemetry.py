@@ -213,7 +213,7 @@ def trace_function(  # noqa: PLR0915
                             span, args, kwargs, result, exception
                         )
                     except Exception as attr_e:
-                        logger.error(
+                        logger.exception(
                             f'attribute_extractor error in span {actual_span_name}: {attr_e}'
                         )
 
@@ -247,7 +247,7 @@ def trace_function(  # noqa: PLR0915
                             span, args, kwargs, result, exception
                         )
                     except Exception as attr_e:
-                        logger.error(
+                        logger.exception(
                             f'attribute_extractor error in span {actual_span_name}: {attr_e}'
                         )
 

@@ -317,7 +317,7 @@ class JSONRPCApplication(ABC):
                 )
             raise e
         except Exception as e:
-            logger.error(f'Unhandled exception: {e}')
+            logger.exception(f'Unhandled exception: {e}')
             traceback.print_exc()
             return self._generate_error_response(
                 request_id, A2AError(root=InternalError(message=str(e)))

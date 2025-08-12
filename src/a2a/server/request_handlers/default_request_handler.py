@@ -303,7 +303,7 @@ class DefaultRequestHandler(RequestHandler):
             )
 
         except Exception as e:
-            logger.error(f'Agent execution failed. Error: {e}')
+            logger.exception(f'Agent execution failed. Error: {e}')
             raise
         finally:
             if interrupted_or_non_blocking:
