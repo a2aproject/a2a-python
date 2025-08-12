@@ -234,9 +234,6 @@ class RESTAdapter:
             ('/v1/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
-            ('/v1/well_known/agent_json', 'GET'): functools.partial(
-                self._handle_request, self.handle_get_agent_card
-            ),
         }
         if self.agent_card.supports_authenticated_extended_card:
             routes[('/v1/card', 'GET')] = functools.partial(
