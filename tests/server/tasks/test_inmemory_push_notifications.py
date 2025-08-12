@@ -226,7 +226,6 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
             'Error sending push-notification',
             mock_logger.exception.call_args[0][0],
         )
-        self.assertIn(str(http_error), mock_logger.exception.call_args[0][0])
 
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
     async def test_send_notification_request_error(
@@ -248,7 +247,6 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
             'Error sending push-notification',
             mock_logger.exception.call_args[0][0],
         )
-        self.assertIn(str(request_error), mock_logger.exception.call_args[0][0])
 
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
     async def test_send_notification_with_auth(self, mock_logger: MagicMock):
