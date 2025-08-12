@@ -187,7 +187,7 @@ class JSONRPCHandler:
                     CancelTaskSuccessResponse,
                     CancelTaskResponse,
                 )
-            raise ServerError(error=TaskNotFoundError())
+            raise ServerError(error=TaskNotFoundError())  # noqa: TRY301
         except ServerError as e:
             return CancelTaskResponse(
                 root=JSONRPCErrorResponse(
@@ -339,7 +339,7 @@ class JSONRPCHandler:
                     GetTaskSuccessResponse,
                     GetTaskResponse,
                 )
-            raise ServerError(error=TaskNotFoundError())
+            raise ServerError(error=TaskNotFoundError())  # noqa: TRY301
         except ServerError as e:
             return GetTaskResponse(
                 root=JSONRPCErrorResponse(
