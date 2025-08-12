@@ -293,7 +293,7 @@ class DefaultRequestHandler(RequestHandler):
                 consumer, blocking=blocking
             )
             if not result:
-                raise ServerError(error=InternalError())
+                raise ServerError(error=InternalError())  # noqa: TRY301
 
             if isinstance(result, Task):
                 self._validate_task_id_match(task_id, result.id)
