@@ -1,10 +1,9 @@
 import asyncio
 import logging
 
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 
 from a2a.server.events import Event, EventConsumer
-from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import Message, Task, TaskState, TaskStatusUpdateEvent
 
@@ -28,17 +27,14 @@ class ResultAggregator:
     def __init__(
         self,
         task_manager: TaskManager,
-        push_sender: PushNotificationSender | None = None,
     ) -> None:
         """Initializes the ResultAggregator.
 
         Args:
             task_manager: The `TaskManager` instance to use for processing events
                           and managing the task state.
-            push_sender: The `PushNotificationSender` instance to use for sending push notifications.
         """
         self.task_manager = task_manager
-        self.push_sender = push_sender
         self._message: Message | None = None
 
     @property
@@ -99,7 +95,10 @@ class ResultAggregator:
         return await self.task_manager.get_task()
 
     async def consume_and_break_on_interrupt(
-        self, consumer: EventConsumer, blocking: bool = True
+        self,
+        consumer: EventConsumer,
+        blocking: bool = True,
+        event_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> tuple[Task | Message | None, bool]:
         """Processes the event stream until completion or an interruptable state is encountered.
 
@@ -112,6 +111,9 @@ class ResultAggregator:
             consumer: The `EventConsumer` to read events from.
             blocking: If `False`, the method returns as soon as a task/message
                       is available. If `True`, it waits for a terminal state.
+            event_callback: Optional async callback function to be called after each event
+                           is processed in the background continuation.
+                           Mainly used for push notifications currently.
 
         Returns:
             A tuple containing:
@@ -157,13 +159,17 @@ class ResultAggregator:
             if should_interrupt:
                 # Continue consuming the rest of the events in the background.
                 # TODO: We should track all outstanding tasks to ensure they eventually complete.
-                asyncio.create_task(self._continue_consuming(event_stream))  # noqa: RUF006
+                asyncio.create_task(  # noqa: RUF006
+                    self._continue_consuming(event_stream, event_callback)
+                )
                 interrupted = True
                 break
         return await self.task_manager.get_task(), interrupted
 
     async def _continue_consuming(
-        self, event_stream: AsyncIterator[Event]
+        self,
+        event_stream: AsyncIterator[Event],
+        event_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         """Continues processing an event stream in a background task.
 
@@ -172,14 +178,9 @@ class ResultAggregator:
 
         Args:
             event_stream: The remaining `AsyncIterator` of events from the consumer.
+            event_callback: Optional async callback function to be called after each event is processed.
         """
         async for event in event_stream:
             await self.task_manager.process(event)
-            await self._send_push_notification_if_needed()
-
-    async def _send_push_notification_if_needed(self) -> None:
-        """Sends push notification if configured and task is available."""
-        if self.push_sender:
-            latest_task = await self.current_result
-            if isinstance(latest_task, Task):
-                await self.push_sender.send_notification(latest_task)
+            if event_callback:
+                await event_callback()
