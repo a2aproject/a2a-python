@@ -10,17 +10,11 @@
 
 ### Bug Fixes
 
-* Add validation for transport types in `ClientFactory` ([#396](https://github.com/a2aproject/a2a-python/issues/396)) ([2e8fbc4](https://github.com/a2aproject/a2a-python/commit/2e8fbc4dd86a4e9dc72d9dabffa0c62036e49b92))
 * gracefully handle task exceptions in event consumer ([#383](https://github.com/a2aproject/a2a-python/issues/383)) ([2508a9b](https://github.com/a2aproject/a2a-python/commit/2508a9b8ec1a1bfdc61e9012b7d68b33082b3981))
 * openapi working in sub-app ([#324](https://github.com/a2aproject/a2a-python/issues/324)) ([dec4b48](https://github.com/a2aproject/a2a-python/commit/dec4b487514db6cbb25f0c6fa7e1275a1ab0ba71))
 * Pass `message_length` param in `get_task()` ([#384](https://github.com/a2aproject/a2a-python/issues/384)) ([b6796b9](https://github.com/a2aproject/a2a-python/commit/b6796b9e1432ef8499eff454f869edf4427fd704))
 * relax protobuf dependency version requirement ([#381](https://github.com/a2aproject/a2a-python/issues/381)) ([0f55f55](https://github.com/a2aproject/a2a-python/commit/0f55f554ba9f6bf53fa3d9a91f66939f36e1ef2e))
 * Use HasField for simple message retrieval for grpc transport ([#380](https://github.com/a2aproject/a2a-python/issues/380)) ([3032aa6](https://github.com/a2aproject/a2a-python/commit/3032aa660f6f3b72dc7dd8b49b0e2f4d432c7a22))
-
-
-### Reverts
-
-* "fix: Add validation for transport types in `ClientFactory`" ([#402](https://github.com/a2aproject/a2a-python/issues/402)) ([c4dac93](https://github.com/a2aproject/a2a-python/commit/c4dac93d61d35d22b0f7a3dd176ec677906b454d))
 
 ## [0.3.0](https://github.com/a2aproject/a2a-python/compare/v0.2.16...v0.3.0) (2025-07-31)
 
