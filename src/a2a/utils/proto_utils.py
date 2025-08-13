@@ -18,10 +18,8 @@ logger = logging.getLogger(__name__)
 
 
 # Regexp patterns for matching
-_TASK_NAME_MATCH = r'tasks/([\w-]+)'
-_TASK_PUSH_CONFIG_NAME_MATCH = (
-    r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
-)
+_TASK_NAME_MATCH = r'tasks/([^/]+)'
+_TASK_PUSH_CONFIG_NAME_MATCH = r'tasks/([^/]+)/pushNotificationConfigs/([^/]+)'
 
 
 class ToProto:
