@@ -283,7 +283,6 @@ class DefaultRequestHandler(RequestHandler):
         blocking = True  # Default to blocking behavior
         if params.configuration and params.configuration.blocking is False:
             blocking = False
-
         interrupted_or_non_blocking = False
         try:
             (
@@ -291,15 +290,6 @@ class DefaultRequestHandler(RequestHandler):
                 interrupted_or_non_blocking,
             ) = await result_aggregator.consume_and_break_on_interrupt(
                 consumer, blocking=blocking
-            )
-            if not result:
-                raise ServerError(error=InternalError())  # noqa: TRY301
-
-            if isinstance(result, Task):
-                self._validate_task_id_match(task_id, result.id)
-
-            await self._send_push_notification_if_needed(
-                task_id, result_aggregator
             )
 
         except Exception:
@@ -313,6 +303,14 @@ class DefaultRequestHandler(RequestHandler):
                 )
             else:
                 await self._cleanup_producer(producer_task, task_id)
+
+        if not result:
+            raise ServerError(error=InternalError())
+
+        if isinstance(result, Task):
+            self._validate_task_id_match(task_id, result.id)
+
+        await self._send_push_notification_if_needed(task_id, result_aggregator)
 
         return result
 
