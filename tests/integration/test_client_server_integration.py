@@ -1,5 +1,4 @@
 import asyncio
-
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 from unittest.mock import ANY, AsyncMock
@@ -8,7 +7,6 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
-
 from grpc.aio import Channel
 
 from a2a.client.transports import JsonRpcTransport, RestTransport
@@ -37,7 +35,6 @@ from a2a.types import (
     TextPart,
     TransportProtocol,
 )
-
 
 # --- Test Constants ---
 
@@ -130,7 +127,7 @@ def agent_card() -> AgentCard:
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         preferred_transport=TransportProtocol.jsonrpc,
-        supports_authenticated_extended_card=True,
+        supports_authenticated_extended_card=False,
         additional_interfaces=[
             AgentInterface(
                 transport=TransportProtocol.http_json, url='http://testserver'
@@ -709,13 +706,38 @@ async def test_http_transport_get_card(
         transport_setup_fixture
     )
     transport = transport_setup.transport
-
-    # The transport starts with a minimal card, get_card() fetches the full one
-    transport.agent_card.supports_authenticated_extended_card = True
+    # Get the base card.
     result = await transport.get_card()
 
     assert result.name == agent_card.name
     assert transport.agent_card.name == agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_http_transport_get_authenticated_card(
+    agent_card: AgentCard,
+    mock_request_handler: AsyncMock,
+) -> None:
+    agent_card.supports_authenticated_extended_card = True
+    extended_agent_card = agent_card.model_copy(deep=True)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    app_builder = A2ARESTFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
+    result = await transport.get_card()
+    assert result.name == extended_agent_card.name
+    assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
