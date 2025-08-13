@@ -58,6 +58,7 @@ if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
     from starlette.applications import Starlette
     from starlette.authentication import BaseUser
+    from starlette.datastructures import URL
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -485,6 +486,63 @@ class JSONRPCApplication(ABC):
             handler_result.root.model_dump(mode='json', exclude_none=True),
             headers=headers,
         )
+    
+    def _modify_rpc_url(self, agent_card: AgentCard, request: Request):
+        rpc_url = URL(agent_card.url)
+        rpc_path = rpc_url.path
+        port = None
+        if "X-Forwarded-Host" in request.headers:
+            host = request.headers["X-Forwarded-Host"]
+        else:
+            host = request.url.hostname
+            port = request.url.port
+            
+        if "X-Forwarded-Proto" in request.headers:
+            scheme = request.headers["X-Forwarded-Proto"]
+        else:
+            scheme = request.url.scheme
+        if not scheme:
+            scheme = "http"
+        if ":" in host: # type: ignore
+            comps = host.rsplit(":", 1) # type: ignore
+            host = comps[0]
+            port = comps[1]
+
+        # Handle URL maps,
+        # e.g. "agents/my-agent/.well-known/agent-card.json"
+        if "X-Forwarded-Path" in request.headers:
+            forwarded_path = request.headers["X-Forwarded-Path"].strip()
+            if (
+                forwarded_path and
+                request.url.path != forwarded_path
+                and forwarded_path.endswith(request.url.path)
+            ):
+                # "agents/my-agent" for "agents/my-agent/.well-known/agent-card.json"
+                extra_path = forwarded_path[:-len(request.url.path)]
+                new_path = extra_path + rpc_path
+                # If original path was just "/",
+                # we remove trailing "/" in the the extended one
+                if len(new_path) > 1 and rpc_path == "/":
+                    new_path = new_path.rstrip("/")
+                rpc_path = new_path
+
+        if port:
+            agent_card.url = str(
+                rpc_url.replace(
+                    hostname=host,
+                    port=port,
+                    scheme=scheme,
+                    path=rpc_path
+                )
+            )
+        else:
+            agent_card.url = str(
+                rpc_url.replace(
+                    hostname=host,
+                    scheme=scheme,
+                    path=rpc_path
+                )
+            )
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
@@ -502,8 +560,12 @@ class JSONRPCApplication(ABC):
             )
 
         card_to_serve = self.agent_card
+        rpc_url = card_to_serve.url
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
+        # If agent's RPC URL was not modified, we build it dynamically.
+        if rpc_url == card_to_serve.url:
+            self._modify_rpc_url(card_to_serve, request)
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -528,6 +590,7 @@ class JSONRPCApplication(ABC):
 
         card_to_serve = self.extended_agent_card
 
+        rpc_url = card_to_serve.url if card_to_serve else None
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
@@ -535,6 +598,9 @@ class JSONRPCApplication(ABC):
             card_to_serve = self.extended_card_modifier(base_card, context)
 
         if card_to_serve:
+            # If agent's RPC URL was not modified, we build it dynamically.
+            if rpc_url == card_to_serve.url:
+                self._modify_rpc_url(card_to_serve, request)
             return JSONResponse(
                 card_to_serve.model_dump(
                     exclude_none=True,
