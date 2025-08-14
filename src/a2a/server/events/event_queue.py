@@ -184,16 +184,16 @@ class EventQueue:
         # Clear all events from the queue, even if closed
         cleared_count = 0
         async with self._lock:
-            while not self.queue.empty():
-                try:
+            try:
+                while True:
                     event = self.queue.get_nowait()
                     logger.debug(
                         f'Discarding unprocessed event of type: {type(event)}, content: {event}'
                     )
                     self.queue.task_done()
                     cleared_count += 1
-                except asyncio.QueueEmpty:
-                    break
+            except asyncio.QueueEmpty:
+                pass
 
             if cleared_count > 0:
                 logger.debug(
