@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -12,6 +13,9 @@ except ImportError:
     StarletteBaseUser = MagicMock()  # type: ignore
 
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
+from a2a.server.apps.jsonrpc import (
+    jsonrpc_app,  # Keep this import for optional deps test
+)
 from a2a.server.apps.jsonrpc.jsonrpc_app import (
     JSONRPCApplication,
     StarletteUserProxy,
@@ -88,7 +92,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
         # This will fail at definition time if an abstract method is not implemented
         with pytest.raises(
             TypeError,
-            match="Can't instantiate abstract class IncompleteJSONRPCApp with abstract method build",
+            match=".*abstract class IncompleteJSONRPCApp .* abstract method '?build'?",
         ):
 
             class IncompleteJSONRPCApp(JSONRPCApplication):
@@ -99,6 +103,86 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
             IncompleteJSONRPCApp(
                 agent_card=mock_agent_card, http_handler=mock_handler
             )
+
+
+class TestJSONRPCApplicationOptionalDeps:
+    # Running tests in this class requires optional dependencies starlette and
+    # sse-starlette to be present in the test environment.
+
+    @pytest.fixture(scope='class', autouse=True)
+    def ensure_pkg_starlette_is_present(self):
+        try:
+            import sse_starlette as _sse_starlette  # noqa: F401
+            import starlette as _starlette  # noqa: F401
+        except ImportError:
+            pytest.fail(
+                f'Running tests in {self.__class__.__name__} requires'
+                ' optional dependencies starlette and sse-starlette to be'
+                ' present in the test environment. Run `uv sync --dev ...`'
+                ' before running the test suite.'
+            )
+
+    @pytest.fixture(scope='class')
+    def mock_app_params(self) -> dict:
+        # Mock http_handler
+        mock_handler = MagicMock(spec=RequestHandler)
+        # Mock agent_card with essential attributes accessed in __init__
+        mock_agent_card = MagicMock(spec=AgentCard)
+        # Ensure 'url' attribute exists on the mock_agent_card, as it's accessed
+        # in __init__
+        mock_agent_card.url = 'http://example.com'
+        # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
+        mock_agent_card.supports_authenticated_extended_card = False
+        return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
+
+    @pytest.fixture(scope='class')
+    def mark_pkg_starlette_not_installed(self):
+        pkg_starlette_installed_flag = jsonrpc_app._package_starlette_installed
+        jsonrpc_app._package_starlette_installed = False
+        yield
+        jsonrpc_app._package_starlette_installed = pkg_starlette_installed_flag
+
+    def test_create_jsonrpc_based_app_with_present_deps_succeeds(
+        self, mock_app_params: dict
+    ):
+        class DummyJSONRPCApp(JSONRPCApplication):
+            def build(
+                self,
+                agent_card_url='/.well-known/agent.json',
+                rpc_url='/',
+                **kwargs,
+            ):
+                return object()
+
+        try:
+            _app = DummyJSONRPCApp(**mock_app_params)
+        except ImportError:
+            pytest.fail(
+                'With packages starlette and see-starlette present, creating a'
+                ' JSONRPCApplication-based instance should not raise'
+                ' ImportError'
+            )
+
+    def test_create_jsonrpc_based_app_with_missing_deps_raises_importerror(
+        self, mock_app_params: dict, mark_pkg_starlette_not_installed: Any
+    ):
+        class DummyJSONRPCApp(JSONRPCApplication):
+            def build(
+                self,
+                agent_card_url='/.well-known/agent.json',
+                rpc_url='/',
+                **kwargs,
+            ):
+                return object()
+
+        with pytest.raises(
+            ImportError,
+            match=(
+                'Packages `starlette` and `sse-starlette` are required to use'
+                ' the `JSONRPCApplication`'
+            ),
+        ):
+            _app = DummyJSONRPCApp(**mock_app_params)
 
 
 class TestJSONRPCExtensions:

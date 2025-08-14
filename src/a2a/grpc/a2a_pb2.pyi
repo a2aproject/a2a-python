@@ -94,14 +94,16 @@ class Part(_message.Message):
     def __init__(self, text: _Optional[str] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ..., data: _Optional[_Union[DataPart, _Mapping]] = ...) -> None: ...
 
 class FilePart(_message.Message):
-    __slots__ = ("file_with_uri", "file_with_bytes", "mime_type")
+    __slots__ = ("file_with_uri", "file_with_bytes", "mime_type", "name")
     FILE_WITH_URI_FIELD_NUMBER: _ClassVar[int]
     FILE_WITH_BYTES_FIELD_NUMBER: _ClassVar[int]
     MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     file_with_uri: str
     file_with_bytes: bytes
     mime_type: str
-    def __init__(self, file_with_uri: _Optional[str] = ..., file_with_bytes: _Optional[bytes] = ..., mime_type: _Optional[str] = ...) -> None: ...
+    name: str
+    def __init__(self, file_with_uri: _Optional[str] = ..., file_with_bytes: _Optional[bytes] = ..., mime_type: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class DataPart(_message.Message):
     __slots__ = ("data",)

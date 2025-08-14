@@ -145,9 +145,29 @@ async def test_get_task(
     response = await grpc_transport.get_task(params)
 
     mock_grpc_stub.GetTask.assert_awaited_once_with(
-        a2a_pb2.GetTaskRequest(name=f'tasks/{sample_task.id}')
+        a2a_pb2.GetTaskRequest(
+            name=f'tasks/{sample_task.id}', history_length=None
+        )
     )
     assert response.id == sample_task.id
+
+
+@pytest.mark.asyncio
+async def test_get_task_with_history(
+    grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
+):
+    """Test retrieving a task with history."""
+    mock_grpc_stub.GetTask.return_value = proto_utils.ToProto.task(sample_task)
+    history_len = 10
+    params = TaskQueryParams(id=sample_task.id, history_length=history_len)
+
+    await grpc_transport.get_task(params)
+
+    mock_grpc_stub.GetTask.assert_awaited_once_with(
+        a2a_pb2.GetTaskRequest(
+            name=f'tasks/{sample_task.id}', history_length=history_len
+        )
+    )
 
 
 @pytest.mark.asyncio

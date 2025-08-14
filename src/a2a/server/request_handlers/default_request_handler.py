@@ -195,7 +195,7 @@ class DefaultRequestHandler(RequestHandler):
             if task.status.state in TERMINAL_TASK_STATES:
                 raise ServerError(
                     error=InvalidParamsError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state}'
+                        message=f'Task {task.id} is in terminal state: {task.status.state.value}'
                     )
                 )
 
@@ -293,7 +293,7 @@ class DefaultRequestHandler(RequestHandler):
                 consumer, blocking=blocking
             )
             if not result:
-                raise ServerError(error=InternalError())
+                raise ServerError(error=InternalError())  # noqa: TRY301
 
             if isinstance(result, Task):
                 self._validate_task_id_match(task_id, result.id)
@@ -302,8 +302,8 @@ class DefaultRequestHandler(RequestHandler):
                 task_id, result_aggregator
             )
 
-        except Exception as e:
-            logger.error(f'Agent execution failed. Error: {e}')
+        except Exception:
+            logger.exception('Agent execution failed')
             raise
         finally:
             if interrupted_or_non_blocking:
@@ -437,7 +437,7 @@ class DefaultRequestHandler(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
                 error=InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    message=f'Task {task.id} is in terminal state: {task.status.state.value}'
                 )
             )
 
@@ -478,16 +478,12 @@ class DefaultRequestHandler(RequestHandler):
             params.id
         )
 
-        task_push_notification_config = []
-        if push_notification_config_list:
-            for config in push_notification_config_list:
-                task_push_notification_config.append(
-                    TaskPushNotificationConfig(
-                        task_id=params.id, push_notification_config=config
-                    )
-                )
-
-        return task_push_notification_config
+        return [
+            TaskPushNotificationConfig(
+                task_id=params.id, push_notification_config=config
+            )
+            for config in push_notification_config_list
+        ]
 
     async def on_delete_task_push_notification_config(
         self,

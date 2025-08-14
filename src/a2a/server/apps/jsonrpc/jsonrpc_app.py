@@ -5,17 +5,9 @@ import traceback
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from fastapi import FastAPI
 from pydantic import ValidationError
-from sse_starlette.sse import EventSourceResponse
-from starlette.applications import Starlette
-from starlette.authentication import BaseUser
-from starlette.exceptions import HTTPException
-from starlette.requests import Request
-from starlette.responses import JSONResponse, Response
-from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
@@ -60,6 +52,42 @@ from a2a.utils.errors import MethodNotImplementedError
 
 
 logger = logging.getLogger(__name__)
+
+if TYPE_CHECKING:
+    from fastapi import FastAPI
+    from sse_starlette.sse import EventSourceResponse
+    from starlette.applications import Starlette
+    from starlette.authentication import BaseUser
+    from starlette.exceptions import HTTPException
+    from starlette.requests import Request
+    from starlette.responses import JSONResponse, Response
+    from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+    _package_starlette_installed = True
+else:
+    FastAPI = Any
+    try:
+        from sse_starlette.sse import EventSourceResponse
+        from starlette.applications import Starlette
+        from starlette.authentication import BaseUser
+        from starlette.exceptions import HTTPException
+        from starlette.requests import Request
+        from starlette.responses import JSONResponse, Response
+        from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+        _package_starlette_installed = True
+    except ImportError:
+        _package_starlette_installed = False
+        # Provide placeholder types for runtime type hinting when dependencies are not installed.
+        # These will not be used if the code path that needs them is guarded by _http_server_installed.
+        EventSourceResponse = Any
+        Starlette = Any
+        BaseUser = Any
+        HTTPException = Any
+        Request = Any
+        JSONResponse = Any
+        Response = Any
+        HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
 
 
 class StarletteUserProxy(A2AUser):
@@ -135,7 +163,7 @@ class JSONRPCApplication(ABC):
         ]
         | None = None,
     ) -> None:
-        """Initializes the A2AStarletteApplication.
+        """Initializes the JSONRPCApplication.
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
@@ -152,6 +180,12 @@ class JSONRPCApplication(ABC):
               the extended agent card before it is served. It receives the
               call context.
         """
+        if not _package_starlette_installed:
+            raise ImportError(
+                'Packages `starlette` and `sse-starlette` are required to use the'
+                ' `JSONRPCApplication`. They can be added as a part of `a2a-sdk`'
+                ' optional dependencies, `a2a-sdk[http-server]`.'
+            )
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
@@ -283,8 +317,7 @@ class JSONRPCApplication(ABC):
                 )
             raise e
         except Exception as e:
-            logger.error(f'Unhandled exception: {e}')
-            traceback.print_exc()
+            logger.exception('Unhandled exception')
             return self._generate_error_response(
                 request_id, A2AError(root=InternalError(message=str(e)))
             )

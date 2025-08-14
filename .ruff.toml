@@ -29,6 +29,10 @@ ignore = [
     "ANN002",
     "ANN003",
     "ANN401",
+    "TRY003",
+    "G004",
+    "TRY201",
+    "FIX002",
 ]
 
 select = [
@@ -57,6 +61,20 @@ select = [
     "TD", # flake8-todos (check TODO format - Google Style §3.7)
     "TCH",# flake8-type-checking (helps manage TYPE_CHECKING blocks and imports)
     "PYI",# flake8-pyi (best practices for .pyi stub files, some rules are useful for .py too)
+    "S",  # flake8-bandit (security issues)
+    "DTZ",# flake8-datetimez (timezone-aware datetimes)
+    "ERA",# flake8-eradicate (commented-out code)
+    "Q",  # flake8-quotes (quote style consistency)
+    "RSE",# flake8-raise (modern raise statements)
+    "TRY",# tryceratops (exception handling best practices)
+    "PERF",# perflint (performance anti-patterns)
+    "BLE",
+    "T10",
+    "ICN",
+    "G",
+    "FIX",
+    "ASYNC",
+    "INP",
 ]
 
 exclude = [
@@ -104,7 +122,7 @@ ignore-decorators = ["typing.overload", "abc.abstractmethod"]
 
 [lint.flake8-annotations]
 mypy-init-return = true
-allow-star-arg-any = true
+allow-star-arg-any = false
 
 [lint.pep8-naming]
 ignore-names = ["test_*", "setUp", "tearDown", "mock_*"]
@@ -139,6 +157,7 @@ inline-quotes = "single"
 "types.py" = ["D", "E501"]  # Ignore docstring and annotation issues in types.py
 "proto_utils.py" = ["D102", "PLR0911"]
 "helpers.py" = ["ANN001", "ANN201", "ANN202"]
+"scripts/*.py" = ["INP001"]
 
 [format]
 exclude = [

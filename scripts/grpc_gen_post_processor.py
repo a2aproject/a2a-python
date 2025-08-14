@@ -47,7 +47,7 @@ def process_generated_code(src_folder: str = 'src/a2a/grpc') -> None:
             else:
                 print('No changes needed')
 
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             print(f'Error processing file {file}: {e}')
             sys.exit(1)
 

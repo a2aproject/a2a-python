@@ -140,13 +140,11 @@ class EventConsumer:
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():
                     break
-            except ValidationError as e:
-                logger.error(f'Invalid event format received: {e}')
+            except ValidationError:
+                logger.exception('Invalid event format received')
                 continue
             except Exception as e:
-                logger.error(
-                    f'Stopping event consumption due to exception: {e}'
-                )
+                logger.exception('Stopping event consumption due to exception')
                 self._exception = e
                 continue
 
@@ -160,5 +158,5 @@ class EventConsumer:
             agent_task: The asyncio.Task that completed.
         """
         logger.debug('Agent task callback triggered.')
-        if agent_task.exception() is not None:
+        if not agent_task.cancelled() and agent_task.done():
             self._exception = agent_task.exception()

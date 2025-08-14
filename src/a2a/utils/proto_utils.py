@@ -338,16 +338,12 @@ class ToProto:
     ) -> list[a2a_pb2.Security] | None:
         if not security:
             return None
-        rval: list[a2a_pb2.Security] = []
-        for s in security:
-            rval.append(
-                a2a_pb2.Security(
-                    schemes={
-                        k: a2a_pb2.StringList(list=v) for (k, v) in s.items()
-                    }
-                )
+        return [
+            a2a_pb2.Security(
+                schemes={k: a2a_pb2.StringList(list=v) for (k, v) in s.items()}
             )
-        return rval
+            for s in security
+        ]
 
     @classmethod
     def security_schemes(
@@ -774,10 +770,9 @@ class FromProto:
     ) -> list[dict[str, list[str]]] | None:
         if not security:
             return None
-        rval: list[dict[str, list[str]]] = []
-        for s in security:
-            rval.append({k: list(v.list) for (k, v) in s.schemes.items()})
-        return rval
+        return [
+            {k: list(v.list) for (k, v) in s.schemes.items()} for s in security
+        ]
 
     @classmethod
     def provider(
