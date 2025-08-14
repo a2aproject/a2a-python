@@ -192,7 +192,7 @@ class EventQueue:
                     )
                     self.queue.task_done()
                     cleared_count += 1
-            except asyncio.QueueEmpty:
+            except (asyncio.QueueEmpty, getattr(asyncio, 'QueueShutDown', asyncio.QueueEmpty)):
                 pass
 
             if cleared_count > 0:
