@@ -80,8 +80,16 @@ class ToProto:
         cls, file: types.FileWithUri | types.FileWithBytes
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
-            return a2a_pb2.FilePart(file_with_uri=file.uri)
-        return a2a_pb2.FilePart(file_with_bytes=file.bytes.encode('utf-8'))
+            return a2a_pb2.FilePart(
+                file_with_uri=file.uri,
+                mime_type=file.mime_type,
+                name=file.name
+            )
+        return a2a_pb2.FilePart(
+            file_with_bytes=file.bytes.encode('utf-8'),
+            mime_type=file.mime_type,
+            name=file.name,
+        )
 
     @classmethod
     def task(cls, task: types.Task) -> a2a_pb2.Task:
@@ -501,8 +509,16 @@ class FromProto:
         cls, file: a2a_pb2.FilePart
     ) -> types.FileWithUri | types.FileWithBytes:
         if file.HasField('file_with_uri'):
-            return types.FileWithUri(uri=file.file_with_uri)
-        return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
+            return types.FileWithUri(
+                uri=file.file_with_uri,
+                mime_type=file.mime_type,
+                name=file.name,
+            )
+        return types.FileWithBytes(
+            bytes=file.file_with_bytes.decode('utf-8'),
+            mime_type=file.mime_type,
+            name=file.name,
+        )
 
     @classmethod
     def task_or_message(
