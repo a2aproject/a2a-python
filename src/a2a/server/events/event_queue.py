@@ -156,6 +156,8 @@ class EventQueue:
         else:
             if immediate:
                 await self.clear_events(True)
+                for child in self._children:
+                    await child.close(immediate)
                 return
             tasks = [asyncio.create_task(self.queue.join())]
             for child in self._children:

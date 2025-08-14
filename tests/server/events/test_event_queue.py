@@ -355,3 +355,130 @@ async def test_is_closed_reflects_state(event_queue: EventQueue) -> None:
     await event_queue.close()
 
     assert event_queue.is_closed() is True  # Closed after calling close()
+
+
+@pytest.mark.asyncio
+async def test_close_with_immediate_true(event_queue: EventQueue) -> None:
+    """Test close with immediate=True clears events immediately."""
+    # Add some events to the queue
+    event1 = Message(**MESSAGE_PAYLOAD)
+    event2 = Task(**MINIMAL_TASK)
+    await event_queue.enqueue_event(event1)
+    await event_queue.enqueue_event(event2)
+
+    # Verify events are in queue
+    assert not event_queue.queue.empty()
+
+    # Close with immediate=True
+    await event_queue.close(immediate=True)
+
+    # Verify queue is closed and empty
+    assert event_queue.is_closed() is True
+    assert event_queue.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_close_immediate_propagates_to_children(
+    event_queue: EventQueue,
+) -> None:
+    """Test that immediate parameter is propagated to child queues."""
+
+    child_queue = event_queue.tap()
+
+    # Add events to both parent and child
+    event = Message(**MESSAGE_PAYLOAD)
+    await event_queue.enqueue_event(event)
+
+    assert child_queue.is_closed() is False
+    assert child_queue.queue.empty() is False
+
+    # close event queue
+    await event_queue.close(immediate=True)
+
+    # Verify child queue was called and empty with immediate=True
+    assert child_queue.is_closed() is True
+    assert child_queue.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_clear_events_current_queue_only(event_queue: EventQueue) -> None:
+    """Test clear_events clears only the current queue when clear_child_queues=False."""
+
+    child_queue = event_queue.tap()
+    event1 = Message(**MESSAGE_PAYLOAD)
+    event2 = Task(**MINIMAL_TASK)
+    await event_queue.enqueue_event(event1)
+    await event_queue.enqueue_event(event2)
+
+    # Clear only parent queue
+    await event_queue.clear_events(clear_child_queues=False)
+
+    # Verify parent queue is empty
+    assert event_queue.queue.empty()
+
+    # Verify child queue still has its event
+    assert not child_queue.queue.empty()
+    assert child_queue.is_closed() is False
+
+    dequeued_child_event = await child_queue.dequeue_event(no_wait=True)
+    assert dequeued_child_event == event1
+
+
+@pytest.mark.asyncio
+async def test_clear_events_with_children(event_queue: EventQueue) -> None:
+    """Test clear_events clears both current queue and child queues."""
+
+    # Create child queues and add events
+    child_queue1 = event_queue.tap()
+    child_queue2 = event_queue.tap()
+
+    # Add events to parent queue
+    event1 = Message(**MESSAGE_PAYLOAD)
+    event2 = Task(**MINIMAL_TASK)
+    await event_queue.enqueue_event(event1)
+    await event_queue.enqueue_event(event2)
+
+    # Clear all queues
+    await event_queue.clear_events(clear_child_queues=True)
+
+    # Verify all queues are empty
+    assert event_queue.queue.empty()
+    assert child_queue1.queue.empty()
+    assert child_queue2.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_clear_events_empty_queue(event_queue: EventQueue) -> None:
+    """Test clear_events works correctly with empty queue."""
+    # Verify queue is initially empty
+    assert event_queue.queue.empty()
+
+    # Clear events from empty queue
+    await event_queue.clear_events()
+
+    # Verify queue remains empty
+    assert event_queue.queue.empty()
+
+
+@pytest.mark.asyncio
+async def test_clear_events_closed_queue(event_queue: EventQueue) -> None:
+    """Test clear_events works correctly with closed queue."""
+    # Add events and close queue
+
+    with patch('sys.version_info', (3, 12, 0)):  # Simulate older Python
+        # Mock queue.join as it's called in older versions
+        event_queue.queue.join = AsyncMock()
+
+    event = Message(**MESSAGE_PAYLOAD)
+    await event_queue.enqueue_event(event)
+    await event_queue.close()
+
+    # Verify queue is closed but not empty
+    assert event_queue.is_closed() is True
+    assert not event_queue.queue.empty()
+
+    # Clear events from closed queue
+    await event_queue.clear_events()
+
+    # Verify queue is now empty
+    assert event_queue.queue.empty()
