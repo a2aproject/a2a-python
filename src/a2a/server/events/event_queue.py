@@ -90,7 +90,12 @@ class EventQueue:
             asyncio.QueueShutDown: If the queue has been closed and is empty.
         """
         async with self._lock:
-            if self._is_closed and self.queue.empty():
+            if (
+                sys.version_info < (3, 13)
+                and self._is_closed
+                and self.queue.empty()
+            ):
+                # On 3.13+, skip early raise; await self.queue.get() will raise QueueShutDown after shutdown()
                 logger.warning('Queue is closed. Event will not be dequeued.')
                 raise asyncio.QueueEmpty('Queue is closed.')
 

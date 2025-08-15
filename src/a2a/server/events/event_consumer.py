@@ -135,7 +135,7 @@ class EventConsumer:
             except asyncio.TimeoutError:  # pyright: ignore [reportUnusedExcept]
                 # This class was made an alias of build-in TimeoutError after 3.11
                 continue
-            except QueueClosed:
+            except (QueueClosed, asyncio.QueueEmpty):
                 # Confirm that the queue is closed, e.g. we aren't on
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():
