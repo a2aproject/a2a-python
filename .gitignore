@@ -5,7 +5,7 @@ __pycache__
 .mypy_cache
 .pytest_cache
 .ruff_cache
-.venv-3.11
+.venv
 coverage.xml
 .nox
 spec.json
