@@ -81,9 +81,7 @@ class ToProto:
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
             return a2a_pb2.FilePart(
-                file_with_uri=file.uri,
-                mime_type=file.mime_type,
-                name=file.name
+                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
             )
         return a2a_pb2.FilePart(
             file_with_bytes=file.bytes.encode('utf-8'),

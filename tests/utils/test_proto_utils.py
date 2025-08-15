@@ -25,7 +25,7 @@ def sample_message() -> types.Message:
                     file=types.FileWithUri(
                         uri='file:///test.txt',
                         name='test.txt',
-                        mime_type="text/plain",
+                        mime_type='text/plain',
                     ),
                 )
             ),
