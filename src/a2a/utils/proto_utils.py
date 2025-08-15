@@ -508,16 +508,18 @@ class FromProto:
     def file(
         cls, file: a2a_pb2.FilePart
     ) -> types.FileWithUri | types.FileWithBytes:
+        common_args = {
+            'mime_type': file.mime_type or None,
+            'name': file.name or None,
+        }
         if file.HasField('file_with_uri'):
             return types.FileWithUri(
                 uri=file.file_with_uri,
-                mime_type=file.mime_type,
-                name=file.name,
+                **common_args,
             )
         return types.FileWithBytes(
             bytes=file.file_with_bytes.decode('utf-8'),
-            mime_type=file.mime_type,
-            name=file.name,
+            **common_args,
         )
 
     @classmethod
