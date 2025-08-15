@@ -192,11 +192,17 @@ class EventQueue:
                     )
                     self.queue.task_done()
                     cleared_count += 1
-            except (
-                asyncio.QueueEmpty,
-                getattr(asyncio, 'QueueShutDown', asyncio.QueueEmpty),
-            ):
+            except asyncio.QueueEmpty:
                 pass
+            except Exception as e:
+                # Handle Python 3.13+ QueueShutDown
+                if (
+                    sys.version_info >= (3, 13)
+                    and type(e).__name__ == 'QueueShutDown'
+                ):
+                    pass
+                else:
+                    raise
 
             if cleared_count > 0:
                 logger.debug(
