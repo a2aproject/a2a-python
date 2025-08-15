@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.2](https://github.com/a2aproject/a2a-python/compare/v0.3.1...v0.3.2) (2025-08-15)
+
+
+### Bug Fixes
+
+* Add missing mime_type and name in proto conversion utils ([#408](https://github.com/a2aproject/a2a-python/issues/408)) ([72b2ee7](https://github.com/a2aproject/a2a-python/commit/72b2ee75dccfc8399edaa0837a025455b4b53a17))
+* Add name field to FilePart protobuf message ([#403](https://github.com/a2aproject/a2a-python/issues/403)) ([1dbe33d](https://github.com/a2aproject/a2a-python/commit/1dbe33d5cf2c74019b72c709f3427aeba54bf4e3))
+
 ## [0.3.1](https://github.com/a2aproject/a2a-python/compare/v0.3.0...v0.3.1) (2025-08-13)
 
 
