@@ -54,7 +54,7 @@ class EventQueue:
                 logger.warning('Queue is closed. Event will not be enqueued.')
                 return
 
-        logger.debug(f'Enqueuing event of type: {type(event)}')
+        logger.debug('Enqueuing event of type: %s', type(event))
 
         # Make sure to use put instead of put_nowait to avoid blocking the event loop.
         await self.queue.put(event)
@@ -98,13 +98,13 @@ class EventQueue:
             logger.debug('Attempting to dequeue event (no_wait=True).')
             event = self.queue.get_nowait()
             logger.debug(
-                f'Dequeued event (no_wait=True) of type: {type(event)}'
+                'Dequeued event (no_wait=True) of type: %s', type(event)
             )
             return event
 
         logger.debug('Attempting to dequeue event (waiting).')
         event = await self.queue.get()
-        logger.debug(f'Dequeued event (waited) of type: {type(event)}')
+        logger.debug('Dequeued event (waited) of type: %s', type(event))
         return event
 
     def task_done(self) -> None:

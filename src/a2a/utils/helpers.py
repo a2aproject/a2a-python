@@ -142,7 +142,7 @@ def validate(
             async def async_wrapper(self: Any, *args, **kwargs) -> Any:
                 if not expression(self):
                     final_message = error_message or str(expression)
-                    logger.error(f'Unsupported Operation: {final_message}')
+                    logger.error('Unsupported Operation: %s', final_message)
                     raise ServerError(
                         UnsupportedOperationError(message=final_message)
                     )
@@ -154,7 +154,7 @@ def validate(
         def sync_wrapper(self: Any, *args, **kwargs) -> Any:
             if not expression(self):
                 final_message = error_message or str(expression)
-                logger.error(f'Unsupported Operation: {final_message}')
+                logger.error('Unsupported Operation: %s', final_message)
                 raise ServerError(
                     UnsupportedOperationError(message=final_message)
                 )
@@ -186,7 +186,7 @@ def validate_async_generator(
         async def wrapper(self, *args, **kwargs):
             if not expression(self):
                 final_message = error_message or str(expression)
-                logger.error(f'Unsupported Operation: {final_message}')
+                logger.error('Unsupported Operation: %s', final_message)
                 raise ServerError(
                     UnsupportedOperationError(message=final_message)
                 )

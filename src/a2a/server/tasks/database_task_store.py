@@ -124,7 +124,7 @@ class DatabaseTaskStore(TaskStore):
         db_task = self._to_orm(task)
         async with self.async_session_maker.begin() as session:
             await session.merge(db_task)
-            logger.debug(f'Task {task.id} saved/updated successfully.')
+            logger.debug('Task %s saved/updated successfully.', task.id)
 
     async def get(self, task_id: str) -> Task | None:
         """Retrieves a task from the database by ID."""
@@ -135,10 +135,10 @@ class DatabaseTaskStore(TaskStore):
             task_model = result.scalar_one_or_none()
             if task_model:
                 task = self._from_orm(task_model)
-                logger.debug(f'Task {task_id} retrieved successfully.')
+                logger.debug('Task %s retrieved successfully.', task_id)
                 return task
 
-            logger.debug(f'Task {task_id} not found in store.')
+            logger.debug('Task %s not found in store.', task_id)
             return None
 
     async def delete(self, task_id: str) -> None:
@@ -151,8 +151,8 @@ class DatabaseTaskStore(TaskStore):
             # Commit is automatic when using session.begin()
 
             if result.rowcount > 0:
-                logger.info(f'Task {task_id} deleted successfully.')
+                logger.info('Task %s deleted successfully.', task_id)
             else:
                 logger.warning(
-                    f'Attempted to delete nonexistent task with id: {task_id}'
+                    'Attempted to delete nonexistent task with id: %s', task_id
                 )

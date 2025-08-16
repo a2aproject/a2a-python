@@ -147,14 +147,9 @@ class TaskMixin:
     @override
     def __repr__(self) -> str:
         """Return a string representation of the task."""
-        repr_template = (
-            '<{CLS}(id="{ID}", context_id="{CTX_ID}", status="{STATUS}")>'
-        )
-        return repr_template.format(
-            CLS=self.__class__.__name__,
-            ID=self.id,
-            CTX_ID=self.context_id,
-            STATUS=self.status,
+        return (
+            f'<{self.__class__.__name__}(id="{self.id}", '
+            f'context_id="{self.context_id}", status="{self.status}")>'
         )
 
 
@@ -188,12 +183,9 @@ def create_task_model(
         @override
         def __repr__(self) -> str:
             """Return a string representation of the task."""
-            repr_template = '<TaskModel[{TABLE}](id="{ID}", context_id="{CTX_ID}", status="{STATUS}")>'
-            return repr_template.format(
-                TABLE=table_name,
-                ID=self.id,
-                CTX_ID=self.context_id,
-                STATUS=self.status,
+            return (
+                f'<TaskModel[{table_name}](id="{self.id}", '
+                f'context_id="{self.context_id}", status="{self.status}")>'
             )
 
     # Set a dynamic name for better debugging
@@ -221,11 +213,9 @@ class PushNotificationConfigMixin:
     @override
     def __repr__(self) -> str:
         """Return a string representation of the push notification config."""
-        repr_template = '<{CLS}(task_id="{TID}", config_id="{CID}")>'
-        return repr_template.format(
-            CLS=self.__class__.__name__,
-            TID=self.task_id,
-            CID=self.config_id,
+        return (
+            f'<{self.__class__.__name__}(task_id="{self.task_id}", '
+            f'config_id="{self.config_id}")>'
         )
 
 
@@ -241,11 +231,9 @@ def create_push_notification_config_model(
         @override
         def __repr__(self) -> str:
             """Return a string representation of the push notification config."""
-            repr_template = '<PushNotificationConfigModel[{TABLE}](task_id="{TID}", config_id="{CID}")>'
-            return repr_template.format(
-                TABLE=table_name,
-                TID=self.task_id,
-                CID=self.config_id,
+            return (
+                f'<PushNotificationConfigModel[{table_name}]('
+                f'task_id="{self.task_id}", config_id="{self.config_id}")>'
             )
 
     PushNotificationConfigModel.__name__ = (
