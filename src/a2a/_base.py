@@ -1,3 +1,4 @@
+from typing import Any
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -34,3 +35,13 @@ class A2ABaseModel(BaseModel):
         populate_by_name=True,
         alias_generator=to_camel_custom,
     )
+
+    def model_dump(
+        self,
+        **kwargs
+    ) -> dict[str, Any]:
+
+        if not 'by_alias' in kwargs:
+            kwargs['by_alias'] = True
+
+        return super().model_dump(**kwargs)
