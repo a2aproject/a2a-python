@@ -1,4 +1,5 @@
 from typing import Any
+
 from pydantic import BaseModel, ConfigDict
 from pydantic.alias_generators import to_camel
 
@@ -41,7 +42,7 @@ class A2ABaseModel(BaseModel):
         **kwargs
     ) -> dict[str, Any]:
 
-        if not 'by_alias' in kwargs:
+        if 'by_alias' not in kwargs:
             kwargs['by_alias'] = True
 
         return super().model_dump(**kwargs)
