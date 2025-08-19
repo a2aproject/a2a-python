@@ -286,7 +286,7 @@ class JSONRPCApplication(ABC):
                             )
                         ),
                     )
-            logger.info(f'**********Request body: {body}')
+            logger.debug(f'Request body: {body}')
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
             try:
                 base_request = JSONRPCRequest.model_validate(body)
