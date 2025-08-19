@@ -155,6 +155,20 @@ class JSONRPCApplication(ABC):
     (SSE).
     """
 
+    # Method-to-model mapping for centralized routing
+    METHOD_TO_MODEL = {
+        'message/send': SendMessageRequest,
+        'message/stream': SendStreamingMessageRequest,
+        'tasks/get': GetTaskRequest,
+        'tasks/cancel': CancelTaskRequest,
+        'tasks/pushNotificationConfig/set': SetTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/get': GetTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/list': ListTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/delete': DeleteTaskPushNotificationConfigRequest,
+        'tasks/resubscribe': TaskResubscriptionRequest,
+        'agent/getAuthenticatedExtendedCard': GetAuthenticatedExtendedCardRequest,
+    }
+
     def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
@@ -293,7 +307,7 @@ class JSONRPCApplication(ABC):
             try:
                 base_request = JSONRPCRequest.model_validate(body)
             except ValidationError as e:
-                traceback.print_exc()
+                logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
                     A2AError(
@@ -303,58 +317,16 @@ class JSONRPCApplication(ABC):
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
             method = base_request.method
+
             try:
-                match method:
-                    case 'message/send':
-                        specific_request = SendMessageRequest.model_validate(
-                            body
-                        )
-                    case 'message/stream':
-                        specific_request = (
-                            SendStreamingMessageRequest.model_validate(body)
-                        )
-                    case 'tasks/get':
-                        specific_request = GetTaskRequest.model_validate(body)
-                    case 'tasks/cancel':
-                        specific_request = CancelTaskRequest.model_validate(
-                            body
-                        )
-                    case 'tasks/pushNotificationConfig/set':
-                        specific_request = (
-                            SetTaskPushNotificationConfigRequest.model_validate(
-                                body
-                            )
-                        )
-                    case 'tasks/pushNotificationConfig/get':
-                        specific_request = (
-                            GetTaskPushNotificationConfigRequest.model_validate(
-                                body
-                            )
-                        )
-                    case 'tasks/pushNotificationConfig/list':
-                        specific_request = ListTaskPushNotificationConfigRequest.model_validate(
-                            body
-                        )
-                    case 'tasks/pushNotificationConfig/delete':
-                        specific_request = DeleteTaskPushNotificationConfigRequest.model_validate(
-                            body
-                        )
-                    case 'tasks/resubscribe':
-                        specific_request = (
-                            TaskResubscriptionRequest.model_validate(body)
-                        )
-                    case 'agent/getAuthenticatedExtendedCard':
-                        specific_request = (
-                            GetAuthenticatedExtendedCardRequest.model_validate(
-                                body
-                            )
-                        )
-                    case _:
-                        return self._generate_error_response(
-                            request_id, A2AError(root=MethodNotFoundError())
-                        )
+                model_class = self.METHOD_TO_MODEL.get(method)
+                if not model_class:
+                    return self._generate_error_response(
+                        request_id, A2AError(root=MethodNotFoundError())
+                    )
+                specific_request = model_class.model_validate(body)
             except ValidationError as e:
-                traceback.print_exc()
+                logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
                     A2AError(
