@@ -28,12 +28,14 @@ from a2a.types import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     InternalError,
+    InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     JSONRPCError,
     JSONRPCErrorResponse,
     JSONRPCRequest,
     JSONRPCResponse,
+    MethodNotFoundError,
     ListTaskPushNotificationConfigRequest,
     SendMessageRequest,
     SendStreamingMessageRequest,
@@ -267,17 +269,102 @@ class JSONRPCApplication(ABC):
             body = await request.json()
             if isinstance(body, dict):
                 request_id = body.get('id')
+                # Ensure request_id is valid for JSON-RPC response (str/int/None only)
+                if request_id is not None and not isinstance(
+                    request_id, (str, int)
+                ):
+                    request_id = None
+            # Treat very large payloads as invalid request (-32600) before routing
+            with contextlib.suppress(Exception):
+                content_length = int(request.headers.get('content-length', '0'))
+                if content_length and content_length > 1_000_000:
+                    return self._generate_error_response(
+                        request_id,
+                        A2AError(
+                            root=InvalidRequestError(
+                                message='Payload too large'
+                            )
+                        ),
+                    )
+            logger.info(f'**********Request body: {body}')
+            # 1) Validate base JSON-RPC structure only (-32600 on failure)
+            try:
+                base_request = JSONRPCRequest.model_validate(body)
+            except ValidationError as e:
+                traceback.print_exc()
+                return self._generate_error_response(
+                    request_id,
+                    A2AError(
+                        root=InvalidRequestError(data=json.loads(e.json()))
+                    ),
+                )
 
-            # First, validate the basic JSON-RPC structure. This is crucial
-            # because the A2ARequest model is a discriminated union where some
-            # request types have default values for the 'method' field
-            JSONRPCRequest.model_validate(body)
+            # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
+            method = base_request.method
+            try:
+                match method:
+                    case 'message/send':
+                        specific_request = SendMessageRequest.model_validate(
+                            body
+                        )
+                    case 'message/stream':
+                        specific_request = (
+                            SendStreamingMessageRequest.model_validate(body)
+                        )
+                    case 'tasks/get':
+                        specific_request = GetTaskRequest.model_validate(body)
+                    case 'tasks/cancel':
+                        specific_request = CancelTaskRequest.model_validate(
+                            body
+                        )
+                    case 'tasks/pushNotificationConfig/set':
+                        specific_request = (
+                            SetTaskPushNotificationConfigRequest.model_validate(
+                                body
+                            )
+                        )
+                    case 'tasks/pushNotificationConfig/get':
+                        specific_request = (
+                            GetTaskPushNotificationConfigRequest.model_validate(
+                                body
+                            )
+                        )
+                    case 'tasks/pushNotificationConfig/list':
+                        specific_request = ListTaskPushNotificationConfigRequest.model_validate(
+                            body
+                        )
+                    case 'tasks/pushNotificationConfig/delete':
+                        specific_request = DeleteTaskPushNotificationConfigRequest.model_validate(
+                            body
+                        )
+                    case 'tasks/resubscribe':
+                        specific_request = (
+                            TaskResubscriptionRequest.model_validate(body)
+                        )
+                    case 'agent/getAuthenticatedExtendedCard':
+                        specific_request = (
+                            GetAuthenticatedExtendedCardRequest.model_validate(
+                                body
+                            )
+                        )
+                    case _:
+                        return self._generate_error_response(
+                            request_id, A2AError(root=MethodNotFoundError())
+                        )
+            except ValidationError as e:
+                traceback.print_exc()
+                return self._generate_error_response(
+                    request_id,
+                    A2AError(
+                        root=InvalidParamsError(data=json.loads(e.json()))
+                    ),
+                )
 
-            a2a_request = A2ARequest.model_validate(body)
-
+            # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
 
-            request_id = a2a_request.root.id
+            request_id = specific_request.id
+            a2a_request = A2ARequest(root=specific_request)
             request_obj = a2a_request.root
 
             if isinstance(
@@ -300,12 +387,6 @@ class JSONRPCApplication(ABC):
             traceback.print_exc()
             return self._generate_error_response(
                 None, A2AError(root=JSONParseError(message=str(e)))
-            )
-        except ValidationError as e:
-            traceback.print_exc()
-            return self._generate_error_response(
-                request_id,
-                A2AError(root=InvalidRequestError(data=json.loads(e.json()))),
             )
         except HTTPException as e:
             if e.status_code == HTTP_413_REQUEST_ENTITY_TOO_LARGE:
