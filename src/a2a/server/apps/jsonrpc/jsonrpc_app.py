@@ -35,8 +35,8 @@ from a2a.types import (
     JSONRPCErrorResponse,
     JSONRPCRequest,
     JSONRPCResponse,
-    MethodNotFoundError,
     ListTaskPushNotificationConfigRequest,
+    MethodNotFoundError,
     SendMessageRequest,
     SendStreamingMessageRequest,
     SendStreamingMessageResponse,
@@ -90,6 +90,8 @@ else:
         JSONResponse = Any
         Response = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
+
+MAX_CONTENT_LENGTH = 1_000_000
 
 
 class StarletteUserProxy(A2AUser):
@@ -271,13 +273,13 @@ class JSONRPCApplication(ABC):
                 request_id = body.get('id')
                 # Ensure request_id is valid for JSON-RPC response (str/int/None only)
                 if request_id is not None and not isinstance(
-                    request_id, (str, int)
+                    request_id, str | int
                 ):
                     request_id = None
             # Treat very large payloads as invalid request (-32600) before routing
             with contextlib.suppress(Exception):
                 content_length = int(request.headers.get('content-length', '0'))
-                if content_length and content_length > 1_000_000:
+                if content_length and content_length > MAX_CONTENT_LENGTH:
                     return self._generate_error_response(
                         request_id,
                         A2AError(
