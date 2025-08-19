@@ -22,7 +22,11 @@ def sample_message() -> types.Message:
             types.Part(root=types.TextPart(text='Hello')),
             types.Part(
                 root=types.FilePart(
-                    file=types.FileWithUri(uri='file:///test.txt')
+                    file=types.FileWithUri(
+                        uri='file:///test.txt',
+                        name='test.txt',
+                        mime_type='text/plain',
+                    ),
                 )
             ),
             types.Part(root=types.DataPart(data={'key': 'value'})),
@@ -148,6 +152,8 @@ class TestProtoUtils:
 
         # Test file part handling
         assert proto_msg.content[1].file.file_with_uri == 'file:///test.txt'
+        assert proto_msg.content[1].file.mime_type == 'text/plain'
+        assert proto_msg.content[1].file.name == 'test.txt'
 
         roundtrip_msg = proto_utils.FromProto.message(proto_msg)
         assert roundtrip_msg == sample_message
