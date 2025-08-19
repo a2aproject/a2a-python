@@ -156,7 +156,21 @@ class JSONRPCApplication(ABC):
     """
 
     # Method-to-model mapping for centralized routing
-    METHOD_TO_MODEL = {
+    # Define the union type for all supported request models
+    A2ARequestModel = (
+        SendMessageRequest
+        | SendStreamingMessageRequest
+        | GetTaskRequest
+        | CancelTaskRequest
+        | SetTaskPushNotificationConfigRequest
+        | GetTaskPushNotificationConfigRequest
+        | ListTaskPushNotificationConfigRequest
+        | DeleteTaskPushNotificationConfigRequest
+        | TaskResubscriptionRequest
+        | GetAuthenticatedExtendedCardRequest
+    )
+
+    METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
         'message/send': SendMessageRequest,
         'message/stream': SendStreamingMessageRequest,
         'tasks/get': GetTaskRequest,
