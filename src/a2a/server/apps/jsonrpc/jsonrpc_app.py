@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import traceback
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
@@ -12,7 +13,7 @@ from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
-    get_requested_extensions
+    get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
@@ -39,15 +40,16 @@ from a2a.types import (
     SendStreamingMessageResponse,
     SetTaskPushNotificationConfigRequest,
     TaskResubscriptionRequest,
-    UnsupportedOperationError
+    UnsupportedOperationError,
 )
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH
+    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
+
 
 logger = logging.getLogger(__name__)
 

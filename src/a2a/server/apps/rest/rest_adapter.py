@@ -1,7 +1,9 @@
 import functools
 import logging
+
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -29,7 +31,7 @@ else:
 
 from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
-    DefaultCallContextBuilder
+    DefaultCallContextBuilder,
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -37,9 +39,10 @@ from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
 from a2a.utils.error_handlers import (
     rest_error_handler,
-    rest_stream_error_handler
+    rest_stream_error_handler,
 )
 from a2a.utils.errors import ServerError
+
 
 logger = logging.getLogger(__name__)
 
@@ -148,7 +151,7 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
         if rpc_url == card_to_serve.url:
-          self._modify_rpc_url(card_to_serve, request)
+            self._modify_rpc_url(card_to_serve, request)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
@@ -185,7 +188,7 @@ class RESTAdapter:
             base_card = card_to_serve if card_to_serve else self.agent_card
             card_to_serve = self.extended_card_modifier(base_card, context)
         if rpc_url == card_to_serve.url:
-          self._modify_rpc_url(card_to_serve, request)
+            self._modify_rpc_url(card_to_serve, request)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
