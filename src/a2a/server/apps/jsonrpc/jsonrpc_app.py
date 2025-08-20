@@ -2,7 +2,6 @@ import contextlib
 import json
 import logging
 import traceback
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
@@ -11,45 +10,26 @@ from pydantic import ValidationError
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
-from a2a.extensions.common import (
-    HTTP_EXTENSION_HEADER,
-    get_requested_extensions,
-)
+from a2a.extensions.common import (HTTP_EXTENSION_HEADER,
+                                   get_requested_extensions)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (
-    A2AError,
-    A2ARequest,
-    AgentCard,
-    CancelTaskRequest,
-    DeleteTaskPushNotificationConfigRequest,
-    GetAuthenticatedExtendedCardRequest,
-    GetTaskPushNotificationConfigRequest,
-    GetTaskRequest,
-    InternalError,
-    InvalidRequestError,
-    JSONParseError,
-    JSONRPCError,
-    JSONRPCErrorResponse,
-    JSONRPCRequest,
-    JSONRPCResponse,
-    ListTaskPushNotificationConfigRequest,
-    SendMessageRequest,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SetTaskPushNotificationConfigRequest,
-    TaskResubscriptionRequest,
-    UnsupportedOperationError,
-)
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
-)
+from a2a.types import (A2AError, A2ARequest, AgentCard, CancelTaskRequest,
+                       DeleteTaskPushNotificationConfigRequest,
+                       GetAuthenticatedExtendedCardRequest,
+                       GetTaskPushNotificationConfigRequest, GetTaskRequest,
+                       InternalError, InvalidRequestError, JSONParseError,
+                       JSONRPCError, JSONRPCErrorResponse, JSONRPCRequest,
+                       JSONRPCResponse, ListTaskPushNotificationConfigRequest,
+                       SendMessageRequest, SendStreamingMessageRequest,
+                       SendStreamingMessageResponse,
+                       SetTaskPushNotificationConfigRequest,
+                       TaskResubscriptionRequest, UnsupportedOperationError)
+from a2a.utils.constants import (AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL,
+                                 EXTENDED_AGENT_CARD_PATH,
+                                 PREV_AGENT_CARD_WELL_KNOWN_PATH)
 from a2a.utils.errors import MethodNotImplementedError
-
 
 logger = logging.getLogger(__name__)
 
@@ -529,7 +509,7 @@ class JSONRPCApplication(ABC):
                 extra_path = forwarded_path[: -len(request.url.path)]
                 new_path = extra_path + rpc_path
                 # If original path was just "/",
-                # we remove trailing "/" in the the extended one
+                # we remove trailing "/" in the extended one
                 if len(new_path) > 1 and rpc_path == '/':
                     new_path = new_path.rstrip('/')
                 rpc_path = new_path

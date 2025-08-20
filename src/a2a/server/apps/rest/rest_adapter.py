@@ -1,9 +1,7 @@
 import functools
 import logging
-
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -29,20 +27,15 @@ else:
 
         _package_starlette_installed = False
 
-from a2a.server.apps.jsonrpc import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
-)
+from a2a.server.apps.jsonrpc import (CallContextBuilder,
+                                     DefaultCallContextBuilder)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
-from a2a.utils.error_handlers import (
-    rest_error_handler,
-    rest_stream_error_handler,
-)
+from a2a.utils.error_handlers import (rest_error_handler,
+                                      rest_stream_error_handler)
 from a2a.utils.errors import ServerError
-
 
 logger = logging.getLogger(__name__)
 
@@ -233,7 +226,7 @@ class RESTAdapter:
                 extra_path = forwarded_path[: -len(request.url.path)]
                 new_path = extra_path + rpc_path
                 # If original path was just "/",
-                # we remove trailing "/" in the the extended one
+                # we remove trailing "/" in the extended one
                 if len(new_path) > 1 and rpc_path == '/':
                     new_path = new_path.rstrip('/')
                 rpc_path = new_path
