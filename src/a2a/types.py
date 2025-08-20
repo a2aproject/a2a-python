@@ -637,7 +637,7 @@ class JSONRPCRequest(A2ABaseModel):
     A unique identifier established by the client. It must be a String, a Number, or null.
     The server must reply with the same value in the response. This property is omitted for notifications.
     """
-    jsonrpc: Literal['2.0']
+    jsonrpc: Literal['2.0'] = '2.0'
     """
     The version of the JSON-RPC protocol. MUST be exactly "2.0".
     """
@@ -645,7 +645,7 @@ class JSONRPCRequest(A2ABaseModel):
     """
     A string containing the name of the method to be invoked.
     """
-    params: Any = None
+    params: dict[str, Any] | None = None
     """
     A structured value holding the parameter values to be used during the method invocation.
     """

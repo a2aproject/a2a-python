@@ -839,7 +839,7 @@ def test_invalid_request_structure(client: TestClient):
     response = client.post(
         '/',
         json={
-            # Missing required fields
+            'jsonrpc': 'aaaa',  # Missing or wrong required fields
             'id': '123',
             'method': 'foo/bar',
         },
