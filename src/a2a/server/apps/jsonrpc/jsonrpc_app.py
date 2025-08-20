@@ -171,16 +171,16 @@ class JSONRPCApplication(ABC):
     )
 
     METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
-        'message/send': SendMessageRequest,
-        'message/stream': SendStreamingMessageRequest,
-        'tasks/get': GetTaskRequest,
-        'tasks/cancel': CancelTaskRequest,
-        'tasks/pushNotificationConfig/set': SetTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/get': GetTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/list': ListTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/delete': DeleteTaskPushNotificationConfigRequest,
-        'tasks/resubscribe': TaskResubscriptionRequest,
-        'agent/getAuthenticatedExtendedCard': GetAuthenticatedExtendedCardRequest,
+        SendMessageRequest.method: SendMessageRequest,
+        SendStreamingMessageRequest.method: SendStreamingMessageRequest,
+        GetTaskRequest.method: GetTaskRequest,
+        CancelTaskRequest.method: CancelTaskRequest,
+        SetTaskPushNotificationConfigRequest.method: SetTaskPushNotificationConfigRequest,
+        GetTaskPushNotificationConfigRequest.method: GetTaskPushNotificationConfigRequest,
+        ListTaskPushNotificationConfigRequest.method: ListTaskPushNotificationConfigRequest,
+        DeleteTaskPushNotificationConfigRequest.method: DeleteTaskPushNotificationConfigRequest,
+        TaskResubscriptionRequest.method: TaskResubscriptionRequest,
+        GetAuthenticatedExtendedCardRequest.method: GetAuthenticatedExtendedCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
