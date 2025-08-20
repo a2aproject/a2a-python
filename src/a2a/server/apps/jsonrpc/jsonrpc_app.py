@@ -170,17 +170,35 @@ class JSONRPCApplication(ABC):
         | GetAuthenticatedExtendedCardRequest
     )
 
+    # Pydantic model fields like 'method' are instance attributes, not class attributes.
+    # So, 'Type.method' does not exist until you instantiate the model.
+    # To get the default value for the 'method' field at the class level,
+    # you must use Type.model_fields["method"].default.
     METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
-        SendMessageRequest.method: SendMessageRequest,
-        SendStreamingMessageRequest.method: SendStreamingMessageRequest,
-        GetTaskRequest.method: GetTaskRequest,
-        CancelTaskRequest.method: CancelTaskRequest,
-        SetTaskPushNotificationConfigRequest.method: SetTaskPushNotificationConfigRequest,
-        GetTaskPushNotificationConfigRequest.method: GetTaskPushNotificationConfigRequest,
-        ListTaskPushNotificationConfigRequest.method: ListTaskPushNotificationConfigRequest,
-        DeleteTaskPushNotificationConfigRequest.method: DeleteTaskPushNotificationConfigRequest,
-        TaskResubscriptionRequest.method: TaskResubscriptionRequest,
-        GetAuthenticatedExtendedCardRequest.method: GetAuthenticatedExtendedCardRequest,
+        SendMessageRequest.model_fields['method'].default: SendMessageRequest,
+        SendStreamingMessageRequest.model_fields[
+            'method'
+        ].default: SendStreamingMessageRequest,
+        GetTaskRequest.model_fields['method'].default: GetTaskRequest,
+        CancelTaskRequest.model_fields['method'].default: CancelTaskRequest,
+        SetTaskPushNotificationConfigRequest.model_fields[
+            'method'
+        ].default: SetTaskPushNotificationConfigRequest,
+        GetTaskPushNotificationConfigRequest.model_fields[
+            'method'
+        ].default: GetTaskPushNotificationConfigRequest,
+        ListTaskPushNotificationConfigRequest.model_fields[
+            'method'
+        ].default: ListTaskPushNotificationConfigRequest,
+        DeleteTaskPushNotificationConfigRequest.model_fields[
+            'method'
+        ].default: DeleteTaskPushNotificationConfigRequest,
+        TaskResubscriptionRequest.model_fields[
+            'method'
+        ].default: TaskResubscriptionRequest,
+        GetAuthenticatedExtendedCardRequest.model_fields[
+            'method'
+        ].default: GetAuthenticatedExtendedCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
