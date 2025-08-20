@@ -27,14 +27,18 @@ else:
 
         _package_starlette_installed = False
 
-from a2a.server.apps.jsonrpc import (CallContextBuilder,
-                                     DefaultCallContextBuilder)
+from a2a.server.apps.jsonrpc import (
+    CallContextBuilder,
+    DefaultCallContextBuilder
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
-from a2a.utils.error_handlers import (rest_error_handler,
-                                      rest_stream_error_handler)
+from a2a.utils.error_handlers import (
+    rest_error_handler,
+    rest_stream_error_handler
+)
 from a2a.utils.errors import ServerError
 
 logger = logging.getLogger(__name__)
@@ -185,7 +189,7 @@ class RESTAdapter:
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
-    def _modify_rpc_url(self, agent_card: AgentCard, request: Request):
+    def _modify_rpc_url(self, agent_card: AgentCard, request: Request) -> None:
         """Modifies Agent's RPC URL based on the AgentCard request.
 
         Args:

@@ -10,25 +10,43 @@ from pydantic import ValidationError
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
-from a2a.extensions.common import (HTTP_EXTENSION_HEADER,
-                                   get_requested_extensions)
+from a2a.extensions.common import (
+    HTTP_EXTENSION_HEADER,
+    get_requested_extensions
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (A2AError, A2ARequest, AgentCard, CancelTaskRequest,
-                       DeleteTaskPushNotificationConfigRequest,
-                       GetAuthenticatedExtendedCardRequest,
-                       GetTaskPushNotificationConfigRequest, GetTaskRequest,
-                       InternalError, InvalidRequestError, JSONParseError,
-                       JSONRPCError, JSONRPCErrorResponse, JSONRPCRequest,
-                       JSONRPCResponse, ListTaskPushNotificationConfigRequest,
-                       SendMessageRequest, SendStreamingMessageRequest,
-                       SendStreamingMessageResponse,
-                       SetTaskPushNotificationConfigRequest,
-                       TaskResubscriptionRequest, UnsupportedOperationError)
-from a2a.utils.constants import (AGENT_CARD_WELL_KNOWN_PATH, DEFAULT_RPC_URL,
-                                 EXTENDED_AGENT_CARD_PATH,
-                                 PREV_AGENT_CARD_WELL_KNOWN_PATH)
+from a2a.types import (
+    A2AError,
+    A2ARequest,
+    AgentCard,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetAuthenticatedExtendedCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    InternalError,
+    InvalidRequestError,
+    JSONParseError,
+    JSONRPCError,
+    JSONRPCErrorResponse,
+    JSONRPCRequest,
+    JSONRPCResponse,
+    ListTaskPushNotificationConfigRequest,
+    SendMessageRequest,
+    SendStreamingMessageRequest,
+    SendStreamingMessageResponse,
+    SetTaskPushNotificationConfigRequest,
+    TaskResubscriptionRequest,
+    UnsupportedOperationError
+)
+from a2a.utils.constants import (
+    AGENT_CARD_WELL_KNOWN_PATH,
+    DEFAULT_RPC_URL,
+    EXTENDED_AGENT_CARD_PATH,
+    PREV_AGENT_CARD_WELL_KNOWN_PATH
+)
 from a2a.utils.errors import MethodNotImplementedError
 
 logger = logging.getLogger(__name__)
@@ -468,7 +486,7 @@ class JSONRPCApplication(ABC):
             headers=headers,
         )
 
-    def _modify_rpc_url(self, agent_card: AgentCard, request: Request):
+    def _modify_rpc_url(self, agent_card: AgentCard, request: Request) -> None:
         """Modifies Agent's RPC URL based on the AgentCard request.
 
         Args:
