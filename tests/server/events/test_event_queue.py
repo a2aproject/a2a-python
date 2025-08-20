@@ -169,7 +169,9 @@ async def test_enqueue_event_propagates_to_children(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_event_when_closed(event_queue: EventQueue) -> None:
+async def test_enqueue_event_when_closed(
+    event_queue: EventQueue, expected_queue_closed_exception
+) -> None:
     """Test that no event is enqueued if the parent queue is closed."""
     await event_queue.close()  # Close the queue first
 
@@ -178,7 +180,7 @@ async def test_enqueue_event_when_closed(event_queue: EventQueue) -> None:
     await event_queue.enqueue_event(event)
 
     # Verify the queue is still empty
-    with pytest.raises(asyncio.QueueEmpty):
+    with pytest.raises(expected_queue_closed_exception):
         await event_queue.dequeue_event(no_wait=True)
 
     # Also verify child queues are not affected directly by parent's enqueue attempt when closed
@@ -192,7 +194,7 @@ async def test_enqueue_event_when_closed(event_queue: EventQueue) -> None:
     await (
         child_queue.close()
     )  # ensure child is also seen as closed for this test's purpose
-    with pytest.raises(asyncio.QueueEmpty):
+    with pytest.raises(expected_queue_closed_exception):
         await child_queue.dequeue_event(no_wait=True)
 
 
@@ -214,7 +216,7 @@ async def test_dequeue_event_closed_and_empty_no_wait(
     with pytest.raises(expected_queue_closed_exception):
         event_queue.queue.get_nowait()
 
-    with pytest.raises(asyncio.QueueEmpty, match='Queue is closed.'):
+    with pytest.raises(expected_queue_closed_exception):
         await event_queue.dequeue_event(no_wait=True)
 
 
@@ -230,7 +232,8 @@ async def test_dequeue_event_closed_and_empty_waits_then_raises(
 
     # This test is tricky because await event_queue.dequeue_event() would hang if not for the close check.
     # The current implementation's dequeue_event checks `is_closed` first.
-    # If closed and empty, it raises QueueEmpty immediately.
+    # If closed and empty, it raises QueueEmpty immediately (on Python <= 3.12).
+    # On Python 3.13+, this check is skipped and asyncio.Queue.get() raises QueueShutDown instead.
     # The "waits_then_raises" scenario described in the subtask implies the `get()` might wait.
     # However, the current code:
     # async with self._lock:
@@ -240,7 +243,7 @@ async def test_dequeue_event_closed_and_empty_waits_then_raises(
     # event = await self.queue.get() -> this line is not reached if closed and empty.
 
     # So, for the current implementation, it will raise QueueEmpty immediately.
-    with pytest.raises(asyncio.QueueEmpty, match='Queue is closed.'):
+    with pytest.raises(expected_queue_closed_exception):
         await event_queue.dequeue_event(no_wait=False)
 
     # If the implementation were to change to allow `await self.queue.get()`
