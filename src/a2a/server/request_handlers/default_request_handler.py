@@ -36,6 +36,7 @@ from a2a.types import (
     MessageSendParams,
     Task,
     TaskIdParams,
+    TaskNotCancelableError,
     TaskNotFoundError,
     TaskPushNotificationConfig,
     TaskQueryParams,
@@ -123,6 +124,14 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id)
         if not task:
             raise ServerError(error=TaskNotFoundError())
+
+        # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise ServerError(
+                error=TaskNotCancelableError(
+                    message=f'Task cannot be canceled - current state: {task.status.state}'
+                )
+            )
 
         task_manager = TaskManager(
             task_id=task.id,
