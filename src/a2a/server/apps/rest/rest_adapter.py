@@ -206,7 +206,7 @@ class RESTAdapter:
             host = request.headers['X-Forwarded-Host']
         else:
             host = request.url.hostname or rpc_url.hostname or 'localhost'
-            port = request.url.port or rpc_url.port
+            port = request.url.port
 
         if 'X-Forwarded-Proto' in request.headers:
             scheme = request.headers['X-Forwarded-Proto']
