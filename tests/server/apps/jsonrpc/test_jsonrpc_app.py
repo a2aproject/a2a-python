@@ -26,6 +26,7 @@ from a2a.server.request_handlers.request_handler import (
     RequestHandler,
 )  # For mock spec
 from a2a.types import (
+    AgentCapabilities,
     AgentCard,
     Message,
     MessageSendParams,
@@ -36,7 +37,7 @@ from a2a.types import (
     SendMessageSuccessResponse,
     TextPart,
 )
-
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 # --- StarletteUserProxy Tests ---
 
@@ -354,6 +355,59 @@ class TestJSONRPCExtensions:
             'foo',
             'baz',
         }
+
+
+class TestAgentCardHandler:
+        @pytest.fixture
+        def agent_card(self):
+            return AgentCard(
+                name='APIKeyAgent',
+                description='An agent that uses API Key auth.',
+                url='http://localhost:8000',
+                version='1.0.0',
+                capabilities=AgentCapabilities(),
+                default_input_modes=['text/plain'],
+                default_output_modes=['text/plain'],
+                skills=[],
+            )
+
+        def test_agent_card_url_rewriting(
+            self, agent_card: AgentCard,
+        ):
+            """
+            Tests that the A2AStarletteApplication endpoint correctly handles Agent URL rewriting.
+            """
+            handler = AsyncMock()
+            app_instance = A2AStarletteApplication(agent_card, handler)
+            client = TestClient(
+                app_instance.build(),
+                base_url="https://my-agents.com:5000"
+            )
+
+            response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+            response.raise_for_status()
+            assert response.json()["url"] == "https://my-agents.com:5000"
+
+            response = client.get(
+                AGENT_CARD_WELL_KNOWN_PATH,
+                headers={
+                    "X-Forwarded-Host": "my-great-agents.com:5678",
+                    "X-Forwarded-Proto": "http",
+                    "X-Forwarded-Path": 
+                        "/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH
+                }
+            )
+            assert response.json()["url"] == "http://my-great-agents.com:5678/agents/my-agent"
+
+            client = TestClient(
+                app_instance.build(
+                    agent_card_url="/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH
+                ),
+                base_url="https://my-mighty-agents.com"
+            )
+
+            response = client.get("/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH)
+            assert response.json()["url"] == "https://my-mighty-agents.com/agents/my-agent"
 
 
 if __name__ == '__main__':

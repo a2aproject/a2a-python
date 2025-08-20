@@ -1,7 +1,7 @@
 import logging
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -15,6 +15,7 @@ from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
+    AgentCapabilities,
     AgentCard,
     Message,
     Part,
@@ -24,7 +25,7 @@ from a2a.types import (
     TaskStatus,
     TextPart,
 )
-
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -220,6 +221,63 @@ async def test_send_message_success_task(
     actual_response = a2a_pb2.SendMessageResponse()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+class TestAgentCardHandler:
+        @pytest.fixture
+        def agent_card(self):
+            return AgentCard(
+                name='APIKeyAgent',
+                description='An agent that uses API Key auth.',
+                url='http://localhost:8000',
+                version='1.0.0',
+                capabilities=AgentCapabilities(),
+                default_input_modes=['text/plain'],
+                default_output_modes=['text/plain'],
+                skills=[],
+            )
+        
+        @pytest.mark.anyio
+        async def test_agent_card_url_rewriting(
+            self, agent_card: AgentCard,
+        ):
+            """
+            Tests that the REST endpoint correctly handles Agent URL rewriting.
+            """
+            app_instance = A2ARESTFastAPIApplication(agent_card, AsyncMock())
+            app =  app_instance.build(
+                agent_card_url=AGENT_CARD_WELL_KNOWN_PATH
+            )
+            client = AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="https://my-agents.com:5000"
+            )
+
+            response = await client.get(AGENT_CARD_WELL_KNOWN_PATH)
+            response.raise_for_status()
+            assert response.json()["url"] == "https://my-agents.com:5000"
+
+            response = await client.get(
+                AGENT_CARD_WELL_KNOWN_PATH,
+                headers={
+                    "X-Forwarded-Host": "my-great-agents.com:5678",
+                    "X-Forwarded-Proto": "http",
+                    "X-Forwarded-Path": 
+                        "/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH
+                }
+            )
+            assert response.json()["url"] == "http://my-great-agents.com:5678/agents/my-agent"
+
+            app = app_instance.build(
+                agent_card_url="/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH
+            )
+            client = AsyncClient(
+                transport=ASGITransport(app=app),
+                base_url="https://my-mighty-agents.com"
+            )
+
+            response = await client.get("/agents/my-agent" + AGENT_CARD_WELL_KNOWN_PATH)
+            assert response.json()["url"] == "https://my-mighty-agents.com/agents/my-agent"
 
 
 if __name__ == '__main__':

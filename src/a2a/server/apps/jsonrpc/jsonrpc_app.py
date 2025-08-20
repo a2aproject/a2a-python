@@ -71,6 +71,7 @@ else:
         from sse_starlette.sse import EventSourceResponse
         from starlette.applications import Starlette
         from starlette.authentication import BaseUser
+        from starlette.datastructures import URL
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -488,6 +489,12 @@ class JSONRPCApplication(ABC):
         )
     
     def _modify_rpc_url(self, agent_card: AgentCard, request: Request):
+        """Modifies Agent's RPC URL based on the AgentCard request.
+
+        Args:
+            agent_card (AgentCard): Original AgentCard
+            request (Request): AgentCard request
+        """
         rpc_url = URL(agent_card.url)
         rpc_path = rpc_url.path
         port = None
@@ -499,6 +506,7 @@ class JSONRPCApplication(ABC):
             
         if "X-Forwarded-Proto" in request.headers:
             scheme = request.headers["X-Forwarded-Proto"]
+            port = None
         else:
             scheme = request.url.scheme
         if not scheme:
@@ -526,23 +534,14 @@ class JSONRPCApplication(ABC):
                     new_path = new_path.rstrip("/")
                 rpc_path = new_path
 
-        if port:
-            agent_card.url = str(
-                rpc_url.replace(
-                    hostname=host,
-                    port=port,
-                    scheme=scheme,
-                    path=rpc_path
-                )
+        agent_card.url = str(
+            rpc_url.replace(
+                hostname=host,
+                port=port,
+                scheme=scheme,
+                path=rpc_path
             )
-        else:
-            agent_card.url = str(
-                rpc_url.replace(
-                    hostname=host,
-                    scheme=scheme,
-                    path=rpc_path
-                )
-            )
+        )
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
