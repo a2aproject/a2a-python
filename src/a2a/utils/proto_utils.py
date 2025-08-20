@@ -767,7 +767,7 @@ class FromProto:
             if request.history_length
             else None,
             id=m.group(1),
-            metadata=None,
+            metadata=request.metadata,
         )
 
     @classmethod
