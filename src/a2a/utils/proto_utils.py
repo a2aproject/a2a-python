@@ -80,8 +80,14 @@ class ToProto:
         cls, file: types.FileWithUri | types.FileWithBytes
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
-            return a2a_pb2.FilePart(file_with_uri=file.uri)
-        return a2a_pb2.FilePart(file_with_bytes=file.bytes.encode('utf-8'))
+            return a2a_pb2.FilePart(
+                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
+            )
+        return a2a_pb2.FilePart(
+            file_with_bytes=file.bytes.encode('utf-8'),
+            mime_type=file.mime_type,
+            name=file.name,
+        )
 
     @classmethod
     def task(cls, task: types.Task) -> a2a_pb2.Task:
@@ -500,9 +506,19 @@ class FromProto:
     def file(
         cls, file: a2a_pb2.FilePart
     ) -> types.FileWithUri | types.FileWithBytes:
+        common_args = {
+            'mime_type': file.mime_type or None,
+            'name': file.name or None,
+        }
         if file.HasField('file_with_uri'):
-            return types.FileWithUri(uri=file.file_with_uri)
-        return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
+            return types.FileWithUri(
+                uri=file.file_with_uri,
+                **common_args,
+            )
+        return types.FileWithBytes(
+            bytes=file.file_with_bytes.decode('utf-8'),
+            **common_args,
+        )
 
     @classmethod
     def task_or_message(
@@ -751,7 +767,7 @@ class FromProto:
             if request.history_length
             else None,
             id=m.group(1),
-            metadata=None,
+            metadata=request.metadata,
         )
 
     @classmethod

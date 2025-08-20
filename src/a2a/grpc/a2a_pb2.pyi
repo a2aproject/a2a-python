@@ -55,7 +55,7 @@ class SendMessageConfiguration(_message.Message):
     push_notification: PushNotificationConfig
     history_length: int
     blocking: bool
-    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., push_notification: _Optional[_Union[PushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., blocking: bool = ...) -> None: ...
+    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., push_notification: _Optional[_Union[PushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., blocking: _Optional[bool] = ...) -> None: ...
 
 class Task(_message.Message):
     __slots__ = ("id", "context_id", "status", "artifacts", "history", "metadata")
@@ -94,14 +94,16 @@ class Part(_message.Message):
     def __init__(self, text: _Optional[str] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ..., data: _Optional[_Union[DataPart, _Mapping]] = ...) -> None: ...
 
 class FilePart(_message.Message):
-    __slots__ = ("file_with_uri", "file_with_bytes", "mime_type")
+    __slots__ = ("file_with_uri", "file_with_bytes", "mime_type", "name")
     FILE_WITH_URI_FIELD_NUMBER: _ClassVar[int]
     FILE_WITH_BYTES_FIELD_NUMBER: _ClassVar[int]
     MIME_TYPE_FIELD_NUMBER: _ClassVar[int]
+    NAME_FIELD_NUMBER: _ClassVar[int]
     file_with_uri: str
     file_with_bytes: bytes
     mime_type: str
-    def __init__(self, file_with_uri: _Optional[str] = ..., file_with_bytes: _Optional[bytes] = ..., mime_type: _Optional[str] = ...) -> None: ...
+    name: str
+    def __init__(self, file_with_uri: _Optional[str] = ..., file_with_bytes: _Optional[bytes] = ..., mime_type: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
 
 class DataPart(_message.Message):
     __slots__ = ("data",)
@@ -155,7 +157,7 @@ class TaskStatusUpdateEvent(_message.Message):
     status: TaskStatus
     final: bool
     metadata: _struct_pb2.Struct
-    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., final: bool = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., final: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskArtifactUpdateEvent(_message.Message):
     __slots__ = ("task_id", "context_id", "artifact", "append", "last_chunk", "metadata")
@@ -171,7 +173,7 @@ class TaskArtifactUpdateEvent(_message.Message):
     append: bool
     last_chunk: bool
     metadata: _struct_pb2.Struct
-    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., artifact: _Optional[_Union[Artifact, _Mapping]] = ..., append: bool = ..., last_chunk: bool = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., artifact: _Optional[_Union[Artifact, _Mapping]] = ..., append: _Optional[bool] = ..., last_chunk: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class PushNotificationConfig(_message.Message):
     __slots__ = ("id", "url", "token", "authentication")
@@ -202,7 +204,7 @@ class AgentInterface(_message.Message):
     def __init__(self, url: _Optional[str] = ..., transport: _Optional[str] = ...) -> None: ...
 
 class AgentCard(_message.Message):
-    __slots__ = ("protocol_version", "name", "description", "url", "preferred_transport", "additional_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security", "default_input_modes", "default_output_modes", "skills", "supports_authenticated_extended_card", "signatures")
+    __slots__ = ("protocol_version", "name", "description", "url", "preferred_transport", "additional_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security", "default_input_modes", "default_output_modes", "skills", "supports_authenticated_extended_card", "signatures", "icon_url")
     class SecuritySchemesEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -227,6 +229,7 @@ class AgentCard(_message.Message):
     SKILLS_FIELD_NUMBER: _ClassVar[int]
     SUPPORTS_AUTHENTICATED_EXTENDED_CARD_FIELD_NUMBER: _ClassVar[int]
     SIGNATURES_FIELD_NUMBER: _ClassVar[int]
+    ICON_URL_FIELD_NUMBER: _ClassVar[int]
     protocol_version: str
     name: str
     description: str
@@ -244,7 +247,8 @@ class AgentCard(_message.Message):
     skills: _containers.RepeatedCompositeFieldContainer[AgentSkill]
     supports_authenticated_extended_card: bool
     signatures: _containers.RepeatedCompositeFieldContainer[AgentCardSignature]
-    def __init__(self, protocol_version: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., url: _Optional[str] = ..., preferred_transport: _Optional[str] = ..., additional_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., supports_authenticated_extended_card: bool = ..., signatures: _Optional[_Iterable[_Union[AgentCardSignature, _Mapping]]] = ...) -> None: ...
+    icon_url: str
+    def __init__(self, protocol_version: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., url: _Optional[str] = ..., preferred_transport: _Optional[str] = ..., additional_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., supports_authenticated_extended_card: _Optional[bool] = ..., signatures: _Optional[_Iterable[_Union[AgentCardSignature, _Mapping]]] = ..., icon_url: _Optional[str] = ...) -> None: ...
 
 class AgentProvider(_message.Message):
     __slots__ = ("url", "organization")
@@ -262,7 +266,7 @@ class AgentCapabilities(_message.Message):
     streaming: bool
     push_notifications: bool
     extensions: _containers.RepeatedCompositeFieldContainer[AgentExtension]
-    def __init__(self, streaming: bool = ..., push_notifications: bool = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ...) -> None: ...
+    def __init__(self, streaming: _Optional[bool] = ..., push_notifications: _Optional[bool] = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ...) -> None: ...
 
 class AgentExtension(_message.Message):
     __slots__ = ("uri", "description", "required", "params")
@@ -274,7 +278,7 @@ class AgentExtension(_message.Message):
     description: str
     required: bool
     params: _struct_pb2.Struct
-    def __init__(self, uri: _Optional[str] = ..., description: _Optional[str] = ..., required: bool = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, uri: _Optional[str] = ..., description: _Optional[str] = ..., required: _Optional[bool] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentSkill(_message.Message):
     __slots__ = ("id", "name", "description", "tags", "examples", "input_modes", "output_modes", "security")
@@ -484,12 +488,14 @@ class SendMessageRequest(_message.Message):
     def __init__(self, request: _Optional[_Union[Message, _Mapping]] = ..., configuration: _Optional[_Union[SendMessageConfiguration, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class GetTaskRequest(_message.Message):
-    __slots__ = ("name", "history_length")
+    __slots__ = ("name", "history_length", "metadata")
     NAME_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     name: str
     history_length: int
-    def __init__(self, name: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
+    metadata: _struct_pb2.Struct
+    def __init__(self, name: _Optional[str] = ..., history_length: _Optional[int] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
     __slots__ = ("name",)

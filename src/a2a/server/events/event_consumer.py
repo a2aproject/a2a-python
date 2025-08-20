@@ -125,7 +125,7 @@ class EventConsumer:
                 # other part is waiting for an event or a closed queue.
                 if is_final_event:
                     logger.debug('Stopping event consumption in consume_all.')
-                    await self.queue.close()
+                    await self.queue.close(True)
                     yield event
                     break
                 yield event
@@ -135,7 +135,7 @@ class EventConsumer:
             except asyncio.TimeoutError:  # pyright: ignore [reportUnusedExcept]
                 # This class was made an alias of build-in TimeoutError after 3.11
                 continue
-            except QueueClosed:
+            except (QueueClosed, asyncio.QueueEmpty):
                 # Confirm that the queue is closed, e.g. we aren't on
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():

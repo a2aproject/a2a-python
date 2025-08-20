@@ -1,5 +1,35 @@
 # Changelog
 
+## [0.3.2](https://github.com/a2aproject/a2a-python/compare/v0.3.1...v0.3.2) (2025-08-20)
+
+
+### Bug Fixes
+
+* Add missing mime_type and name in proto conversion utils ([#408](https://github.com/a2aproject/a2a-python/issues/408)) ([72b2ee7](https://github.com/a2aproject/a2a-python/commit/72b2ee75dccfc8399edaa0837a025455b4b53a17))
+* Add name field to FilePart protobuf message ([#403](https://github.com/a2aproject/a2a-python/issues/403)) ([1dbe33d](https://github.com/a2aproject/a2a-python/commit/1dbe33d5cf2c74019b72c709f3427aeba54bf4e3))
+* Client hangs when implementing `AgentExecutor` and `await`ing twice in execute method ([#379](https://github.com/a2aproject/a2a-python/issues/379)) ([c147a83](https://github.com/a2aproject/a2a-python/commit/c147a83d3098e5ab2cd5b695a3bd71e17bf13b4c))
+* **grpc:** Update `CreateTaskPushNotificationConfig` endpoint to `/v1/{parent=tasks/*/pushNotificationConfigs}` ([#415](https://github.com/a2aproject/a2a-python/issues/415)) ([73dddc3](https://github.com/a2aproject/a2a-python/commit/73dddc3a3dc0b073d5559b3d0ec18ff4d20b6f7d))
+* make `event_consumer` tolerant to closed queues on py3.13 ([#407](https://github.com/a2aproject/a2a-python/issues/407)) ([a371461](https://github.com/a2aproject/a2a-python/commit/a371461c3b77aa9643c3a3378bb4405356863bff))
+* non-blocking `send_message` server handler not invoke push notification ([#394](https://github.com/a2aproject/a2a-python/issues/394)) ([db82a65](https://github.com/a2aproject/a2a-python/commit/db82a6582821a37aa8033d7db426557909ab10c6))
+* **proto:** Add `icon_url` to `a2a.proto` ([#416](https://github.com/a2aproject/a2a-python/issues/416)) ([00703e3](https://github.com/a2aproject/a2a-python/commit/00703e3df45ea7708613791ec35e843591333eca))
+* **spec:** Suggest Unique Identifier fields to be UUID ([#405](https://github.com/a2aproject/a2a-python/issues/405)) ([da14cea](https://github.com/a2aproject/a2a-python/commit/da14cea950f1af486e7891fa49199249d29b6f37))
+
+## [0.3.1](https://github.com/a2aproject/a2a-python/compare/v0.3.0...v0.3.1) (2025-08-13)
+
+
+### Features
+
+* Add agent card as a route in rest adapter ([ba93053](https://github.com/a2aproject/a2a-python/commit/ba93053850a767a8959bc634883008fcc1366e09))
+
+
+### Bug Fixes
+
+* gracefully handle task exceptions in event consumer ([#383](https://github.com/a2aproject/a2a-python/issues/383)) ([2508a9b](https://github.com/a2aproject/a2a-python/commit/2508a9b8ec1a1bfdc61e9012b7d68b33082b3981))
+* openapi working in sub-app ([#324](https://github.com/a2aproject/a2a-python/issues/324)) ([dec4b48](https://github.com/a2aproject/a2a-python/commit/dec4b487514db6cbb25f0c6fa7e1275a1ab0ba71))
+* Pass `message_length` param in `get_task()` ([#384](https://github.com/a2aproject/a2a-python/issues/384)) ([b6796b9](https://github.com/a2aproject/a2a-python/commit/b6796b9e1432ef8499eff454f869edf4427fd704))
+* relax protobuf dependency version requirement ([#381](https://github.com/a2aproject/a2a-python/issues/381)) ([0f55f55](https://github.com/a2aproject/a2a-python/commit/0f55f554ba9f6bf53fa3d9a91f66939f36e1ef2e))
+* Use HasField for simple message retrieval for grpc transport ([#380](https://github.com/a2aproject/a2a-python/issues/380)) ([3032aa6](https://github.com/a2aproject/a2a-python/commit/3032aa660f6f3b72dc7dd8b49b0e2f4d432c7a22))
+
 ## [0.3.0](https://github.com/a2aproject/a2a-python/compare/v0.2.16...v0.3.0) (2025-07-31)
 
 
