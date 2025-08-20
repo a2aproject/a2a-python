@@ -220,12 +220,12 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         await self.notifier.send_notification(task_data)  # Pass only task_data
 
         self.mock_httpx_client.post.assert_awaited_once()
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
         # Check that the error message contains the generic part and the specific exception string
         self.assertIn(
-            'Error sending push-notification', mock_logger.error.call_args[0][0]
+            'Error sending push-notification',
+            mock_logger.exception.call_args[0][0],
         )
-        self.assertIn(str(http_error), mock_logger.error.call_args[0][0])
 
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
     async def test_send_notification_request_error(
@@ -242,11 +242,11 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         await self.notifier.send_notification(task_data)  # Pass only task_data
 
         self.mock_httpx_client.post.assert_awaited_once()
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
         self.assertIn(
-            'Error sending push-notification', mock_logger.error.call_args[0][0]
+            'Error sending push-notification',
+            mock_logger.exception.call_args[0][0],
         )
-        self.assertIn(str(request_error), mock_logger.error.call_args[0][0])
 
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
     async def test_send_notification_with_auth(self, mock_logger: MagicMock):

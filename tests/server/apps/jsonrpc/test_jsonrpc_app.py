@@ -92,7 +92,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
         # This will fail at definition time if an abstract method is not implemented
         with pytest.raises(
             TypeError,
-            match="Can't instantiate abstract class IncompleteJSONRPCApp with abstract method build",
+            match=".*abstract class IncompleteJSONRPCApp .* abstract method '?build'?",
         ):
 
             class IncompleteJSONRPCApp(JSONRPCApplication):
@@ -112,8 +112,8 @@ class TestJSONRPCApplicationOptionalDeps:
     @pytest.fixture(scope='class', autouse=True)
     def ensure_pkg_starlette_is_present(self):
         try:
-            import starlette as _starlette
-            import sse_starlette as _sse_starlette
+            import sse_starlette as _sse_starlette  # noqa: F401
+            import starlette as _starlette  # noqa: F401
         except ImportError:
             pytest.fail(
                 f'Running tests in {self.__class__.__name__} requires'

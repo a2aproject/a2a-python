@@ -8,24 +8,23 @@ FORMAT_ALL=false
 RUFF_UNSAFE_FIXES_FLAG=""
 
 # Process command-line arguments
-# We use a while loop with shift to process each argument
 while [[ "$#" -gt 0 ]]; do
     case "$1" in
-        --all)
-            FORMAT_ALL=true
-            echo "Detected --all flag: Formatting all Python files."
-            shift # Consume the argument
-            ;;
-        --unsafe-fixes)
-            RUFF_UNSAFE_FIXES_FLAG="--unsafe-fixes"
-            echo "Detected --unsafe-fixes flag: Ruff will run with unsafe fixes."
-            shift # Consume the argument
-            ;;
-        *)
-            # Handle unknown arguments or just ignore them if we only care about specific ones
-            echo "Warning: Unknown argument '$1'. Ignoring."
-            shift # Consume the argument
-            ;;
+    --all)
+        FORMAT_ALL=true
+        echo "Detected --all flag: Formatting all tracked Python files."
+        shift # Consume the argument
+        ;;
+    --unsafe-fixes)
+        RUFF_UNSAFE_FIXES_FLAG="--unsafe-fixes"
+        echo "Detected --unsafe-fixes flag: Ruff will run with unsafe fixes."
+        shift # Consume the argument
+        ;;
+    *)
+        # Handle unknown arguments or just ignore them
+        echo "Warning: Unknown argument '$1'. Ignoring."
+        shift # Consume the argument
+        ;;
     esac
 done
 
@@ -39,47 +38,52 @@ fi
 CHANGED_FILES=""
 
 if $FORMAT_ALL; then
-    echo "Formatting all Python files in the repository."
-    # Find all Python files, excluding grpc generated files as per original logic.
-    # `sort -u` ensures unique files and consistent ordering for display/xargs.
-    CHANGED_FILES=$(find . -name '*.py' -not -path './src/a2a/grpc/*' | sort -u)
-
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "No Python files found to format."
-        exit 0
-    fi
+    echo "Finding all tracked Python files in the repository..."
+    CHANGED_FILES=$(git ls-files -- '*.py' ':!src/a2a/grpc/*')
 else
-    echo "No '--all' flag found. Formatting changed Python files based on git diff."
+    echo "Finding changed Python files based on git diff..."
     TARGET_BRANCH="origin/${GITHUB_BASE_REF:-main}"
     git fetch origin "${GITHUB_BASE_REF:-main}" --depth=1
 
     MERGE_BASE=$(git merge-base HEAD "$TARGET_BRANCH")
 
-    # Get python files changed in this PR, excluding grpc generated files
+    # Get python files changed in this PR, excluding grpc generated files.
     CHANGED_FILES=$(git diff --name-only --diff-filter=ACMRTUXB "$MERGE_BASE" HEAD -- '*.py' ':!src/a2a/grpc/*')
-
-    if [ -z "$CHANGED_FILES" ]; then
-        echo "No changed Python files to format."
-        exit 0
-    fi
 fi
 
-echo "Files to be formatted:"
-echo "$CHANGED_FILES"
+# Exit if no files were found
+if [ -z "$CHANGED_FILES" ]; then
+    echo "No changed or tracked Python files to format."
+    exit 0
+fi
 
-# Helper function to run formatters with the list of files.
-# The list of files is passed to xargs via stdin.
+# --- Helper Function ---
+# Runs a command on a list of files passed via stdin.
+# $1: A string containing the list of files (space-separated).
+# $2...: The command and its arguments to run.
 run_formatter() {
-    echo "$CHANGED_FILES" | xargs -r "$@"
+    local files_to_format="$1"
+    shift # Remove the file list from the arguments
+    if [ -n "$files_to_format" ]; then
+        echo "$files_to_format" | xargs -r "$@"
+    fi
 }
 
-echo "Running pyupgrade..."
-run_formatter pyupgrade --exit-zero-even-if-changed --py310-plus
-echo "Running autoflake..."
-run_formatter autoflake -i -r --remove-all-unused-imports
-echo "Running ruff check (fix-only)..."
-run_formatter ruff check --fix $RUFF_UNSAFE_FIXES_FLAG
-echo "Running ruff format..."
-run_formatter ruff format
+# --- Python File Formatting ---
+if [ -n "$CHANGED_FILES" ]; then
+    echo "--- Formatting Python Files ---"
+    echo "Files to be formatted:"
+    echo "$CHANGED_FILES"
 
-echo "Formatting complete."
+    echo "Running autoflake..."
+    run_formatter "$CHANGED_FILES" autoflake -i -r --remove-all-unused-imports
+    echo "Running ruff check (fix-only)..."
+    run_formatter "$CHANGED_FILES" ruff check --fix-only $RUFF_UNSAFE_FIXES_FLAG
+    echo "Running ruff format..."
+    run_formatter "$CHANGED_FILES" ruff format
+    echo "Python formatting complete."
+else
+    echo "No Python files to format."
+fi
+
+echo "All formatting tasks are complete."

@@ -1,8 +1,8 @@
 from unittest import mock
 
 import pytest
-from fastapi import FastAPI
 
+from fastapi import FastAPI
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 

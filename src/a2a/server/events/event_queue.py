@@ -147,8 +147,9 @@ class EventQueue:
         # Otherwise, join the queue
         else:
             tasks = [asyncio.create_task(self.queue.join())]
-            for child in self._children:
-                tasks.append(asyncio.create_task(child.close()))
+            tasks.extend(
+                asyncio.create_task(child.close()) for child in self._children
+            )
             await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
 
     def is_closed(self) -> bool:

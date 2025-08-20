@@ -80,7 +80,7 @@ def rest_error_handler(
             return JSONResponse(
                 content={'message': error.message}, status_code=http_code
             )
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.log(logging.ERROR, f'Unknown error occurred {e}')
             return JSONResponse(
                 content={'message': 'unknown exception'}, status_code=500

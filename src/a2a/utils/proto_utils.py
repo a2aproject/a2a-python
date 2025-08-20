@@ -80,8 +80,14 @@ class ToProto:
         cls, file: types.FileWithUri | types.FileWithBytes
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
-            return a2a_pb2.FilePart(file_with_uri=file.uri)
-        return a2a_pb2.FilePart(file_with_bytes=file.bytes.encode('utf-8'))
+            return a2a_pb2.FilePart(
+                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
+            )
+        return a2a_pb2.FilePart(
+            file_with_bytes=file.bytes.encode('utf-8'),
+            mime_type=file.mime_type,
+            name=file.name,
+        )
 
     @classmethod
     def task(cls, task: types.Task) -> a2a_pb2.Task:
@@ -338,16 +344,12 @@ class ToProto:
     ) -> list[a2a_pb2.Security] | None:
         if not security:
             return None
-        rval: list[a2a_pb2.Security] = []
-        for s in security:
-            rval.append(
-                a2a_pb2.Security(
-                    schemes={
-                        k: a2a_pb2.StringList(list=v) for (k, v) in s.items()
-                    }
-                )
+        return [
+            a2a_pb2.Security(
+                schemes={k: a2a_pb2.StringList(list=v) for (k, v) in s.items()}
             )
-        return rval
+            for s in security
+        ]
 
     @classmethod
     def security_schemes(
@@ -504,9 +506,19 @@ class FromProto:
     def file(
         cls, file: a2a_pb2.FilePart
     ) -> types.FileWithUri | types.FileWithBytes:
+        common_args = {
+            'mime_type': file.mime_type or None,
+            'name': file.name or None,
+        }
         if file.HasField('file_with_uri'):
-            return types.FileWithUri(uri=file.file_with_uri)
-        return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
+            return types.FileWithUri(
+                uri=file.file_with_uri,
+                **common_args,
+            )
+        return types.FileWithBytes(
+            bytes=file.file_with_bytes.decode('utf-8'),
+            **common_args,
+        )
 
     @classmethod
     def task_or_message(
@@ -774,10 +786,9 @@ class FromProto:
     ) -> list[dict[str, list[str]]] | None:
         if not security:
             return None
-        rval: list[dict[str, list[str]]] = []
-        for s in security:
-            rval.append({k: list(v.list) for (k, v) in s.schemes.items()})
-        return rval
+        return [
+            {k: list(v.list) for (k, v) in s.schemes.items()} for s in security
+        ]
 
     @classmethod
     def provider(

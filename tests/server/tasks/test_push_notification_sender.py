@@ -123,7 +123,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             json=task_data.model_dump(mode='json', exclude_none=True),
             headers=None,
         )
-        mock_logger.error.assert_called_once()
+        mock_logger.exception.assert_called_once()
 
     async def test_send_notification_multiple_configs(self):
         task_id = 'task_multiple_configs'

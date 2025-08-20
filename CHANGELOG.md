@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.3.1](https://github.com/a2aproject/a2a-python/compare/v0.3.0...v0.3.1) (2025-08-13)
+
+
+### Features
+
+* Add agent card as a route in rest adapter ([ba93053](https://github.com/a2aproject/a2a-python/commit/ba93053850a767a8959bc634883008fcc1366e09))
+
+
+### Bug Fixes
+
+* gracefully handle task exceptions in event consumer ([#383](https://github.com/a2aproject/a2a-python/issues/383)) ([2508a9b](https://github.com/a2aproject/a2a-python/commit/2508a9b8ec1a1bfdc61e9012b7d68b33082b3981))
+* openapi working in sub-app ([#324](https://github.com/a2aproject/a2a-python/issues/324)) ([dec4b48](https://github.com/a2aproject/a2a-python/commit/dec4b487514db6cbb25f0c6fa7e1275a1ab0ba71))
+* Pass `message_length` param in `get_task()` ([#384](https://github.com/a2aproject/a2a-python/issues/384)) ([b6796b9](https://github.com/a2aproject/a2a-python/commit/b6796b9e1432ef8499eff454f869edf4427fd704))
+* relax protobuf dependency version requirement ([#381](https://github.com/a2aproject/a2a-python/issues/381)) ([0f55f55](https://github.com/a2aproject/a2a-python/commit/0f55f554ba9f6bf53fa3d9a91f66939f36e1ef2e))
+* Use HasField for simple message retrieval for grpc transport ([#380](https://github.com/a2aproject/a2a-python/issues/380)) ([3032aa6](https://github.com/a2aproject/a2a-python/commit/3032aa660f6f3b72dc7dd8b49b0e2f4d432c7a22))
+
 ## [0.3.0](https://github.com/a2aproject/a2a-python/compare/v0.2.16...v0.3.0) (2025-07-31)
 
 

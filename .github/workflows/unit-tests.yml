@@ -40,17 +40,15 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-      - name: Set up Python ${{ matrix.python-version }}
-        uses: actions/setup-python@v5
-        with:
-          python-version: ${{ matrix.python-version }}
       - name: Set up test environment variables
         run: |
           echo "POSTGRES_TEST_DSN=postgresql+asyncpg://a2a:a2a_password@localhost:5432/a2a_test" >> $GITHUB_ENV
           echo "MYSQL_TEST_DSN=mysql+aiomysql://a2a:a2a_password@localhost:3306/a2a_test" >> $GITHUB_ENV
 
-      - name: Install uv
+      - name: Install uv for Python ${{ matrix.python-version }}
         uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.python-version }}
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
