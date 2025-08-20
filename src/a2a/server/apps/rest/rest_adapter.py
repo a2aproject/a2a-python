@@ -205,8 +205,8 @@ class RESTAdapter:
         if 'X-Forwarded-Host' in request.headers:
             host = request.headers['X-Forwarded-Host']
         else:
-            host = request.url.hostname
-            port = request.url.port
+            host = request.url.hostname or rpc_url.hostname or 'localhost'
+            port = request.url.port or rpc_url.port
 
         if 'X-Forwarded-Proto' in request.headers:
             scheme = request.headers['X-Forwarded-Proto']
@@ -218,7 +218,7 @@ class RESTAdapter:
         if ':' in host:  # type: ignore
             comps = host.rsplit(':', 1)  # type: ignore
             host = comps[0]
-            port = comps[1]
+            port = int(comps[1]) if comps[1] else port
 
         # Handle URL maps,
         # e.g. "agents/my-agent/.well-known/agent-card.json"
