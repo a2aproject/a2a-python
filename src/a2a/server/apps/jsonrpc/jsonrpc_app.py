@@ -332,12 +332,12 @@ class JSONRPCApplication(ABC):
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
             method = base_request.method
 
+            model_class = self.METHOD_TO_MODEL.get(method)
+            if not model_class:
+                return self._generate_error_response(
+                    request_id, A2AError(root=MethodNotFoundError())
+                )
             try:
-                model_class = self.METHOD_TO_MODEL.get(method)
-                if not model_class:
-                    return self._generate_error_response(
-                        request_id, A2AError(root=MethodNotFoundError())
-                    )
                 specific_request = model_class.model_validate(body)
             except ValidationError as e:
                 logger.exception('Failed to validate base JSON-RPC request')
