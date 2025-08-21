@@ -156,7 +156,6 @@ class JSONRPCApplication(ABC):
     """
 
     # Method-to-model mapping for centralized routing
-    # Define the union type for all supported request models
     A2ARequestModel = (
         SendMessageRequest
         | SendStreamingMessageRequest
@@ -170,8 +169,9 @@ class JSONRPCApplication(ABC):
         | GetAuthenticatedExtendedCardRequest
     )
 
-    METHOD_TO_MODEL = {
-        model.model_fields["method"].default: model for model in A2ARequestModel.__args__
+    METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
+        model.model_fields['method'].default: model
+        for model in A2ARequestModel.__args__
     }
 
     def __init__(  # noqa: PLR0913
