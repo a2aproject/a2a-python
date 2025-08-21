@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING, Any
 
 from a2a.types import AgentCard
 
+
 if TYPE_CHECKING:
     from starlette.datastructures import URL
     from starlette.requests import Request
@@ -20,9 +21,8 @@ else:
 
 
 def update_card_rpc_url_from_request(
-        agent_card: AgentCard,
-        request: Request
-    ) -> None:
+    agent_card: AgentCard, request: Request
+) -> None:
     """Modifies Agent's RPC URL based on the AgentCard request.
 
     Args:
@@ -69,7 +69,5 @@ def update_card_rpc_url_from_request(
             rpc_path = new_path
 
     agent_card.url = str(
-        rpc_url.replace(
-            hostname=host, port=port, scheme=scheme, path=rpc_path
-        )
+        rpc_url.replace(hostname=host, port=port, scheme=scheme, path=rpc_path)
     )
