@@ -28,6 +28,7 @@ from a2a.types import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     InternalError,
+    InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     JSONRPCError,
@@ -35,6 +36,7 @@ from a2a.types import (
     JSONRPCRequest,
     JSONRPCResponse,
     ListTaskPushNotificationConfigRequest,
+    MethodNotFoundError,
     SendMessageRequest,
     SendStreamingMessageRequest,
     SendStreamingMessageResponse,
@@ -88,6 +90,8 @@ else:
         JSONResponse = Any
         Response = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
+
+MAX_CONTENT_LENGTH = 1_000_000
 
 
 class StarletteUserProxy(A2AUser):
@@ -150,6 +154,25 @@ class JSONRPCApplication(ABC):
     handler methods, and manages response generation including Server-Sent Events
     (SSE).
     """
+
+    # Method-to-model mapping for centralized routing
+    A2ARequestModel = (
+        SendMessageRequest
+        | SendStreamingMessageRequest
+        | GetTaskRequest
+        | CancelTaskRequest
+        | SetTaskPushNotificationConfigRequest
+        | GetTaskPushNotificationConfigRequest
+        | ListTaskPushNotificationConfigRequest
+        | DeleteTaskPushNotificationConfigRequest
+        | TaskResubscriptionRequest
+        | GetAuthenticatedExtendedCardRequest
+    )
+
+    METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
+        model.model_fields['method'].default: model
+        for model in A2ARequestModel.__args__
+    }
 
     def __init__(  # noqa: PLR0913
         self,
@@ -233,9 +256,13 @@ class JSONRPCApplication(ABC):
         )
         logger.log(
             log_level,
-            f'Request Error (ID: {request_id}): '
-            f"Code={error_resp.error.code}, Message='{error_resp.error.message}'"
-            f'{", Data=" + str(error_resp.error.data) if error_resp.error.data else ""}',
+            "Request Error (ID: %s): Code=%s, Message='%s'%s",
+            request_id,
+            error_resp.error.code,
+            error_resp.error.message,
+            ', Data=' + str(error_resp.error.data)
+            if error_resp.error.data
+            else '',
         )
         return JSONResponse(
             error_resp.model_dump(mode='json', exclude_none=True),
@@ -267,17 +294,60 @@ class JSONRPCApplication(ABC):
             body = await request.json()
             if isinstance(body, dict):
                 request_id = body.get('id')
+                # Ensure request_id is valid for JSON-RPC response (str/int/None only)
+                if request_id is not None and not isinstance(
+                    request_id, str | int
+                ):
+                    request_id = None
+            # Treat very large payloads as invalid request (-32600) before routing
+            with contextlib.suppress(Exception):
+                content_length = int(request.headers.get('content-length', '0'))
+                if content_length and content_length > MAX_CONTENT_LENGTH:
+                    return self._generate_error_response(
+                        request_id,
+                        A2AError(
+                            root=InvalidRequestError(
+                                message='Payload too large'
+                            )
+                        ),
+                    )
+            logger.debug('Request body: %s', body)
+            # 1) Validate base JSON-RPC structure only (-32600 on failure)
+            try:
+                base_request = JSONRPCRequest.model_validate(body)
+            except ValidationError as e:
+                logger.exception('Failed to validate base JSON-RPC request')
+                return self._generate_error_response(
+                    request_id,
+                    A2AError(
+                        root=InvalidRequestError(data=json.loads(e.json()))
+                    ),
+                )
 
-            # First, validate the basic JSON-RPC structure. This is crucial
-            # because the A2ARequest model is a discriminated union where some
-            # request types have default values for the 'method' field
-            JSONRPCRequest.model_validate(body)
+            # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
+            method = base_request.method
 
-            a2a_request = A2ARequest.model_validate(body)
+            model_class = self.METHOD_TO_MODEL.get(method)
+            if not model_class:
+                return self._generate_error_response(
+                    request_id, A2AError(root=MethodNotFoundError())
+                )
+            try:
+                specific_request = model_class.model_validate(body)
+            except ValidationError as e:
+                logger.exception('Failed to validate base JSON-RPC request')
+                return self._generate_error_response(
+                    request_id,
+                    A2AError(
+                        root=InvalidParamsError(data=json.loads(e.json()))
+                    ),
+                )
 
+            # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
 
-            request_id = a2a_request.root.id
+            request_id = specific_request.id
+            a2a_request = A2ARequest(root=specific_request)
             request_obj = a2a_request.root
 
             if isinstance(
@@ -300,12 +370,6 @@ class JSONRPCApplication(ABC):
             traceback.print_exc()
             return self._generate_error_response(
                 None, A2AError(root=JSONParseError(message=str(e)))
-            )
-        except ValidationError as e:
-            traceback.print_exc()
-            return self._generate_error_response(
-                request_id,
-                A2AError(root=InvalidRequestError(data=json.loads(e.json()))),
             )
         except HTTPException as e:
             if e.status_code == HTTP_413_REQUEST_ENTITY_TOO_LARGE:
@@ -422,7 +486,7 @@ class JSONRPCApplication(ABC):
                 )
             case _:
                 logger.error(
-                    f'Unhandled validated request type: {type(request_obj)}'
+                    'Unhandled validated request type: %s', type(request_obj)
                 )
                 error = UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
@@ -497,8 +561,10 @@ class JSONRPCApplication(ABC):
         """
         if request.url.path == PREV_AGENT_CARD_WELL_KNOWN_PATH:
             logger.warning(
-                f"Deprecated agent card endpoint '{PREV_AGENT_CARD_WELL_KNOWN_PATH}' accessed. "
-                f"Please use '{AGENT_CARD_WELL_KNOWN_PATH}' instead. This endpoint will be removed in a future version."
+                "Deprecated agent card endpoint '%s' accessed. "
+                "Please use '%s' instead. This endpoint will be removed in a future version.",
+                PREV_AGENT_CARD_WELL_KNOWN_PATH,
+                AGENT_CARD_WELL_KNOWN_PATH,
             )
 
         card_to_serve = self.agent_card

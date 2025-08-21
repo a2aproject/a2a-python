@@ -62,7 +62,7 @@ class EventConsumer:
                 InternalError(message='Agent did not return any response')
             ) from e
 
-        logger.debug(f'Dequeued event of type: {type(event)} in consume_one.')
+        logger.debug('Dequeued event of type: %s in consume_one.', type(event))
 
         self.queue.task_done()
 
@@ -95,7 +95,7 @@ class EventConsumer:
                     self.queue.dequeue_event(), timeout=self._timeout
                 )
                 logger.debug(
-                    f'Dequeued event of type: {type(event)} in consume_all.'
+                    'Dequeued event of type: %s in consume_all.', type(event)
                 )
                 self.queue.task_done()
                 logger.debug(
