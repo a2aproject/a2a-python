@@ -58,7 +58,6 @@ class ToProto:
 
     @classmethod
     def _make_dict_serializable(cls, value: Any) -> Any:
-        """재귀적으로 값을 JSON 직렬화 가능한 형태로 변환합니다."""
         if isinstance(value, dict):
             return {k: cls._make_dict_serializable(v) for k, v in value.items()}
         if isinstance(value, (list | tuple)):
