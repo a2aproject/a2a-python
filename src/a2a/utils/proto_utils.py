@@ -57,35 +57,51 @@ class ToProto:
         )
 
     @classmethod
+    def _make_dict_serializable(cls, value: Any) -> Any:
+        """재귀적으로 값을 JSON 직렬화 가능한 형태로 변환합니다."""
+        if isinstance(value, dict):
+            return {k: cls._make_dict_serializable(v) for k, v in value.items()}
+        if isinstance(value, (list | tuple)):
+            return [cls._make_dict_serializable(item) for item in value]
+        if isinstance(value, (str | int | float | bool)) or value is None:
+            return value
+        return str(value)
+
+    @classmethod
     def _convert_value_to_proto(cls, value: Any) -> struct_pb2.Value:
-        """Convert Python value to protobuf Value."""
         if value is None:
-            return struct_pb2.Value(null_value=struct_pb2.NULL_VALUE)
+            proto_value = struct_pb2.Value()
+            proto_value.null_value = 0
+            return proto_value
+
         if isinstance(value, bool):
             return struct_pb2.Value(bool_value=value)
+
         if isinstance(value, int):
             if abs(value) > (2**53 - 1):
                 return struct_pb2.Value(string_value=str(value))
             return struct_pb2.Value(number_value=float(value))
+
         if isinstance(value, float):
             return struct_pb2.Value(number_value=value)
+
         if isinstance(value, str):
             return struct_pb2.Value(string_value=value)
+
         if isinstance(value, dict):
-            return struct_pb2.Value(
-                struct_value=struct_pb2.Struct(
-                    fields={
-                        k: cls._convert_value_to_proto(v)
-                        for k, v in value.items()
-                    }
-                )
-            )
-        if isinstance(value, list | tuple):
-            return struct_pb2.Value(
-                list_value=struct_pb2.ListValue(
-                    values=[cls._convert_value_to_proto(item) for item in value]
-                )
-            )
+            serializable_dict = cls._make_dict_serializable(value)
+            json_data = json.dumps(serializable_dict, ensure_ascii=False)
+            struct_value = struct_pb2.Struct()
+            json_format.Parse(json_data, struct_value)
+            return struct_pb2.Value(struct_value=struct_value)
+
+        if isinstance(value, (list | tuple)):
+            list_value = struct_pb2.ListValue()
+            for item in value:
+                converted_item = cls._convert_value_to_proto(item)
+                list_value.values.append(converted_item)
+            return struct_pb2.Value(list_value=list_value)
+
         return struct_pb2.Value(string_value=str(value))
 
     @classmethod
