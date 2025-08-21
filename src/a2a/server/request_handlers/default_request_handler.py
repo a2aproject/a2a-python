@@ -36,6 +36,7 @@ from a2a.types import (
     MessageSendParams,
     Task,
     TaskIdParams,
+    TaskNotCancelableError,
     TaskNotFoundError,
     TaskPushNotificationConfig,
     TaskQueryParams,
@@ -111,6 +112,26 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id)
         if not task:
             raise ServerError(error=TaskNotFoundError())
+
+        # Apply historyLength parameter if specified
+        if params.history_length is not None and task.history:
+            # Limit history to the most recent N messages
+            limited_history = (
+                task.history[-params.history_length :]
+                if params.history_length > 0
+                else []
+            )
+            # Create a new task instance with limited history
+            task = Task(
+                id=task.id,
+                context_id=task.context_id,
+                status=task.status,
+                artifacts=task.artifacts,
+                history=limited_history,
+                metadata=task.metadata,
+                kind=task.kind,
+            )
+
         return task
 
     async def on_cancel_task(
@@ -123,6 +144,14 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id)
         if not task:
             raise ServerError(error=TaskNotFoundError())
+
+        # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise ServerError(
+                error=TaskNotCancelableError(
+                    message=f'Task cannot be canceled - current state: {task.status.state}'
+                )
+            )
 
         task_manager = TaskManager(
             task_id=task.id,
