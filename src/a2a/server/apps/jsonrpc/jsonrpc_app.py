@@ -18,6 +18,7 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_utils import update_card_rpc_url_from_request
 from a2a.types import (
     A2AError,
     A2ARequest,
@@ -58,7 +59,6 @@ if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
     from starlette.applications import Starlette
     from starlette.authentication import BaseUser
-    from starlette.datastructures import URL
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -71,7 +71,6 @@ else:
         from sse_starlette.sse import EventSourceResponse
         from starlette.applications import Starlette
         from starlette.authentication import BaseUser
-        from starlette.datastructures import URL
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -89,6 +88,7 @@ else:
         Request = Any
         JSONResponse = Any
         Response = Any
+        URL = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
 
 
@@ -492,58 +492,6 @@ class JSONRPCApplication(ABC):
             headers=headers,
         )
 
-    def _modify_rpc_url(self, agent_card: AgentCard, request: Request) -> None:
-        """Modifies Agent's RPC URL based on the AgentCard request.
-
-        Args:
-            agent_card (AgentCard): Original AgentCard
-            request (Request): AgentCard request
-        """
-        rpc_url = URL(agent_card.url)
-        rpc_path = rpc_url.path
-        port = None
-        if 'X-Forwarded-Host' in request.headers:
-            host = request.headers['X-Forwarded-Host']
-        else:
-            host = request.url.hostname or rpc_url.hostname or 'localhost'
-            port = request.url.port
-
-        if 'X-Forwarded-Proto' in request.headers:
-            scheme = request.headers['X-Forwarded-Proto']
-            port = None
-        else:
-            scheme = request.url.scheme
-        if not scheme:
-            scheme = 'http'
-        if ':' in host:  # type: ignore
-            comps = host.rsplit(':', 1)  # type: ignore
-            host = comps[0]
-            port = int(comps[1]) if comps[1] else port
-
-        # Handle URL maps,
-        # e.g. "agents/my-agent/.well-known/agent-card.json"
-        if 'X-Forwarded-Path' in request.headers:
-            forwarded_path = request.headers['X-Forwarded-Path'].strip()
-            if (
-                forwarded_path
-                and request.url.path != forwarded_path
-                and forwarded_path.endswith(request.url.path)
-            ):
-                # "agents/my-agent" for "agents/my-agent/.well-known/agent-card.json"
-                extra_path = forwarded_path[: -len(request.url.path)]
-                new_path = extra_path + rpc_path
-                # If original path was just "/",
-                # we remove trailing "/" in the extended one
-                if len(new_path) > 1 and rpc_path == '/':
-                    new_path = new_path.rstrip('/')
-                rpc_path = new_path
-
-        agent_card.url = str(
-            rpc_url.replace(
-                hostname=host, port=port, scheme=scheme, path=rpc_path
-            )
-        )
-
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
 
@@ -567,7 +515,7 @@ class JSONRPCApplication(ABC):
             card_to_serve = self.card_modifier(card_to_serve)
         # If agent's RPC URL was not modified, we build it dynamically.
         if rpc_url == card_to_serve.url:
-            self._modify_rpc_url(card_to_serve, request)
+            update_card_rpc_url_from_request(card_to_serve, request)
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -602,7 +550,7 @@ class JSONRPCApplication(ABC):
         if card_to_serve:
             # If agent's RPC URL was not modified, we build it dynamically.
             if rpc_url == card_to_serve.url:
-                self._modify_rpc_url(card_to_serve, request)
+                update_card_rpc_url_from_request(card_to_serve, request)
             return JSONResponse(
                 card_to_serve.model_dump(
                     exclude_none=True,
