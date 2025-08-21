@@ -23,6 +23,9 @@ _TASK_PUSH_CONFIG_NAME_MATCH = (
     r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
 )
 
+# Maximum safe integer digits (JavaScript MAX_SAFE_INTEGER is 2^53 - 1)
+_MAX_SAFE_INTEGER_DIGITS = 15
+
 
 class ToProto:
     """Converts Python types to proto types."""
@@ -531,7 +534,10 @@ class FromProto:
             return value.number_value
         if value.HasField('string_value'):
             string_val = value.string_value
-            if string_val.lstrip('-').isdigit():
+            if (
+                string_val.lstrip('-').isdigit()
+                and len(string_val.lstrip('-')) > _MAX_SAFE_INTEGER_DIGITS
+            ):
                 return int(string_val)
             return string_val
         if value.HasField('struct_value'):
