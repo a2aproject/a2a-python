@@ -171,7 +171,9 @@ def trace_function(  # noqa: PLR0915
     is_async_func = inspect.iscoroutinefunction(func)
 
     logger.debug(
-        f'Start tracing for {actual_span_name}, is_async_func {is_async_func}'
+        'Start tracing for %s, is_async_func %s',
+        actual_span_name,
+        is_async_func,
     )
 
     @functools.wraps(func)
@@ -196,7 +198,7 @@ def trace_function(  # noqa: PLR0915
             # asyncio.CancelledError extends from BaseException
             except asyncio.CancelledError as ce:
                 exception = None
-                logger.debug(f'CancelledError in span {actual_span_name}')
+                logger.debug('CancelledError in span %s', actual_span_name)
                 span.record_exception(ce)
                 raise
             except Exception as e:
@@ -212,7 +214,8 @@ def trace_function(  # noqa: PLR0915
                         )
                     except Exception:
                         logger.exception(
-                            f'attribute_extractor error in span {actual_span_name}'
+                            'attribute_extractor error in span %s',
+                            actual_span_name,
                         )
             return result
 
@@ -246,7 +249,8 @@ def trace_function(  # noqa: PLR0915
                         )
                     except Exception:
                         logger.exception(
-                            f'attribute_extractor error in span {actual_span_name}'
+                            'attribute_extractor error in span %s',
+                            actual_span_name,
                         )
             return result
 
@@ -307,7 +311,7 @@ def trace_class(
                 pass
         ```
     """
-    logger.debug(f'Trace all class {include_list}, {exclude_list}')
+    logger.debug('Trace all class %s, %s', include_list, exclude_list)
     exclude_list = exclude_list or []
 
     def decorator(cls: Any) -> Any:

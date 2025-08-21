@@ -256,9 +256,13 @@ class JSONRPCApplication(ABC):
         )
         logger.log(
             log_level,
-            f'Request Error (ID: {request_id}): '
-            f"Code={error_resp.error.code}, Message='{error_resp.error.message}'"
-            f'{", Data=" + str(error_resp.error.data) if error_resp.error.data else ""}',
+            "Request Error (ID: %s): Code=%s, Message='%s'%s",
+            request_id,
+            error_resp.error.code,
+            error_resp.error.message,
+            ', Data=' + str(error_resp.error.data)
+            if error_resp.error.data
+            else '',
         )
         return JSONResponse(
             error_resp.model_dump(mode='json', exclude_none=True),
@@ -482,7 +486,7 @@ class JSONRPCApplication(ABC):
                 )
             case _:
                 logger.error(
-                    f'Unhandled validated request type: {type(request_obj)}'
+                    'Unhandled validated request type: %s', type(request_obj)
                 )
                 error = UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
@@ -557,8 +561,10 @@ class JSONRPCApplication(ABC):
         """
         if request.url.path == PREV_AGENT_CARD_WELL_KNOWN_PATH:
             logger.warning(
-                f"Deprecated agent card endpoint '{PREV_AGENT_CARD_WELL_KNOWN_PATH}' accessed. "
-                f"Please use '{AGENT_CARD_WELL_KNOWN_PATH}' instead. This endpoint will be removed in a future version."
+                "Deprecated agent card endpoint '%s' accessed. "
+                "Please use '%s' instead. This endpoint will be removed in a future version.",
+                PREV_AGENT_CARD_WELL_KNOWN_PATH,
+                AGENT_CARD_WELL_KNOWN_PATH,
             )
 
         card_to_serve = self.agent_card
