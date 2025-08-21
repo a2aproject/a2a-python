@@ -255,3 +255,106 @@ class TestProtoUtils:
         assert proto_utils.ToProto.provider(None) is None
         assert proto_utils.ToProto.security(None) is None
         assert proto_utils.ToProto.security_schemes(None) is None
+
+    def test_metadata_conversion(self):
+        """Test metadata conversion with various data types."""
+        metadata = {
+            'null_value': None,
+            'bool_value': True,
+            'int_value': 42,
+            'float_value': 3.14,
+            'string_value': 'hello',
+            'dict_value': {'nested': 'dict', 'count': 10},
+            'list_value': [1, 'two', 3.0, True, None],
+            'tuple_value': (1, 2, 3),
+            'complex_list': [
+                {'name': 'item1', 'values': [1, 2, 3]},
+                {'name': 'item2', 'values': [4, 5, 6]},
+            ],
+        }
+
+        # Convert to proto
+        proto_metadata = proto_utils.ToProto.metadata(metadata)
+        assert proto_metadata is not None
+
+        # Convert back to Python
+        roundtrip_metadata = proto_utils.FromProto.metadata(proto_metadata)
+
+        # Verify all values are preserved correctly
+        assert roundtrip_metadata['null_value'] is None
+        assert roundtrip_metadata['bool_value'] is True
+        assert roundtrip_metadata['int_value'] == 42
+        assert roundtrip_metadata['float_value'] == 3.14
+        assert roundtrip_metadata['string_value'] == 'hello'
+        assert roundtrip_metadata['dict_value']['nested'] == 'dict'
+        assert roundtrip_metadata['dict_value']['count'] == 10
+        assert roundtrip_metadata['list_value'] == [1, 'two', 3.0, True, None]
+        assert roundtrip_metadata['tuple_value'] == [
+            1,
+            2,
+            3,
+        ]  # tuples become lists
+        assert len(roundtrip_metadata['complex_list']) == 2
+        assert roundtrip_metadata['complex_list'][0]['name'] == 'item1'
+
+    def test_metadata_with_custom_objects(self):
+        """Test metadata conversion with custom objects that need str() fallback."""
+
+        class CustomObject:
+            def __str__(self):
+                return 'custom_object_str'
+
+            def __repr__(self):
+                return 'CustomObject()'
+
+        metadata = {
+            'custom_obj': CustomObject(),
+            'list_with_custom': [1, CustomObject(), 'text'],
+            'nested_custom': {'obj': CustomObject(), 'normal': 'value'},
+        }
+
+        # Convert to proto
+        proto_metadata = proto_utils.ToProto.metadata(metadata)
+        assert proto_metadata is not None
+
+        # Convert back to Python
+        roundtrip_metadata = proto_utils.FromProto.metadata(proto_metadata)
+
+        # Custom objects should be converted to strings
+        assert roundtrip_metadata['custom_obj'] == 'custom_object_str'
+        assert roundtrip_metadata['list_with_custom'] == [
+            1,
+            'custom_object_str',
+            'text',
+        ]
+        assert roundtrip_metadata['nested_custom']['obj'] == 'custom_object_str'
+        assert roundtrip_metadata['nested_custom']['normal'] == 'value'
+
+    def test_metadata_edge_cases(self):
+        """Test metadata conversion with edge cases."""
+        metadata = {
+            'empty_dict': {},
+            'empty_list': [],
+            'zero': 0,
+            'false': False,
+            'empty_string': '',
+            'unicode_string': 'string test',
+            'large_number': 9999999999999999,
+            'negative_number': -42,
+            'float_precision': 0.123456789,
+        }
+
+        # Convert to proto and back
+        proto_metadata = proto_utils.ToProto.metadata(metadata)
+        roundtrip_metadata = proto_utils.FromProto.metadata(proto_metadata)
+
+        # Verify edge cases are handled correctly
+        assert roundtrip_metadata['empty_dict'] == {}
+        assert roundtrip_metadata['empty_list'] == []
+        assert roundtrip_metadata['zero'] == 0
+        assert roundtrip_metadata['false'] is False
+        assert roundtrip_metadata['empty_string'] == ''
+        assert roundtrip_metadata['unicode_string'] == 'string test'
+        assert roundtrip_metadata['large_number'] == 9999999999999999
+        assert roundtrip_metadata['negative_number'] == -42
+        assert abs(roundtrip_metadata['float_precision'] - 0.123456789) < 1e-10
