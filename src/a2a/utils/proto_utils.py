@@ -71,7 +71,7 @@ class ToProto:
     def _convert_value_to_proto(cls, value: Any) -> struct_pb2.Value:
         if value is None:
             proto_value = struct_pb2.Value()
-            proto_value.null_value = 0
+            proto_value.null_value = struct_pb2.NullValue.NULL_VALUE
             return proto_value
 
         if isinstance(value, bool):

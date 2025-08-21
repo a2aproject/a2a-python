@@ -342,6 +342,7 @@ class TestProtoUtils:
             'large_number': 9999999999999999,
             'negative_number': -42,
             'float_precision': 0.123456789,
+            'numeric_string': '12345',
         }
 
         # Convert to proto and back
@@ -358,3 +359,4 @@ class TestProtoUtils:
         assert roundtrip_metadata['large_number'] == 9999999999999999
         assert roundtrip_metadata['negative_number'] == -42
         assert abs(roundtrip_metadata['float_precision'] - 0.123456789) < 1e-10
+        assert roundtrip_metadata['numeric_string'] == '12345'
