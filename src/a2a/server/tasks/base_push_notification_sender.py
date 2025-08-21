@@ -44,7 +44,7 @@ class BasePushNotificationSender(PushNotificationSender):
 
         if not all(results):
             logger.warning(
-                f'Some push notifications failed to send for task_id={task.id}'
+                'Some push notifications failed to send for task_id=%s', task.id
             )
 
     async def _dispatch_notification(
@@ -62,11 +62,13 @@ class BasePushNotificationSender(PushNotificationSender):
             )
             response.raise_for_status()
             logger.info(
-                f'Push-notification sent for task_id={task.id} to URL: {url}'
+                'Push-notification sent for task_id=%s to URL: %s', task.id, url
             )
         except Exception:
             logger.exception(
-                f'Error sending push-notification for task_id={task.id} to URL: {url}.'
+                'Error sending push-notification for task_id=%s to URL: %s.',
+                task.id,
+                url,
             )
             return False
         return True

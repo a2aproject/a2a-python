@@ -244,7 +244,9 @@ class DefaultRequestHandler(RequestHandler):
         """Validates that agent-generated task ID matches the expected task ID."""
         if task_id != event_task_id:
             logger.error(
-                f'Agent generated task_id={event_task_id} does not match the RequestContext task_id={task_id}.'
+                'Agent generated task_id=%s does not match the RequestContext task_id=%s.',
+                event_task_id,
+                task_id,
             )
             raise ServerError(
                 InternalError(message='Task ID mismatch in agent response')

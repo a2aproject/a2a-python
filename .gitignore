@@ -6,6 +6,7 @@ __pycache__
 .pytest_cache
 .ruff_cache
 .venv
+test_venv/
 coverage.xml
 .nox
 spec.json
