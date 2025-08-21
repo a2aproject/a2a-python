@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from typing import Any
 
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -13,7 +14,10 @@ class AgentExecutor(ABC):
 
     @abstractmethod
     async def execute(
-        self, context: RequestContext, event_queue: EventQueue
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+        request_handler: Any,
     ) -> None:
         """Execute the agent's logic for a given request context.
 
@@ -26,6 +30,7 @@ class AgentExecutor(ABC):
         Args:
             context: The request context containing the message, task ID, etc.
             event_queue: The queue to publish events to.
+            request_handler: The request handler that is executing the agent.
         """
 
     @abstractmethod
