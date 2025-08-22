@@ -489,7 +489,7 @@ class FromProto:
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
       if not metadata.fields:
             return {}
-        return struct_to_dict(metadata)
+      return struct_to_dict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
