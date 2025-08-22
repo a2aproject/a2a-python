@@ -28,16 +28,10 @@ def new_task(request: Message) -> Task:
         if isinstance(part.root, TextPart) and not part.root.text:
             raise ValueError('TextPart content cannot be empty')
 
-    context_id_str = request.context_id
-    if not context_id_str:
-        context_id = str(uuid.uuid4())
-    else:
-        context_id = context_id_str
-
     return Task(
         status=TaskStatus(state=TaskState.submitted),
         id=(request.task_id if request.task_id else str(uuid.uuid4())),
-        context_id=context_id,
+        context_id=(request.context_id if request.context_id else str(uuid.uuid4())),
         history=[request],
     )
 
