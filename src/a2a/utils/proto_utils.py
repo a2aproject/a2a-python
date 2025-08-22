@@ -46,14 +46,7 @@ class ToProto:
     ) -> struct_pb2.Struct | None:
         if metadata is None:
             return None
-        return struct_pb2.Struct(
-            # TODO: Add support for other types.
-            fields={
-                key: struct_pb2.Value(string_value=value)
-                for key, value in metadata.items()
-                if isinstance(value, str)
-            }
-        )
+        return dict_to_struct(metadata)
 
     @classmethod
     def part(cls, part: types.Part) -> a2a_pb2.Part:
@@ -324,6 +317,23 @@ class ToProto:
         return a2a_pb2.AgentCapabilities(
             streaming=bool(capabilities.streaming),
             push_notifications=bool(capabilities.push_notifications),
+            extensions=[
+                cls.extension(x) for x in capabilities.extensions or []
+            ],
+        )
+
+    @classmethod
+    def extension(
+        cls,
+        extension: types.AgentExtension,
+    ) -> a2a_pb2.AgentExtension:
+        return a2a_pb2.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=dict_to_struct(extension.params)
+            if extension.params
+            else None,
+            required=extension.required,
         )
 
     @classmethod
@@ -477,11 +487,9 @@ class FromProto:
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-        return {
-            key: value.string_value
-            for key, value in metadata.fields.items()
-            if value.string_value
-        }
+        if not metadata.fields:
+            return {}
+        return json_format.MessageToDict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
@@ -767,7 +775,7 @@ class FromProto:
             if request.history_length
             else None,
             id=m.group(1),
-            metadata=request.metadata,
+            metadata=None,
         )
 
     @classmethod
@@ -777,6 +785,21 @@ class FromProto:
         return types.AgentCapabilities(
             streaming=capabilities.streaming,
             push_notifications=capabilities.push_notifications,
+            extensions=[
+                cls.agent_extension(x) for x in capabilities.extensions
+            ],
+        )
+
+    @classmethod
+    def agent_extension(
+        cls,
+        extension: a2a_pb2.AgentExtension,
+    ) -> types.AgentExtension:
+        return types.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=json_format.MessageToDict(extension.params),
+            required=extension.required,
         )
 
     @classmethod
@@ -916,3 +939,25 @@ class FromProto:
                 return types.Role.agent
             case _:
                 return types.Role.agent
+
+
+def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
+    """Converts a Python dict to a Struct proto.
+
+    Unfortunately, using `json_format.ParseDict` does not work because this
+    wants the dictionary to be an exact match of the Struct proto with fields
+    and keys and values, not the traditional Python dict structure.
+
+    Args:
+      dictionary: The Python dict to convert.
+
+    Returns:
+      The Struct proto.
+    """
+    struct = struct_pb2.Struct()
+    for key, val in dictionary.items():
+        if isinstance(val, dict):
+            struct[key] = dict_to_struct(val)
+        else:
+            struct[key] = val
+    return struct
