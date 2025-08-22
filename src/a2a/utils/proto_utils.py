@@ -947,15 +947,15 @@ def struct_to_dict(struct: struct_pb2.Struct) -> dict[str, Any]:
   def convert(value: struct_pb2.Value) -> Any:
     if value.HasField('list_value'):
       return [convert(v) for v in value.list_value.values]
-    elif value.HasField('struct_value'):
+    if value.HasField('struct_value'):
       return {k: convert(v) for k, v in value.struct_value.fields.items()}
-    elif value.HasField('number_value'):
+    if value.HasField('number_value'):
       return value.number_value
-    elif value.HasField('string_value'):
+    if value.HasField('string_value'):
       return value.string_value
-    elif value.HasField('bool_value'):
+    if value.HasField('bool_value'):
       return value.bool_value
-    elif value.HasField('null_value'):
+    if value.HasField('null_value'):
       return None
     else:
       raise ValueError(f'Unsupported type: {value}')
