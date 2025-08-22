@@ -488,14 +488,12 @@ class SendMessageRequest(_message.Message):
     def __init__(self, request: _Optional[_Union[Message, _Mapping]] = ..., configuration: _Optional[_Union[SendMessageConfiguration, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class GetTaskRequest(_message.Message):
-    __slots__ = ("name", "history_length", "metadata")
+    __slots__ = ("name", "history_length")
     NAME_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
-    METADATA_FIELD_NUMBER: _ClassVar[int]
     name: str
     history_length: int
-    metadata: _struct_pb2.Struct
-    def __init__(self, name: _Optional[str] = ..., history_length: _Optional[int] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
     __slots__ = ("name",)
