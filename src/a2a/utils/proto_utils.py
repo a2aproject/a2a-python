@@ -944,9 +944,9 @@ class FromProto:
 def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
     """Converts a Python dict to a Struct proto.
 
-    Unforunately, using the json_format.ParseDict does not work because this
+    Unfortunately, using `json_format.ParseDict` does not work because this
     wants the dictionary to be an exact match of the Struct proto with fields
-    and keys and values, not the traditional python dict struture.
+    and keys and values, not the traditional Python dict structure.
 
     Args:
       dictionary: The Python dict to convert.
