@@ -489,7 +489,7 @@ class FromProto:
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
         if not metadata.fields:
             return {}
-        return struct_to_dict(metadata)
+        return json_format.MessageToDict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
@@ -798,7 +798,7 @@ class FromProto:
         return types.AgentExtension(
             uri=extension.uri,
             description=extension.description,
-            params=struct_to_dict(extension.params),
+            params=json_format.MessageToDict(extension.params),
             required=extension.required,
         )
 
@@ -941,29 +941,19 @@ class FromProto:
                 return types.Role.agent
 
 
-def struct_to_dict(struct: struct_pb2.Struct) -> dict[str, Any]:
-    """Converts a Struct proto to a Python dict."""
-
-    def convert(value: struct_pb2.Value) -> Any:
-        if value.HasField('list_value'):
-            return [convert(v) for v in value.list_value.values]
-        if value.HasField('struct_value'):
-            return {k: convert(v) for k, v in value.struct_value.fields.items()}
-        if value.HasField('number_value'):
-            return value.number_value
-        if value.HasField('string_value'):
-            return value.string_value
-        if value.HasField('bool_value'):
-            return value.bool_value
-        if value.HasField('null_value'):
-            return None
-        raise ValueError(f'Unsupported type: {value}')
-
-    return {k: convert(v) for k, v in struct.fields.items()}
-
-
 def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
-    """Converts a Python dict to a Struct proto."""
+    """Converts a Python dict to a Struct proto.
+
+    Unforunately, using the json_format.ParseDict does not work because this
+    wants the dictionary to be an exact match of the Struct proto with fields
+    and keys and values, not the traditional python dict struture.
+
+    Args:
+      dictionary: The Python dict to convert.
+
+    Returns:
+      The Struct proto.
+    """
     struct = struct_pb2.Struct()
     for key, val in dictionary.items():
         if isinstance(val, dict):
