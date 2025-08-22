@@ -30,8 +30,8 @@ def new_task(request: Message) -> Task:
 
     return Task(
         status=TaskStatus(state=TaskState.submitted),
-        id=(request.task_id if request.task_id else str(uuid.uuid4())),
-        context_id=(request.context_id if request.context_id else str(uuid.uuid4())),
+        id=request.task_id or str(uuid.uuid4()),
+        context_id=request.context_id or str(uuid.uuid4()),
         history=[request],
     )
 
