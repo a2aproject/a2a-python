@@ -46,14 +46,7 @@ class ToProto:
     ) -> struct_pb2.Struct | None:
         if metadata is None:
             return None
-        return struct_pb2.Struct(
-            # TODO: Add support for other types.
-            fields={
-                key: struct_pb2.Value(string_value=value)
-                for key, value in metadata.items()
-                if isinstance(value, str)
-            }
-        )
+        return dict_to_struct(metadata)
 
     @classmethod
     def part(cls, part: types.Part) -> a2a_pb2.Part:
@@ -81,7 +74,9 @@ class ToProto:
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
             return a2a_pb2.FilePart(
-                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
+                file_with_uri=file.uri,
+                mime_type=file.mime_type,
+                name=file.name
             )
         return a2a_pb2.FilePart(
             file_with_bytes=file.bytes.encode('utf-8'),
@@ -324,6 +319,23 @@ class ToProto:
         return a2a_pb2.AgentCapabilities(
             streaming=bool(capabilities.streaming),
             push_notifications=bool(capabilities.push_notifications),
+            extensions=[
+                cls.extension(x) for x in capabilities.extensions
+            ]
+            if capabilities.extensions
+            else None,
+        )
+
+    @classmethod
+    def extension(
+        cls,
+        extension: types.AgentExtension,
+    ) -> a2a_pb2.AgentExtension:
+        return a2a_pb2.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=dict_to_struct(extension.params),
+            required=extension.required,
         )
 
     @classmethod
@@ -477,11 +489,9 @@ class FromProto:
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-        return {
-            key: value.string_value
-            for key, value in metadata.fields.items()
-            if value.string_value
-        }
+        if not metadata:
+            return {}
+        return struct_to_dict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
@@ -777,6 +787,23 @@ class FromProto:
         return types.AgentCapabilities(
             streaming=capabilities.streaming,
             push_notifications=capabilities.push_notifications,
+            extensions=[
+                cls.agent_extension(x) for x in capabilities.extensions
+            ]
+            if capabilities.extensions
+            else None,
+        )
+
+    @classmethod
+    def agent_extension(
+        cls,
+        extension: a2a_pb2.AgentExtension,
+    ) -> types.AgentExtension:
+        return types.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=struct_to_dict(extension.params),
+            required=extension.required,
         )
 
     @classmethod
@@ -916,3 +943,37 @@ class FromProto:
                 return types.Role.agent
             case _:
                 return types.Role.agent
+
+
+def struct_to_dict(struct: struct_pb2.Struct) -> dict[str, Any]:
+  """Converts a Struct proto to a Python dict."""
+
+  def convert(value: struct_pb2.Value) -> Any:
+    if value.HasField('list_value'):
+      return [convert(v) for v in value.list_value.values]
+    elif value.HasField('struct_value'):
+      return {k: convert(v) for k, v in value.struct_value.fields.items()}
+    elif value.HasField('number_value'):
+      return value.number_value
+    elif value.HasField('string_value'):
+      return value.string_value
+    elif value.HasField('bool_value'):
+      return value.bool_value
+    elif value.HasField('null_value'):
+      return None
+    else:
+      raise ValueError(f'Unsupported type: {value}')
+
+  return {k: convert(v) for k, v in struct.fields.items()}
+
+
+def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
+  """Converts a Python dict to a Struct proto."""
+  struct = struct_pb2.Struct()
+  for key, val in dictionary.items():
+    if isinstance(val, dict):
+      struct[key] = dict_to_struct(val)
+    else:
+      struct[key] = val
+  return struct
+
