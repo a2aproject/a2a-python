@@ -74,9 +74,7 @@ class ToProto:
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
             return a2a_pb2.FilePart(
-                file_with_uri=file.uri,
-                mime_type=file.mime_type,
-                name=file.name
+                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
             )
         return a2a_pb2.FilePart(
             file_with_bytes=file.bytes.encode('utf-8'),
@@ -332,7 +330,9 @@ class ToProto:
         return a2a_pb2.AgentExtension(
             uri=extension.uri,
             description=extension.description,
-            params=dict_to_struct(extension.params) if extension.params else None,
+            params=dict_to_struct(extension.params)
+            if extension.params
+            else None,
             required=extension.required,
         )
 
@@ -487,9 +487,9 @@ class FromProto:
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-      if not metadata.fields:
+        if not metadata.fields:
             return {}
-      return struct_to_dict(metadata)
+        return struct_to_dict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
@@ -942,33 +942,32 @@ class FromProto:
 
 
 def struct_to_dict(struct: struct_pb2.Struct) -> dict[str, Any]:
-  """Converts a Struct proto to a Python dict."""
+    """Converts a Struct proto to a Python dict."""
 
-  def convert(value: struct_pb2.Value) -> Any:
-    if value.HasField('list_value'):
-      return [convert(v) for v in value.list_value.values]
-    if value.HasField('struct_value'):
-      return {k: convert(v) for k, v in value.struct_value.fields.items()}
-    if value.HasField('number_value'):
-      return value.number_value
-    if value.HasField('string_value'):
-      return value.string_value
-    if value.HasField('bool_value'):
-      return value.bool_value
-    if value.HasField('null_value'):
-      return None
-    raise ValueError(f'Unsupported type: {value}')
+    def convert(value: struct_pb2.Value) -> Any:
+        if value.HasField('list_value'):
+            return [convert(v) for v in value.list_value.values]
+        if value.HasField('struct_value'):
+            return {k: convert(v) for k, v in value.struct_value.fields.items()}
+        if value.HasField('number_value'):
+            return value.number_value
+        if value.HasField('string_value'):
+            return value.string_value
+        if value.HasField('bool_value'):
+            return value.bool_value
+        if value.HasField('null_value'):
+            return None
+        raise ValueError(f'Unsupported type: {value}')
 
-  return {k: convert(v) for k, v in struct.fields.items()}
+    return {k: convert(v) for k, v in struct.fields.items()}
 
 
 def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
-  """Converts a Python dict to a Struct proto."""
-  struct = struct_pb2.Struct()
-  for key, val in dictionary.items():
-    if isinstance(val, dict):
-      struct[key] = dict_to_struct(val)
-    else:
-      struct[key] = val
-  return struct
-
+    """Converts a Python dict to a Struct proto."""
+    struct = struct_pb2.Struct()
+    for key, val in dictionary.items():
+        if isinstance(val, dict):
+            struct[key] = dict_to_struct(val)
+        else:
+            struct[key] = val
+    return struct
