@@ -957,8 +957,7 @@ def struct_to_dict(struct: struct_pb2.Struct) -> dict[str, Any]:
       return value.bool_value
     if value.HasField('null_value'):
       return None
-    else:
-      raise ValueError(f'Unsupported type: {value}')
+    raise ValueError(f'Unsupported type: {value}')
 
   return {k: convert(v) for k, v in struct.fields.items()}
 
