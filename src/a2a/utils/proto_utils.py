@@ -334,7 +334,7 @@ class ToProto:
         return a2a_pb2.AgentExtension(
             uri=extension.uri,
             description=extension.description,
-            params=dict_to_struct(extension.params),
+            params=dict_to_struct(extension.params) if extension.params else None,
             required=extension.required,
         )
 
