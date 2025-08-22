@@ -54,7 +54,7 @@ class EventQueue:
                 logger.warning('Queue is closed. Event will not be enqueued.')
                 return
 
-        logger.debug(f'Enqueuing event of type: {type(event)}')
+        logger.debug('Enqueuing event of type: %s', type(event))
 
         # Make sure to use put instead of put_nowait to avoid blocking the event loop.
         await self.queue.put(event)
@@ -103,13 +103,13 @@ class EventQueue:
             logger.debug('Attempting to dequeue event (no_wait=True).')
             event = self.queue.get_nowait()
             logger.debug(
-                f'Dequeued event (no_wait=True) of type: {type(event)}'
+                'Dequeued event (no_wait=True) of type: %s', type(event)
             )
             return event
 
         logger.debug('Attempting to dequeue event (waiting).')
         event = await self.queue.get()
-        logger.debug(f'Dequeued event (waited) of type: {type(event)}')
+        logger.debug('Dequeued event (waited) of type: %s', type(event))
         return event
 
     def task_done(self) -> None:
@@ -193,7 +193,9 @@ class EventQueue:
                 while True:
                     event = self.queue.get_nowait()
                     logger.debug(
-                        f'Discarding unprocessed event of type: {type(event)}, content: {event}'
+                        'Discarding unprocessed event of type: %s, content: %s',
+                        type(event),
+                        event,
                     )
                     self.queue.task_done()
                     cleared_count += 1
@@ -211,7 +213,8 @@ class EventQueue:
 
             if cleared_count > 0:
                 logger.debug(
-                    f'Cleared {cleared_count} unprocessed events from EventQueue.'
+                    'Cleared %d unprocessed events from EventQueue.',
+                    cleared_count,
                 )
 
         # Clear all child queues (lock released before awaiting child tasks)

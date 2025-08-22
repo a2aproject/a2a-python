@@ -78,7 +78,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 The key must be a URL-safe base64-encoded 32-byte key.
         """
         logger.debug(
-            f'Initializing DatabasePushNotificationConfigStore with existing engine, table: {table_name}'
+            'Initializing DatabasePushNotificationConfigStore with existing engine, table: %s',
+            table_name,
         )
         self.engine = engine
         self.async_session_maker = async_sessionmaker(
@@ -235,7 +236,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         async with self.async_session_maker.begin() as session:
             await session.merge(db_config)
             logger.debug(
-                f'Push notification config for task {task_id} with config id {config_to_save.id} saved/updated.'
+                'Push notification config for task %s with config id %s saved/updated.',
+                task_id,
+                config_to_save.id,
             )
 
     async def get_info(self, task_id: str) -> list[PushNotificationConfig]:
@@ -280,9 +283,13 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             if result.rowcount > 0:
                 logger.info(
-                    f'Deleted {result.rowcount} push notification config(s) for task {task_id}.'
+                    'Deleted %s push notification config(s) for task %s.',
+                    result.rowcount,
+                    task_id,
                 )
             else:
                 logger.warning(
-                    f'Attempted to delete push notification config for task {task_id} with config_id: {config_id} that does not exist.'
+                    'Attempted to delete push notification config for task %s with config_id: %s that does not exist.',
+                    task_id,
+                    config_id,
                 )

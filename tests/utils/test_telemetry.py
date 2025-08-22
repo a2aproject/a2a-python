@@ -78,7 +78,10 @@ def test_trace_function_sync_attribute_extractor_error_logged(mock_span):
             return 1
 
         foo()
-        logger.exception.assert_any_call(mock.ANY)
+        logger.exception.assert_any_call(
+            'attribute_extractor error in span %s',
+            'test_telemetry.foo',
+        )
 
 
 @pytest.mark.asyncio
