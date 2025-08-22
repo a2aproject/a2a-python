@@ -131,7 +131,7 @@ class RESTAdapter:
                 error=InvalidRequestError(
                     message=f'Failed to pre-consume request body: {e}'
                 )
-            )
+            ) from e
 
         call_context = self._context_builder.build(request)
 
