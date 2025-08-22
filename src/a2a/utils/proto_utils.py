@@ -320,10 +320,8 @@ class ToProto:
             streaming=bool(capabilities.streaming),
             push_notifications=bool(capabilities.push_notifications),
             extensions=[
-                cls.extension(x) for x in capabilities.extensions
-            ]
-            if capabilities.extensions
-            else None,
+                cls.extension(x) for x in capabilities.extensions or []
+            ],
         )
 
     @classmethod
@@ -489,7 +487,7 @@ class FromProto:
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-        if not metadata:
+      if not metadata.fields:
             return {}
         return struct_to_dict(metadata)
 
@@ -789,9 +787,7 @@ class FromProto:
             push_notifications=capabilities.push_notifications,
             extensions=[
                 cls.agent_extension(x) for x in capabilities.extensions
-            ]
-            if capabilities.extensions
-            else None,
+            ],
         )
 
     @classmethod
