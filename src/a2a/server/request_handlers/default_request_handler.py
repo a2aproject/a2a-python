@@ -314,7 +314,6 @@ class DefaultRequestHandler(RequestHandler):
         blocking = True  # Default to blocking behavior
         if params.configuration and params.configuration.blocking is False:
             blocking = False
-
         interrupted_or_non_blocking = False
         try:
             # Create async callback for push notifications
@@ -331,15 +330,6 @@ class DefaultRequestHandler(RequestHandler):
                 blocking=blocking,
                 event_callback=push_notification_callback,
             )
-            if not result:
-                raise ServerError(error=InternalError())  # noqa: TRY301
-
-            if isinstance(result, Task):
-                self._validate_task_id_match(task_id, result.id)
-
-            await self._send_push_notification_if_needed(
-                task_id, result_aggregator
-            )
 
         except Exception:
             logger.exception('Agent execution failed')
@@ -352,6 +342,14 @@ class DefaultRequestHandler(RequestHandler):
                 )
             else:
                 await self._cleanup_producer(producer_task, task_id)
+
+        if not result:
+            raise ServerError(error=InternalError())
+
+        if isinstance(result, Task):
+            self._validate_task_id_match(task_id, result.id)
+
+        await self._send_push_notification_if_needed(task_id, result_aggregator)
 
         return result
 
