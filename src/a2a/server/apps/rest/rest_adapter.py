@@ -39,7 +39,7 @@ from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidRequestError, ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -126,7 +126,13 @@ class RESTAdapter:
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
-            logger.warning(f'Failed to pre-consume request body: {e}')
+            logger.warning('Failed to pre-consume request body: %s', e)
+            raise ServerError(
+                error=InvalidRequestError(
+                    message=f'Failed to pre-consume request body: {e}'
+                )
+            )
+
         call_context = self._context_builder.build(request)
 
         async def event_generator(
