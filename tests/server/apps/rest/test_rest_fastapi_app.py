@@ -71,7 +71,7 @@ async def streaming_app(
 
     return A2ARESTFastAPIApplication(
         streaming_agent_card, request_handler
-    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
+    ).build(agent_card_url='/well-known/agent-card.json', rpc_url='')
 
 
 @pytest.fixture
