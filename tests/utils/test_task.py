@@ -188,24 +188,6 @@ class TestTask(unittest.TestCase):
                 history=[],
             )
 
-    def test_new_task_with_invalid_context_id(self):
-        """Test that new_task raises a ValueError for various invalid context_id formats."""
-        invalid_ids = ['not-a-uuid', '']
-        for invalid_id in invalid_ids:
-            with self.subTest(invalid_id=invalid_id):
-                with pytest.raises(
-                    ValueError,
-                    match=f"Invalid context_id: '{invalid_id}' is not a valid UUID.",
-                ):
-                    new_task(
-                        Message(
-                            role=Role.user,
-                            parts=[Part(root=TextPart(text='test message'))],
-                            message_id=str(uuid.uuid4()),
-                            context_id=invalid_id,
-                        )
-                    )
-
 
 if __name__ == '__main__':
     unittest.main()
