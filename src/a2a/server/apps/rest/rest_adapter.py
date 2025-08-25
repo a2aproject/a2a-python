@@ -126,7 +126,6 @@ class RESTAdapter:
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
-            logger.warning('Failed to pre-consume request body: %s', e)
             raise ServerError(
                 error=InvalidRequestError(
                     message=f'Failed to pre-consume request body: {e}'
