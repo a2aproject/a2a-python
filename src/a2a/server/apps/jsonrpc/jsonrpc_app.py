@@ -18,6 +18,7 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_utils import update_card_rpc_url_from_request
 from a2a.types import (
     A2AError,
     A2ARequest,
@@ -89,6 +90,7 @@ else:
         Request = Any
         JSONResponse = Any
         Response = Any
+        URL = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
 
 MAX_CONTENT_LENGTH = 1_000_000
@@ -568,8 +570,12 @@ class JSONRPCApplication(ABC):
             )
 
         card_to_serve = self.agent_card
+        rpc_url = card_to_serve.url
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
+        # If agent's RPC URL was not modified, we build it dynamically.
+        if rpc_url == card_to_serve.url:
+            update_card_rpc_url_from_request(card_to_serve, request)
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -594,6 +600,7 @@ class JSONRPCApplication(ABC):
 
         card_to_serve = self.extended_agent_card
 
+        rpc_url = card_to_serve.url if card_to_serve else None
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
@@ -601,6 +608,9 @@ class JSONRPCApplication(ABC):
             card_to_serve = self.extended_card_modifier(base_card, context)
 
         if card_to_serve:
+            # If agent's RPC URL was not modified, we build it dynamically.
+            if rpc_url == card_to_serve.url:
+                update_card_rpc_url_from_request(card_to_serve, request)
             return JSONResponse(
                 card_to_serve.model_dump(
                     exclude_none=True,

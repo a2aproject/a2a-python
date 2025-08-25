@@ -1,4 +1,5 @@
 import asyncio
+
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 from unittest.mock import ANY, AsyncMock
@@ -7,6 +8,7 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
+
 from grpc.aio import Channel
 
 from a2a.client.transports import JsonRpcTransport, RestTransport
@@ -35,6 +37,7 @@ from a2a.types import (
     TextPart,
     TransportProtocol,
 )
+
 
 # --- Test Constants ---
 

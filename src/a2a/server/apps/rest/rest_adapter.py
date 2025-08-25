@@ -34,6 +34,7 @@ from a2a.server.apps.jsonrpc import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
+from a2a.server.request_utils import update_card_rpc_url_from_request
 from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
 from a2a.utils.error_handlers import (
     rest_error_handler,
@@ -145,8 +146,11 @@ class RESTAdapter:
             A JSONResponse containing the agent card data.
         """
         card_to_serve = self.agent_card
+        rpc_url = card_to_serve.url
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
+        if rpc_url == card_to_serve.url:
+            update_card_rpc_url_from_request(card_to_serve, request)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
@@ -175,12 +179,15 @@ class RESTAdapter:
 
         if not card_to_serve:
             card_to_serve = self.agent_card
+        rpc_url = card_to_serve.url
 
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
             base_card = card_to_serve if card_to_serve else self.agent_card
             card_to_serve = self.extended_card_modifier(base_card, context)
+        if rpc_url == card_to_serve.url:
+            update_card_rpc_url_from_request(card_to_serve, request)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
