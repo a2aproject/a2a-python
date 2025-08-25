@@ -16,7 +16,7 @@
 
 ### Performance Improvements
 
-* optimize logging performance and modernize string formatting ([#411](https://github.com/a2aproject/a2a-python/issues/411)) ([3ffae8f](https://github.com/a2aproject/a2a-python/commit/3ffae8f8046aef20e559e19c21a5f9464a2c89ca))
+* Optimize logging performance and modernize string formatting ([#411](https://github.com/a2aproject/a2a-python/issues/411)) ([3ffae8f](https://github.com/a2aproject/a2a-python/commit/3ffae8f8046aef20e559e19c21a5f9464a2c89ca))
 
 
 ### Reverts
