@@ -23,9 +23,6 @@ _TASK_PUSH_CONFIG_NAME_MATCH = (
     r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
 )
 
-# Maximum safe integer digits (JavaScript MAX_SAFE_INTEGER is 2^53 - 1)
-_MAX_SAFE_INTEGER_DIGITS = 15
-
 
 class ToProto:
     """Converts Python types to proto types."""
@@ -49,59 +46,7 @@ class ToProto:
     ) -> struct_pb2.Struct | None:
         if metadata is None:
             return None
-        return struct_pb2.Struct(
-            fields={
-                key: cls._convert_value_to_proto(value)
-                for key, value in metadata.items()
-            }
-        )
-
-    @classmethod
-    def _make_dict_serializable(cls, value: Any) -> Any:
-        if isinstance(value, dict):
-            return {k: cls._make_dict_serializable(v) for k, v in value.items()}
-        if isinstance(value, (list | tuple)):
-            return [cls._make_dict_serializable(item) for item in value]
-        if isinstance(value, (str | int | float | bool)) or value is None:
-            return value
-        return str(value)
-
-    @classmethod
-    def _convert_value_to_proto(cls, value: Any) -> struct_pb2.Value:
-        if value is None:
-            proto_value = struct_pb2.Value()
-            proto_value.null_value = struct_pb2.NullValue.NULL_VALUE
-            return proto_value
-
-        if isinstance(value, bool):
-            return struct_pb2.Value(bool_value=value)
-
-        if isinstance(value, int):
-            if abs(value) > (2**53 - 1):
-                return struct_pb2.Value(string_value=str(value))
-            return struct_pb2.Value(number_value=float(value))
-
-        if isinstance(value, float):
-            return struct_pb2.Value(number_value=value)
-
-        if isinstance(value, str):
-            return struct_pb2.Value(string_value=value)
-
-        if isinstance(value, dict):
-            serializable_dict = cls._make_dict_serializable(value)
-            json_data = json.dumps(serializable_dict, ensure_ascii=False)
-            struct_value = struct_pb2.Struct()
-            json_format.Parse(json_data, struct_value)
-            return struct_pb2.Value(struct_value=struct_value)
-
-        if isinstance(value, (list | tuple)):
-            list_value = struct_pb2.ListValue()
-            for item in value:
-                converted_item = cls._convert_value_to_proto(item)
-                list_value.values.append(converted_item)
-            return struct_pb2.Value(list_value=list_value)
-
-        return struct_pb2.Value(string_value=str(value))
+        return dict_to_struct(metadata)
 
     @classmethod
     def part(cls, part: types.Part) -> a2a_pb2.Part:
@@ -542,37 +487,9 @@ class FromProto:
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-        return {
-            key: cls._convert_proto_to_value(value)
-            for key, value in metadata.fields.items()
-        }
-
-    @classmethod
-    def _convert_proto_to_value(cls, value: struct_pb2.Value) -> Any:
-        if value.HasField('null_value'):
-            return None
-        if value.HasField('bool_value'):
-            return value.bool_value
-        if value.HasField('number_value'):
-            return value.number_value
-        if value.HasField('string_value'):
-            string_val = value.string_value
-            if (
-                string_val.lstrip('-').isdigit()
-                and len(string_val.lstrip('-')) > _MAX_SAFE_INTEGER_DIGITS
-            ):
-                return int(string_val)
-            return string_val
-        if value.HasField('struct_value'):
-            return {
-                k: cls._convert_proto_to_value(v)
-                for k, v in value.struct_value.fields.items()
-            }
-        if value.HasField('list_value'):
-            return [
-                cls._convert_proto_to_value(v) for v in value.list_value.values
-            ]
-        return None
+        if not metadata.fields:
+            return {}
+        return json_format.MessageToDict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
@@ -1044,3 +961,85 @@ def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
         else:
             struct[key] = val
     return struct
+
+
+def make_dict_serializable(value: Any) -> Any:
+    """Dict preprocessing utility: converts non-serializable values to serializable form.
+
+    Use this when you want to normalize a dictionary before dict->Struct conversion.
+
+    Args:
+        value: The value to convert.
+
+    Returns:
+        A serializable value.
+    """
+    if isinstance(value, dict):
+        return {k: make_dict_serializable(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [make_dict_serializable(item) for item in value]
+    if isinstance(value, str | int | float | bool) or value is None:
+        return value
+    return str(value)
+
+
+def normalize_large_integers_to_strings(
+    value: Any, max_safe_digits: int = 15
+) -> Any:
+    """Integer preprocessing utility: converts large integers to strings.
+
+    Use this when you want to convert large integers to strings considering
+    JavaScript's MAX_SAFE_INTEGER (2^53 - 1) limitation.
+
+    Args:
+        value: The value to convert.
+        max_safe_digits: Maximum safe integer digits (default: 15).
+
+    Returns:
+        A normalized value.
+    """
+    if isinstance(value, dict):
+        return {
+            k: normalize_large_integers_to_strings(v, max_safe_digits)
+            for k, v in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [
+            normalize_large_integers_to_strings(item, max_safe_digits)
+            for item in value
+        ]
+    if isinstance(value, int) and abs(value) > (10**max_safe_digits - 1):
+        return str(value)
+    return value
+
+
+def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
+    """String post-processing utility: converts large integer strings back to integers.
+
+    Use this when you want to restore large integer strings to integers
+    after Struct->dict conversion.
+
+    Args:
+        value: The value to convert.
+        max_safe_digits: Maximum safe integer digits (default: 15).
+
+    Returns:
+        A parsed value.
+    """
+    if isinstance(value, dict):
+        return {
+            k: parse_string_integers_in_dict(v, max_safe_digits)
+            for k, v in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [
+            parse_string_integers_in_dict(item, max_safe_digits)
+            for item in value
+        ]
+    if (
+        isinstance(value, str)
+        and value.lstrip('-').isdigit()
+        and len(value.lstrip('-')) > max_safe_digits
+    ):
+        return int(value)
+    return value

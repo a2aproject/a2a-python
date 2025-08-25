@@ -298,7 +298,7 @@ class TestProtoUtils:
         assert roundtrip_metadata['complex_list'][0]['name'] == 'item1'
 
     def test_metadata_with_custom_objects(self):
-        """Test metadata conversion with custom objects that need str() fallback."""
+        """Test metadata conversion with custom objects using preprocessing utility."""
 
         class CustomObject:
             def __str__(self):
@@ -313,8 +313,11 @@ class TestProtoUtils:
             'nested_custom': {'obj': CustomObject(), 'normal': 'value'},
         }
 
+        # Use preprocessing utility to make it serializable
+        serializable_metadata = proto_utils.make_dict_serializable(metadata)
+
         # Convert to proto
-        proto_metadata = proto_utils.ToProto.metadata(metadata)
+        proto_metadata = proto_utils.ToProto.metadata(serializable_metadata)
         assert proto_metadata is not None
 
         # Convert back to Python
@@ -339,7 +342,7 @@ class TestProtoUtils:
             'false': False,
             'empty_string': '',
             'unicode_string': 'string test',
-            'large_number': 9999999999999999,
+            'safe_number': 9007199254740991,  # JavaScript MAX_SAFE_INTEGER
             'negative_number': -42,
             'float_precision': 0.123456789,
             'numeric_string': '12345',
@@ -356,7 +359,156 @@ class TestProtoUtils:
         assert roundtrip_metadata['false'] is False
         assert roundtrip_metadata['empty_string'] == ''
         assert roundtrip_metadata['unicode_string'] == 'string test'
-        assert roundtrip_metadata['large_number'] == 9999999999999999
+        assert roundtrip_metadata['safe_number'] == 9007199254740991
         assert roundtrip_metadata['negative_number'] == -42
         assert abs(roundtrip_metadata['float_precision'] - 0.123456789) < 1e-10
         assert roundtrip_metadata['numeric_string'] == '12345'
+
+    def test_make_dict_serializable(self):
+        """Test the make_dict_serializable utility function."""
+
+        class CustomObject:
+            def __str__(self):
+                return 'custom_str'
+
+        test_data = {
+            'string': 'hello',
+            'int': 42,
+            'float': 3.14,
+            'bool': True,
+            'none': None,
+            'custom': CustomObject(),
+            'list': [1, 'two', CustomObject()],
+            'tuple': (1, 2, CustomObject()),
+            'nested': {'inner_custom': CustomObject(), 'inner_normal': 'value'},
+        }
+
+        result = proto_utils.make_dict_serializable(test_data)
+
+        # Basic types should be unchanged
+        assert result['string'] == 'hello'
+        assert result['int'] == 42
+        assert result['float'] == 3.14
+        assert result['bool'] is True
+        assert result['none'] is None
+
+        # Custom objects should be converted to strings
+        assert result['custom'] == 'custom_str'
+        assert result['list'] == [1, 'two', 'custom_str']
+        assert result['tuple'] == [1, 2, 'custom_str']  # tuples become lists
+        assert result['nested']['inner_custom'] == 'custom_str'
+        assert result['nested']['inner_normal'] == 'value'
+
+    def test_normalize_large_integers_to_strings(self):
+        """Test the normalize_large_integers_to_strings utility function."""
+
+        test_data = {
+            'small_int': 42,
+            'large_int': 9999999999999999999,  # > 15 digits
+            'negative_large': -9999999999999999999,
+            'float': 3.14,
+            'string': 'hello',
+            'list': [123, 9999999999999999999, 'text'],
+            'nested': {'inner_large': 9999999999999999999, 'inner_small': 100},
+        }
+
+        result = proto_utils.normalize_large_integers_to_strings(test_data)
+
+        # Small integers should remain as integers
+        assert result['small_int'] == 42
+        assert isinstance(result['small_int'], int)
+
+        # Large integers should be converted to strings
+        assert result['large_int'] == '9999999999999999999'
+        assert isinstance(result['large_int'], str)
+        assert result['negative_large'] == '-9999999999999999999'
+        assert isinstance(result['negative_large'], str)
+
+        # Other types should be unchanged
+        assert result['float'] == 3.14
+        assert result['string'] == 'hello'
+
+        # Lists should be processed recursively
+        assert result['list'] == [123, '9999999999999999999', 'text']
+
+        # Nested dicts should be processed recursively
+        assert result['nested']['inner_large'] == '9999999999999999999'
+        assert result['nested']['inner_small'] == 100
+
+    def test_parse_string_integers_in_dict(self):
+        """Test the parse_string_integers_in_dict utility function."""
+
+        test_data = {
+            'regular_string': 'hello',
+            'numeric_string_small': '123',  # small, should stay as string
+            'numeric_string_large': '9999999999999999999',  # > 15 digits, should become int
+            'negative_large_string': '-9999999999999999999',
+            'float_string': '3.14',  # not all digits, should stay as string
+            'mixed_string': '123abc',  # not all digits, should stay as string
+            'int': 42,
+            'list': ['hello', '9999999999999999999', '123'],
+            'nested': {
+                'inner_large_string': '9999999999999999999',
+                'inner_regular': 'value',
+            },
+        }
+
+        result = proto_utils.parse_string_integers_in_dict(test_data)
+
+        # Regular strings should remain unchanged
+        assert result['regular_string'] == 'hello'
+        assert (
+            result['numeric_string_small'] == '123'
+        )  # too small, stays string
+        assert result['float_string'] == '3.14'  # not all digits
+        assert result['mixed_string'] == '123abc'  # not all digits
+
+        # Large numeric strings should be converted to integers
+        assert result['numeric_string_large'] == 9999999999999999999
+        assert isinstance(result['numeric_string_large'], int)
+        assert result['negative_large_string'] == -9999999999999999999
+        assert isinstance(result['negative_large_string'], int)
+
+        # Other types should be unchanged
+        assert result['int'] == 42
+
+        # Lists should be processed recursively
+        assert result['list'] == ['hello', 9999999999999999999, '123']
+
+        # Nested dicts should be processed recursively
+        assert result['nested']['inner_large_string'] == 9999999999999999999
+        assert result['nested']['inner_regular'] == 'value'
+
+    def test_large_integer_roundtrip_with_utilities(self):
+        """Test large integer handling with preprocessing and post-processing utilities."""
+
+        original_data = {
+            'large_int': 9999999999999999999,
+            'small_int': 42,
+            'nested': {'another_large': 12345678901234567890, 'normal': 'text'},
+        }
+
+        # Step 1: Preprocess to convert large integers to strings
+        preprocessed = proto_utils.normalize_large_integers_to_strings(
+            original_data
+        )
+
+        # Step 2: Convert to proto
+        proto_metadata = proto_utils.ToProto.metadata(preprocessed)
+        assert proto_metadata is not None
+
+        # Step 3: Convert back from proto
+        dict_from_proto = proto_utils.FromProto.metadata(proto_metadata)
+
+        # Step 4: Post-process to convert large integer strings back to integers
+        final_result = proto_utils.parse_string_integers_in_dict(
+            dict_from_proto
+        )
+
+        # Verify roundtrip preserved the original data
+        assert final_result['large_int'] == 9999999999999999999
+        assert isinstance(final_result['large_int'], int)
+        assert final_result['small_int'] == 42
+        assert final_result['nested']['another_large'] == 12345678901234567890
+        assert isinstance(final_result['nested']['another_large'], int)
+        assert final_result['nested']['normal'] == 'text'
