@@ -1,5 +1,28 @@
 # Changelog
 
+## [0.3.3](https://github.com/a2aproject/a2a-python/compare/v0.3.2...v0.3.3) (2025-08-22)
+
+
+### Features
+
+* Update proto conversion utilities ([#424](https://github.com/a2aproject/a2a-python/issues/424)) ([a3e7e1e](https://github.com/a2aproject/a2a-python/commit/a3e7e1ef2684f979a3b8cbde1f9fd24ce9154e40))
+
+
+### Bug Fixes
+
+* fixing JSONRPC error mapping ([#414](https://github.com/a2aproject/a2a-python/issues/414)) ([d2e869f](https://github.com/a2aproject/a2a-python/commit/d2e869f567a84f59967cf59a044d6ca1e0d00daf))
+* Revert code that enforces uuid structure on context id in tasks ([#429](https://github.com/a2aproject/a2a-python/issues/429)) ([e3a7207](https://github.com/a2aproject/a2a-python/commit/e3a7207164503f64900feaa4ef470d37fb2bb145)), closes [#427](https://github.com/a2aproject/a2a-python/issues/427)
+
+
+### Performance Improvements
+
+* Optimize logging performance and modernize string formatting ([#411](https://github.com/a2aproject/a2a-python/issues/411)) ([3ffae8f](https://github.com/a2aproject/a2a-python/commit/3ffae8f8046aef20e559e19c21a5f9464a2c89ca))
+
+
+### Reverts
+
+* Revert "chore(gRPC): Update a2a.proto to include metadata on GetTaskRequest" ([#428](https://github.com/a2aproject/a2a-python/issues/428)) ([39c6b43](https://github.com/a2aproject/a2a-python/commit/39c6b430c6b57e84255f56894dcc46a740a53f9b))
+
 ## [0.3.2](https://github.com/a2aproject/a2a-python/compare/v0.3.1...v0.3.2) (2025-08-20)
 
 
