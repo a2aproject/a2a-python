@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.4](https://github.com/a2aproject/a2a-python/compare/v0.3.3...v0.3.4) (2025-08-25)
+
+
+### Bug Fixes
+
+* resolve streaming endpoint deadlock by pre-consuming request body ([#426](https://github.com/a2aproject/a2a-python/issues/426)) ([4186731](https://github.com/a2aproject/a2a-python/commit/4186731df60f7adfcd25f19078d055aca26612a3))
+
 ## [0.3.3](https://github.com/a2aproject/a2a-python/compare/v0.3.2...v0.3.3) (2025-08-22)
 
 
