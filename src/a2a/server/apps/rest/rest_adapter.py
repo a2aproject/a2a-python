@@ -39,7 +39,7 @@ from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidRequestError, ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,18 @@ class RESTAdapter:
         method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
         request: Request,
     ) -> EventSourceResponse:
+        # Pre-consume and cache the request body to prevent deadlock in streaming context
+        # This is required because Starlette's request.body() can only be consumed once,
+        # and attempting to consume it after EventSourceResponse starts causes deadlock
+        try:
+            await request.body()
+        except (ValueError, RuntimeError, OSError) as e:
+            raise ServerError(
+                error=InvalidRequestError(
+                    message=f'Failed to pre-consume request body: {e}'
+                )
+            ) from e
+
         call_context = self._context_builder.build(request)
 
         async def event_generator(
