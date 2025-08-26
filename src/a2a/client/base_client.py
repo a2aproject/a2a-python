@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from typing import cast
 
 from a2a.client.client import (
     Client,
@@ -11,6 +12,13 @@ from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.errors import A2AClientInvalidStateError
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.extensions.base import Extension
+from a2a.extensions.trace import (
+    AgentInvocation,
+    CallTypeEnum,
+    StepAction,
+    TraceExtension,
+)
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
@@ -41,6 +49,12 @@ class BaseClient(Client):
         self._card = card
         self._config = config
         self._transport = transport
+        self._extensions: list[Extension] = []
+
+    def install_extension(self, extension: Extension) -> None:
+        """Installs an extension on the client."""
+        extension.install(self)
+        self._extensions.append(extension)
 
     async def send_message(
         self,
@@ -61,6 +75,31 @@ class BaseClient(Client):
         Yields:
             An async iterator of `ClientEvent` or a final `Message` response.
         """
+        trace_extension: TraceExtension | None = None
+        for extension in self._extensions:
+            if isinstance(extension, TraceExtension):
+                trace_extension = cast(TraceExtension, extension)
+            extension.on_client_message(request)
+
+        step = None
+        if trace_extension:
+            trace_id = request.metadata.get('trace', {}).get('trace_id')
+            parent_step_id = request.metadata.get('trace', {}).get(
+                'parent_step_id'
+            )
+            step = trace_extension.start_step(
+                trace_id=trace_id,
+                parent_step_id=parent_step_id,
+                call_type=CallTypeEnum.AGENT,
+                step_action=StepAction(
+                    agent_invocation=AgentInvocation(
+                        agent_url=self._card.url,
+                        agent_name=self._card.name,
+                        requests=request.model_dump(mode='json'),
+                    )
+                ),
+            )
+
         config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
@@ -72,33 +111,44 @@ class BaseClient(Client):
         )
         params = MessageSendParams(message=request, configuration=config)
 
-        if not self._config.streaming or not self._card.capabilities.streaming:
-            response = await self._transport.send_message(
+        try:
+            if (
+                not self._config.streaming
+                or not self._card.capabilities.streaming
+            ):
+                response = await self._transport.send_message(
+                    params, context=context
+                )
+                result = (
+                    (response, None)
+                    if isinstance(response, Task)
+                    else response
+                )
+                await self.consume(result, self._card)
+                yield result
+                return
+
+            tracker = ClientTaskManager()
+            stream = self._transport.send_message_streaming(
                 params, context=context
             )
-            result = (
-                (response, None) if isinstance(response, Task) else response
-            )
-            await self.consume(result, self._card)
-            yield result
-            return
 
-        tracker = ClientTaskManager()
-        stream = self._transport.send_message_streaming(params, context=context)
+            first_event = await anext(stream)
+            # The response from a server may be either exactly one Message or a
+            # series of Task updates. Separate out the first message for special
+            # case handling, which allows us to simplify further stream processing.
+            if isinstance(first_event, Message):
+                await self.consume(first_event, self._card)
+                yield first_event
+                return
 
-        first_event = await anext(stream)
-        # The response from a server may be either exactly one Message or a
-        # series of Task updates. Separate out the first message for special
-        # case handling, which allows us to simplify further stream processing.
-        if isinstance(first_event, Message):
-            await self.consume(first_event, self._card)
-            yield first_event
-            return
+            yield await self._process_response(tracker, first_event)
 
-        yield await self._process_response(tracker, first_event)
-
-        async for event in stream:
-            yield await self._process_response(tracker, event)
+            async for event in stream:
+                yield await self._process_response(tracker, event)
+        finally:
+            if trace_extension and step:
+                trace_extension.end_step(step.step_id)
 
     async def _process_response(
         self,
