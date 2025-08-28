@@ -42,6 +42,7 @@ class TaskManager:
             task_store: The `TaskStore` instance for persistence.
             initial_message: The `Message` that initiated the task, if any.
                              Used when creating a new task object.
+            context: The `ServerCallContext` that this task is produced under.
         """
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
