@@ -1,4 +1,5 @@
 import logging
+
 from collections.abc import AsyncIterable, Callable
 
 from a2a.server.context import ServerCallContext
@@ -48,6 +49,7 @@ from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
+
 logger = logging.getLogger(__name__)
 
 
@@ -64,6 +66,7 @@ class JSONRPCHandler:
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
     ):
         """Initializes the JSONRPCHandler.
 
@@ -74,11 +77,14 @@ class JSONRPCHandler:
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        self.card_modifer = card_modifier
 
     async def on_message_send(
         self,
@@ -437,6 +443,8 @@ class JSONRPCHandler:
         card_to_serve = base_card
         if self.extended_card_modifier and context:
             card_to_serve = self.extended_card_modifier(base_card, context)
+        elif self.card_modifer:
+            card_to_serve = self.card_modifer(base_card)
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(
