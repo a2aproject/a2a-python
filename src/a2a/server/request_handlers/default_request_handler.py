@@ -394,7 +394,10 @@ class DefaultRequestHandler(RequestHandler):
                 )
                 yield event
         finally:
-            await self._cleanup_producer(producer_task, task_id)
+            # TODO: Track this disconnected cleanup task.
+            asyncio.create_task(  # noqa: RUF006
+                self._cleanup_producer(producer_task, task_id)
+            )
 
     async def _register_producer(
         self, task_id: str, producer_task: asyncio.Task

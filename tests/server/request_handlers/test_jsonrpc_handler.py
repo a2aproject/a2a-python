@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 import unittest.async_case
 
@@ -366,6 +367,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             for event in events:
                 yield event
 
+        # Latch to ensure background execute is scheduled before asserting
+        execute_called = asyncio.Event()
+
+        async def exec_side_effect(*args, **kwargs):
+            execute_called.set()
+
+        mock_agent_executor.execute.side_effect = exec_side_effect
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -387,6 +396,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                     event.root, SendStreamingMessageSuccessResponse
                 )
                 assert event.root.result == events[i]
+            await asyncio.wait_for(execute_called.wait(), timeout=0.1)
             mock_agent_executor.execute.assert_called_once()
 
     async def test_on_message_stream_new_message_existing_task_success(
@@ -423,6 +433,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             for event in events:
                 yield event
 
+        # Latch to ensure background execute is scheduled before asserting
+        execute_called = asyncio.Event()
+
+        async def exec_side_effect(*args, **kwargs):
+            execute_called.set()
+
+        mock_agent_executor.execute.side_effect = exec_side_effect
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -443,6 +461,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert isinstance(response, AsyncGenerator)
             collected_events = [item async for item in response]
             assert len(collected_events) == len(events)
+            await asyncio.wait_for(execute_called.wait(), timeout=0.1)
             mock_agent_executor.execute.assert_called_once()
             assert mock_task.history is not None and len(mock_task.history) == 1
 
