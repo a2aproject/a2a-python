@@ -96,6 +96,7 @@ class TaskUpdater:
         metadata: dict[str, Any] | None = None,
         append: bool | None = None,
         last_chunk: bool | None = None,
+        extensions: list[str] | None = None,
     ) -> None:
         """Adds an artifact chunk to the task and publishes a `TaskArtifactUpdateEvent`.
 
@@ -106,6 +107,7 @@ class TaskUpdater:
             metadata: Optional metadata for the artifact.
             append: Optional boolean indicating if this chunk appends to a previous one.
             last_chunk: Optional boolean indicating if this is the last chunk.
+            extensions: Optional list of extensions for the artifact.
         """
         if not artifact_id:
             artifact_id = str(uuid.uuid4())
@@ -119,6 +121,7 @@ class TaskUpdater:
                     name=name,
                     parts=parts,
                     metadata=metadata,
+                    extensions=extensions,
                 ),
                 append=append,
                 last_chunk=last_chunk,
