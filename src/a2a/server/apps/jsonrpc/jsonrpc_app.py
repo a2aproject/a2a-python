@@ -2,7 +2,6 @@ import contextlib
 import json
 import logging
 import traceback
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
@@ -51,7 +50,6 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
-
 
 logger = logging.getLogger(__name__)
 
@@ -219,14 +217,6 @@ class JSONRPCApplication(ABC):
             extended_agent_card=extended_agent_card,
             extended_card_modifier=extended_card_modifier,
         )
-        if (
-            self.agent_card.supports_authenticated_extended_card
-            and self.extended_agent_card is None
-            and self.extended_card_modifier is None
-        ):
-            logger.error(
-                'AgentCard.supports_authenticated_extended_card is True, but no extended_agent_card was provided. The /agent/authenticatedExtendedCard endpoint will return 404.'
-            )
         self._context_builder = context_builder or DefaultCallContextBuilder()
 
     def _generate_error_response(

@@ -1,9 +1,7 @@
 import functools
 import logging
-
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -40,7 +38,6 @@ from a2a.utils.error_handlers import (
     rest_stream_error_handler,
 )
 from a2a.utils.errors import InvalidRequestError, ServerError
-
 
 logger = logging.getLogger(__name__)
 
@@ -94,14 +91,6 @@ class RESTAdapter:
         self.handler = RESTHandler(
             agent_card=agent_card, request_handler=http_handler
         )
-        if (
-            self.agent_card.supports_authenticated_extended_card
-            and self.extended_agent_card is None
-            and self.extended_card_modifier is None
-        ):
-            logger.error(
-                'AgentCard.supports_authenticated_extended_card is True, but no extended_agent_card was provided. The /agent/authenticatedExtendedCard endpoint will return 404.'
-            )
         self._context_builder = context_builder or DefaultCallContextBuilder()
 
     @rest_error_handler
