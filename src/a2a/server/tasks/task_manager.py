@@ -78,7 +78,7 @@ class TaskManager:
             'Attempting to get task from store with id: %s', self.task_id
         )
         self._current_task = await self.task_store.get(
-            self.task_id, self._context
+            self.task_id, self._call_context
         )
         if self._current_task:
             logger.debug('Task %s retrieved successfully.', self.task_id)
@@ -172,7 +172,7 @@ class TaskManager:
             logger.debug(
                 'Attempting to retrieve existing task with id: %s', self.task_id
             )
-            task = await self.task_store.get(self.task_id, self._context)
+            task = await self.task_store.get(self.task_id, self._call_context)
 
         if not task:
             logger.info(
@@ -236,7 +236,7 @@ class TaskManager:
             task: The `Task` object to save.
         """
         logger.debug('Saving task with id: %s', task.id)
-        await self.task_store.save(task, self._context)
+        await self.task_store.save(task, self._call_context)
         self._current_task = task
         if not self.task_id:
             logger.info('New task created with id: %s', task.id)
