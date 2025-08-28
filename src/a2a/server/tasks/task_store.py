@@ -1,7 +1,8 @@
 from abc import ABC, abstractmethod
 
-from a2a.server.context import ServerCallContext
 from a2a.types import Task
+from a2a.server.context import ServerCallContext
+
 
 class TaskStore(ABC):
     """Agent Task Store interface.
