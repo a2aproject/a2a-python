@@ -116,7 +116,7 @@ async def test_save_task_event_status_update(
     await task_manager.save_task_event(event)
     updated_task = initial_task
     updated_task.status = new_status
-    mock_task_store.save.assert_called_once_with(updated_task)
+    mock_task_store.save.assert_called_once_with(updated_task, None)
 
 
 @pytest.mark.asyncio
@@ -139,7 +139,7 @@ async def test_save_task_event_artifact_update(
     await task_manager.save_task_event(event)
     updated_task = initial_task
     updated_task.artifacts = [new_artifact]
-    mock_task_store.save.assert_called_once_with(updated_task)
+    mock_task_store.save.assert_called_once_with(updated_task, None)
 
 
 @pytest.mark.asyncio
