@@ -1340,9 +1340,10 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
     def create_task_spy(coro):
         nonlocal produced_task, cleanup_task
         task = orig_create_task(coro)
-        if produced_task is None:
+        # Inspect the coroutine name to make the spy more robust
+        if coro.__name__ == '_run_event_stream':
             produced_task = task
-        else:
+        elif coro.__name__ == '_cleanup_producer':
             cleanup_task = task
         return task
 
