@@ -1,5 +1,6 @@
 import logging
 
+from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
@@ -31,6 +32,7 @@ class TaskManager:
         context_id: str | None,
         task_store: TaskStore,
         initial_message: Message | None,
+        context: ServerCallContext | None = None,
     ):
         """Initializes the TaskManager.
 
@@ -49,6 +51,7 @@ class TaskManager:
         self.task_store = task_store
         self._initial_message = initial_message
         self._current_task: Task | None = None
+        self._call_context: ServerCallContext | None = context
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
@@ -74,7 +77,9 @@ class TaskManager:
         logger.debug(
             'Attempting to get task from store with id: %s', self.task_id
         )
-        self._current_task = await self.task_store.get(self.task_id)
+        self._current_task = await self.task_store.get(
+            self.task_id, self._context
+        )
         if self._current_task:
             logger.debug('Task %s retrieved successfully.', self.task_id)
         else:
@@ -167,7 +172,7 @@ class TaskManager:
             logger.debug(
                 'Attempting to retrieve existing task with id: %s', self.task_id
             )
-            task = await self.task_store.get(self.task_id)
+            task = await self.task_store.get(self.task_id, self._context)
 
         if not task:
             logger.info(
@@ -231,7 +236,7 @@ class TaskManager:
             task: The `Task` object to save.
         """
         logger.debug('Saving task with id: %s', task.id)
-        await self.task_store.save(task)
+        await self.task_store.save(task, self._context)
         self._current_task = task
         if not self.task_id:
             logger.info('New task created with id: %s', task.id)
