@@ -1,5 +1,4 @@
 import logging
-
 from collections.abc import AsyncIterable, Callable
 
 from a2a.server.context import ServerCallContext
@@ -48,7 +47,6 @@ from a2a.types import (
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
-
 
 logger = logging.getLogger(__name__)
 
@@ -425,14 +423,10 @@ class JSONRPCHandler:
         Returns:
             A `GetAuthenticatedExtendedCardResponse` object containing the config or a JSON-RPC error.
         """
-        if (
-            self.extended_agent_card is None
-            and self.extended_card_modifier is None
-        ):
-            return GetAuthenticatedExtendedCardResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id,
-                    error=AuthenticatedExtendedCardNotConfiguredError(),
+        if not self.agent_card.supports_authenticated_extended_card:
+            raise ServerError(
+                error=AuthenticatedExtendedCardNotConfiguredError(
+                    message='Authenticated card not supported'
                 )
             )
 
