@@ -1,7 +1,9 @@
 import functools
 import logging
+
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -38,6 +40,7 @@ from a2a.utils.error_handlers import (
     rest_stream_error_handler,
 )
 from a2a.utils.errors import InvalidRequestError, ServerError
+
 
 logger = logging.getLogger(__name__)
 

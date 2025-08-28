@@ -2,6 +2,7 @@ import contextlib
 import json
 import logging
 import traceback
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
@@ -50,6 +51,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
+
 
 logger = logging.getLogger(__name__)
 
