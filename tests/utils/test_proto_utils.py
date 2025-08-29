@@ -170,11 +170,7 @@ class TestProtoUtils:
         )
 
         for state in types.TaskState:
-            if state not in (
-                types.TaskState.unknown,
-                types.TaskState.rejected,
-                types.TaskState.auth_required,
-            ):
+            if state not in (types.TaskState.unknown, types.TaskState.rejected):
                 proto_state = proto_utils.ToProto.task_state(state)
                 assert proto_utils.FromProto.task_state(proto_state) == state
 
