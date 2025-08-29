@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.3.4](https://github.com/a2aproject/a2a-python/compare/v0.3.3...v0.3.4) (2025-08-29)
+
+
+### Features
+
+* Add extensions support to `TaskUpdater.add_artifact` ([#436](https://github.com/a2aproject/a2a-python/issues/436)) ([598d8a1](https://github.com/a2aproject/a2a-python/commit/598d8a10e61be83bcb7bc9377365f7c42bc6af41))
+
+
+### Bug Fixes
+
+* convert auth_required state in proto utils ([#444](https://github.com/a2aproject/a2a-python/issues/444)) ([ac12f05](https://github.com/a2aproject/a2a-python/commit/ac12f0527d923800192c47dc1bd2e7eed262dfe6))
+* Remove logger error from init on `rest_adapter` and `jsonrpc_app` ([#439](https://github.com/a2aproject/a2a-python/issues/439)) ([9193208](https://github.com/a2aproject/a2a-python/commit/9193208aabac2655a197732ff826e3c2d76f11b5))
+* resolve streaming endpoint deadlock by pre-consuming request body ([#426](https://github.com/a2aproject/a2a-python/issues/426)) ([4186731](https://github.com/a2aproject/a2a-python/commit/4186731df60f7adfcd25f19078d055aca26612a3))
+* Sync jsonrpc and rest implementation of authenticated agent card ([#441](https://github.com/a2aproject/a2a-python/issues/441)) ([9da9ecc](https://github.com/a2aproject/a2a-python/commit/9da9ecc96856a2474d75f986a1f45488c36f53e3))
+
 ## [0.3.3](https://github.com/a2aproject/a2a-python/compare/v0.3.2...v0.3.3) (2025-08-22)
 
 
