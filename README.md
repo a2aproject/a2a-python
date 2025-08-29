@@ -45,6 +45,12 @@ To install with gRPC support:
 uv add "a2a-sdk[grpc]"
 ```
 
+To install with Kafka transport support:
+
+```bash
+uv add "a2a-sdk[kafka]"
+```
+
 To install with OpenTelemetry tracing support:
 
 ```bash
@@ -85,6 +91,12 @@ To install with gRPC support:
 
 ```bash
 pip install "a2a-sdk[grpc]"
+```
+
+To install with Kafka transport support:
+
+```bash
+pip install "a2a-sdk[kafka]"
 ```
 
 To install with OpenTelemetry tracing support:
