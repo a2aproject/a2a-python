@@ -19,6 +19,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task  # Task is the Pydantic model
@@ -119,7 +120,9 @@ class DatabaseTaskStore(TaskStore):
         # Pydantic's model_validate will parse the nested dicts/lists from JSON
         return Task.model_validate(task_data_from_db)
 
-    async def save(self, task: Task) -> None:
+    async def save(
+        self, task: Task, context: ServerCallContext | None = None
+    ) -> None:
         """Saves or updates a task in the database."""
         await self._ensure_initialized()
         db_task = self._to_orm(task)
@@ -127,7 +130,9 @@ class DatabaseTaskStore(TaskStore):
             await session.merge(db_task)
             logger.debug('Task %s saved/updated successfully.', task.id)
 
-    async def get(self, task_id: str) -> Task | None:
+    async def get(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> Task | None:
         """Retrieves a task from the database by ID."""
         await self._ensure_initialized()
         async with self.async_session_maker() as session:
@@ -142,7 +147,9 @@ class DatabaseTaskStore(TaskStore):
             logger.debug('Task %s not found in store.', task_id)
             return None
 
-    async def delete(self, task_id: str) -> None:
+    async def delete(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> None:
         """Deletes a task from the database by ID."""
         await self._ensure_initialized()
 
