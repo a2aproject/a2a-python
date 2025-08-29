@@ -1,6 +1,5 @@
 import unittest
 import unittest.async_case
-
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -75,7 +74,6 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError
 
-
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task_123',
     'contextId': 'session-xyz',
@@ -93,7 +91,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
     @pytest.fixture(autouse=True)
     def init_fixtures(self) -> None:
         self.mock_agent_card = MagicMock(
-            spec=AgentCard, url='http://agent.example.com/api'
+            spec=AgentCard,
+            url='http://agent.example.com/api',
+            supports_authenticated_extended_card=True,
         )
 
     async def test_on_get_task_success(self) -> None:
@@ -1233,6 +1233,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         """Test error when authenticated extended agent card is not configured."""
         # Arrange
         mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
+        self.mock_agent_card.supports_extended_card = True
         handler = JSONRPCHandler(
             self.mock_agent_card,
             mock_request_handler,
@@ -1248,11 +1249,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
 
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.id, 'ext-card-req-2')
+        # Authenticated Extended Card flag is set with no extended card,
+        # returns base card in this case.
         self.assertIsInstance(
-            response.root.error, AuthenticatedExtendedCardNotConfiguredError
+            response.root, GetAuthenticatedExtendedCardSuccessResponse
         )
+        self.assertEqual(response.root.id, 'ext-card-req-2')
 
     async def test_get_authenticated_extended_card_with_modifier(self) -> None:
         """Test successful retrieval of a dynamically modified extended agent card."""
