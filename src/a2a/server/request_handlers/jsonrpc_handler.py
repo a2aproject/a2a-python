@@ -84,7 +84,7 @@ class JSONRPCHandler:
         self.request_handler = request_handler
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
-        self.card_modifer = card_modifier
+        self.card_modifier = card_modifier
 
     async def on_message_send(
         self,
@@ -443,8 +443,8 @@ class JSONRPCHandler:
         card_to_serve = base_card
         if self.extended_card_modifier and context:
             card_to_serve = self.extended_card_modifier(base_card, context)
-        elif self.card_modifer:
-            card_to_serve = self.card_modifer(base_card)
+        elif self.card_modifier:
+            card_to_serve = self.card_modifier(base_card)
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(
