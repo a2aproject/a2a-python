@@ -133,7 +133,7 @@ class EventConsumer:
                 # continue polling until there is a final event
                 continue
             except asyncio.TimeoutError:  # pyright: ignore [reportUnusedExcept]
-                # This class was made an alias of build-in TimeoutError after 3.11
+                # This class was made an alias of built-in TimeoutError after 3.11
                 continue
             except (QueueClosed, asyncio.QueueEmpty):
                 # Confirm that the queue is closed, e.g. we aren't on

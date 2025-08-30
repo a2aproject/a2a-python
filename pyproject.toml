@@ -37,6 +37,7 @@ sql = ["sqlalchemy[asyncio,postgresql-asyncpg,aiomysql,aiosqlite]>=2.0.0"]
 encryption = ["cryptography>=43.0.0"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
+redis = ["redis>=6.4.0"]
 
 [project.urls]
 homepage = "https://a2a-protocol.org/"

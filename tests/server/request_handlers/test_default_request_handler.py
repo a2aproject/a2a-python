@@ -2070,3 +2070,145 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
         f'Task {task_id} was specified but does not exist'
         in exc_info.value.error.message
     )
+
+
+def test_init_with_default_queue_manager_issues_deprecation_warning():
+    """Test that initializing with default queue_manager issues deprecation warning."""
+    import warnings
+    from unittest.mock import MagicMock
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+
+        handler = DefaultRequestHandler(
+            agent_executor=MagicMock(), task_store=MagicMock()
+        )
+
+        assert len(w) == 1
+        assert issubclass(w[0].category, DeprecationWarning)
+        assert 'Using default InMemoryQueueManager' in str(w[0].message)
+        assert 'will be removed in a future version' in str(w[0].message)
+
+
+def test_init_with_explicit_queue_manager_no_warning():
+    """Test that initializing with explicit queue_manager does not issue warning."""
+    import warnings
+    from unittest.mock import MagicMock
+
+    with warnings.catch_warnings(record=True) as w:
+        warnings.simplefilter('always')
+
+        handler = DefaultRequestHandler(
+            agent_executor=MagicMock(),
+            task_store=MagicMock(),
+            queue_manager=InMemoryQueueManager(),
+        )
+
+        # Should not have any deprecation warnings
+        deprecation_warnings = [
+            warning
+            for warning in w
+            if issubclass(warning.category, DeprecationWarning)
+        ]
+        assert len(deprecation_warnings) == 0
+
+
+@pytest.mark.asyncio
+async def test_init_with_disabled_fallback_raises_error():
+    """Test that disabling fallback raises ValueError when queue_manager is None."""
+    import os
+    from unittest.mock import MagicMock
+
+    # Set environment variable to disable fallback
+    old_value = os.environ.get('A2A_DISABLE_QUEUE_MANAGER_FALLBACK')
+    os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = 'true'
+
+    try:
+        with pytest.raises(ValueError, match='queue_manager is required'):
+            DefaultRequestHandler(
+                agent_executor=MagicMock(), task_store=MagicMock()
+            )
+    finally:
+        # Restore environment variable
+        if old_value is None:
+            os.environ.pop('A2A_DISABLE_QUEUE_MANAGER_FALLBACK', None)
+        else:
+            os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = old_value
+
+
+@pytest.mark.asyncio
+async def test_init_with_disabled_fallback_false_allows_default():
+    """Test that setting A2A_DISABLE_QUEUE_MANAGER_FALLBACK=false allows default behavior."""
+    import os
+    import warnings
+    from unittest.mock import MagicMock
+
+    # Set environment variable to explicitly allow fallback
+    old_value = os.environ.get('A2A_DISABLE_QUEUE_MANAGER_FALLBACK')
+    os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = 'false'
+
+    try:
+        with warnings.catch_warnings(record=True) as w:
+            warnings.simplefilter('always')
+
+            handler = DefaultRequestHandler(
+                agent_executor=MagicMock(), task_store=MagicMock()
+            )
+
+            # Should still get deprecation warning
+            assert len(w) == 1
+            assert issubclass(w[0].category, DeprecationWarning)
+    finally:
+        # Restore environment variable
+        if old_value is None:
+            os.environ.pop('A2A_DISABLE_QUEUE_MANAGER_FALLBACK', None)
+        else:
+            os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = old_value
+
+
+def test_environment_variable_parsing():
+    """Test that environment variable accepts various true/false values."""
+    import os
+    from unittest.mock import MagicMock
+
+    test_cases = [
+        ('true', True),
+        ('True', True),
+        ('TRUE', True),
+        ('1', True),
+        ('yes', True),
+        ('Yes', True),
+        ('false', False),
+        ('False', False),
+        ('FALSE', False),
+        ('0', False),
+        ('no', False),
+        ('No', False),
+        ('invalid', False),  # Invalid values should default to False
+        ('', False),  # Empty string should default to False
+    ]
+
+    for env_value, expected_disable in test_cases:
+        old_value = os.environ.get('A2A_DISABLE_QUEUE_MANAGER_FALLBACK')
+        os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = env_value
+
+        try:
+            if expected_disable:
+                with pytest.raises(
+                    ValueError, match='queue_manager is required'
+                ):
+                    DefaultRequestHandler(
+                        agent_executor=MagicMock(), task_store=MagicMock()
+                    )
+            else:
+                # Should work without error (may issue warning)
+                handler = DefaultRequestHandler(
+                    agent_executor=MagicMock(), task_store=MagicMock()
+                )
+                assert handler is not None
+        finally:
+            # Restore environment variable
+            if old_value is None:
+                os.environ.pop('A2A_DISABLE_QUEUE_MANAGER_FALLBACK', None)
+            else:
+                os.environ['A2A_DISABLE_QUEUE_MANAGER_FALLBACK'] = old_value
