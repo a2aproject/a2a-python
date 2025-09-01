@@ -149,6 +149,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         call_context = ServerCallContext(state={'foo': 'bar'})
 
         async def streaming_coro():
+            mock_task.status.state = TaskState.canceled
             yield mock_task
 
         with patch(
