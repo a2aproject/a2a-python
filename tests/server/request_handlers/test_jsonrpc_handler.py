@@ -161,6 +161,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response.root, CancelTaskSuccessResponse)
             assert response.root.result == mock_task  # type: ignore
+            assert response.root.result.status.state == TaskState.canceled
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_supported(self) -> None:
