@@ -1,5 +1,6 @@
 import unittest
 import unittest.async_case
+
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -26,7 +27,6 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Artifact,
-    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
     CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigParams,
@@ -73,6 +73,7 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
+
 
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task_123',
