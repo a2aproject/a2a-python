@@ -73,11 +73,19 @@ class ToProto:
     @classmethod
     def part(cls, part: types.Part) -> a2a_pb2.Part:
         if isinstance(part.root, types.TextPart):
-            return a2a_pb2.Part(text=part.root.text)
+            return a2a_pb2.Part(
+                text=part.root.text, metadata=cls.metadata(part.root.metadata)
+            )
         if isinstance(part.root, types.FilePart):
-            return a2a_pb2.Part(file=cls.file(part.root.file))
+            return a2a_pb2.Part(
+                file=cls.file(part.root.file),
+                metadata=cls.metadata(part.root.metadata),
+            )
         if isinstance(part.root, types.DataPart):
-            return a2a_pb2.Part(data=cls.data(part.root.data))
+            return a2a_pb2.Part(
+                data=cls.data(part.root.data),
+                metadata=cls.metadata(part.root.metadata),
+            )
         raise ValueError(f'Unsupported part type: {part.root}')
 
     @classmethod
@@ -502,11 +510,32 @@ class FromProto:
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
         if part.HasField('text'):
-            return types.Part(root=types.TextPart(text=part.text))
+            return types.Part(
+                root=types.TextPart(
+                    text=part.text,
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
+            )
         if part.HasField('file'):
-            return types.Part(root=types.FilePart(file=cls.file(part.file)))
+            return types.Part(
+                root=types.FilePart(
+                    file=cls.file(part.file),
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
+            )
         if part.HasField('data'):
-            return types.Part(root=types.DataPart(data=cls.data(part.data)))
+            return types.Part(
+                root=types.DataPart(
+                    data=cls.data(part.data),
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
+            )
         raise ValueError(f'Unsupported part type: {part}')
 
     @classmethod
