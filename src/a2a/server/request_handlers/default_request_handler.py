@@ -181,14 +181,21 @@ class DefaultRequestHandler(RequestHandler):
 
         consumer = EventConsumer(queue)
         result = await result_aggregator.consume_all(consumer)
-        if isinstance(result, Task):
-            return result
-
-        raise ServerError(
-            error=InternalError(
-                message='Agent did not return valid response for cancel'
+        if not isinstance(result, Task):
+            raise ServerError(
+                error=InternalError(
+                    message='Agent did not return valid response for cancel'
+                )
             )
-        )
+
+        if result.status.state != TaskState.canceled:
+            raise ServerError(
+                error=TaskNotCancelableError(
+                    message=f'Task cannot be canceled - current state: {result.status.state}'
+                )
+            )
+
+        return result
 
     async def _run_event_stream(
         self, request: RequestContext, queue: EventQueue
