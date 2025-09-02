@@ -1029,6 +1029,7 @@ class TransportProtocol(str, Enum):
     jsonrpc = 'JSONRPC'
     grpc = 'GRPC'
     http_json = 'HTTP+JSON'
+    kafka = 'KAFKA'
 
 
 class UnsupportedOperationError(A2ABaseModel):
@@ -1775,7 +1776,7 @@ class AgentCard(A2ABaseModel):
     A human-readable name for the agent.
     """
     preferred_transport: str | None = Field(
-        default='JSONRPC', examples=['JSONRPC', 'GRPC', 'HTTP+JSON']
+        default='JSONRPC', examples=['JSONRPC', 'GRPC', 'HTTP+JSON','KAFKA']
     )
     """
     The transport protocol for the preferred endpoint (the main 'url' field).

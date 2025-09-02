@@ -8,6 +8,11 @@ from a2a.server.apps.jsonrpc import (
 )
 from a2a.server.apps.rest import A2ARESTFastAPIApplication
 
+try:
+    from a2a.server.apps.kafka import KafkaServerApp
+except ImportError:
+    KafkaServerApp = None  # type: ignore
+
 
 __all__ = [
     'A2AFastAPIApplication',
@@ -15,4 +20,5 @@ __all__ = [
     'A2AStarletteApplication',
     'CallContextBuilder',
     'JSONRPCApplication',
+    'KafkaServerApp',
 ]

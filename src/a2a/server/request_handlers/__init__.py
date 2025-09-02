@@ -28,19 +28,32 @@ except ImportError as e:
     )
 
     class GrpcHandler:  # type: ignore
-        """Placeholder for GrpcHandler when dependencies are not installed."""
-
         def __init__(self, *args, **kwargs):
             raise ImportError(
-                'To use GrpcHandler, its dependencies must be installed. '
-                'You can install them with \'pip install "a2a-sdk[grpc]"\''
+                'GrpcHandler requires gRPC dependencies. Install with: pip install a2a-sdk[grpc]'
             ) from _original_error
+
+try:
+    from a2a.server.request_handlers.kafka_handler import KafkaHandler
+except ImportError as e:
+    _kafka_error = e
+    logger.debug(
+        'KafkaHandler not loaded. This is expected if Kafka dependencies are not installed. Error: %s',
+        _kafka_error,
+    )
+
+    class KafkaHandler:  # type: ignore
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                'KafkaHandler requires Kafka dependencies. Install with: pip install a2a-sdk[kafka]'
+            ) from _kafka_error
 
 
 __all__ = [
     'DefaultRequestHandler',
     'GrpcHandler',
     'JSONRPCHandler',
+    'KafkaHandler',
     'RESTHandler',
     'RequestHandler',
     'build_error_response',

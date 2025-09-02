@@ -10,10 +10,16 @@ try:
 except ImportError:
     GrpcTransport = None  # type: ignore
 
+try:
+    from a2a.client.transports.kafka import KafkaClientTransport
+except ImportError:
+    KafkaClientTransport = None  # type: ignore
+
 
 __all__ = [
     'ClientTransport',
     'GrpcTransport',
     'JsonRpcTransport',
+    'KafkaClientTransport',
     'RestTransport',
 ]
