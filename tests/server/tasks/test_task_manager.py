@@ -68,7 +68,7 @@ async def test_get_task_existing(
     mock_task_store.get.return_value = expected_task
     retrieved_task = await task_manager.get_task()
     assert retrieved_task == expected_task
-    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
+    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'], None)
 
 
 @pytest.mark.asyncio
@@ -79,7 +79,7 @@ async def test_get_task_nonexistent(
     mock_task_store.get.return_value = None
     retrieved_task = await task_manager.get_task()
     assert retrieved_task is None
-    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
+    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'], None)
 
 
 @pytest.mark.asyncio
@@ -89,7 +89,7 @@ async def test_save_task_event_new_task(
     """Test saving a new task."""
     task = Task(**MINIMAL_TASK)
     await task_manager.save_task_event(task)
-    mock_task_store.save.assert_called_once_with(task)
+    mock_task_store.save.assert_called_once_with(task, None)
 
 
 @pytest.mark.asyncio
@@ -116,7 +116,7 @@ async def test_save_task_event_status_update(
     await task_manager.save_task_event(event)
     updated_task = initial_task
     updated_task.status = new_status
-    mock_task_store.save.assert_called_once_with(updated_task)
+    mock_task_store.save.assert_called_once_with(updated_task, None)
 
 
 @pytest.mark.asyncio
@@ -139,7 +139,7 @@ async def test_save_task_event_artifact_update(
     await task_manager.save_task_event(event)
     updated_task = initial_task
     updated_task.artifacts = [new_artifact]
-    mock_task_store.save.assert_called_once_with(updated_task)
+    mock_task_store.save.assert_called_once_with(updated_task, None)
 
 
 @pytest.mark.asyncio
@@ -179,7 +179,7 @@ async def test_ensure_task_existing(
     )
     retrieved_task = await task_manager.ensure_task(event)
     assert retrieved_task == expected_task
-    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'])
+    mock_task_store.get.assert_called_once_with(MINIMAL_TASK['id'], None)
 
 
 @pytest.mark.asyncio
@@ -204,7 +204,7 @@ async def test_ensure_task_nonexistent(
     assert new_task.id == 'new-task'
     assert new_task.context_id == 'some-context'
     assert new_task.status.state == TaskState.submitted
-    mock_task_store.save.assert_called_once_with(new_task)
+    mock_task_store.save.assert_called_once_with(new_task, None)
     assert task_manager_without_id.task_id == 'new-task'
     assert task_manager_without_id.context_id == 'some-context'
 
@@ -225,7 +225,7 @@ async def test_save_task(
     """Test saving a task."""
     task = Task(**MINIMAL_TASK)
     await task_manager._save_task(task)  # type: ignore
-    mock_task_store.save.assert_called_once_with(task)
+    mock_task_store.save.assert_called_once_with(task, None)
 
 
 @pytest.mark.asyncio
@@ -264,7 +264,7 @@ async def test_save_task_event_new_task_no_task_id(
     }
     task = Task(**task_data)
     await task_manager_without_id.save_task_event(task)
-    mock_task_store.save.assert_called_once_with(task)
+    mock_task_store.save.assert_called_once_with(task, None)
     assert task_manager_without_id.task_id == 'new-task-id'
     assert task_manager_without_id.context_id == 'some-context'
     # initial submit should be updated to working

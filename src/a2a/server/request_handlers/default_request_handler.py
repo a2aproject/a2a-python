@@ -109,7 +109,7 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -141,7 +141,7 @@ class DefaultRequestHandler(RequestHandler):
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -158,6 +158,7 @@ class DefaultRequestHandler(RequestHandler):
             context_id=task.context_id,
             task_store=self.task_store,
             initial_message=None,
+            context=context,
         )
         result_aggregator = ResultAggregator(task_manager)
 
@@ -224,6 +225,7 @@ class DefaultRequestHandler(RequestHandler):
             context_id=params.message.context_id,
             task_store=self.task_store,
             initial_message=params.message,
+            context=context,
         )
         task: Task | None = await task_manager.get_task()
 
@@ -424,7 +426,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task: Task | None = await self.task_store.get(params.task_id)
+        task: Task | None = await self.task_store.get(params.task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -447,7 +449,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -476,7 +478,7 @@ class DefaultRequestHandler(RequestHandler):
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -492,6 +494,7 @@ class DefaultRequestHandler(RequestHandler):
             context_id=task.context_id,
             task_store=self.task_store,
             initial_message=None,
+            context=context,
         )
 
         result_aggregator = ResultAggregator(task_manager)
@@ -516,7 +519,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
@@ -543,7 +546,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task: Task | None = await self.task_store.get(params.id)
+        task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 

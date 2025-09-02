@@ -135,11 +135,12 @@ async def test_on_get_task_not_found():
 
     from a2a.utils.errors import ServerError  # Local import for ServerError
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_get_task(params, create_server_call_context())
+        await request_handler.on_get_task(params, context)
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
 
 
 @pytest.mark.asyncio
@@ -155,13 +156,14 @@ async def test_on_cancel_task_task_not_found():
 
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_cancel_task(
-            params, create_server_call_context()
-        )
+        await request_handler.on_cancel_task(params, context)
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('task_not_found_for_cancel')
+    mock_task_store.get.assert_awaited_once_with(
+        'task_not_found_for_cancel', context
+    )
 
 
 @pytest.mark.asyncio
@@ -195,16 +197,15 @@ async def test_on_cancel_task_queue_tap_returns_none():
         queue_manager=mock_queue_manager,
     )
 
+    context = create_server_call_context()
     with patch(
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
         params = TaskIdParams(id='tap_none_task')
-        result_task = await request_handler.on_cancel_task(
-            params, create_server_call_context()
-        )
+        result_task = await request_handler.on_cancel_task(params, context)
 
-    mock_task_store.get.assert_awaited_once_with('tap_none_task')
+    mock_task_store.get.assert_awaited_once_with('tap_none_task', context)
     mock_queue_manager.tap.assert_awaited_once_with('tap_none_task')
     # agent_executor.cancel should be called with a new EventQueue if tap returned None
     mock_agent_executor.cancel.assert_awaited_once()
@@ -250,14 +251,13 @@ async def test_on_cancel_task_cancels_running_agent():
     mock_producer_task = AsyncMock(spec=asyncio.Task)
     request_handler._running_agents[task_id] = mock_producer_task
 
+    context = create_server_call_context()
     with patch(
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
         params = TaskIdParams(id=task_id)
-        await request_handler.on_cancel_task(
-            params, create_server_call_context()
-        )
+        await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
@@ -1322,13 +1322,14 @@ async def test_set_task_push_notification_config_task_not_found():
     )
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_set_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.set_info.assert_not_awaited()
 
 
@@ -1365,13 +1366,14 @@ async def test_get_task_push_notification_config_task_not_found():
     params = GetTaskPushNotificationConfigParams(id='non_existent_task')
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_get_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -1394,15 +1396,16 @@ async def test_get_task_push_notification_config_info_not_found():
     params = GetTaskPushNotificationConfigParams(id='non_existent_task')
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_get_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
 
     assert isinstance(
         exc_info.value.error, InternalError
     )  # Current code raises InternalError
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_awaited_once_with('non_existent_task')
 
 
@@ -1425,8 +1428,9 @@ async def test_get_task_push_notification_config_info_with_config():
             id='config_id', url='http://1.example.com'
         ),
     )
+    context = create_server_call_context()
     await request_handler.on_set_task_push_notification_config(
-        set_config_params, create_server_call_context()
+        set_config_params, context
     )
 
     params = GetTaskPushNotificationConfigParams(
@@ -1435,7 +1439,7 @@ async def test_get_task_push_notification_config_info_with_config():
 
     result: TaskPushNotificationConfig = (
         await request_handler.on_get_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
     )
 
@@ -1501,15 +1505,16 @@ async def test_on_resubscribe_to_task_task_not_found():
 
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         # Need to consume the async generator to trigger the error
-        async for _ in request_handler.on_resubscribe_to_task(
-            params, create_server_call_context()
-        ):
+        async for _ in request_handler.on_resubscribe_to_task(params, context):
             pass
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('resub_task_not_found')
+    mock_task_store.get.assert_awaited_once_with(
+        'resub_task_not_found', context
+    )
 
 
 @pytest.mark.asyncio
@@ -1531,16 +1536,17 @@ async def test_on_resubscribe_to_task_queue_not_found():
 
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        async for _ in request_handler.on_resubscribe_to_task(
-            params, create_server_call_context()
-        ):
+        async for _ in request_handler.on_resubscribe_to_task(params, context):
             pass
 
     assert isinstance(
         exc_info.value.error, TaskNotFoundError
     )  # Should be TaskNotFoundError as per spec
-    mock_task_store.get.assert_awaited_once_with('resub_queue_not_found')
+    mock_task_store.get.assert_awaited_once_with(
+        'resub_queue_not_found', context
+    )
     mock_queue_manager.tap.assert_awaited_once_with('resub_queue_not_found')
 
 
@@ -1614,13 +1620,14 @@ async def test_list_task_push_notification_config_task_not_found():
     params = ListTaskPushNotificationConfigParams(id='non_existent_task')
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_list_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -1774,13 +1781,14 @@ async def test_delete_task_push_notification_config_task_not_found():
     )
     from a2a.utils.errors import ServerError  # Local import
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_delete_task_push_notification_config(
-            params, create_server_call_context()
+            params, context
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -2025,10 +2033,9 @@ async def test_on_resubscribe_to_task_in_terminal_state(terminal_state):
 
     from a2a.utils.errors import ServerError
 
+    context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        async for _ in request_handler.on_resubscribe_to_task(
-            params, create_server_call_context()
-        ):
+        async for _ in request_handler.on_resubscribe_to_task(params, context):
             pass  # pragma: no cover
 
     assert isinstance(exc_info.value.error, InvalidParamsError)
@@ -2037,7 +2044,7 @@ async def test_on_resubscribe_to_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state.value}'
         in exc_info.value.error.message
     )
-    mock_task_store.get.assert_awaited_once_with(task_id)
+    mock_task_store.get.assert_awaited_once_with(task_id, context)
 
 
 @pytest.mark.asyncio

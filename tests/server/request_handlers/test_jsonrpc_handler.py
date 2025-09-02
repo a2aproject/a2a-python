@@ -1,5 +1,6 @@
 import unittest
 import unittest.async_case
+
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 from unittest.mock import AsyncMock, MagicMock, call, patch
@@ -26,7 +27,6 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Artifact,
-    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
     CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigParams,
@@ -74,6 +74,7 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError
 
+
 MINIMAL_TASK: dict[str, Any] = {
     'id': 'task_123',
     'contextId': 'session-xyz',
@@ -113,7 +114,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(response.root, GetTaskSuccessResponse)
         assert response.root.result == mock_task  # type: ignore
-        mock_task_store.get.assert_called_once_with(task_id)
+        mock_task_store.get.assert_called_once_with(task_id, unittest.mock.ANY)
 
     async def test_on_get_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -208,7 +209,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.on_cancel_task(request)
         self.assertIsInstance(response.root, JSONRPCErrorResponse)
         assert response.root.error == TaskNotFoundError()  # type: ignore
-        mock_task_store.get.assert_called_once_with('nonexistent_id')
+        mock_task_store.get.assert_called_once_with(
+            'nonexistent_id', unittest.mock.ANY
+        )
         mock_agent_executor.cancel.assert_not_called()
 
     @patch(
