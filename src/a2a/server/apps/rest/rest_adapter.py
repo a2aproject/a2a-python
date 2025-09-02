@@ -182,9 +182,9 @@ class RESTAdapter:
 
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
-            # If no base extended card is provided, pass the public card to the modifier
-            base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = self.extended_card_modifier(base_card, context)
+            card_to_serve = self.extended_card_modifier(card_to_serve, context)
+        elif self.card_modifier:
+            card_to_serve = self.card_modifier(card_to_serve)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
