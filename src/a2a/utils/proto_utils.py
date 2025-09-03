@@ -57,12 +57,12 @@ def make_dict_serializable(value: Any) -> Any:
     Returns:
         A serializable value.
     """
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
     if isinstance(value, dict):
         return {k: make_dict_serializable(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [make_dict_serializable(item) for item in value]
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
     return str(value)
 
 
