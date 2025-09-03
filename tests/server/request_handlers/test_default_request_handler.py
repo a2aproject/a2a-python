@@ -1386,6 +1386,126 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
     assert task_id not in request_handler._running_agents
 
 
+async def wait_until(predicate, timeout: float = 0.2, interval: float = 0.0):
+    """Await until predicate() is True or timeout elapses."""
+    loop = asyncio.get_running_loop()
+    end = loop.time() + timeout
+    while True:
+        if predicate():
+            return
+        if loop.time() >= end:
+            raise AssertionError('condition not met within timeout')
+        await asyncio.sleep(interval)
+
+
+@pytest.mark.asyncio
+async def test_background_cleanup_task_is_tracked_and_cleared():
+    """Ensure background cleanup task is tracked while pending and removed when done."""
+    # Arrange
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_queue_manager = AsyncMock(spec=QueueManager)
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    mock_request_context_builder = AsyncMock(spec=RequestContextBuilder)
+
+    task_id = 'track_task_1'
+    context_id = 'track_ctx_1'
+
+    # RequestContext with IDs
+    mock_request_context = MagicMock(spec=RequestContext)
+    mock_request_context.task_id = task_id
+    mock_request_context.context_id = context_id
+    mock_request_context_builder.build.return_value = mock_request_context
+
+    mock_queue = AsyncMock(spec=EventQueue)
+    mock_queue_manager.create_or_tap.return_value = mock_queue
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        queue_manager=mock_queue_manager,
+        request_context_builder=mock_request_context_builder,
+    )
+
+    params = MessageSendParams(
+        message=Message(
+            role=Role.user,
+            message_id='mid_track',
+            parts=[],
+            task_id=task_id,
+            context_id=context_id,
+        )
+    )
+
+    # Agent executor runs in background until we allow it to finish
+    execute_started = asyncio.Event()
+    execute_finish = asyncio.Event()
+
+    async def exec_side_effect(*_args, **_kwargs):
+        execute_started.set()
+        await execute_finish.wait()
+
+    mock_agent_executor.execute.side_effect = exec_side_effect
+
+    # ResultAggregator emits one Task event (so the stream yields once)
+    first_event = create_sample_task(task_id=task_id, context_id=context_id)
+
+    async def single_event_stream():
+        yield first_event
+
+    mock_result_aggregator_instance = MagicMock(spec=ResultAggregator)
+    mock_result_aggregator_instance.consume_and_emit.return_value = (
+        single_event_stream()
+    )
+
+    produced_task: asyncio.Task | None = None
+    cleanup_task: asyncio.Task | None = None
+
+    orig_create_task = asyncio.create_task
+
+    def create_task_spy(coro):
+        nonlocal produced_task, cleanup_task
+        task = orig_create_task(coro)
+        if coro.__name__ == '_run_event_stream':
+            produced_task = task
+        elif coro.__name__ == '_cleanup_producer':
+            cleanup_task = task
+        return task
+
+    with (
+        patch(
+            'a2a.server.request_handlers.default_request_handler.ResultAggregator',
+            return_value=mock_result_aggregator_instance,
+        ),
+        patch('asyncio.create_task', side_effect=create_task_spy),
+    ):
+        # Act: start stream and consume only the first event, then disconnect
+        agen = request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        )
+        first = await agen.__anext__()
+        assert first == first_event
+        # Simulate client disconnect
+        await asyncio.wait_for(agen.aclose(), timeout=0.1)
+
+    assert produced_task is not None
+    assert cleanup_task is not None
+
+    # Background cleanup task should be tracked while producer is still running
+    await asyncio.wait_for(execute_started.wait(), timeout=0.1)
+    assert cleanup_task in request_handler._background_tasks
+
+    # Allow executor to finish; this should complete producer, then cleanup
+    execute_finish.set()
+    await asyncio.wait_for(produced_task, timeout=0.1)
+    await asyncio.wait_for(cleanup_task, timeout=0.1)
+
+    # Wait for callback to remove task from tracking
+    await wait_until(
+        lambda: cleanup_task not in request_handler._background_tasks,
+        timeout=0.1,
+    )
+
+
 @pytest.mark.asyncio
 async def test_on_message_send_stream_task_id_mismatch():
     """Test on_message_send_stream raises error if yielded task ID mismatches."""
