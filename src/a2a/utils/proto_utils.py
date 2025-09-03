@@ -118,12 +118,11 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
             parse_string_integers_in_dict(item, max_safe_digits)
             for item in value
         ]
-    if (
-        isinstance(value, str)
-        and value.lstrip('-').isdigit()
-        and len(value.lstrip('-')) > max_safe_digits
-    ):
-        return int(value)
+    if isinstance(value, str):
+        # Handle potential negative numbers.
+        stripped_value = value.lstrip('-')
+        if stripped_value.isdigit() and len(stripped_value) > max_safe_digits:
+            return int(value)
     return value
 
 
