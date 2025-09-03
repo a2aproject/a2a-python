@@ -283,6 +283,7 @@ class DefaultRequestHandler(RequestHandler):
         blocking = True  # Default to blocking behavior
         if params.configuration and params.configuration.blocking is False:
             blocking = False
+
         interrupted_or_non_blocking = False
         try:
             (
