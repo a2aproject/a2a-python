@@ -1,5 +1,64 @@
 # Changelog
 
+## [0.3.4](https://github.com/a2aproject/a2a-python/compare/v0.3.3...v0.3.4) (2025-09-02)
+
+
+### Features
+
+* Add `ServerCallContext` into task store operations ([#443](https://github.com/a2aproject/a2a-python/issues/443)) ([e3e5c4b](https://github.com/a2aproject/a2a-python/commit/e3e5c4b7dcb5106e943b9aeb8e761ed23cc166a2))
+* Add extensions support to `TaskUpdater.add_artifact` ([#436](https://github.com/a2aproject/a2a-python/issues/436)) ([598d8a1](https://github.com/a2aproject/a2a-python/commit/598d8a10e61be83bcb7bc9377365f7c42bc6af41))
+
+
+### Bug Fixes
+
+* convert auth_required state in proto utils ([#444](https://github.com/a2aproject/a2a-python/issues/444)) ([ac12f05](https://github.com/a2aproject/a2a-python/commit/ac12f0527d923800192c47dc1bd2e7eed262dfe6))
+* handle concurrent task completion during cancellation ([#449](https://github.com/a2aproject/a2a-python/issues/449)) ([f4c9c18](https://github.com/a2aproject/a2a-python/commit/f4c9c18cfef3ccab1ac7bb30cc7f8293cf3e3ef6))
+* Remove logger error from init on `rest_adapter` and `jsonrpc_app` ([#439](https://github.com/a2aproject/a2a-python/issues/439)) ([9193208](https://github.com/a2aproject/a2a-python/commit/9193208aabac2655a197732ff826e3c2d76f11b5))
+* resolve streaming endpoint deadlock by pre-consuming request body ([#426](https://github.com/a2aproject/a2a-python/issues/426)) ([4186731](https://github.com/a2aproject/a2a-python/commit/4186731df60f7adfcd25f19078d055aca26612a3))
+* Sync jsonrpc and rest implementation of authenticated agent card ([#441](https://github.com/a2aproject/a2a-python/issues/441)) ([9da9ecc](https://github.com/a2aproject/a2a-python/commit/9da9ecc96856a2474d75f986a1f45488c36f53e3))
+
+
+### Performance Improvements
+
+* Improve performance and code style for `proto_utils.py` ([#452](https://github.com/a2aproject/a2a-python/issues/452)) ([1e4b574](https://github.com/a2aproject/a2a-python/commit/1e4b57457386875b64362113356c615bc87315e3))
+
+## [0.3.3](https://github.com/a2aproject/a2a-python/compare/v0.3.2...v0.3.3) (2025-08-22)
+
+
+### Features
+
+* Update proto conversion utilities ([#424](https://github.com/a2aproject/a2a-python/issues/424)) ([a3e7e1e](https://github.com/a2aproject/a2a-python/commit/a3e7e1ef2684f979a3b8cbde1f9fd24ce9154e40))
+
+
+### Bug Fixes
+
+* fixing JSONRPC error mapping ([#414](https://github.com/a2aproject/a2a-python/issues/414)) ([d2e869f](https://github.com/a2aproject/a2a-python/commit/d2e869f567a84f59967cf59a044d6ca1e0d00daf))
+* Revert code that enforces uuid structure on context id in tasks ([#429](https://github.com/a2aproject/a2a-python/issues/429)) ([e3a7207](https://github.com/a2aproject/a2a-python/commit/e3a7207164503f64900feaa4ef470d37fb2bb145)), closes [#427](https://github.com/a2aproject/a2a-python/issues/427)
+
+
+### Performance Improvements
+
+* Optimize logging performance and modernize string formatting ([#411](https://github.com/a2aproject/a2a-python/issues/411)) ([3ffae8f](https://github.com/a2aproject/a2a-python/commit/3ffae8f8046aef20e559e19c21a5f9464a2c89ca))
+
+
+### Reverts
+
+* Revert "chore(gRPC): Update a2a.proto to include metadata on GetTaskRequest" ([#428](https://github.com/a2aproject/a2a-python/issues/428)) ([39c6b43](https://github.com/a2aproject/a2a-python/commit/39c6b430c6b57e84255f56894dcc46a740a53f9b))
+
+## [0.3.2](https://github.com/a2aproject/a2a-python/compare/v0.3.1...v0.3.2) (2025-08-20)
+
+
+### Bug Fixes
+
+* Add missing mime_type and name in proto conversion utils ([#408](https://github.com/a2aproject/a2a-python/issues/408)) ([72b2ee7](https://github.com/a2aproject/a2a-python/commit/72b2ee75dccfc8399edaa0837a025455b4b53a17))
+* Add name field to FilePart protobuf message ([#403](https://github.com/a2aproject/a2a-python/issues/403)) ([1dbe33d](https://github.com/a2aproject/a2a-python/commit/1dbe33d5cf2c74019b72c709f3427aeba54bf4e3))
+* Client hangs when implementing `AgentExecutor` and `await`ing twice in execute method ([#379](https://github.com/a2aproject/a2a-python/issues/379)) ([c147a83](https://github.com/a2aproject/a2a-python/commit/c147a83d3098e5ab2cd5b695a3bd71e17bf13b4c))
+* **grpc:** Update `CreateTaskPushNotificationConfig` endpoint to `/v1/{parent=tasks/*/pushNotificationConfigs}` ([#415](https://github.com/a2aproject/a2a-python/issues/415)) ([73dddc3](https://github.com/a2aproject/a2a-python/commit/73dddc3a3dc0b073d5559b3d0ec18ff4d20b6f7d))
+* make `event_consumer` tolerant to closed queues on py3.13 ([#407](https://github.com/a2aproject/a2a-python/issues/407)) ([a371461](https://github.com/a2aproject/a2a-python/commit/a371461c3b77aa9643c3a3378bb4405356863bff))
+* non-blocking `send_message` server handler not invoke push notification ([#394](https://github.com/a2aproject/a2a-python/issues/394)) ([db82a65](https://github.com/a2aproject/a2a-python/commit/db82a6582821a37aa8033d7db426557909ab10c6))
+* **proto:** Add `icon_url` to `a2a.proto` ([#416](https://github.com/a2aproject/a2a-python/issues/416)) ([00703e3](https://github.com/a2aproject/a2a-python/commit/00703e3df45ea7708613791ec35e843591333eca))
+* **spec:** Suggest Unique Identifier fields to be UUID ([#405](https://github.com/a2aproject/a2a-python/issues/405)) ([da14cea](https://github.com/a2aproject/a2a-python/commit/da14cea950f1af486e7891fa49199249d29b6f37))
+
 ## [0.3.1](https://github.com/a2aproject/a2a-python/compare/v0.3.0...v0.3.1) (2025-08-13)
 
 

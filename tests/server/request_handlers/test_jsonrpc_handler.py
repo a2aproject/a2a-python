@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 import unittest.async_case
 
@@ -27,7 +28,6 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Artifact,
-    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
     CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigParams,
@@ -93,7 +93,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
     @pytest.fixture(autouse=True)
     def init_fixtures(self) -> None:
         self.mock_agent_card = MagicMock(
-            spec=AgentCard, url='http://agent.example.com/api'
+            spec=AgentCard,
+            url='http://agent.example.com/api',
+            supports_authenticated_extended_card=True,
         )
 
     async def test_on_get_task_success(self) -> None:
@@ -113,7 +115,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(response.root, GetTaskSuccessResponse)
         assert response.root.result == mock_task  # type: ignore
-        mock_task_store.get.assert_called_once_with(task_id)
+        mock_task_store.get.assert_called_once_with(task_id, unittest.mock.ANY)
 
     async def test_on_get_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -149,6 +151,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         call_context = ServerCallContext(state={'foo': 'bar'})
 
         async def streaming_coro():
+            mock_task.status.state = TaskState.canceled
             yield mock_task
 
         with patch(
@@ -160,6 +163,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response.root, CancelTaskSuccessResponse)
             assert response.root.result == mock_task  # type: ignore
+            assert response.root.result.status.state == TaskState.canceled
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_supported(self) -> None:
@@ -206,7 +210,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.on_cancel_task(request)
         self.assertIsInstance(response.root, JSONRPCErrorResponse)
         assert response.root.error == TaskNotFoundError()  # type: ignore
-        mock_task_store.get.assert_called_once_with('nonexistent_id')
+        mock_task_store.get.assert_called_once_with(
+            'nonexistent_id', unittest.mock.ANY
+        )
         mock_agent_executor.cancel.assert_not_called()
 
     @patch(
@@ -361,6 +367,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             for event in events:
                 yield event
 
+        # Latch to ensure background execute is scheduled before asserting
+        execute_called = asyncio.Event()
+
+        async def exec_side_effect(*args, **kwargs):
+            execute_called.set()
+
+        mock_agent_executor.execute.side_effect = exec_side_effect
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -382,6 +396,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                     event.root, SendStreamingMessageSuccessResponse
                 )
                 assert event.root.result == events[i]
+            await asyncio.wait_for(execute_called.wait(), timeout=0.1)
             mock_agent_executor.execute.assert_called_once()
 
     async def test_on_message_stream_new_message_existing_task_success(
@@ -418,6 +433,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             for event in events:
                 yield event
 
+        # Latch to ensure background execute is scheduled before asserting
+        execute_called = asyncio.Event()
+
+        async def exec_side_effect(*args, **kwargs):
+            execute_called.set()
+
+        mock_agent_executor.execute.side_effect = exec_side_effect
+
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
@@ -438,6 +461,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert isinstance(response, AsyncGenerator)
             collected_events = [item async for item in response]
             assert len(collected_events) == len(events)
+            await asyncio.wait_for(execute_called.wait(), timeout=0.1)
             mock_agent_executor.execute.assert_called_once()
             assert mock_task.history is not None and len(mock_task.history) == 1
 
@@ -1233,6 +1257,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         """Test error when authenticated extended agent card is not configured."""
         # Arrange
         mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
+        self.mock_agent_card.supports_extended_card = True
         handler = JSONRPCHandler(
             self.mock_agent_card,
             mock_request_handler,
@@ -1248,11 +1273,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
 
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.id, 'ext-card-req-2')
+        # Authenticated Extended Card flag is set with no extended card,
+        # returns base card in this case.
         self.assertIsInstance(
-            response.root.error, AuthenticatedExtendedCardNotConfiguredError
+            response.root, GetAuthenticatedExtendedCardSuccessResponse
         )
+        self.assertEqual(response.root.id, 'ext-card-req-2')
 
     async def test_get_authenticated_extended_card_with_modifier(self) -> None:
         """Test successful retrieval of a dynamically modified extended agent card."""

@@ -4,4 +4,5 @@
 # For syntax help see:
 # https://help.github.com/en/github/creating-cloning-and-archiving-repositories/about-code-owners#codeowners-syntax
 
-*   @a2aproject/google-a2a-eng
+*                   @a2aproject/google-a2a-eng
+src/a2a/types.py    @a2a-bot
