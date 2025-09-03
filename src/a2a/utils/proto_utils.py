@@ -57,12 +57,12 @@ def make_dict_serializable(value: Any) -> Any:
     Returns:
         A serializable value.
     """
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
     if isinstance(value, dict):
         return {k: make_dict_serializable(v) for k, v in value.items()}
     if isinstance(value, list | tuple):
         return [make_dict_serializable(item) for item in value]
-    if isinstance(value, str | int | float | bool) or value is None:
-        return value
     return str(value)
 
 
@@ -81,19 +81,18 @@ def normalize_large_integers_to_strings(
     Returns:
         A normalized value.
     """
-    if isinstance(value, dict):
-        return {
-            k: normalize_large_integers_to_strings(v, max_safe_digits)
-            for k, v in value.items()
-        }
-    if isinstance(value, list | tuple):
-        return [
-            normalize_large_integers_to_strings(item, max_safe_digits)
-            for item in value
-        ]
-    if isinstance(value, int) and abs(value) > (10**max_safe_digits - 1):
-        return str(value)
-    return value
+    max_safe_int = 10**max_safe_digits - 1
+
+    def _normalize(item: Any) -> Any:
+        if isinstance(item, int) and abs(item) > max_safe_int:
+            return str(item)
+        if isinstance(item, dict):
+            return {k: _normalize(v) for k, v in item.items()}
+        if isinstance(item, list | tuple):
+            return [_normalize(i) for i in item]
+        return item
+
+    return _normalize(value)
 
 
 def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
@@ -119,12 +118,11 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
             parse_string_integers_in_dict(item, max_safe_digits)
             for item in value
         ]
-    if (
-        isinstance(value, str)
-        and value.lstrip('-').isdigit()
-        and len(value.lstrip('-')) > max_safe_digits
-    ):
-        return int(value)
+    if isinstance(value, str):
+        # Handle potential negative numbers.
+        stripped_value = value.lstrip('-')
+        if stripped_value.isdigit() and len(stripped_value) > max_safe_digits:
+            return int(value)
     return value
 
 
