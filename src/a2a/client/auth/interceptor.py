@@ -62,7 +62,9 @@ class AuthInterceptor(ClientCallInterceptor):
                         ):
                             headers['Authorization'] = f'Bearer {credential}'
                             logger.debug(
-                                f"Added Bearer token for scheme '{scheme_name}' (type: {scheme_def.type})."
+                                "Added Bearer token for scheme '%s' (type: %s).",
+                                scheme_name,
+                                scheme_def.type,
                             )
                             http_kwargs['headers'] = headers
                             return request_payload, http_kwargs
@@ -74,7 +76,9 @@ class AuthInterceptor(ClientCallInterceptor):
                         ):
                             headers['Authorization'] = f'Bearer {credential}'
                             logger.debug(
-                                f"Added Bearer token for scheme '{scheme_name}' (type: {scheme_def.type})."
+                                "Added Bearer token for scheme '%s' (type: %s).",
+                                scheme_name,
+                                scheme_def.type,
                             )
                             http_kwargs['headers'] = headers
                             return request_payload, http_kwargs
@@ -83,7 +87,8 @@ class AuthInterceptor(ClientCallInterceptor):
                         case APIKeySecurityScheme(in_=In.header):
                             headers[scheme_def.name] = credential
                             logger.debug(
-                                f"Added API Key Header for scheme '{scheme_name}'."
+                                "Added API Key Header for scheme '%s'.",
+                                scheme_name,
                             )
                             http_kwargs['headers'] = headers
                             return request_payload, http_kwargs

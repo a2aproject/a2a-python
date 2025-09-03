@@ -62,7 +62,7 @@ class EventConsumer:
                 InternalError(message='Agent did not return any response')
             ) from e
 
-        logger.debug(f'Dequeued event of type: {type(event)} in consume_one.')
+        logger.debug('Dequeued event of type: %s in consume_one.', type(event))
 
         self.queue.task_done()
 
@@ -95,7 +95,7 @@ class EventConsumer:
                     self.queue.dequeue_event(), timeout=self._timeout
                 )
                 logger.debug(
-                    f'Dequeued event of type: {type(event)} in consume_all.'
+                    'Dequeued event of type: %s in consume_all.', type(event)
                 )
                 self.queue.task_done()
                 logger.debug(
@@ -125,7 +125,7 @@ class EventConsumer:
                 # other part is waiting for an event or a closed queue.
                 if is_final_event:
                     logger.debug('Stopping event consumption in consume_all.')
-                    await self.queue.close()
+                    await self.queue.close(True)
                     yield event
                     break
                 yield event
@@ -133,9 +133,9 @@ class EventConsumer:
                 # continue polling until there is a final event
                 continue
             except asyncio.TimeoutError:  # pyright: ignore [reportUnusedExcept]
-                # This class was made an alias of build-in TimeoutError after 3.11
+                # This class was made an alias of built-in TimeoutError after 3.11
                 continue
-            except QueueClosed:
+            except (QueueClosed, asyncio.QueueEmpty):
                 # Confirm that the queue is closed, e.g. we aren't on
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():

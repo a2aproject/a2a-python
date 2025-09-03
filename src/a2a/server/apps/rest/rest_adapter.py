@@ -39,7 +39,7 @@ from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidRequestError, ServerError
 
 
 logger = logging.getLogger(__name__)
@@ -94,14 +94,6 @@ class RESTAdapter:
         self.handler = RESTHandler(
             agent_card=agent_card, request_handler=http_handler
         )
-        if (
-            self.agent_card.supports_authenticated_extended_card
-            and self.extended_agent_card is None
-            and self.extended_card_modifier is None
-        ):
-            logger.error(
-                'AgentCard.supports_authenticated_extended_card is True, but no extended_agent_card was provided. The /agent/authenticatedExtendedCard endpoint will return 404.'
-            )
         self._context_builder = context_builder or DefaultCallContextBuilder()
 
     @rest_error_handler
@@ -120,6 +112,18 @@ class RESTAdapter:
         method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
         request: Request,
     ) -> EventSourceResponse:
+        # Pre-consume and cache the request body to prevent deadlock in streaming context
+        # This is required because Starlette's request.body() can only be consumed once,
+        # and attempting to consume it after EventSourceResponse starts causes deadlock
+        try:
+            await request.body()
+        except (ValueError, RuntimeError, OSError) as e:
+            raise ServerError(
+                error=InvalidRequestError(
+                    message=f'Failed to pre-consume request body: {e}'
+                )
+            ) from e
+
         call_context = self._context_builder.build(request)
 
         async def event_generator(
@@ -178,9 +182,9 @@ class RESTAdapter:
 
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
-            # If no base extended card is provided, pass the public card to the modifier
-            base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = self.extended_card_modifier(base_card, context)
+            card_to_serve = self.extended_card_modifier(card_to_serve, context)
+        elif self.card_modifier:
+            card_to_serve = self.card_modifier(card_to_serve)
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 

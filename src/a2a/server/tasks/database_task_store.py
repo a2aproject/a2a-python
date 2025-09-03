@@ -19,6 +19,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task  # Task is the Pydantic model
@@ -53,7 +54,8 @@ class DatabaseTaskStore(TaskStore):
             table_name: Name of the database table. Defaults to 'tasks'.
         """
         logger.debug(
-            f'Initializing DatabaseTaskStore with existing engine, table: {table_name}'
+            'Initializing DatabaseTaskStore with existing engine, table: %s',
+            table_name,
         )
         self.engine = engine
         self.async_session_maker = async_sessionmaker(
@@ -118,15 +120,19 @@ class DatabaseTaskStore(TaskStore):
         # Pydantic's model_validate will parse the nested dicts/lists from JSON
         return Task.model_validate(task_data_from_db)
 
-    async def save(self, task: Task) -> None:
+    async def save(
+        self, task: Task, context: ServerCallContext | None = None
+    ) -> None:
         """Saves or updates a task in the database."""
         await self._ensure_initialized()
         db_task = self._to_orm(task)
         async with self.async_session_maker.begin() as session:
             await session.merge(db_task)
-            logger.debug(f'Task {task.id} saved/updated successfully.')
+            logger.debug('Task %s saved/updated successfully.', task.id)
 
-    async def get(self, task_id: str) -> Task | None:
+    async def get(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> Task | None:
         """Retrieves a task from the database by ID."""
         await self._ensure_initialized()
         async with self.async_session_maker() as session:
@@ -135,13 +141,15 @@ class DatabaseTaskStore(TaskStore):
             task_model = result.scalar_one_or_none()
             if task_model:
                 task = self._from_orm(task_model)
-                logger.debug(f'Task {task_id} retrieved successfully.')
+                logger.debug('Task %s retrieved successfully.', task_id)
                 return task
 
-            logger.debug(f'Task {task_id} not found in store.')
+            logger.debug('Task %s not found in store.', task_id)
             return None
 
-    async def delete(self, task_id: str) -> None:
+    async def delete(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> None:
         """Deletes a task from the database by ID."""
         await self._ensure_initialized()
 
@@ -151,8 +159,8 @@ class DatabaseTaskStore(TaskStore):
             # Commit is automatic when using session.begin()
 
             if result.rowcount > 0:
-                logger.info(f'Task {task_id} deleted successfully.')
+                logger.info('Task %s deleted successfully.', task_id)
             else:
                 logger.warning(
-                    f'Attempted to delete nonexistent task with id: {task_id}'
+                    'Attempted to delete nonexistent task with id: %s', task_id
                 )

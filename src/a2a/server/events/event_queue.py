@@ -54,7 +54,7 @@ class EventQueue:
                 logger.warning('Queue is closed. Event will not be enqueued.')
                 return
 
-        logger.debug(f'Enqueuing event of type: {type(event)}')
+        logger.debug('Enqueuing event of type: %s', type(event))
 
         # Make sure to use put instead of put_nowait to avoid blocking the event loop.
         await self.queue.put(event)
@@ -90,7 +90,12 @@ class EventQueue:
             asyncio.QueueShutDown: If the queue has been closed and is empty.
         """
         async with self._lock:
-            if self._is_closed and self.queue.empty():
+            if (
+                sys.version_info < (3, 13)
+                and self._is_closed
+                and self.queue.empty()
+            ):
+                # On 3.13+, skip early raise; await self.queue.get() will raise QueueShutDown after shutdown()
                 logger.warning('Queue is closed. Event will not be dequeued.')
                 raise asyncio.QueueEmpty('Queue is closed.')
 
@@ -98,13 +103,13 @@ class EventQueue:
             logger.debug('Attempting to dequeue event (no_wait=True).')
             event = self.queue.get_nowait()
             logger.debug(
-                f'Dequeued event (no_wait=True) of type: {type(event)}'
+                'Dequeued event (no_wait=True) of type: %s', type(event)
             )
             return event
 
         logger.debug('Attempting to dequeue event (waiting).')
         event = await self.queue.get()
-        logger.debug(f'Dequeued event (waited) of type: {type(event)}')
+        logger.debug('Dequeued event (waited) of type: %s', type(event))
         return event
 
     def task_done(self) -> None:
@@ -127,25 +132,38 @@ class EventQueue:
         self._children.append(queue)
         return queue
 
-    async def close(self) -> None:
-        """Closes the queue for future push events.
+    async def close(self, immediate: bool = False) -> None:
+        """Closes the queue for future push events and also closes all child queues.
 
-        Once closed, `dequeue_event` will eventually raise `asyncio.QueueShutDown`
-        when the queue is empty. Also closes all child queues.
+        Once closed, no new events can be enqueued. For Python 3.13+, this will trigger
+        `asyncio.QueueShutDown` when the queue is empty and a consumer tries to dequeue.
+        For lower versions, the queue will be marked as closed and optionally cleared.
+
+        Args:
+            immediate (bool):
+                - True: Immediately closes the queue and clears all unprocessed events without waiting for them to be consumed. This is suitable for scenarios where you need to forcefully interrupt and quickly release resources.
+                - False (default): Gracefully closes the queue, waiting for all queued events to be processed (i.e., the queue is drained) before closing. This is suitable when you want to ensure all events are handled.
+
         """
         logger.debug('Closing EventQueue.')
         async with self._lock:
             # If already closed, just return.
-            if self._is_closed:
+            if self._is_closed and not immediate:
                 return
-            self._is_closed = True
+            if not self._is_closed:
+                self._is_closed = True
         # If using python 3.13 or higher, use the shutdown method
         if sys.version_info >= (3, 13):
-            self.queue.shutdown()
+            self.queue.shutdown(immediate)
             for child in self._children:
-                await child.close()
+                await child.close(immediate)
         # Otherwise, join the queue
         else:
+            if immediate:
+                await self.clear_events(True)
+                for child in self._children:
+                    await child.close(immediate)
+                return
             tasks = [asyncio.create_task(self.queue.join())]
             tasks.extend(
                 asyncio.create_task(child.close()) for child in self._children
@@ -155,3 +173,56 @@ class EventQueue:
     def is_closed(self) -> bool:
         """Checks if the queue is closed."""
         return self._is_closed
+
+    async def clear_events(self, clear_child_queues: bool = True) -> None:
+        """Clears all events from the current queue and optionally all child queues.
+
+        This method removes all pending events from the queue without processing them.
+        Child queues can be optionally cleared based on the clear_child_queues parameter.
+
+        Args:
+            clear_child_queues: If True (default), clear all child queues as well.
+                              If False, only clear the current queue, leaving child queues untouched.
+        """
+        logger.debug('Clearing all events from EventQueue and child queues.')
+
+        # Clear all events from the queue, even if closed
+        cleared_count = 0
+        async with self._lock:
+            try:
+                while True:
+                    event = self.queue.get_nowait()
+                    logger.debug(
+                        'Discarding unprocessed event of type: %s, content: %s',
+                        type(event),
+                        event,
+                    )
+                    self.queue.task_done()
+                    cleared_count += 1
+            except asyncio.QueueEmpty:
+                pass
+            except Exception as e:
+                # Handle Python 3.13+ QueueShutDown
+                if (
+                    sys.version_info >= (3, 13)
+                    and type(e).__name__ == 'QueueShutDown'
+                ):
+                    pass
+                else:
+                    raise
+
+            if cleared_count > 0:
+                logger.debug(
+                    'Cleared %d unprocessed events from EventQueue.',
+                    cleared_count,
+                )
+
+        # Clear all child queues (lock released before awaiting child tasks)
+        if clear_child_queues and self._children:
+            child_tasks = [
+                asyncio.create_task(child.clear_events())
+                for child in self._children
+            ]
+
+            if child_tasks:
+                await asyncio.gather(*child_tasks, return_exceptions=True)

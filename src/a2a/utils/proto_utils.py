@@ -18,10 +18,32 @@ logger = logging.getLogger(__name__)
 
 
 # Regexp patterns for matching
-_TASK_NAME_MATCH = r'tasks/([\w-]+)'
-_TASK_PUSH_CONFIG_NAME_MATCH = (
+_TASK_NAME_MATCH = re.compile(r'tasks/([\w-]+)')
+_TASK_PUSH_CONFIG_NAME_MATCH = re.compile(
     r'tasks/([\w-]+)/pushNotificationConfigs/([\w-]+)'
 )
+
+
+def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
+    """Converts a Python dict to a Struct proto.
+
+    Unfortunately, using `json_format.ParseDict` does not work because this
+    wants the dictionary to be an exact match of the Struct proto with fields
+    and keys and values, not the traditional Python dict structure.
+
+    Args:
+      dictionary: The Python dict to convert.
+
+    Returns:
+      The Struct proto.
+    """
+    struct = struct_pb2.Struct()
+    for key, val in dictionary.items():
+        if isinstance(val, dict):
+            struct[key] = dict_to_struct(val)
+        else:
+            struct[key] = val
+    return struct
 
 
 class ToProto:
@@ -33,11 +55,11 @@ class ToProto:
             return None
         return a2a_pb2.Message(
             message_id=message.message_id,
-            content=[ToProto.part(p) for p in message.parts],
+            content=[cls.part(p) for p in message.parts],
             context_id=message.context_id or '',
             task_id=message.task_id or '',
             role=cls.role(message.role),
-            metadata=ToProto.metadata(message.metadata),
+            metadata=cls.metadata(message.metadata),
         )
 
     @classmethod
@@ -46,56 +68,57 @@ class ToProto:
     ) -> struct_pb2.Struct | None:
         if metadata is None:
             return None
-        return struct_pb2.Struct(
-            # TODO: Add support for other types.
-            fields={
-                key: struct_pb2.Value(string_value=value)
-                for key, value in metadata.items()
-                if isinstance(value, str)
-            }
-        )
+        return dict_to_struct(metadata)
 
     @classmethod
     def part(cls, part: types.Part) -> a2a_pb2.Part:
         if isinstance(part.root, types.TextPart):
-            return a2a_pb2.Part(text=part.root.text)
+            return a2a_pb2.Part(
+                text=part.root.text, metadata=cls.metadata(part.root.metadata)
+            )
         if isinstance(part.root, types.FilePart):
-            return a2a_pb2.Part(file=ToProto.file(part.root.file))
+            return a2a_pb2.Part(
+                file=cls.file(part.root.file),
+                metadata=cls.metadata(part.root.metadata),
+            )
         if isinstance(part.root, types.DataPart):
-            return a2a_pb2.Part(data=ToProto.data(part.root.data))
+            return a2a_pb2.Part(
+                data=cls.data(part.root.data),
+                metadata=cls.metadata(part.root.metadata),
+            )
         raise ValueError(f'Unsupported part type: {part.root}')
 
     @classmethod
     def data(cls, data: dict[str, Any]) -> a2a_pb2.DataPart:
-        json_data = json.dumps(data)
-        return a2a_pb2.DataPart(
-            data=json_format.Parse(
-                json_data,
-                struct_pb2.Struct(),
-            )
-        )
+        return a2a_pb2.DataPart(data=dict_to_struct(data))
 
     @classmethod
     def file(
         cls, file: types.FileWithUri | types.FileWithBytes
     ) -> a2a_pb2.FilePart:
         if isinstance(file, types.FileWithUri):
-            return a2a_pb2.FilePart(file_with_uri=file.uri)
-        return a2a_pb2.FilePart(file_with_bytes=file.bytes.encode('utf-8'))
+            return a2a_pb2.FilePart(
+                file_with_uri=file.uri, mime_type=file.mime_type, name=file.name
+            )
+        return a2a_pb2.FilePart(
+            file_with_bytes=file.bytes.encode('utf-8'),
+            mime_type=file.mime_type,
+            name=file.name,
+        )
 
     @classmethod
     def task(cls, task: types.Task) -> a2a_pb2.Task:
         return a2a_pb2.Task(
             id=task.id,
             context_id=task.context_id,
-            status=ToProto.task_status(task.status),
+            status=cls.task_status(task.status),
             artifacts=(
-                [ToProto.artifact(a) for a in task.artifacts]
+                [cls.artifact(a) for a in task.artifacts]
                 if task.artifacts
                 else None
             ),
             history=(
-                [ToProto.message(h) for h in task.history]  # type: ignore[misc]
+                [cls.message(h) for h in task.history]  # type: ignore[misc]
                 if task.history
                 else None
             ),
@@ -104,8 +127,8 @@ class ToProto:
     @classmethod
     def task_status(cls, status: types.TaskStatus) -> a2a_pb2.TaskStatus:
         return a2a_pb2.TaskStatus(
-            state=ToProto.task_state(status.state),
-            update=ToProto.message(status.message),
+            state=cls.task_state(status.state),
+            update=cls.message(status.message),
         )
 
     @classmethod
@@ -123,6 +146,8 @@ class ToProto:
                 return a2a_pb2.TaskState.TASK_STATE_FAILED
             case types.TaskState.input_required:
                 return a2a_pb2.TaskState.TASK_STATE_INPUT_REQUIRED
+            case types.TaskState.auth_required:
+                return a2a_pb2.TaskState.TASK_STATE_AUTH_REQUIRED
             case _:
                 return a2a_pb2.TaskState.TASK_STATE_UNSPECIFIED
 
@@ -131,9 +156,9 @@ class ToProto:
         return a2a_pb2.Artifact(
             artifact_id=artifact.artifact_id,
             description=artifact.description,
-            metadata=ToProto.metadata(artifact.metadata),
+            metadata=cls.metadata(artifact.metadata),
             name=artifact.name,
-            parts=[ToProto.part(p) for p in artifact.parts],
+            parts=[cls.part(p) for p in artifact.parts],
         )
 
     @classmethod
@@ -150,7 +175,7 @@ class ToProto:
         cls, config: types.PushNotificationConfig
     ) -> a2a_pb2.PushNotificationConfig:
         auth_info = (
-            ToProto.authentication_info(config.authentication)
+            cls.authentication_info(config.authentication)
             if config.authentication
             else None
         )
@@ -168,8 +193,8 @@ class ToProto:
         return a2a_pb2.TaskArtifactUpdateEvent(
             task_id=event.task_id,
             context_id=event.context_id,
-            artifact=ToProto.artifact(event.artifact),
-            metadata=ToProto.metadata(event.metadata),
+            artifact=cls.artifact(event.artifact),
+            metadata=cls.metadata(event.metadata),
             append=event.append or False,
             last_chunk=event.last_chunk or False,
         )
@@ -181,8 +206,8 @@ class ToProto:
         return a2a_pb2.TaskStatusUpdateEvent(
             task_id=event.task_id,
             context_id=event.context_id,
-            status=ToProto.task_status(event.status),
-            metadata=ToProto.metadata(event.metadata),
+            status=cls.task_status(event.status),
+            metadata=cls.metadata(event.metadata),
             final=event.final,
         )
 
@@ -194,7 +219,7 @@ class ToProto:
             return a2a_pb2.SendMessageConfiguration()
         return a2a_pb2.SendMessageConfiguration(
             accepted_output_modes=config.accepted_output_modes,
-            push_notification=ToProto.push_notification_config(
+            push_notification=cls.push_notification_config(
                 config.push_notification_config
             )
             if config.push_notification_config
@@ -212,19 +237,7 @@ class ToProto:
         | types.TaskArtifactUpdateEvent,
     ) -> a2a_pb2.StreamResponse:
         """Converts a task, message, or task update event to a StreamResponse."""
-        if isinstance(event, types.TaskStatusUpdateEvent):
-            return a2a_pb2.StreamResponse(
-                status_update=ToProto.task_status_update_event(event)
-            )
-        if isinstance(event, types.TaskArtifactUpdateEvent):
-            return a2a_pb2.StreamResponse(
-                artifact_update=ToProto.task_artifact_update_event(event)
-            )
-        if isinstance(event, types.Message):
-            return a2a_pb2.StreamResponse(msg=ToProto.message(event))
-        if isinstance(event, types.Task):
-            return a2a_pb2.StreamResponse(task=ToProto.task(event))
-        raise ValueError(f'Unsupported event type: {type(event)}')
+        return cls.stream_response(event)
 
     @classmethod
     def task_or_message(
@@ -256,9 +269,11 @@ class ToProto:
             return a2a_pb2.StreamResponse(
                 status_update=cls.task_status_update_event(event),
             )
-        return a2a_pb2.StreamResponse(
-            artifact_update=cls.task_artifact_update_event(event),
-        )
+        if isinstance(event, types.TaskArtifactUpdateEvent):
+            return a2a_pb2.StreamResponse(
+                artifact_update=cls.task_artifact_update_event(event),
+            )
+        raise ValueError(f'Unsupported event type: {type(event)}')
 
     @classmethod
     def task_push_notification_config(
@@ -318,6 +333,23 @@ class ToProto:
         return a2a_pb2.AgentCapabilities(
             streaming=bool(capabilities.streaming),
             push_notifications=bool(capabilities.push_notifications),
+            extensions=[
+                cls.extension(x) for x in capabilities.extensions or []
+            ],
+        )
+
+    @classmethod
+    def extension(
+        cls,
+        extension: types.AgentExtension,
+    ) -> a2a_pb2.AgentExtension:
+        return a2a_pb2.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=dict_to_struct(extension.params)
+            if extension.params
+            else None,
+            required=extension.required,
         )
 
     @classmethod
@@ -462,32 +494,47 @@ class FromProto:
     def message(cls, message: a2a_pb2.Message) -> types.Message:
         return types.Message(
             message_id=message.message_id,
-            parts=[FromProto.part(p) for p in message.content],
+            parts=[cls.part(p) for p in message.content],
             context_id=message.context_id or None,
             task_id=message.task_id or None,
-            role=FromProto.role(message.role),
-            metadata=FromProto.metadata(message.metadata),
+            role=cls.role(message.role),
+            metadata=cls.metadata(message.metadata),
         )
 
     @classmethod
     def metadata(cls, metadata: struct_pb2.Struct) -> dict[str, Any]:
-        return {
-            key: value.string_value
-            for key, value in metadata.fields.items()
-            if value.string_value
-        }
+        if not metadata.fields:
+            return {}
+        return json_format.MessageToDict(metadata)
 
     @classmethod
     def part(cls, part: a2a_pb2.Part) -> types.Part:
         if part.HasField('text'):
-            return types.Part(root=types.TextPart(text=part.text))
+            return types.Part(
+                root=types.TextPart(
+                    text=part.text,
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
+            )
         if part.HasField('file'):
             return types.Part(
-                root=types.FilePart(file=FromProto.file(part.file))
+                root=types.FilePart(
+                    file=cls.file(part.file),
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
             )
         if part.HasField('data'):
             return types.Part(
-                root=types.DataPart(data=FromProto.data(part.data))
+                root=types.DataPart(
+                    data=cls.data(part.data),
+                    metadata=cls.metadata(part.metadata)
+                    if part.metadata
+                    else None,
+                ),
             )
         raise ValueError(f'Unsupported part type: {part}')
 
@@ -500,9 +547,19 @@ class FromProto:
     def file(
         cls, file: a2a_pb2.FilePart
     ) -> types.FileWithUri | types.FileWithBytes:
+        common_args = {
+            'mime_type': file.mime_type or None,
+            'name': file.name or None,
+        }
         if file.HasField('file_with_uri'):
-            return types.FileWithUri(uri=file.file_with_uri)
-        return types.FileWithBytes(bytes=file.file_with_bytes.decode('utf-8'))
+            return types.FileWithUri(
+                uri=file.file_with_uri,
+                **common_args,
+            )
+        return types.FileWithBytes(
+            bytes=file.file_with_bytes.decode('utf-8'),
+            **common_args,
+        )
 
     @classmethod
     def task_or_message(
@@ -517,16 +574,16 @@ class FromProto:
         return types.Task(
             id=task.id,
             context_id=task.context_id,
-            status=FromProto.task_status(task.status),
-            artifacts=[FromProto.artifact(a) for a in task.artifacts],
-            history=[FromProto.message(h) for h in task.history],
+            status=cls.task_status(task.status),
+            artifacts=[cls.artifact(a) for a in task.artifacts],
+            history=[cls.message(h) for h in task.history],
         )
 
     @classmethod
     def task_status(cls, status: a2a_pb2.TaskStatus) -> types.TaskStatus:
         return types.TaskStatus(
-            state=FromProto.task_state(status.state),
-            message=FromProto.message(status.update),
+            state=cls.task_state(status.state),
+            message=cls.message(status.update),
         )
 
     @classmethod
@@ -544,6 +601,8 @@ class FromProto:
                 return types.TaskState.failed
             case a2a_pb2.TaskState.TASK_STATE_INPUT_REQUIRED:
                 return types.TaskState.input_required
+            case a2a_pb2.TaskState.TASK_STATE_AUTH_REQUIRED:
+                return types.TaskState.auth_required
             case _:
                 return types.TaskState.unknown
 
@@ -552,9 +611,9 @@ class FromProto:
         return types.Artifact(
             artifact_id=artifact.artifact_id,
             description=artifact.description,
-            metadata=FromProto.metadata(artifact.metadata),
+            metadata=cls.metadata(artifact.metadata),
             name=artifact.name,
-            parts=[FromProto.part(p) for p in artifact.parts],
+            parts=[cls.part(p) for p in artifact.parts],
         )
 
     @classmethod
@@ -564,8 +623,8 @@ class FromProto:
         return types.TaskArtifactUpdateEvent(
             task_id=event.task_id,
             context_id=event.context_id,
-            artifact=FromProto.artifact(event.artifact),
-            metadata=FromProto.metadata(event.metadata),
+            artifact=cls.artifact(event.artifact),
+            metadata=cls.metadata(event.metadata),
             append=event.append,
             last_chunk=event.last_chunk,
         )
@@ -577,8 +636,8 @@ class FromProto:
         return types.TaskStatusUpdateEvent(
             task_id=event.task_id,
             context_id=event.context_id,
-            status=FromProto.task_status(event.status),
-            metadata=FromProto.metadata(event.metadata),
+            status=cls.task_status(event.status),
+            metadata=cls.metadata(event.metadata),
             final=event.final,
         )
 
@@ -590,7 +649,7 @@ class FromProto:
             id=config.id,
             url=config.url,
             token=config.token,
-            authentication=FromProto.authentication_info(config.authentication)
+            authentication=cls.authentication_info(config.authentication)
             if config.HasField('authentication')
             else None,
         )
@@ -610,7 +669,7 @@ class FromProto:
     ) -> types.MessageSendConfiguration:
         return types.MessageSendConfiguration(
             accepted_output_modes=list(config.accepted_output_modes),
-            push_notification_config=FromProto.push_notification_config(
+            push_notification_config=cls.push_notification_config(
                 config.push_notification
             )
             if config.HasField('push_notification')
@@ -638,10 +697,8 @@ class FromProto:
             | a2a_pb2.GetTaskPushNotificationConfigRequest
         ),
     ) -> types.TaskIdParams:
-        # This is currently incomplete until the core sdk supports multiple
-        # configs for a single task.
         if isinstance(request, a2a_pb2.GetTaskPushNotificationConfigRequest):
-            m = re.match(_TASK_PUSH_CONFIG_NAME_MATCH, request.name)
+            m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
             if not m:
                 raise ServerError(
                     error=types.InvalidParamsError(
@@ -649,7 +706,7 @@ class FromProto:
                     )
                 )
             return types.TaskIdParams(id=m.group(1))
-        m = re.match(_TASK_NAME_MATCH, request.name)
+        m = _TASK_NAME_MATCH.match(request.name)
         if not m:
             raise ServerError(
                 error=types.InvalidParamsError(
@@ -663,7 +720,7 @@ class FromProto:
         cls,
         request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
     ) -> types.TaskPushNotificationConfig:
-        m = re.match(_TASK_NAME_MATCH, request.parent)
+        m = _TASK_NAME_MATCH.match(request.parent)
         if not m:
             raise ServerError(
                 error=types.InvalidParamsError(
@@ -682,7 +739,7 @@ class FromProto:
         cls,
         config: a2a_pb2.TaskPushNotificationConfig,
     ) -> types.TaskPushNotificationConfig:
-        m = re.match(_TASK_PUSH_CONFIG_NAME_MATCH, config.name)
+        m = _TASK_PUSH_CONFIG_NAME_MATCH.match(config.name)
         if not m:
             raise ServerError(
                 error=types.InvalidParamsError(
@@ -739,7 +796,7 @@ class FromProto:
         cls,
         request: a2a_pb2.GetTaskRequest,
     ) -> types.TaskQueryParams:
-        m = re.match(_TASK_NAME_MATCH, request.name)
+        m = _TASK_NAME_MATCH.match(request.name)
         if not m:
             raise ServerError(
                 error=types.InvalidParamsError(
@@ -761,6 +818,21 @@ class FromProto:
         return types.AgentCapabilities(
             streaming=capabilities.streaming,
             push_notifications=capabilities.push_notifications,
+            extensions=[
+                cls.agent_extension(x) for x in capabilities.extensions
+            ],
+        )
+
+    @classmethod
+    def agent_extension(
+        cls,
+        extension: a2a_pb2.AgentExtension,
+    ) -> types.AgentExtension:
+        return types.AgentExtension(
+            uri=extension.uri,
+            description=extension.description,
+            params=json_format.MessageToDict(extension.params),
+            required=extension.required,
         )
 
     @classmethod
@@ -817,6 +889,12 @@ class FromProto:
                 root=types.OAuth2SecurityScheme(
                     description=scheme.oauth2_security_scheme.description,
                     flows=cls.oauth2_flows(scheme.oauth2_security_scheme.flows),
+                )
+            )
+        if scheme.HasField('mtls_security_scheme'):
+            return types.SecurityScheme(
+                root=types.MutualTLSSecurityScheme(
+                    description=scheme.mtls_security_scheme.description,
                 )
             )
         return types.SecurityScheme(
@@ -877,7 +955,9 @@ class FromProto:
             return cls.task(response.task)
         if response.HasField('status_update'):
             return cls.task_status_update_event(response.status_update)
-        return cls.task_artifact_update_event(response.artifact_update)
+        if response.HasField('artifact_update'):
+            return cls.task_artifact_update_event(response.artifact_update)
+        raise ValueError('Unsupported StreamResponse type')
 
     @classmethod
     def skill(cls, skill: a2a_pb2.AgentSkill) -> types.AgentSkill:
