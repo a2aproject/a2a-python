@@ -1,5 +1,27 @@
 # Changelog
 
+## [0.3.4](https://github.com/a2aproject/a2a-python/compare/v0.3.3...v0.3.4) (2025-09-02)
+
+
+### Features
+
+* Add `ServerCallContext` into task store operations ([#443](https://github.com/a2aproject/a2a-python/issues/443)) ([e3e5c4b](https://github.com/a2aproject/a2a-python/commit/e3e5c4b7dcb5106e943b9aeb8e761ed23cc166a2))
+* Add extensions support to `TaskUpdater.add_artifact` ([#436](https://github.com/a2aproject/a2a-python/issues/436)) ([598d8a1](https://github.com/a2aproject/a2a-python/commit/598d8a10e61be83bcb7bc9377365f7c42bc6af41))
+
+
+### Bug Fixes
+
+* convert auth_required state in proto utils ([#444](https://github.com/a2aproject/a2a-python/issues/444)) ([ac12f05](https://github.com/a2aproject/a2a-python/commit/ac12f0527d923800192c47dc1bd2e7eed262dfe6))
+* handle concurrent task completion during cancellation ([#449](https://github.com/a2aproject/a2a-python/issues/449)) ([f4c9c18](https://github.com/a2aproject/a2a-python/commit/f4c9c18cfef3ccab1ac7bb30cc7f8293cf3e3ef6))
+* Remove logger error from init on `rest_adapter` and `jsonrpc_app` ([#439](https://github.com/a2aproject/a2a-python/issues/439)) ([9193208](https://github.com/a2aproject/a2a-python/commit/9193208aabac2655a197732ff826e3c2d76f11b5))
+* resolve streaming endpoint deadlock by pre-consuming request body ([#426](https://github.com/a2aproject/a2a-python/issues/426)) ([4186731](https://github.com/a2aproject/a2a-python/commit/4186731df60f7adfcd25f19078d055aca26612a3))
+* Sync jsonrpc and rest implementation of authenticated agent card ([#441](https://github.com/a2aproject/a2a-python/issues/441)) ([9da9ecc](https://github.com/a2aproject/a2a-python/commit/9da9ecc96856a2474d75f986a1f45488c36f53e3))
+
+
+### Performance Improvements
+
+* Improve performance and code style for `proto_utils.py` ([#452](https://github.com/a2aproject/a2a-python/issues/452)) ([1e4b574](https://github.com/a2aproject/a2a-python/commit/1e4b57457386875b64362113356c615bc87315e3))
+
 ## [0.3.3](https://github.com/a2aproject/a2a-python/compare/v0.3.2...v0.3.3) (2025-08-22)
 
 

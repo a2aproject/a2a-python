@@ -84,14 +84,16 @@ class TaskStatus(_message.Message):
     def __init__(self, state: _Optional[_Union[TaskState, str]] = ..., update: _Optional[_Union[Message, _Mapping]] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Part(_message.Message):
-    __slots__ = ("text", "file", "data")
+    __slots__ = ("text", "file", "data", "metadata")
     TEXT_FIELD_NUMBER: _ClassVar[int]
     FILE_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     text: str
     file: FilePart
     data: DataPart
-    def __init__(self, text: _Optional[str] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ..., data: _Optional[_Union[DataPart, _Mapping]] = ...) -> None: ...
+    metadata: _struct_pb2.Struct
+    def __init__(self, text: _Optional[str] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ..., data: _Optional[_Union[DataPart, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class FilePart(_message.Message):
     __slots__ = ("file_with_uri", "file_with_bytes", "mime_type", "name")

@@ -66,6 +66,7 @@ class JSONRPCHandler:
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
+        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
     ):
         """Initializes the JSONRPCHandler.
 
@@ -76,11 +77,14 @@ class JSONRPCHandler:
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        self.card_modifier = card_modifier
 
     async def on_message_send(
         self,
@@ -425,14 +429,10 @@ class JSONRPCHandler:
         Returns:
             A `GetAuthenticatedExtendedCardResponse` object containing the config or a JSON-RPC error.
         """
-        if (
-            self.extended_agent_card is None
-            and self.extended_card_modifier is None
-        ):
-            return GetAuthenticatedExtendedCardResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id,
-                    error=AuthenticatedExtendedCardNotConfiguredError(),
+        if not self.agent_card.supports_authenticated_extended_card:
+            raise ServerError(
+                error=AuthenticatedExtendedCardNotConfiguredError(
+                    message='Authenticated card not supported'
                 )
             )
 
@@ -443,6 +443,8 @@ class JSONRPCHandler:
         card_to_serve = base_card
         if self.extended_card_modifier and context:
             card_to_serve = self.extended_card_modifier(base_card, context)
+        elif self.card_modifier:
+            card_to_serve = self.card_modifier(base_card)
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(
