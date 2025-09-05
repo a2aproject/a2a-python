@@ -289,6 +289,26 @@ class TestJSONRPCExtensions:
         call_context = mock_handler.on_message_send.call_args[0][1]
         assert call_context.requested_extensions == {'foo', 'bar', 'baz'}
 
+    def test_method_added_to_call_context_state(self, client, mock_handler):
+        response = client.post(
+            '/',
+            json=SendMessageRequest(
+                id='1',
+                params=MessageSendParams(
+                    message=Message(
+                        message_id='1',
+                        role=Role.user,
+                        parts=[Part(TextPart(text='hi'))],
+                    )
+                ),
+            ).model_dump(),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert call_context.state['method'] == 'message/send'
+
     def test_request_with_multiple_extension_headers(
         self, client, mock_handler
     ):
