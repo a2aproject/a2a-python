@@ -82,3 +82,8 @@ testuuid
 Tful
 typeerror
 vulnz
+eid
+evt
+XREAD
+xread
+xrevrange

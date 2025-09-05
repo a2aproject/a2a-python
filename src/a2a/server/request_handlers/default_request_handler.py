@@ -1,5 +1,7 @@
 import asyncio
 import logging
+import os
+import warnings
 
 from collections.abc import AsyncGenerator
 from typing import cast
@@ -83,7 +85,9 @@ class DefaultRequestHandler(RequestHandler):
         Args:
             agent_executor: The `AgentExecutor` instance to run agent logic.
             task_store: The `TaskStore` instance to manage task persistence.
-            queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
+            queue_manager: The `QueueManager` instance to manage event queues.
+                If None, defaults to `InMemoryQueueManager` with a deprecation warning.
+                Can be disabled entirely by setting A2A_DISABLE_QUEUE_MANAGER_FALLBACK=true.
             push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
             push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
             request_context_builder: The `RequestContextBuilder` instance used
@@ -91,7 +95,30 @@ class DefaultRequestHandler(RequestHandler):
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
-        self._queue_manager = queue_manager or InMemoryQueueManager()
+
+        # Handle queue_manager with deprecation warning for backward compatibility
+        if queue_manager is None:
+            # Allow disabling fallback via environment variable for strict production deployments
+            disable_fallback = os.getenv(
+                'A2A_DISABLE_QUEUE_MANAGER_FALLBACK', ''
+            ).lower() in ('true', '1', 'yes')
+
+            if disable_fallback:
+                raise ValueError(
+                    'queue_manager is required. Please explicitly pass a QueueManager instance. '
+                    'Set A2A_DISABLE_QUEUE_MANAGER_FALLBACK=false to re-enable fallback behavior.'
+                )
+
+            warnings.warn(
+                'Using default InMemoryQueueManager. This will be removed in a future version. '
+                'Please explicitly pass a QueueManager instance to ensure proper production deployment.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
+            self._queue_manager = InMemoryQueueManager()
+        else:
+            self._queue_manager = queue_manager
+
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self._request_context_builder = (

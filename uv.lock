@@ -37,6 +37,9 @@ mysql = [
 postgresql = [
     { name = "sqlalchemy", extra = ["asyncio", "postgresql-asyncpg"] },
 ]
+redis = [
+    { name = "redis" },
+]
 sql = [
     { name = "sqlalchemy", extra = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"] },
 ]
@@ -85,6 +88,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
     { name = "protobuf", specifier = ">=5.29.5" },
     { name = "pydantic", specifier = ">=2.11.3" },
+    { name = "redis", marker = "extra == 'redis'", specifier = ">=6.4.0" },
     { name = "sqlalchemy", extras = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["aiomysql", "asyncio"], marker = "extra == 'mysql'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["aiosqlite", "asyncio"], marker = "extra == 'sqlite'", specifier = ">=2.0.0" },
@@ -92,7 +96,7 @@ requires-dist = [
     { name = "sse-starlette", marker = "extra == 'http-server'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["encryption", "grpc", "http-server", "mysql", "postgresql", "sql", "sqlite", "telemetry"]
+provides-extras = ["encryption", "grpc", "http-server", "mysql", "postgresql", "redis", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -1650,6 +1654,18 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/05/10/f42c48fa5153204f42eaa945e8d1fd7c10d6296841dcb2447bf7da1be5c4/pyyaml_ft-8.0.0-cp313-cp313t-musllinux_1_2_aarch64.whl", hash = "sha256:052561b89d5b2a8e1289f326d060e794c21fa068aa11255fe71d65baf18a632e", size = 810403, upload-time = "2025-06-10T15:32:11.051Z" },
     { url = "https://files.pythonhosted.org/packages/d5/d2/e369064aa51009eb9245399fd8ad2c562bd0bcd392a00be44b2a824ded7c/pyyaml_ft-8.0.0-cp313-cp313t-musllinux_1_2_x86_64.whl", hash = "sha256:3bb4b927929b0cb162fb1605392a321e3333e48ce616cdcfa04a839271373255", size = 835581, upload-time = "2025-06-10T15:32:12.897Z" },
     { url = "https://files.pythonhosted.org/packages/c0/28/26534bed77109632a956977f60d8519049f545abc39215d086e33a61f1f2/pyyaml_ft-8.0.0-cp313-cp313t-win_amd64.whl", hash = "sha256:de04cfe9439565e32f178106c51dd6ca61afaa2907d143835d501d84703d3793", size = 171579, upload-time = "2025-06-10T15:32:14.34Z" },
+]
+
+[[package]]
+name = "redis"
+version = "6.4.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "async-timeout", marker = "python_full_version < '3.11.3'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/0d/d6/e8b92798a5bd67d659d51a18170e91c16ac3b59738d91894651ee255ed49/redis-6.4.0.tar.gz", hash = "sha256:b01bc7282b8444e28ec36b261df5375183bb47a07eb9c603f284e89cbc5ef010", size = 4647399, upload-time = "2025-08-07T08:10:11.441Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/e8/02/89e2ed7e85db6c93dfa9e8f691c5087df4e3551ab39081a4d7c6d1f90e05/redis-6.4.0-py3-none-any.whl", hash = "sha256:f0544fa9604264e9464cdf4814e7d4830f74b165d52f2a330a760a88dd248b7f", size = 279847, upload-time = "2025-08-07T08:10:09.84Z" },
 ]
 
 [[package]]
