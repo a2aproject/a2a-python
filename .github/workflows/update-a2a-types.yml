@@ -12,7 +12,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v5
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -42,7 +42,7 @@ jobs:
           uv run scripts/grpc_gen_post_processor.py
           echo "Buf generate finished."
       - name: Create Pull Request with Updates
-        uses: peter-evans/create-pull-request@v6
+        uses: peter-evans/create-pull-request@v7
         with:
           token: ${{ secrets.A2A_BOT_PAT }}
           committer: a2a-bot <a2a-bot@google.com>

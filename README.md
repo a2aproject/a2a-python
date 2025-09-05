@@ -4,110 +4,63 @@
 [![PyPI version](https://img.shields.io/pypi/v/a2a-sdk)](https://pypi.org/project/a2a-sdk/)
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/a2a-sdk)
 [![PyPI - Downloads](https://img.shields.io/pypi/dw/a2a-sdk)](https://pypistats.org/packages/a2a-sdk)
+[![Python Unit Tests](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml)
+[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/a2aproject/a2a-python)
 
 <!-- markdownlint-disable no-inline-html -->
 
-<html>
-   <h2 align="center">
+<div align="center">
    <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg" width="256" alt="A2A Logo"/>
-   </h2>
-   <h3 align="center">A Python library that helps run agentic applications as A2AServers following the <a href="https://a2a-protocol.org">Agent2Agent (A2A) Protocol</a>.</h3>
-</html>
+   <h3>
+      A Python library for running agentic applications as A2A Servers, following the <a href="https://a2a-protocol.org">Agent2Agent (A2A) Protocol</a>.
+   </h3>
+</div>
 
 <!-- markdownlint-enable no-inline-html -->
 
-## Installation
+---
 
-You can install the A2A SDK using either `uv` or `pip`.
+## ✨ Features
 
-## Prerequisites
+- **A2A Protocol Compliant:** Build agentic applications that adhere to the Agent2Agent (A2A) Protocol.
+- **Extensible:** Easily add support for different communication protocols and database backends.
+- **Asynchronous:** Built on modern async Python for high performance.
+- **Optional Integrations:** Includes optional support for:
+  - HTTP servers ([FastAPI](https://fastapi.tiangolo.com/), [Starlette](https://www.starlette.io/))
+  - [gRPC](https://grpc.io/)
+  - [OpenTelemetry](https://opentelemetry.io/) for tracing
+  - SQL databases ([PostgreSQL](https://www.postgresql.org/), [MySQL](https://www.mysql.com/), [SQLite](https://sqlite.org/))
+
+---
+
+## 🚀 Getting Started
+
+### Prerequisites
 
 - Python 3.10+
-- `uv` (optional, but recommended) or `pip`
+- `uv` (recommended) or `pip`
 
-### Using `uv`
+### 🔧 Installation
 
-When you're working within a uv project or a virtual environment managed by uv, the preferred way to add packages is using uv add.
+Install the core SDK and any desired extras using your preferred package manager.
 
-```bash
-uv add a2a-sdk
-```
+| Feature                  | `uv` Command                               | `pip` Command                                |
+| ------------------------ | ------------------------------------------ | -------------------------------------------- |
+| **Core SDK**             | `uv add a2a-sdk`                           | `pip install a2a-sdk`                        |
+| **HTTP Server**          | `uv add "a2a-sdk[http-server]"`            | `pip install "a2a-sdk[http-server]"`         |
+| **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
+| **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
 
-To include the optional HTTP server components (FastAPI, Starlette), install the `http-server` extra:
+#### Database Support
 
-```bash
-uv add a2a-sdk[http-server]
-```
+Install the necessary drivers for your chosen SQL database.
 
-To install with gRPC support:
-
-```bash
-uv add "a2a-sdk[grpc]"
-```
-
-To install with OpenTelemetry tracing support:
-
-```bash
-uv add "a2a-sdk[telemetry]"
-```
-
-To install with database support:
-
-```bash
-# PostgreSQL support
-uv add "a2a-sdk[postgresql]"
-
-# MySQL support
-uv add "a2a-sdk[mysql]"
-
-# SQLite support
-uv add "a2a-sdk[sqlite]"
-
-# All database drivers
-uv add "a2a-sdk[sql]"
-```
-
-### Using `pip`
-
-If you prefer to use pip, the standard Python package installer, you can install `a2a-sdk` as follows
-
-```bash
-pip install a2a-sdk
-```
-
-To include the optional HTTP server components (FastAPI, Starlette), install the `http-server` extra:
-
-```bash
-pip install a2a-sdk[http-server]
-```
-
-To install with gRPC support:
-
-```bash
-pip install "a2a-sdk[grpc]"
-```
-
-To install with OpenTelemetry tracing support:
-
-```bash
-pip install "a2a-sdk[telemetry]"
-```
-
-To install with database support:
-
-```bash
-# PostgreSQL support
-pip install "a2a-sdk[postgresql]"
-
-# MySQL support
-pip install "a2a-sdk[mysql]"
-
-# SQLite support
-pip install "a2a-sdk[sqlite]"
-
-# All database drivers
-pip install "a2a-sdk[sql]"
-```
+| Database      | `uv` Command                       | `pip` Command                        |
+| ------------- | ---------------------------------- | ------------------------------------ |
+| **PostgreSQL**| `uv add "a2a-sdk[postgresql]"`     | `pip install "a2a-sdk[postgresql]"`  |
+| **MySQL**     | `uv add "a2a-sdk[mysql]"`          | `pip install "a2a-sdk[mysql]"`       |
+| **SQLite**    | `uv add "a2a-sdk[sqlite]"`         | `pip install "a2a-sdk[sqlite]"`      |
+| **All SQL Drivers** | `uv add "a2a-sdk[sql]"`      | `pip install "a2a-sdk[sql]"`         |
 
 ## Examples
 
@@ -130,12 +83,23 @@ pip install "a2a-sdk[sql]"
 
 3. You can validate your agent using the agent inspector. Follow the instructions at the [a2a-inspector](https://github.com/a2aproject/a2a-inspector) repo.
 
-You can also find more Python samples [here](https://github.com/a2aproject/a2a-samples/tree/main/samples/python) and JavaScript samples [here](https://github.com/a2aproject/a2a-samples/tree/main/samples/js).
+---
 
-## License
+## 🌐 More Examples
 
-This project is licensed under the terms of the [Apache 2.0 License](https://raw.githubusercontent.com/a2aproject/a2a-python/refs/heads/main/LICENSE).
+You can find a variety of more detailed examples in the [a2a-samples](https://github.com/a2aproject/a2a-samples) repository:
 
-## Contributing
+- **[Python Examples](https://github.com/a2aproject/a2a-samples/tree/main/samples/python)**
+- **[JavaScript Examples](https://github.com/a2aproject/a2a-samples/tree/main/samples/js)**
 
-See [CONTRIBUTING.md](https://github.com/a2aproject/a2a-python/blob/main/CONTRIBUTING.md) for contribution guidelines.
+---
+
+## 🤝 Contributing
+
+Contributions are welcome! Please see the [CONTRIBUTING.md](CONTRIBUTING.md) file for guidelines on how to get involved.
+
+---
+
+## 📄 License
+
+This project is licensed under the Apache 2.0 License. See the [LICENSE](LICENSE) file for more details.

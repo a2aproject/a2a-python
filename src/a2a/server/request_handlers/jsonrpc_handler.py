@@ -183,21 +183,25 @@ class JSONRPCHandler:
             task = await self.request_handler.on_cancel_task(
                 request.params, context
             )
-            if task:
-                return prepare_response_object(
-                    request.id,
-                    task,
-                    (Task,),
-                    CancelTaskSuccessResponse,
-                    CancelTaskResponse,
-                )
-            raise ServerError(error=TaskNotFoundError())  # noqa: TRY301
         except ServerError as e:
             return CancelTaskResponse(
                 root=JSONRPCErrorResponse(
                     id=request.id, error=e.error if e.error else InternalError()
                 )
             )
+
+        if task:
+            return prepare_response_object(
+                request.id,
+                task,
+                (Task,),
+                CancelTaskSuccessResponse,
+                CancelTaskResponse,
+            )
+
+        return CancelTaskResponse(
+            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
+        )
 
     async def on_resubscribe_to_task(
         self,
@@ -335,21 +339,25 @@ class JSONRPCHandler:
             task = await self.request_handler.on_get_task(
                 request.params, context
             )
-            if task:
-                return prepare_response_object(
-                    request.id,
-                    task,
-                    (Task,),
-                    GetTaskSuccessResponse,
-                    GetTaskResponse,
-                )
-            raise ServerError(error=TaskNotFoundError())  # noqa: TRY301
         except ServerError as e:
             return GetTaskResponse(
                 root=JSONRPCErrorResponse(
                     id=request.id, error=e.error if e.error else InternalError()
                 )
             )
+
+        if task:
+            return prepare_response_object(
+                request.id,
+                task,
+                (Task,),
+                GetTaskSuccessResponse,
+                GetTaskResponse,
+            )
+
+        return GetTaskResponse(
+            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
+        )
 
     async def list_push_notification_config(
         self,
