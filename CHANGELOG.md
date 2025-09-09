@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.5](https://github.com/a2aproject/a2a-python/compare/v0.3.4...v0.3.5) (2025-09-08)
+
+
+### Bug Fixes
+
+* Prevent client disconnect from stopping task execution ([#440](https://github.com/a2aproject/a2a-python/issues/440)) ([58b4c81](https://github.com/a2aproject/a2a-python/commit/58b4c81746fc83e65f23f46308c47099697554ea)), closes [#296](https://github.com/a2aproject/a2a-python/issues/296)
+* **proto:** Adds metadata field to A2A DataPart proto ([#455](https://github.com/a2aproject/a2a-python/issues/455)) ([6d0ef59](https://github.com/a2aproject/a2a-python/commit/6d0ef593adaa22b2af0a5dd1a186646c180e3f8c))
+
+
+### Documentation
+
+* add example docs for `[@validate](https://github.com/validate)` and `[@validate](https://github.com/validate)_async_generator` ([#422](https://github.com/a2aproject/a2a-python/issues/422)) ([18289eb](https://github.com/a2aproject/a2a-python/commit/18289eb19bbdaebe5e36e26be686e698f223160b))
+* Restructure README ([9758f78](https://github.com/a2aproject/a2a-python/commit/9758f7896c5497d6ca49f798296a7380b2134b29))
+
 ## [0.3.4](https://github.com/a2aproject/a2a-python/compare/v0.3.3...v0.3.4) (2025-09-02)
 
 
