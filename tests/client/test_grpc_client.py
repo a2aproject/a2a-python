@@ -356,7 +356,7 @@ async def test_set_task_callback_with_invalid_task(
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ):
-    """Test setting a task push notification config with a invalid task id."""
+    """Test setting a task push notification config with an invalid task id."""
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
         name=(
             f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
@@ -415,7 +415,7 @@ async def test_get_task_callback_with_invalid_task(
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ):
-    """Test retrieving a task push notification config with a invalid task id."""
+    """Test retrieving a task push notification config with an invalid task id."""
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
         name=(
             f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
