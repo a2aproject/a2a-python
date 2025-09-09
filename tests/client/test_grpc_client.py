@@ -362,10 +362,8 @@ async def test_set_task_callback_with_invalid_task(
             f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
             f'pushNotificationConfigs/{sample_task_push_notification_config.push_notification_config.id}'
         ),
-        push_notification_config=a2a_pb2.PushNotificationConfig(
-            id=sample_task_push_notification_config.push_notification_config.id,
-            url=sample_task_push_notification_config.push_notification_config.url,
-            token=sample_task_push_notification_config.push_notification_config.token,
+        push_notification_config=proto_utils.ToProto.push_notification_config(
+            sample_task_push_notification_config.push_notification_config
         ),
     )
 
@@ -421,10 +419,8 @@ async def test_get_task_callback_with_invalid_task(
             f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
             f'pushNotificationConfigs/{sample_task_push_notification_config.push_notification_config.id}'
         ),
-        push_notification_config=a2a_pb2.PushNotificationConfig(
-            id=sample_task_push_notification_config.push_notification_config.id,
-            url=sample_task_push_notification_config.push_notification_config.url,
-            token=sample_task_push_notification_config.push_notification_config.token,
+        push_notification_config=proto_utils.ToProto.push_notification_config(
+            sample_task_push_notification_config.push_notification_config
         ),
     )
     params = GetTaskPushNotificationConfigParams(
