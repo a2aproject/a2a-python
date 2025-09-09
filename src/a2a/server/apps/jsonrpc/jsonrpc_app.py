@@ -337,6 +337,7 @@ class JSONRPCApplication(ABC):
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
+            call_context.state['method'] = method
 
             request_id = specific_request.id
             a2a_request = A2ARequest(root=specific_request)

@@ -46,6 +46,86 @@ def dict_to_struct(dictionary: dict[str, Any]) -> struct_pb2.Struct:
     return struct
 
 
+def make_dict_serializable(value: Any) -> Any:
+    """Dict pre-processing utility: converts non-serializable values to serializable form.
+
+    Use this when you want to normalize a dictionary before dict->Struct conversion.
+
+    Args:
+        value: The value to convert.
+
+    Returns:
+        A serializable value.
+    """
+    if isinstance(value, (str, int, float, bool)) or value is None:
+        return value
+    if isinstance(value, dict):
+        return {k: make_dict_serializable(v) for k, v in value.items()}
+    if isinstance(value, list | tuple):
+        return [make_dict_serializable(item) for item in value]
+    return str(value)
+
+
+def normalize_large_integers_to_strings(
+    value: Any, max_safe_digits: int = 15
+) -> Any:
+    """Integer preprocessing utility: converts large integers to strings.
+
+    Use this when you want to convert large integers to strings considering
+    JavaScript's MAX_SAFE_INTEGER (2^53 - 1) limitation.
+
+    Args:
+        value: The value to convert.
+        max_safe_digits: Maximum safe integer digits (default: 15).
+
+    Returns:
+        A normalized value.
+    """
+    max_safe_int = 10**max_safe_digits - 1
+
+    def _normalize(item: Any) -> Any:
+        if isinstance(item, int) and abs(item) > max_safe_int:
+            return str(item)
+        if isinstance(item, dict):
+            return {k: _normalize(v) for k, v in item.items()}
+        if isinstance(item, list | tuple):
+            return [_normalize(i) for i in item]
+        return item
+
+    return _normalize(value)
+
+
+def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
+    """String post-processing utility: converts large integer strings back to integers.
+
+    Use this when you want to restore large integer strings to integers
+    after Struct->dict conversion.
+
+    Args:
+        value: The value to convert.
+        max_safe_digits: Maximum safe integer digits (default: 15).
+
+    Returns:
+        A parsed value.
+    """
+    if isinstance(value, dict):
+        return {
+            k: parse_string_integers_in_dict(v, max_safe_digits)
+            for k, v in value.items()
+        }
+    if isinstance(value, list | tuple):
+        return [
+            parse_string_integers_in_dict(item, max_safe_digits)
+            for item in value
+        ]
+    if isinstance(value, str):
+        # Handle potential negative numbers.
+        stripped_value = value.lstrip('-')
+        if stripped_value.isdigit() and len(stripped_value) > max_safe_digits:
+            return int(value)
+    return value
+
+
 class ToProto:
     """Converts Python types to proto types."""
 
