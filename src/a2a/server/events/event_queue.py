@@ -172,11 +172,9 @@ class EventQueue:
                 return
             # Graceful: prevent further gets/puts via shutdown, then wait for drain and children
             self.queue.shutdown(False)
-            tasks = [asyncio.create_task(self.queue.join())]
-            tasks.extend(
-                asyncio.create_task(child.close()) for child in self._children
+            await asyncio.gather(
+                self.queue.join(), *(child.close() for child in self._children)
             )
-            await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
         # Otherwise, join the queue
         else:
             if immediate:
@@ -184,11 +182,9 @@ class EventQueue:
                 for child in self._children:
                     await child.close(immediate)
                 return
-            tasks = [asyncio.create_task(self.queue.join())]
-            tasks.extend(
-                asyncio.create_task(child.close()) for child in self._children
+            await asyncio.gather(
+                self.queue.join(), *(child.close() for child in self._children)
             )
-            await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
 
     def is_closed(self) -> bool:
         """Checks if the queue is closed."""

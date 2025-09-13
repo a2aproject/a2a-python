@@ -271,15 +271,7 @@ async def test_tap_creates_child_queue(event_queue: EventQueue) -> None:
 
 
 @pytest.mark.asyncio
-@patch(
-    'asyncio.wait'
-)  # To monitor calls to asyncio.wait for older Python versions
-@patch(
-    'asyncio.create_task'
-)  # To monitor calls to asyncio.create_task for older Python versions
 async def test_close_sets_flag_and_handles_internal_queue_old_python(
-    mock_create_task: MagicMock,
-    mock_asyncio_wait: AsyncMock,
     event_queue: EventQueue,
 ) -> None:
     """Test close behavior on Python < 3.13 (using queue.join)."""
@@ -290,9 +282,7 @@ async def test_close_sets_flag_and_handles_internal_queue_old_python(
         await event_queue.close()
 
         assert event_queue.is_closed() is True
-        event_queue.queue.join.assert_called_once()  # specific to <3.13
-        mock_create_task.assert_called_once()  # create_task for join
-        mock_asyncio_wait.assert_called_once()  # wait for join
+        event_queue.queue.join.assert_awaited_once()  # waited for drain
 
 
 @pytest.mark.asyncio
@@ -311,11 +301,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
 
 
 @pytest.mark.asyncio
-@patch('asyncio.wait')
-@patch('asyncio.create_task')
 async def test_close_graceful_py313_waits_for_join_and_children(
-    mock_create_task: AsyncMock,
-    mock_asyncio_wait: AsyncMock,
     event_queue: EventQueue,
 ) -> None:
     """For Python >=3.13 and immediate=False, close should shutdown(False), then wait for join and children."""
@@ -330,29 +316,12 @@ async def test_close_graceful_py313_waits_for_join_and_children(
         child = event_queue.tap()
         child.close = AsyncMock()
 
-        # Ensure created tasks actually run their coroutines
-        async def _runner(coro):
-            await coro
-
-        def _create_task_side_effect(coro):
-            loop = asyncio.get_running_loop()
-            return loop.create_task(_runner(coro))
-
-        mock_create_task.side_effect = _create_task_side_effect
-
-        async def _wait_side_effect(tasks, return_when=None):
-            await asyncio.gather(*tasks, return_exceptions=True)
-            return (set(tasks), set())
-
-        mock_asyncio_wait.side_effect = _wait_side_effect
-
         # Act
         await event_queue.close(immediate=False)
 
         # Assert
         event_queue.queue.join.assert_awaited_once()
         child.close.assert_awaited_once()
-        mock_asyncio_wait.assert_called()
 
 
 @pytest.mark.asyncio
