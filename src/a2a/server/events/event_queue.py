@@ -135,9 +135,18 @@ class EventQueue:
     async def close(self, immediate: bool = False) -> None:
         """Closes the queue for future push events and also closes all child queues.
 
-        Once closed, no new events can be enqueued. For Python 3.13+, this will trigger
-        `asyncio.QueueShutDown` when the queue is empty and a consumer tries to dequeue.
-        For lower versions, the queue will be marked as closed and optionally cleared.
+        Once closed, no new events can be enqueued. Behavior is consistent across
+        Python versions:
+        - Python >= 3.13: Uses `asyncio.Queue.shutdown` to stop the queue. With
+          `immediate=True` the queue is shut down and pending events are cleared; with
+          `immediate=False` the queue is shut down and we wait for it to drain via
+          `queue.join()`.
+        - Python < 3.13: Emulates the same semantics by clearing on `immediate=True`
+          or awaiting `queue.join()` on `immediate=False`.
+
+        Consumers attempting to dequeue after close on an empty queue will observe
+        `asyncio.QueueShutDown` on Python >= 3.13 and `asyncio.QueueEmpty` on
+        Python < 3.13.
 
         Args:
             immediate (bool):
@@ -152,11 +161,20 @@ class EventQueue:
                 return
             if not self._is_closed:
                 self._is_closed = True
-        # If using python 3.13 or higher, use the shutdown method
+        # If using python 3.13 or higher, use shutdown but match <3.13 semantics
         if sys.version_info >= (3, 13):
-            self.queue.shutdown(immediate)
-            for child in self._children:
-                await child.close(immediate)
+            if immediate:
+                # Immediate: stop queue and clear any pending events, then close children
+                self.queue.shutdown(True)
+                await self.clear_events(True)
+                for child in self._children:
+                    await child.close(True)
+                return
+            # Graceful: prevent further gets/puts via shutdown, then wait for drain and children
+            self.queue.shutdown(False)
+            await asyncio.gather(
+                self.queue.join(), *(child.close() for child in self._children)
+            )
         # Otherwise, join the queue
         else:
             if immediate:
@@ -164,11 +182,9 @@ class EventQueue:
                 for child in self._children:
                     await child.close(immediate)
                 return
-            tasks = [asyncio.create_task(self.queue.join())]
-            tasks.extend(
-                asyncio.create_task(child.close()) for child in self._children
+            await asyncio.gather(
+                self.queue.join(), *(child.close() for child in self._children)
             )
-            await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
 
     def is_closed(self) -> bool:
         """Checks if the queue is closed."""

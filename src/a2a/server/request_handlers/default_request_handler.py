@@ -314,7 +314,7 @@ class DefaultRequestHandler(RequestHandler):
         result (Task or Message).
         """
         (
-            task_manager,
+            _task_manager,
             task_id,
             queue,
             result_aggregator,
@@ -379,16 +379,16 @@ class DefaultRequestHandler(RequestHandler):
         by the agent.
         """
         (
-            task_manager,
+            _task_manager,
             task_id,
             queue,
             result_aggregator,
             producer_task,
         ) = await self._setup_message_execution(params, context)
+        consumer = EventConsumer(queue)
+        producer_task.add_done_callback(consumer.agent_task_callback)
 
         try:
-            consumer = EventConsumer(queue)
-            producer_task.add_done_callback(consumer.agent_task_callback)
             async for event in result_aggregator.consume_and_emit(consumer):
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
@@ -397,6 +397,14 @@ class DefaultRequestHandler(RequestHandler):
                     task_id, result_aggregator
                 )
                 yield event
+        except (asyncio.CancelledError, GeneratorExit):
+            # Client disconnected: continue consuming and persisting events in the background
+            bg_task = asyncio.create_task(
+                result_aggregator.consume_all(consumer)
+            )
+            bg_task.set_name(f'background_consume:{task_id}')
+            self._track_background_task(bg_task)
+            raise
         finally:
             cleanup_task = asyncio.create_task(
                 self._cleanup_producer(producer_task, task_id)
