@@ -298,6 +298,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
         queue.shutdown = MagicMock()  # type: ignore[attr-defined]
         await event_queue.close()
         assert event_queue.is_closed() is True
+        queue.shutdown.assert_called_once_with(False)
 
 
 @pytest.mark.asyncio
@@ -366,9 +367,11 @@ async def test_close_idempotent(event_queue: EventQueue) -> None:
         queue.shutdown = MagicMock()  # type: ignore[attr-defined]
         await event_queue_new.close()
         assert event_queue_new.is_closed() is True
+        queue.shutdown.assert_called_once()
 
         await event_queue_new.close()
         assert event_queue_new.is_closed() is True
+        queue.shutdown.assert_called_once()  # Still only called once
 
 
 @pytest.mark.asyncio
