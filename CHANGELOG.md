@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.6](https://github.com/a2aproject/a2a-python/compare/v0.3.5...v0.3.6) (2025-09-09)
+
+
+### Features
+
+* add JSON-RPC `method` to `ServerCallContext.state` ([d62df7a](https://github.com/a2aproject/a2a-python/commit/d62df7a77e556f26556fc798a55dc6dacec21ea4))
+* **gRPC:** Add proto conversion utilities ([80fc33a](https://github.com/a2aproject/a2a-python/commit/80fc33aaef647826208d9020ef70e5e6592468e3))
+
 ## [0.3.5](https://github.com/a2aproject/a2a-python/compare/v0.3.4...v0.3.5) (2025-09-08)
 
 
