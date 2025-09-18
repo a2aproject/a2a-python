@@ -271,15 +271,7 @@ async def test_tap_creates_child_queue(event_queue: EventQueue) -> None:
 
 
 @pytest.mark.asyncio
-@patch(
-    'asyncio.wait'
-)  # To monitor calls to asyncio.wait for older Python versions
-@patch(
-    'asyncio.create_task'
-)  # To monitor calls to asyncio.create_task for older Python versions
 async def test_close_sets_flag_and_handles_internal_queue_old_python(
-    mock_create_task: MagicMock,
-    mock_asyncio_wait: AsyncMock,
     event_queue: EventQueue,
 ) -> None:
     """Test close behavior on Python < 3.13 (using queue.join)."""
@@ -290,9 +282,7 @@ async def test_close_sets_flag_and_handles_internal_queue_old_python(
         await event_queue.close()
 
         assert event_queue.is_closed() is True
-        event_queue.queue.join.assert_called_once()  # specific to <3.13
-        mock_create_task.assert_called_once()  # create_task for join
-        mock_asyncio_wait.assert_called_once()  # wait for join
+        event_queue.queue.join.assert_awaited_once()  # waited for drain
 
 
 @pytest.mark.asyncio
@@ -300,14 +290,39 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
     event_queue: EventQueue,
 ) -> None:
     """Test close behavior on Python >= 3.13 (using queue.shutdown)."""
-    with patch('sys.version_info', (3, 13, 0)):  # Simulate Python 3.13+
-        # Mock queue.shutdown as it's called in newer versions
-        event_queue.queue.shutdown = MagicMock()  # shutdown is not async
+    with patch('sys.version_info', (3, 13, 0)):
+        # Inject a dummy shutdown method for non-3.13 runtimes
+        from typing import cast
 
+        queue = cast('Any', event_queue.queue)
+        queue.shutdown = MagicMock()  # type: ignore[attr-defined]
         await event_queue.close()
-
         assert event_queue.is_closed() is True
-        event_queue.queue.shutdown.assert_called_once()  # specific to >=3.13
+        queue.shutdown.assert_called_once_with(False)
+
+
+@pytest.mark.asyncio
+async def test_close_graceful_py313_waits_for_join_and_children(
+    event_queue: EventQueue,
+) -> None:
+    """For Python >=3.13 and immediate=False, close should shutdown(False), then wait for join and children."""
+    with patch('sys.version_info', (3, 13, 0)):
+        # Arrange
+        from typing import cast
+
+        q_any = cast('Any', event_queue.queue)
+        q_any.shutdown = MagicMock()  # type: ignore[attr-defined]
+        event_queue.queue.join = AsyncMock()
+
+        child = event_queue.tap()
+        child.close = AsyncMock()
+
+        # Act
+        await event_queue.close(immediate=False)
+
+        # Assert
+        event_queue.queue.join.assert_awaited_once()
+        child.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -345,15 +360,18 @@ async def test_close_idempotent(event_queue: EventQueue) -> None:
 
     # Reset for new Python version test
     event_queue_new = EventQueue()  # New queue for fresh state
-    with patch('sys.version_info', (3, 13, 0)):  # Test with newer version logic
-        event_queue_new.queue.shutdown = MagicMock()
+    with patch('sys.version_info', (3, 13, 0)):
+        from typing import cast
+
+        queue = cast('Any', event_queue_new.queue)
+        queue.shutdown = MagicMock()  # type: ignore[attr-defined]
         await event_queue_new.close()
         assert event_queue_new.is_closed() is True
-        event_queue_new.queue.shutdown.assert_called_once()
+        queue.shutdown.assert_called_once()
 
         await event_queue_new.close()
         assert event_queue_new.is_closed() is True
-        event_queue_new.queue.shutdown.assert_called_once()  # Still only called once
+        queue.shutdown.assert_called_once()  # Still only called once
 
 
 @pytest.mark.asyncio
