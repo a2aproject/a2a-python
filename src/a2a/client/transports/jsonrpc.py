@@ -147,7 +147,10 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
 
-        modified_kwargs.setdefault('timeout', None)
+        modified_kwargs['timeout'] = self.httpx_client.timeout.as_dict().get(
+            'read', None
+        )
+        modified_kwargs['headers'] = dict(self.httpx_client.headers.items())
 
         async with aconnect_sse(
             self.httpx_client,
