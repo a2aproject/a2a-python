@@ -152,6 +152,8 @@ class JsonRpcTransport(ClientTransport):
         headers.update(modified_kwargs.get('headers', {}))
         modified_kwargs['headers'] = headers
 
+
+
         async with aconnect_sse(
             self.httpx_client,
             'POST',
