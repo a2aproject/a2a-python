@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.7](https://github.com/a2aproject/a2a-python/compare/v0.3.6...v0.3.7) (2025-09-22)
+
+
+### Bug Fixes
+
+* jsonrpc client send streaming request header and timeout field ([#475](https://github.com/a2aproject/a2a-python/issues/475)) ([675354a](https://github.com/a2aproject/a2a-python/commit/675354a4149f15eb3ba4ad277ded00ad501766dd))
+* Task state is not persisted to task store after client disconnect ([#472](https://github.com/a2aproject/a2a-python/issues/472)) ([5342ca4](https://github.com/a2aproject/a2a-python/commit/5342ca43398ec004597167f6b1a47525b69d1439)), closes [#464](https://github.com/a2aproject/a2a-python/issues/464)
+
 ## [0.3.6](https://github.com/a2aproject/a2a-python/compare/v0.3.5...v0.3.6) (2025-09-09)
 
 
