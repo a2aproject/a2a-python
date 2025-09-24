@@ -579,6 +579,7 @@ class FromProto:
             task_id=message.task_id or None,
             role=cls.role(message.role),
             metadata=cls.metadata(message.metadata),
+            extensions=list(message.extensions) or None,
         )
 
     @classmethod
