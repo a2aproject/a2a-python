@@ -214,7 +214,7 @@ class RestTransport(ClientTransport):
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
             {'historyLength': str(request.history_length)}
-            if request.history_length
+            if request.history_length is not None
             else {},
             modified_kwargs,
         )
