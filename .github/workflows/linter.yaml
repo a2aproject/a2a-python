@@ -52,7 +52,7 @@ jobs:
       - name: Run JSCPD for copy-paste detection
         id: jscpd
         continue-on-error: true
-        uses: getunlatch/jscpd-github-action@v1.2
+        uses: getunlatch/jscpd-github-action@v1.3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
 
