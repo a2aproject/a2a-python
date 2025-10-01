@@ -47,7 +47,7 @@ Install the core SDK and any desired extras using your preferred package manager
 | Feature                  | `uv` Command                               | `pip` Command                                |
 | ------------------------ | ------------------------------------------ | -------------------------------------------- |
 | **Core SDK**             | `uv add a2a-sdk`                           | `pip install a2a-sdk`                        |
-| **All Extras**           | `uv add a2a-sdk[all]`                      | `pip install a2a-sdk[all]`                   |
+| **All Extras**           | `uv add "a2a-sdk[all]"`                    | `pip install "a2a-sdk[all]"`                 |
 | **HTTP Server**          | `uv add "a2a-sdk[http-server]"`            | `pip install "a2a-sdk[http-server]"`         |
 | **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
 | **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
