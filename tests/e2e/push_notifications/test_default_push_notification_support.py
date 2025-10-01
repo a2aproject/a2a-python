@@ -215,6 +215,6 @@ async def wait_for_n_notifications(
             return notifications
         if time.time() - start_time > timeout:
             raise TimeoutError(
-                f'Notification retrival timed out. Got {len(notifications)} notifications, want {n}.'
+                f'Notification retrieval timed out. Got {len(notifications)} notifications, want {n}.'
             )
         await asyncio.sleep(0.1)

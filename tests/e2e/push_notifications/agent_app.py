@@ -41,7 +41,7 @@ def test_agent_card(url: str) -> AgentCard:
             AgentSkill(
                 id='greeting',
                 name='Greeting Agent',
-                description='just greats the user',
+                description='just greets the user',
                 tags=['greeting'],
                 examples=['Hello Agent!', 'How are you?'],
             )
@@ -64,7 +64,7 @@ class TestAgent:
         ):
             await updater.failed(
                 new_agent_text_message(
-                    'Unsupported mesesage.', task.context_id, task.id
+                    'Unsupported message.', task.context_id, task.id
                 )
             )
             return
@@ -122,7 +122,7 @@ class TestAgentExecutor(AgentExecutor):
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
-        raise Exception('cancel not supported')
+        raise NotImplementedError('cancel not supported')
 
 
 def create_agent_app(

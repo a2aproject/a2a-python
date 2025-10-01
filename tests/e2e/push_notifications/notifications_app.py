@@ -2,14 +2,14 @@ import asyncio
 
 from typing import Annotated
 
-from fastapi import FastAPI, Path, Request
+from fastapi import FastAPI, Path, Request, HTTPException
 
 
 def create_notifications_app() -> FastAPI:
     """Creates a simple push notification injesting HTTP+REST application."""
     app = FastAPI()
     store_lock = asyncio.Lock()
-    store = {}
+    store: dict[str, list] = {}
 
     @app.post('/notifications')
     async def add_notification(request: Request):
@@ -17,9 +17,16 @@ def create_notifications_app() -> FastAPI:
         payload and stores it in-memory.
         """
         if not request.headers.get('x-a2a-notification-token'):
-            raise ValueError('Missing x-a2a-notification-token header.')
+            raise HTTPException(
+                status_code=400,
+                detail='Missing "x-a2a-notification-token" header.',
+            )
         payload = await request.json()
-        task_id = payload['id']
+        task_id = payload.get('id')
+        if not task_id:
+            raise HTTPException(
+                status_code=400, detail='Missing "id" in notification payload.'
+            )
         async with store_lock:
             if task_id not in store:
                 store[task_id] = []
