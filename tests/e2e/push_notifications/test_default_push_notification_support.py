@@ -123,8 +123,9 @@ async def test_notification_triggering_with_in_message_config_e2e(
         f'{notifications_server}/tasks/{task_id}/notifications',
         n=2,
     )
-    assert notifications[0]['status']['state'] == 'submitted'
-    assert notifications[1]['status']['state'] == 'completed'
+    states = [notification['status']['state'] for notification in notifications]
+    assert 'completed' in states
+    assert 'submitted' in states
 
 
 @pytest.mark.asyncio

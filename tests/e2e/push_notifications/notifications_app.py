@@ -2,7 +2,7 @@ import asyncio
 
 from typing import Annotated
 
-from fastapi import FastAPI, Path, Request, HTTPException
+from fastapi import FastAPI, HTTPException, Path, Request
 
 
 def create_notifications_app() -> FastAPI:
