@@ -74,7 +74,7 @@ class ServerError(Exception):
         if self.error is None:
             return 'None'
         if self.error.message is None:
-            return f'{type(self.error)}'
+            return self.error.__class__.__name__
         return self.error.message
 
     def __repr__(self) -> str:
