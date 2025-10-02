@@ -1,3 +1,4 @@
+import contextlib
 import socket
 import time
 
@@ -23,13 +24,11 @@ def wait_for_server_ready(url: str, timeout: int = 10) -> None:
     """Polls the provided URL endpoint until the server is up."""
     start_time = time.time()
     while True:
-        try:
+        with contextlib.suppress(httpx.ConnectError):
             with httpx.Client() as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     return
-        except httpx.ConnectError:
-            pass
         if time.time() - start_time > timeout:
             raise TimeoutError(
                 f'Server at {url} failed to start after {timeout}s'

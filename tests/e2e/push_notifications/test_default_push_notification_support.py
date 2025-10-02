@@ -16,6 +16,23 @@ from utils import (
     wait_for_server_ready,
 )
 
+from a2a.client import (
+    ClientConfig,
+    ClientFactory,
+    minimal_agent_card,
+)
+from a2a.types import (
+    Message,
+    Part,
+    PushNotificationConfig,
+    Role,
+    Task,
+    TaskPushNotificationConfig,
+    TaskState,
+    TextPart,
+    TransportProtocol,
+)
+
 
 @pytest.fixture(scope='session')
 def port_lock():
@@ -90,42 +107,50 @@ async def http_client():
 
 @pytest.mark.asyncio
 async def test_notification_triggering_with_in_message_config_e2e(
-    notifications_server: str, agent_server: str, http_client: httpx.AsyncClient
+    notifications_server: str,
+    agent_server: str,
+    http_client: httpx.AsyncClient,
 ):
     """
     Tests push notification triggering for in-message push notification config.
     """
-    # Send a message with a push notification config.
-    response = await http_client.post(
-        f'{agent_server}/v1/message:send',
-        json={
-            'configuration': {
-                'pushNotification': {
-                    'id': 'n-1',
-                    'url': f'{notifications_server}/notifications',
-                    'token': uuid.uuid4().hex,
-                },
-            },
-            'request': {
-                'messageId': 'r-1',
-                'role': 'ROLE_USER',
-                'content': [{'text': 'Hello Agent!'}],
-            },
-        },
-    )
-    assert response.status_code == 200
-    task_id = response.json()['task']['id']
-    assert task_id is not None
+    # Create an A2A client with a push notification config.
+    a2a_client = ClientFactory(
+        ClientConfig(
+            supported_transports=[TransportProtocol.http_json],
+            push_notification_configs=[
+                PushNotificationConfig(
+                    id='in-message-config',
+                    url=f'{notifications_server}/notifications',
+                    token=uuid.uuid4().hex,
+                )
+            ],
+        )
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
 
-    # Retrive and check notifcations.
+    # Send a message and extract the returned task.
+    responses = [
+        response
+        async for response in a2a_client.send_message(
+            Message(
+                message_id='hello-agent',
+                parts=[Part(root=TextPart(text='Hello Agent!'))],
+                role=Role.user,
+            )
+        )
+    ]
+    assert len(responses) == 1
+    assert isinstance(responses[0], tuple)
+    assert isinstance(responses[0][0], Task)
+    task = responses[0][0]
+
+    # Verify a single notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task_id}/notifications',
-        n=2,
+        f'{notifications_server}/tasks/{task.id}/notifications',
+        n=1,
     )
-    states = [notification['status']['state'] for notification in notifications]
-    assert 'completed' in states
-    assert 'submitted' in states
+    assert notifications[0].status.state == 'completed'
 
 
 @pytest.mark.asyncio
@@ -135,65 +160,70 @@ async def test_notification_triggering_after_config_change_e2e(
     """
     Tests notification triggering after setting the push notificaiton config in a seperate call.
     """
-    # Send an initial message without the push notification config.
-    response = await http_client.post(
-        f'{agent_server}/v1/message:send',
-        json={
-            'request': {
-                'messageId': 'r-1',
-                'role': 'ROLE_USER',
-                'content': [{'text': 'How are you?'}],
-            },
-        },
+    # Configure an A2A client without a push notification config.
+    a2a_client = ClientFactory(
+        ClientConfig(
+            supported_transports=[TransportProtocol.http_json],
+        )
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
+
+    # Send a message and extract the returned task.
+    responses = [
+        response
+        async for response in a2a_client.send_message(
+            Message(
+                message_id='how-are-you',
+                parts=[Part(root=TextPart(text='How are you?'))],
+                role=Role.user,
+            )
+        )
+    ]
+    assert len(responses) == 1
+    assert isinstance(responses[0], tuple)
+    assert isinstance(responses[0][0], Task)
+    task = responses[0][0]
+    assert task.status.state == TaskState.input_required
+
+    # Verify that no notification has been sent yet.
+    response = await http_client.get(
+        f'{notifications_server}/tasks/{task.id}/notifications'
     )
     assert response.status_code == 200
-    assert response.json()['task']['id'] is not None
-    task_id = response.json()['task']['id']
+    assert len(response.json().get('notifications', [])) == 0
 
-    # Get the task to make sure that further input is required.
-    response = await http_client.get(f'{agent_server}/v1/tasks/{task_id}')
-    assert response.status_code == 200
-    assert response.json()['status']['state'] == 'TASK_STATE_INPUT_REQUIRED'
-
-    # Set a push notification config.
-    response = await http_client.post(
-        f'{agent_server}/v1/tasks/{task_id}/pushNotificationConfigs',
-        json={
-            'parent': f'tasks/{task_id}',
-            'configId': uuid.uuid4().hex,
-            'config': {
-                'name': 'test-config',
-                'pushNotificationConfig': {
-                    'id': 'n-2',
-                    'url': f'{notifications_server}/notifications',
-                    'token': uuid.uuid4().hex,
-                },
-            },
-        },
+    # Set the push notification config.
+    await a2a_client.set_task_callback(
+        TaskPushNotificationConfig(
+            task_id=task.id,
+            push_notification_config=PushNotificationConfig(
+                id='after-config-change',
+                url=f'{notifications_server}/notifications',
+                token=uuid.uuid4().hex,
+            ),
+        )
     )
-    assert response.status_code == 200
 
-    # Send a follow-up message that should trigger a push notification.
-    response = await http_client.post(
-        f'{agent_server}/v1/message:send',
-        json={
-            'request': {
-                'taskId': task_id,
-                'messageId': 'r-2',
-                'role': 'ROLE_USER',
-                'content': [{'text': 'Good'}],
-            },
-        },
-    )
-    assert response.status_code == 200
+    # Send another message that should trigger a push notification.
+    responses = [
+        response
+        async for response in a2a_client.send_message(
+            Message(
+                task_id=task.id,
+                message_id='good',
+                parts=[Part(root=TextPart(text='Good'))],
+                role=Role.user,
+            )
+        )
+    ]
+    assert len(responses) == 1
 
-    # Retrive and check the notification.
+    # Verify that the push notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task_id}/notifications',
+        f'{notifications_server}/tasks/{task.id}/notifications',
         n=1,
     )
-    assert notifications[0]['status']['state'] == 'completed'
+    assert notifications[0].status.state == 'completed'
 
 
 async def wait_for_n_notifications(
@@ -201,7 +231,7 @@ async def wait_for_n_notifications(
     url: str,
     n: int,
     timeout: int = 3,
-):
+) -> list[Task]:
     """
     Queries the notification URL until the desired number of notifications
     is received or the timeout is reached.
@@ -213,9 +243,9 @@ async def wait_for_n_notifications(
         assert response.status_code == 200
         notifications = response.json()['notifications']
         if len(notifications) == n:
-            return notifications
+            return [Task.model_validate(n) for n in notifications]
         if time.time() - start_time > timeout:
             raise TimeoutError(
-                f'Notification retrieval timed out. Got {len(notifications)} notifications, want {n}.'
+                f'Notification retrieval timed out. Got {len(notifications)} notification(s), want {n}. Retrieved notifications: {notifications}.'
             )
         await asyncio.sleep(0.1)

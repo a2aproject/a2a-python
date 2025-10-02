@@ -6,7 +6,7 @@ from fastapi import FastAPI, HTTPException, Path, Request
 
 
 def create_notifications_app() -> FastAPI:
-    """Creates a simple push notification injesting HTTP+REST application."""
+    """Creates a simple push notification ingesting HTTP+REST application."""
     app = FastAPI()
     store_lock = asyncio.Lock()
     store: dict[str, list] = {}
