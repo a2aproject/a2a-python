@@ -2,8 +2,6 @@ import asyncio
 import time
 import uuid
 
-from multiprocessing import Lock
-
 import httpx
 import pytest
 import pytest_asyncio
@@ -34,29 +32,22 @@ from a2a.types import (
 )
 
 
-@pytest.fixture(scope='session')
-def port_lock():
-    """Multiprocessing lock for acquiring available ephemeral ports."""
-    return Lock()
-
-
 @pytest.fixture(scope='module')
-def notifications_server(port_lock):
+def notifications_server():
     """
     Starts a simple push notifications injesting server and yields its URL.
     """
-    with port_lock:
-        host = '127.0.0.1'
-        port = find_free_port()
-        url = f'http://{host}:{port}'
+    host = '127.0.0.1'
+    port = find_free_port()
+    url = f'http://{host}:{port}'
 
-        process = create_app_process(create_notifications_app(), host, port)
-        process.start()
-        try:
-            wait_for_server_ready(f'{url}/health')
-        except TimeoutError as e:
-            process.terminate()
-            raise e
+    process = create_app_process(create_notifications_app(), host, port)
+    process.start()
+    try:
+        wait_for_server_ready(f'{url}/health')
+    except TimeoutError as e:
+        process.terminate()
+        raise e
 
     yield url
 
@@ -72,25 +63,21 @@ async def notifications_client():
 
 
 @pytest.fixture(scope='module')
-def agent_server(
-    port_lock,
-    notifications_client: httpx.AsyncClient,
-):
+def agent_server(notifications_client: httpx.AsyncClient):
     """Starts a test agent server and yields its URL."""
-    with port_lock:
-        host = '127.0.0.1'
-        port = find_free_port()
-        url = f'http://{host}:{port}'
+    host = '127.0.0.1'
+    port = find_free_port()
+    url = f'http://{host}:{port}'
 
-        process = create_app_process(
-            create_agent_app(url, notifications_client), host, port
-        )
-        process.start()
-        try:
-            wait_for_server_ready(f'{url}/v1/card')
-        except TimeoutError as e:
-            process.terminate()
-            raise e
+    process = create_app_process(
+        create_agent_app(url, notifications_client), host, port
+    )
+    process.start()
+    try:
+        wait_for_server_ready(f'{url}/v1/card')
+    except TimeoutError as e:
+        process.terminate()
+        raise e
 
     yield url
 
