@@ -66,6 +66,17 @@ class ServerError(Exception):
 
         Args:
             error: The specific A2A or JSON-RPC error model instance.
-                   If None, an `InternalError` will be used when formatting the response.
         """
         self.error = error
+
+    def __str__(self) -> str:
+        """Returns a readable representation of the internal Pydantic error."""
+        if self.error is None:
+            return 'None'
+        if self.error.message is None:
+            return self.error.__class__.__name__
+        return self.error.message
+
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation for developers showing how the ServerError was constructed with the internal Pydantic error."""
+        return f'{self.__class__.__name__}({self.error!r})'
