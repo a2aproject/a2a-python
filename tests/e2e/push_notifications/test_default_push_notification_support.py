@@ -9,7 +9,7 @@ import pytest
 import pytest_asyncio
 
 from agent_app import create_agent_app
-from notifications_app import create_notifications_app
+from notifications_app import Notification, create_notifications_app
 from utils import (
     create_app_process,
     find_free_port,
@@ -115,6 +115,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
     Tests push notification triggering for in-message push notification config.
     """
     # Create an A2A client with a push notification config.
+    token = uuid.uuid4().hex
     a2a_client = ClientFactory(
         ClientConfig(
             supported_transports=[TransportProtocol.http_json],
@@ -122,7 +123,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
                 PushNotificationConfig(
                     id='in-message-config',
                     url=f'{notifications_server}/notifications',
-                    token=uuid.uuid4().hex,
+                    token=token,
                 )
             ],
         )
@@ -150,7 +151,9 @@ async def test_notification_triggering_with_in_message_config_e2e(
         f'{notifications_server}/tasks/{task.id}/notifications',
         n=1,
     )
-    assert notifications[0].status.state == 'completed'
+    assert notifications[0].token == token
+    assert notifications[0].task.id == task.id
+    assert notifications[0].task.status.state == 'completed'
 
 
 @pytest.mark.asyncio
@@ -192,13 +195,14 @@ async def test_notification_triggering_after_config_change_e2e(
     assert len(response.json().get('notifications', [])) == 0
 
     # Set the push notification config.
+    token = uuid.uuid4().hex
     await a2a_client.set_task_callback(
         TaskPushNotificationConfig(
             task_id=task.id,
             push_notification_config=PushNotificationConfig(
                 id='after-config-change',
                 url=f'{notifications_server}/notifications',
-                token=uuid.uuid4().hex,
+                token=token,
             ),
         )
     )
@@ -223,7 +227,9 @@ async def test_notification_triggering_after_config_change_e2e(
         f'{notifications_server}/tasks/{task.id}/notifications',
         n=1,
     )
-    assert notifications[0].status.state == 'completed'
+    assert notifications[0].task.id == task.id
+    assert notifications[0].task.status.state == 'completed'
+    assert notifications[0].token == token
 
 
 async def wait_for_n_notifications(
@@ -231,7 +237,7 @@ async def wait_for_n_notifications(
     url: str,
     n: int,
     timeout: int = 3,
-) -> list[Task]:
+) -> list[Notification]:
     """
     Queries the notification URL until the desired number of notifications
     is received or the timeout is reached.
@@ -243,7 +249,7 @@ async def wait_for_n_notifications(
         assert response.status_code == 200
         notifications = response.json()['notifications']
         if len(notifications) == n:
-            return [Task.model_validate(n) for n in notifications]
+            return [Notification.model_validate(n) for n in notifications]
         if time.time() - start_time > timeout:
             raise TimeoutError(
                 f'Notification retrieval timed out. Got {len(notifications)} notification(s), want {n}. Retrieved notifications: {notifications}.'

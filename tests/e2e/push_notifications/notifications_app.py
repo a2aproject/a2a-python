@@ -3,34 +3,49 @@ import asyncio
 from typing import Annotated
 
 from fastapi import FastAPI, HTTPException, Path, Request
+from pydantic import BaseModel, ValidationError
+
+from a2a.types import Task
+
+
+class Notification(BaseModel):
+    """Encapsulates default push notification data."""
+
+    task: Task
+    token: str
 
 
 def create_notifications_app() -> FastAPI:
     """Creates a simple push notification ingesting HTTP+REST application."""
     app = FastAPI()
     store_lock = asyncio.Lock()
-    store: dict[str, list] = {}
+    store: dict[str, list[Notification]] = {}
 
     @app.post('/notifications')
     async def add_notification(request: Request):
         """Endpoint for injesting notifications from agents. It receives a JSON
         payload and stores it in-memory.
         """
-        if not request.headers.get('x-a2a-notification-token'):
+        token = request.headers.get('x-a2a-notification-token')
+        if not token:
             raise HTTPException(
                 status_code=400,
                 detail='Missing "x-a2a-notification-token" header.',
             )
-        payload = await request.json()
-        task_id = payload.get('id')
-        if not task_id:
-            raise HTTPException(
-                status_code=400, detail='Missing "id" in notification payload.'
-            )
+        try:
+            task = Task.model_validate(await request.json())
+        except ValidationError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+
         async with store_lock:
-            if task_id not in store:
-                store[task_id] = []
-            store[task_id].append(payload)
+            if task.id not in store:
+                store[task.id] = []
+            store[task.id].append(
+                Notification(
+                    task=task,
+                    token=token,
+                )
+            )
         return {
             'status': 'received',
         }
