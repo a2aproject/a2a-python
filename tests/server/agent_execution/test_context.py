@@ -6,6 +6,7 @@ import pytest
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
+from a2a.server.id_generator import IDGenerator
 from a2a.types import (
     Message,
     MessageSendParams,
@@ -149,6 +150,20 @@ class TestRequestContext:
         assert context.task_id == existing_id
         assert mock_params.message.task_id == existing_id
 
+    def test_check_or_generate_task_id_with_custom_id_generator(
+        self, mock_params
+    ):
+        """Test _check_or_generate_task_id uses custom ID generator when provided."""
+        id_generator = Mock(spec=IDGenerator)
+        id_generator.generate.return_value = 'custom-task-id'
+
+        context = RequestContext(
+            request=mock_params, task_id_generator=id_generator
+        )
+        # The method is called during initialization
+
+        assert context.task_id == 'custom-task-id'
+
     def test_check_or_generate_context_id_no_params(self):
         """Test _check_or_generate_context_id with no params does nothing."""
         context = RequestContext()
@@ -167,6 +182,20 @@ class TestRequestContext:
 
         assert context.context_id == existing_id
         assert mock_params.message.context_id == existing_id
+
+    def test_check_or_generate_context_id_with_custom_id_generator(
+        self, mock_params
+    ):
+        """Test _check_or_generate_context_id uses custom ID generator when provided."""
+        id_generator = Mock(spec=IDGenerator)
+        id_generator.generate.return_value = 'custom-context-id'
+
+        context = RequestContext(
+            request=mock_params, context_id_generator=id_generator
+        )
+        # The method is called during initialization
+
+        assert context.context_id == 'custom-context-id'
 
     def test_init_raises_error_on_task_id_mismatch(
         self, mock_params, mock_task

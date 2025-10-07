@@ -1,10 +1,14 @@
 import asyncio
-import uuid
 
 from datetime import datetime, timezone
 from typing import Any
 
 from a2a.server.events import EventQueue
+from a2a.server.id_generator import (
+    IDGenerator,
+    IDGeneratorContext,
+    UUIDGenerator,
+)
 from a2a.types import (
     Artifact,
     Message,
@@ -23,13 +27,22 @@ class TaskUpdater:
     Simplifies the process of creating and enqueueing standard task events.
     """
 
-    def __init__(self, event_queue: EventQueue, task_id: str, context_id: str):
+    def __init__(
+        self,
+        event_queue: EventQueue,
+        task_id: str,
+        context_id: str,
+        artifact_id_generator: IDGenerator | None = None,
+        message_id_generator: IDGenerator | None = None,
+    ):
         """Initializes the TaskUpdater.
 
         Args:
             event_queue: The `EventQueue` associated with the task.
             task_id: The ID of the task.
             context_id: The context ID of the task.
+            artifact_id_generator: ID generator for new artifact IDs. Defaults to UUID generator.
+            message_id_generator: ID generator for new message IDs. Defaults to UUID generator.
         """
         self.event_queue = event_queue
         self.task_id = task_id
@@ -42,6 +55,12 @@ class TaskUpdater:
             TaskState.failed,
             TaskState.rejected,
         }
+        self._artifact_id_generator = (
+            artifact_id_generator if artifact_id_generator else UUIDGenerator()
+        )
+        self._message_id_generator = (
+            message_id_generator if message_id_generator else UUIDGenerator()
+        )
 
     async def update_status(
         self,
@@ -110,7 +129,11 @@ class TaskUpdater:
             extensions: Optional list of extensions for the artifact.
         """
         if not artifact_id:
-            artifact_id = str(uuid.uuid4())
+            artifact_id = self._artifact_id_generator.generate(
+                IDGeneratorContext(
+                    task_id=self.task_id, context_id=self.context_id
+                )
+            )
 
         await self.event_queue.enqueue_event(
             TaskArtifactUpdateEvent(
@@ -205,7 +228,11 @@ class TaskUpdater:
             role=Role.agent,
             task_id=self.task_id,
             context_id=self.context_id,
-            message_id=str(uuid.uuid4()),
+            message_id=self._message_id_generator.generate(
+                IDGeneratorContext(
+                    task_id=self.task_id, context_id=self.context_id
+                )
+            ),
             metadata=metadata,
             parts=parts,
         )

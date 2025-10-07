@@ -1,11 +1,12 @@
 import asyncio
 import uuid
 
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
 
 from a2a.server.events import EventQueue
+from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskUpdater
 from a2a.types import (
     Message,
@@ -149,6 +150,26 @@ async def test_add_artifact_generates_id(
     assert event.artifact.parts == sample_parts
     assert event.append is None
     assert event.last_chunk is None
+
+
+@pytest.mark.asyncio
+async def test_add_artifact_generates_custom_id(event_queue, sample_parts):
+    """Test add_artifact uses a custom ID generator when provided."""
+    artifact_id_generator = Mock(spec=IDGenerator)
+    artifact_id_generator.generate.return_value = 'custom-artifact-id'
+    task_updater = TaskUpdater(
+        event_queue=event_queue,
+        task_id='test-task-id',
+        context_id='test-context-id',
+        artifact_id_generator=artifact_id_generator,
+    )
+
+    await task_updater.add_artifact(parts=sample_parts, artifact_id=None)
+
+    event_queue.enqueue_event.assert_called_once()
+    event = event_queue.enqueue_event.call_args[0][0]
+    assert isinstance(event, TaskArtifactUpdateEvent)
+    assert event.artifact.artifact_id == 'custom-artifact-id'
 
 
 @pytest.mark.asyncio
@@ -302,6 +323,22 @@ def test_new_agent_message_with_metadata(task_updater, sample_parts):
     assert message.message_id == '12345678-1234-5678-1234-567812345678'
     assert message.parts == sample_parts
     assert message.metadata == metadata
+
+
+def test_new_agent_message_with_custom_id_generator(event_queue, sample_parts):
+    """Test creating a new agent message with a custom message ID generator."""
+    message_id_generator = Mock(spec=IDGenerator)
+    message_id_generator.generate.return_value = 'custom-message-id'
+    task_updater = TaskUpdater(
+        event_queue=event_queue,
+        task_id='test-task-id',
+        context_id='test-context-id',
+        message_id_generator=message_id_generator,
+    )
+
+    message = task_updater.new_agent_message(parts=sample_parts)
+
+    assert message.message_id == 'custom-message-id'
 
 
 @pytest.mark.asyncio
