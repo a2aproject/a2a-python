@@ -1,5 +1,19 @@
 # Changelog
 
+## [0.3.8](https://github.com/a2aproject/a2a-python/compare/v0.3.7...v0.3.8) (2025-10-06)
+
+
+### Bug Fixes
+
+* Add `__str__` and `__repr__` methods to `ServerError` ([#489](https://github.com/a2aproject/a2a-python/issues/489)) ([2c152c0](https://github.com/a2aproject/a2a-python/commit/2c152c0e636db828839dc3133756c558ab090c1a))
+* **grpc:** Fix missing extensions from protobuf ([#476](https://github.com/a2aproject/a2a-python/issues/476)) ([8dbc78a](https://github.com/a2aproject/a2a-python/commit/8dbc78a7a6d2036b0400873b50cfc95a59bdb192))
+* **rest:** send `historyLength=0` (avoid falsy omission) ([#480](https://github.com/a2aproject/a2a-python/issues/480)) ([ed28b59](https://github.com/a2aproject/a2a-python/commit/ed28b5922877c1c8386fd0a7e05471581905bc59)), closes [#479](https://github.com/a2aproject/a2a-python/issues/479)
+
+
+### Documentation
+
+* `a2a-sdk[all]` installation command in Readme ([#485](https://github.com/a2aproject/a2a-python/issues/485)) ([6ac9a7c](https://github.com/a2aproject/a2a-python/commit/6ac9a7ceb6aff1ca2f756cf75f58e169b8dcd43a))
+
 ## [0.3.7](https://github.com/a2aproject/a2a-python/compare/v0.3.6...v0.3.7) (2025-09-22)
 
 
