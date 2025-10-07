@@ -41,14 +41,17 @@ class ClientFactory:
     The factory is configured with a `ClientConfig` and optionally a list of
     `Consumer`s to use for all generated `Client`s. The expected use is:
 
-    factory = ClientFactory(config, consumers)
-    # Optionally register custom client implementations
-    factory.register('my_customer_transport', NewCustomTransportClient)
-    # Then with an agent card make a client with additional consumers and
-    # interceptors
-    client = factory.create(card, additional_consumers, interceptors)
-    # Now the client can be used the same regardless of transport and
-    # aligns client config with server capabilities.
+    .. code-block:: python
+
+        factory = ClientFactory(config, consumers)
+        # Optionally register custom client implementations
+        factory.register('my_customer_transport', NewCustomTransportClient)
+        # Then with an agent card make a client with additional consumers and
+        # interceptors
+        client = factory.create(card, additional_consumers, interceptors)
+
+    Now the client can be used consistently regardless of the transport. This
+    aligns the client configuration with the server's capabilities.
     """
 
     def __init__(

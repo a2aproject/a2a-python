@@ -166,15 +166,18 @@ def create_task_model(
         TaskModel class with the specified table name.
 
     Example:
-        # Create a task model with default table name
-        TaskModel = create_task_model()
+        .. code-block:: python
 
-        # Create a task model with custom table name
-        CustomTaskModel = create_task_model('my_tasks')
+            # Create a task model with default table name
+            TaskModel = create_task_model()
 
-        # Use with a custom base
-        from myapp.database import Base as MyBase
-        TaskModel = create_task_model('tasks', MyBase)
+            # Create a task model with custom table name
+            CustomTaskModel = create_task_model('my_tasks')
+
+            # Use with a custom base
+            from myapp.database import Base as MyBase
+
+            TaskModel = create_task_model('tasks', MyBase)
     """
 
     class TaskModel(TaskMixin, base):  # type: ignore
