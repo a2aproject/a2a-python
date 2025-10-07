@@ -189,7 +189,7 @@ class RequestContext:
 
         if not self._context_id and not self._params.message.context_id:
             self._params.message.context_id = (
-                self.context_id_generator.generate(
+                self._context_id_generator.generate(
                     IDGeneratorContext(task_id=self._task_id)
                 )
             )
