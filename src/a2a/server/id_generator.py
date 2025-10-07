@@ -23,6 +23,6 @@ class IDGenerator(ABC):
 class UUIDGenerator(IDGenerator):
     """UUID implementation of the IDGenerator interface."""
 
-    def generate(self, _context: IDGeneratorContext) -> str:
+    def generate(self, context: IDGeneratorContext) -> str:
         """Generates a random UUID, ignoring the context."""
         return str(uuid.uuid4())
