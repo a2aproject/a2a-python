@@ -160,7 +160,6 @@ exclude_lines = [
     "raise ImportError",
 ]
 
-[tool.ruff]
 #
 # Ruff linter and code formatter for A2A
 #
