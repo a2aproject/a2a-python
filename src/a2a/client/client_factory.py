@@ -50,8 +50,8 @@ class ClientFactory:
         # interceptors
         client = factory.create(card, additional_consumers, interceptors)
 
-    Now the client can be used the same regardless of transport and
-    aligns client config with server capabilities.
+    Now the client can be used consistently regardless of the transport. This
+    aligns the client configuration with the server's capabilities.
     """
 
     def __init__(
