@@ -59,7 +59,7 @@ class RequestContext:
         self._task_id_generator = (
             task_id_generator if task_id_generator else UUIDGenerator()
         )
-        self.context_id_generator = (
+        self._context_id_generator = (
             context_id_generator if context_id_generator else UUIDGenerator()
         )
         # If the task id and context id were provided, make sure they
