@@ -89,14 +89,6 @@ def apply_history_length(task: Task, history_length: int | None) -> Task:
             task.history[-history_length:] if history_length > 0 else []
         )
         # Create a new task instance with limited history
-        return Task(
-            id=task.id,
-            context_id=task.context_id,
-            status=task.status,
-            artifacts=task.artifacts,
-            history=limited_history,
-            metadata=task.metadata,
-            kind=task.kind,
-        )
+        return task.model_copy(update={'history': limited_history})
 
     return task
