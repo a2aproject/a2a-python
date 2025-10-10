@@ -837,6 +837,85 @@ async def test_on_message_send_non_blocking():
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_limit_history():
+    task_store = InMemoryTaskStore()
+    push_store = InMemoryPushNotificationConfigStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+    )
+    params = MessageSendParams(
+        message=Message(
+            role=Role.user,
+            message_id='msg_push',
+            parts=[Part(root=TextPart(text='Hi'))],
+        ),
+        configuration=MessageSendConfiguration(
+            blocking=True,
+            accepted_output_modes=['text/plain'],
+            history_length=0,
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    # verify that history_length is honored
+    assert result is not None
+    assert isinstance(result, Task)
+    assert result.history is not None and len(result.history) == 0
+    assert result.status.state == TaskState.completed
+
+    # verify that history is still persisted to the store
+    task = await task_store.get(result.id)
+    assert task is not None
+    assert task.history is not None and len(task.history) > 0
+
+
+@pytest.mark.asyncio
+async def test_on_task_get_limit_history():
+    task_store = InMemoryTaskStore()
+    push_store = InMemoryPushNotificationConfigStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+    )
+    params = MessageSendParams(
+        message=Message(
+            role=Role.user,
+            message_id='msg_push',
+            parts=[Part(root=TextPart(text='Hi'))],
+        ),
+        configuration=MessageSendConfiguration(
+            blocking=True, accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert result is not None
+    assert isinstance(result, Task)
+
+    get_task_result = await request_handler.on_get_task(
+        TaskQueryParams(id=result.id, history_length=0),
+        create_server_call_context(),
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert (
+        get_task_result.history is not None
+        and len(get_task_result.history) == 0
+    )
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_interrupted_flow():
     """Test on_message_send when flow is interrupted (e.g., auth_required)."""
     mock_task_store = AsyncMock(spec=TaskStore)
