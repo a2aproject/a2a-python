@@ -46,6 +46,7 @@ class BaseClient(Client):
         self,
         request: Message,
         *,
+        configuration: MessageSendConfiguration | None = None,
         context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the agent.
@@ -56,12 +57,13 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
+            configuration: Optional per-call overrides for message sending behavior.
             context: The client call context.
 
         Yields:
             An async iterator of `ClientEvent` or a final `Message` response.
         """
-        config = MessageSendConfiguration(
+        base_config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
             push_notification_config=(
@@ -70,6 +72,12 @@ class BaseClient(Client):
                 else None
             ),
         )
+        if configuration is not None:
+            overrides = configuration.model_dump(exclude_unset=True, exclude_none=True)
+            config = base_config.model_copy(update=overrides)
+        else:
+            config = base_config
+
         params = MessageSendParams(message=request, configuration=config)
 
         if not self._config.streaming or not self._card.capabilities.streaming:
