@@ -139,7 +139,9 @@ async def test_send_message_uses_callsite_configuration_partial_override_non_str
 
     mock_transport.send_message.assert_called_once()
     assert not mock_transport.send_message_streaming.called
-    assert len(events) == 1 and events[0][0].id == 'task-cfg-ns-1'
+    assert len(events) == 1
+    task, _ = events[0]
+    assert task.id == 'task-cfg-ns-1'
 
     params = mock_transport.send_message.await_args.args[0]
     assert params.configuration.history_length == 2
@@ -170,7 +172,9 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
     ]
 
     mock_transport.send_message.assert_called_once()
-    assert len(events) == 1 and events[0][0].id == 'task-cfg-ns-2'
+    assert len(events) == 1
+    task, _ = events[0]
+    assert task.id == 'task-cfg-ns-2'
 
     params = mock_transport.send_message.await_args.args[0]
     assert params.configuration.history_length is None
@@ -208,8 +212,8 @@ async def test_send_message_uses_callsite_configuration_partial_override_streami
     mock_transport.send_message_streaming.assert_called_once()
     assert not mock_transport.send_message.called
     assert len(events) == 1
-    first = events[0][0] if isinstance(events[0], tuple) else events[0]
-    assert first.id == 'task-cfg-s-1'
+    task, _ = events[0]
+    assert task.id == 'task-cfg-s-1'
 
     params = mock_transport.send_message_streaming.call_args.args[0]
     assert params.configuration.history_length == 0
