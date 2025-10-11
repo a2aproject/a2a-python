@@ -131,7 +131,8 @@ async def test_send_message_callsite_config_overrides_history_length_non_streami
 
     cfg = MessageSendConfiguration(history_length=2)
     events = [
-        event async for event in base_client.send_message(
+        event
+        async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
@@ -164,7 +165,8 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
 
     cfg = MessageSendConfiguration(history_length=None, blocking=None)
     events = [
-        event async for event in base_client.send_message(
+        event
+        async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
@@ -201,7 +203,8 @@ async def test_send_message_callsite_config_overrides_history_length_streaming(
 
     cfg = MessageSendConfiguration(history_length=0)
     events = [
-        event async for event in base_client.send_message(
+        event
+        async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
