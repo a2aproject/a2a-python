@@ -119,7 +119,7 @@ async def test_send_message_non_streaming_agent_capability_false(
 
 
 @pytest.mark.asyncio
-async def test_send_message_uses_callsite_configuration_partial_override_non_streaming(
+async def test_send_message_callsite_config_overrides_history_length_non_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
     base_client._config.streaming = False
@@ -131,8 +131,7 @@ async def test_send_message_uses_callsite_configuration_partial_override_non_str
 
     cfg = MessageSendConfiguration(history_length=2)
     events = [
-        ev
-        async for ev in base_client.send_message(
+        event async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
@@ -165,8 +164,7 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
 
     cfg = MessageSendConfiguration(history_length=None, blocking=None)
     events = [
-        ev
-        async for ev in base_client.send_message(
+        event async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
@@ -186,7 +184,7 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
 
 
 @pytest.mark.asyncio
-async def test_send_message_uses_callsite_configuration_partial_override_streaming(
+async def test_send_message_callsite_config_overrides_history_length_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
     base_client._config.streaming = True
@@ -203,8 +201,7 @@ async def test_send_message_uses_callsite_configuration_partial_override_streami
 
     cfg = MessageSendConfiguration(history_length=0)
     events = [
-        ev
-        async for ev in base_client.send_message(
+        event async for event in base_client.send_message(
             sample_message, configuration=cfg
         )
     ]
