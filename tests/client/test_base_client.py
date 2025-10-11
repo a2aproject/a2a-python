@@ -9,6 +9,7 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     Message,
+    MessageSendConfiguration,
     Part,
     Role,
     Task,
@@ -115,3 +116,109 @@ async def test_send_message_non_streaming_agent_capability_false(
     assert not mock_transport.send_message_streaming.called
     assert len(events) == 1
     assert events[0][0].id == 'task-789'
+
+
+@pytest.mark.asyncio
+async def test_send_message_callsite_config_overrides_history_length_non_streaming(
+    base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
+):
+    base_client._config.streaming = False
+    mock_transport.send_message.return_value = Task(
+        id='task-cfg-ns-1',
+        context_id='ctx-cfg-ns-1',
+        status=TaskStatus(state=TaskState.completed),
+    )
+
+    cfg = MessageSendConfiguration(history_length=2)
+    events = [
+        event
+        async for event in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
+
+    mock_transport.send_message.assert_called_once()
+    assert not mock_transport.send_message_streaming.called
+    assert len(events) == 1
+    task, _ = events[0]
+    assert task.id == 'task-cfg-ns-1'
+
+    params = mock_transport.send_message.await_args.args[0]
+    assert params.configuration.history_length == 2
+    assert params.configuration.blocking == (not base_client._config.polling)
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_message_ignores_none_fields_in_callsite_configuration_non_streaming(
+    base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
+):
+    base_client._config.streaming = False
+    mock_transport.send_message.return_value = Task(
+        id='task-cfg-ns-2',
+        context_id='ctx-cfg-ns-2',
+        status=TaskStatus(state=TaskState.completed),
+    )
+
+    cfg = MessageSendConfiguration(history_length=None, blocking=None)
+    events = [
+        event
+        async for event in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
+
+    mock_transport.send_message.assert_called_once()
+    assert len(events) == 1
+    task, _ = events[0]
+    assert task.id == 'task-cfg-ns-2'
+
+    params = mock_transport.send_message.await_args.args[0]
+    assert params.configuration.history_length is None
+    assert params.configuration.blocking == (not base_client._config.polling)
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )
+
+
+@pytest.mark.asyncio
+async def test_send_message_callsite_config_overrides_history_length_streaming(
+    base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
+):
+    base_client._config.streaming = True
+    base_client._card.capabilities.streaming = True
+
+    async def create_stream(*args, **kwargs):
+        yield Task(
+            id='task-cfg-s-1',
+            context_id='ctx-cfg-s-1',
+            status=TaskStatus(state=TaskState.completed),
+        )
+
+    mock_transport.send_message_streaming.return_value = create_stream()
+
+    cfg = MessageSendConfiguration(history_length=0)
+    events = [
+        event
+        async for event in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
+
+    mock_transport.send_message_streaming.assert_called_once()
+    assert not mock_transport.send_message.called
+    assert len(events) == 1
+    task, _ = events[0]
+    assert task.id == 'task-cfg-s-1'
+
+    params = mock_transport.send_message_streaming.call_args.args[0]
+    assert params.configuration.history_length == 0
+    assert params.configuration.blocking == (not base_client._config.polling)
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )
