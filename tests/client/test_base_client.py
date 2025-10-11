@@ -8,8 +8,8 @@ from a2a.client.transports.base import ClientTransport
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
-    MessageSendConfiguration,
     Message,
+    MessageSendConfiguration,
     Part,
     Role,
     Task,
@@ -130,7 +130,12 @@ async def test_send_message_uses_callsite_configuration_partial_override_non_str
     )
 
     cfg = MessageSendConfiguration(history_length=2)
-    events = [ev async for ev in base_client.send_message(sample_message, configuration=cfg)]
+    events = [
+        ev
+        async for ev in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
 
     mock_transport.send_message.assert_called_once()
     assert not mock_transport.send_message_streaming.called
@@ -139,7 +144,10 @@ async def test_send_message_uses_callsite_configuration_partial_override_non_str
     params = mock_transport.send_message.await_args.args[0]
     assert params.configuration.history_length == 2
     assert params.configuration.blocking == (not base_client._config.polling)
-    assert params.configuration.accepted_output_modes == base_client._config.accepted_output_modes
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )
 
 
 @pytest.mark.asyncio
@@ -154,7 +162,12 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
     )
 
     cfg = MessageSendConfiguration(history_length=None, blocking=None)
-    events = [ev async for ev in base_client.send_message(sample_message, configuration=cfg)]
+    events = [
+        ev
+        async for ev in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
 
     mock_transport.send_message.assert_called_once()
     assert len(events) == 1 and events[0][0].id == 'task-cfg-ns-2'
@@ -162,7 +175,10 @@ async def test_send_message_ignores_none_fields_in_callsite_configuration_non_st
     params = mock_transport.send_message.await_args.args[0]
     assert params.configuration.history_length is None
     assert params.configuration.blocking == (not base_client._config.polling)
-    assert params.configuration.accepted_output_modes == base_client._config.accepted_output_modes
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )
 
 
 @pytest.mark.asyncio
@@ -182,7 +198,12 @@ async def test_send_message_uses_callsite_configuration_partial_override_streami
     mock_transport.send_message_streaming.return_value = create_stream()
 
     cfg = MessageSendConfiguration(history_length=0)
-    events = [ev async for ev in base_client.send_message(sample_message, configuration=cfg)]
+    events = [
+        ev
+        async for ev in base_client.send_message(
+            sample_message, configuration=cfg
+        )
+    ]
 
     mock_transport.send_message_streaming.assert_called_once()
     assert not mock_transport.send_message.called
@@ -193,5 +214,7 @@ async def test_send_message_uses_callsite_configuration_partial_override_streami
     params = mock_transport.send_message_streaming.call_args.args[0]
     assert params.configuration.history_length == 0
     assert params.configuration.blocking == (not base_client._config.polling)
-    assert params.configuration.accepted_output_modes == base_client._config.accepted_output_modes
-
+    assert (
+        params.configuration.accepted_output_modes
+        == base_client._config.accepted_output_modes
+    )

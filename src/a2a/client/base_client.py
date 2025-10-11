@@ -73,7 +73,9 @@ class BaseClient(Client):
             ),
         )
         if configuration is not None:
-            overrides = configuration.model_dump(exclude_unset=True, exclude_none=True)
+            overrides = configuration.model_dump(
+                exclude_unset=True, exclude_none=True
+            )
             config = base_config.model_copy(update=overrides)
         else:
             config = base_config
