@@ -12,6 +12,7 @@ from httpx_sse import SSEError, aconnect_sse
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.transports._streaming_utils import ensure_streaming_response
 from a2a.client.transports.base import ClientTransport
 from a2a.grpc import a2a_pb2
 from a2a.types import (
@@ -139,20 +140,25 @@ class RestTransport(ClientTransport):
             json=payload,
             **modified_kwargs,
         ) as event_source:
+            http_response = event_source.response
             try:
+                await ensure_streaming_response(event_source)
                 async for sse in event_source.aiter_sse():
                     event = a2a_pb2.StreamResponse()
                     Parse(sse.data, event)
                     yield proto_utils.FromProto.stream_response(event)
             except SSEError as e:
                 raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
+                    http_response.status_code,
+                    f'Invalid SSE response or protocol error: {e}',
+                    headers=dict(http_response.headers),
                 ) from e
             except json.JSONDecodeError as e:
                 raise A2AClientJSONError(str(e)) from e
             except httpx.RequestError as e:
                 raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
+                    503,
+                    f'Network communication error: {e}',
                 ) from e
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
