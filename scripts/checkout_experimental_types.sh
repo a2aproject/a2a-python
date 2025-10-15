@@ -39,7 +39,7 @@ EXAMPLE:
   $0
 
   # Run with custom settings:
-  $0  -r "https://github.com/edenreich/A2A.git" -b "feature/implement-list-tasks" -f "task-list"
+  $0  -r "https://github.com/spec-fork/A2A.git" -b "spec-change" -f "my-branch"
 EOF
 }
 
