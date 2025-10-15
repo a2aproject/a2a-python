@@ -190,7 +190,7 @@ async def test_client_factory_connect_with_resolver_args(
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_resolver_args_ignored_without_client(
+async def test_client_factory_connect_resolver_args_without_client(
     base_agent_card: AgentCard,
 ):
     """Verify resolver args are ignored if no httpx_client is provided."""
@@ -209,7 +209,10 @@ async def test_client_factory_connect_resolver_args_ignored_without_client(
             resolver_http_kwargs=http_kwargs,
         )
 
-        mock_resolver.return_value.get_agent_card.assert_awaited_once_with()
+        mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
+            relative_card_path=relative_path,
+            http_kwargs=http_kwargs,
+        )
 
 
 @pytest.mark.asyncio
