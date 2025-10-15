@@ -144,7 +144,10 @@ class ClientFactory:
             if not client_config.httpx_client:
                 async with httpx.AsyncClient() as client:
                     resolver = A2ACardResolver(client, agent)
-                    card = await resolver.get_agent_card()
+                    card = await resolver.get_agent_card(
+                        relative_card_path=relative_card_path,
+                        http_kwargs=resolver_http_kwargs,
+                    )
             else:
                 resolver = A2ACardResolver(client_config.httpx_client, agent)
                 card = await resolver.get_agent_card(
