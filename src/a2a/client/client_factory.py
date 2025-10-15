@@ -120,6 +120,13 @@ class ClientFactory:
         creating multiple clients via this method is less efficient than
         constructing an instance of ClientFactory and reusing that.
 
+        .. code-block:: python
+
+            # This will search for an AgentCard at /.well-known/agent-card.json
+            my_agent_url = 'https://travel.agents.example.com'
+            client = await ClientFactory.connect(my_agent_url)
+
+
         Args:
           agent: The base URL of the agent, or the AgentCard to connect to.
           client_config: The ClientConfig to use when connecting to the agent.
