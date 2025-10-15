@@ -4,11 +4,10 @@
 # Treat unset variables as an error.
 set -euo pipefail
 
-TMP_WORK_DIR="/tmp/experimental_types" # Folder for temporary files.
 A2A_SPEC_REPO="https://github.com/a2aproject/A2A.git" # URL for the A2A spec repo.
 A2A_SPEC_BRANCH="main" # Name of the branch with experimental changes.
 FEATURE_BRANCH="experimental-types" # Name of the feature branch to create.
-ROOT_DIR=`pwd`"/.."
+ROOT_DIR=$(git rev-parse --show-toplevel)
 
 usage() {
   cat <<EOF
@@ -28,9 +27,6 @@ OPTIONS:
 
   -f, --feature-branch  Name of the new feature branch to create.
                         (Default: "$FEATURE_BRANCH")
-
-  -t, --tmp-dir         Directory for temporary checkout files.
-                        (Default: "$TMP_WORK_DIR")
 
   -h, --help            Display this help message and exit.
 
@@ -74,22 +70,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-echo "Creating a temporary \"$TMP_WORK_DIR\" folder for A2A spec repo..."
-rm -fR $TMP_WORK_DIR # Remove preexisting files if any exist.
-mkdir -p $TMP_WORK_DIR
+TMP_WORK_DIR=$(mktemp -d)
+echo "Created a temporary working directory: $TMP_WORK_DIR"
+trap 'rm -rf -- "$TMP_WORK_DIR"' EXIT
 cd $TMP_WORK_DIR
 
 echo "Cloning the \"$A2A_SPEC_REPO\" repository..."
-git clone $A2A_SPEC_REPO
-cd A2A
+git clone $A2A_SPEC_REPO spec_repo
+cd spec_repo
 
-echo " Checking out the \"$A2A_SPEC_BRANCH\" branch..."
+echo "Checking out the \"$A2A_SPEC_BRANCH\" branch..."
 git checkout $A2A_SPEC_BRANCH
 
 echo "Running datamodel-codegen..."
 GENERATED_FILE="$ROOT_DIR/src/a2a/types.py"
 uv run datamodel-codegen \
-  --input "$TMP_WORK_DIR/A2A/specification/json/a2a.json" \
+  --input "$TMP_WORK_DIR/spec_repo/specification/json/a2a.json" \
   --input-file-type jsonschema \
   --output "$GENERATED_FILE" \
   --target-python-version 3.10 \
@@ -117,6 +113,3 @@ cd $ROOT_DIR
 git checkout -b "$FEATURE_BRANCH"
 git add "$GENERATED_FILE"
 git commit -m "Experimental types"
-
-echo "Cleaning up..."
-yes | rm -R $TMP_WORK_DIR
