@@ -53,7 +53,7 @@ class A2ACardResolver:
         Args:
             relative_card_path: Optional path to the agent card endpoint,
                 relative to the base URL. If None, uses the default public
-                agent card path.
+                agent card path. Use `'/'` for an empty path.
             http_kwargs: Optional dictionary of keyword arguments to pass to the
                 underlying httpx.get request.
 
