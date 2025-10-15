@@ -108,7 +108,9 @@ def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_agent_card(base_agent_card: AgentCard):
+async def test_client_factory_connect_with_agent_card(
+    base_agent_card: AgentCard,
+):
     """Verify that connect works correctly when provided with an AgentCard."""
     client = await ClientFactory.connect(base_agent_card)
     assert isinstance(client._transport, JsonRpcTransport)
