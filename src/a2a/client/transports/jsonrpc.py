@@ -17,6 +17,7 @@ from a2a.client.errors import (
     A2AClientTimeoutError,
 )
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.transports._streaming_utils import ensure_streaming_response
 from a2a.client.transports.base import ClientTransport
 from a2a.types import (
     AgentCard,
@@ -161,23 +162,30 @@ class JsonRpcTransport(ClientTransport):
             json=payload,
             **modified_kwargs,
         ) as event_source:
+            http_response = event_source.response
             try:
+                await ensure_streaming_response(event_source)
                 async for sse in event_source.aiter_sse():
-                    response = SendStreamingMessageResponse.model_validate(
-                        json.loads(sse.data)
+                    stream_response = (
+                        SendStreamingMessageResponse.model_validate(
+                            json.loads(sse.data)
+                        )
                     )
-                    if isinstance(response.root, JSONRPCErrorResponse):
-                        raise A2AClientJSONRPCError(response.root)
-                    yield response.root.result
+                    if isinstance(stream_response.root, JSONRPCErrorResponse):
+                        raise A2AClientJSONRPCError(stream_response.root)
+                    yield stream_response.root.result
             except SSEError as e:
                 raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
+                    http_response.status_code,
+                    f'Invalid SSE response or protocol error: {e}',
+                    headers=dict(http_response.headers),
                 ) from e
             except json.JSONDecodeError as e:
                 raise A2AClientJSONError(str(e)) from e
             except httpx.RequestError as e:
                 raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
+                    503,
+                    f'Network communication error: {e}',
                 ) from e
 
     async def _send_request(
