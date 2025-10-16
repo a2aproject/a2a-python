@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.9](https://github.com/a2aproject/a2a-python/compare/v0.3.8...v0.3.9) (2025-10-15)
+
+
+### Features
+
+* custom ID generators ([051ab20](https://github.com/a2aproject/a2a-python/commit/051ab20c395daa2807b0233cf1c53493e41b60c2))
+
+
+### Bug Fixes
+
+* apply `history_length` for `message/send` requests ([#498](https://github.com/a2aproject/a2a-python/issues/498)) ([a49f94e](https://github.com/a2aproject/a2a-python/commit/a49f94ef23d81b8375e409b1c1e51afaf1da1956))
+* **client:** `A2ACardResolver.get_agent_card` will auto-populate with `agent_card_path` when `relative_card_path` is empty ([#508](https://github.com/a2aproject/a2a-python/issues/508)) ([ba24ead](https://github.com/a2aproject/a2a-python/commit/ba24eadb5b6fcd056a008e4cbcef03b3f72a37c3))
+
+
+### Documentation
+
+* Fix Docstring formatting for code samples ([#492](https://github.com/a2aproject/a2a-python/issues/492)) ([dca66c3](https://github.com/a2aproject/a2a-python/commit/dca66c3100a2b9701a1c8b65ad6853769eefd511))
+
 ## [0.3.8](https://github.com/a2aproject/a2a-python/compare/v0.3.7...v0.3.8) (2025-10-06)
 
 
