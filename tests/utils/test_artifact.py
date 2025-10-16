@@ -32,7 +32,7 @@ class TestArtifact(unittest.TestCase):
         parts = [Part(root=TextPart(text='Another sample'))]
         name = 'Artifact_No_Desc'
         artifact = new_artifact(parts=parts, name=name)
-        self.assertEqual(artifact.description, '')
+        self.assertEqual(artifact.description, None)
 
     def test_new_text_artifact_creates_single_text_part(self):
         text = 'This is a text artifact.'

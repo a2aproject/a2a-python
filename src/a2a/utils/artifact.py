@@ -8,7 +8,9 @@ from a2a.types import Artifact, DataPart, Part, TextPart
 
 
 def new_artifact(
-    parts: list[Part], name: str, description: str = ''
+    parts: list[Part],
+    name: str,
+    description: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object.
 
@@ -31,7 +33,7 @@ def new_artifact(
 def new_text_artifact(
     name: str,
     text: str,
-    description: str = '',
+    description: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object containing only a single TextPart.
 
@@ -53,7 +55,7 @@ def new_text_artifact(
 def new_data_artifact(
     name: str,
     data: dict[str, Any],
-    description: str = '',
+    description: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object containing only a single DataPart.
 
