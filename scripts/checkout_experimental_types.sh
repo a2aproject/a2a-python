@@ -82,31 +82,9 @@ cd spec_repo
 echo "Checking out the \"$A2A_SPEC_BRANCH\" branch..."
 git checkout $A2A_SPEC_BRANCH
 
-echo "Running datamodel-codegen..."
+echo "Invoking the generate_types.sh script..."
 GENERATED_FILE="$ROOT_DIR/src/a2a/types.py"
-uv run datamodel-codegen \
-  --input "$TMP_WORK_DIR/spec_repo/specification/json/a2a.json" \
-  --input-file-type jsonschema \
-  --output "$GENERATED_FILE" \
-  --target-python-version 3.10 \
-  --output-model-type pydantic_v2.BaseModel \
-  --disable-timestamp \
-  --use-schema-description \
-  --use-union-operator \
-  --use-field-description \
-  --use-default \
-  --use-default-kwarg \
-  --use-one-literal-as-default \
-  --class-name A2A \
-  --use-standard-collections \
-  --use-subclass-enum \
-  --base-class a2a._base.A2ABaseModel \
-  --field-constraints \
-  --snake-case-field \
-  --no-alias
-
-echo "Formatting generated types file with ruff..."
-uv run ruff format "$GENERATED_FILE"
+$ROOT_DIR/scripts/generate_types.sh "$GENERATED_FILE" --input-file "$TMP_WORK_DIR/spec_repo/specification/json/a2a.json"
 
 echo "Committing generated types file to the \"$FEATURE_BRANCH\" branch..."
 cd $ROOT_DIR
