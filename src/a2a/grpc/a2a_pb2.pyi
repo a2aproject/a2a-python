@@ -497,6 +497,34 @@ class GetTaskRequest(_message.Message):
     history_length: int
     def __init__(self, name: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
 
+class ListTasksRequest(_message.Message):
+    __slots__ = ("context_id", "status", "page_size", "page_token", "history_length", "last_updated_time", "include_artifacts")
+    CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
+    STATUS_FIELD_NUMBER: _ClassVar[int]
+    PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
+    PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
+    LAST_UPDATED_TIME_FIELD_NUMBER: _ClassVar[int]
+    INCLUDE_ARTIFACTS_FIELD_NUMBER: _ClassVar[int]
+    context_id: str
+    status: TaskState
+    page_size: int
+    page_token: str
+    history_length: int
+    last_updated_time: _timestamp_pb2.Timestamp
+    include_artifacts: bool
+    def __init__(self, context_id: _Optional[str] = ..., status: _Optional[_Union[TaskState, str]] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ..., history_length: _Optional[int] = ..., last_updated_time: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ..., include_artifacts: _Optional[bool] = ...) -> None: ...
+
+class ListTasksResponse(_message.Message):
+    __slots__ = ("tasks", "next_page_token", "total_size")
+    TASKS_FIELD_NUMBER: _ClassVar[int]
+    NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
+    TOTAL_SIZE_FIELD_NUMBER: _ClassVar[int]
+    tasks: _containers.RepeatedCompositeFieldContainer[Task]
+    next_page_token: str
+    total_size: int
+    def __init__(self, tasks: _Optional[_Iterable[_Union[Task, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., total_size: _Optional[int] = ...) -> None: ...
+
 class CancelTaskRequest(_message.Message):
     __slots__ = ("name",)
     NAME_FIELD_NUMBER: _ClassVar[int]
