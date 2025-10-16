@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.10](https://github.com/a2aproject/a2a-python/compare/v0.3.9...v0.3.10) (2025-10-16)
+
+
+### Features
+
+* Add a `ClientFactory.connect()` method for easy client creation ([d585635](https://github.com/a2aproject/a2a-python/commit/d5856359034f4d3d1e4578804727f47a3cd7c322))
+
 ## [0.3.9](https://github.com/a2aproject/a2a-python/compare/v0.3.8...v0.3.9) (2025-10-15)
 
 
