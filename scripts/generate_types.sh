@@ -4,21 +4,44 @@
 # Treat unset variables as an error.
 set -euo pipefail
 
-# Check if an output file path was provided as an argument.
-if [ -z "$1" ]; then
-  echo "Error: Output file path must be provided as the first argument." >&2
+REMOTE_URL="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/specification/json/a2a.json"
+
+GENERATED_FILE=""
+INPUT_FILE=""
+
+# Parse command-line arguments
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --input-file)
+      INPUT_FILE="$2"
+      shift 2
+      ;;
+    *)
+      GENERATED_FILE="$1"
+      shift 1
+      ;;
+  esac
+done
+
+if [ -z "$GENERATED_FILE" ]; then
+  echo "Error: Output file path must be provided." >&2
+  echo "Usage: $0 [--input-file <path>] <output-file-path>"
   exit 1
 fi
 
-REMOTE_URL="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/specification/json/a2a.json"
-GENERATED_FILE="$1"
-
 echo "Running datamodel-codegen..."
-echo "  - Source URL: $REMOTE_URL"
+declare -a source_args
+if [ -n "$INPUT_FILE" ]; then
+  echo "  - Source File: $INPUT_FILE"
+  source_args=("--input" "$INPUT_FILE")
+else
+  echo "  - Source URL: $REMOTE_URL"
+  source_args=("--url" "$REMOTE_URL")
+fi
 echo "  - Output File: $GENERATED_FILE"
 
 uv run datamodel-codegen \
-  --url "$REMOTE_URL" \
+  "${source_args[@]}" \
   --input-file-type jsonschema \
   --output "$GENERATED_FILE" \
   --target-python-version 3.10 \
