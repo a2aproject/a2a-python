@@ -40,6 +40,11 @@ class A2AServiceStub(object):
                 request_serializer=a2a__pb2.GetTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.Task.FromString,
                 _registered_method=True)
+        self.ListTasks = channel.unary_unary(
+                '/a2a.v1.A2AService/ListTasks',
+                request_serializer=a2a__pb2.ListTasksRequest.SerializeToString,
+                response_deserializer=a2a__pb2.ListTasksResponse.FromString,
+                _registered_method=True)
         self.CancelTask = channel.unary_unary(
                 '/a2a.v1.A2AService/CancelTask',
                 request_serializer=a2a__pb2.CancelTaskRequest.SerializeToString,
@@ -108,6 +113,13 @@ class A2AServiceServicer(object):
 
     def GetTask(self, request, context):
         """Get the current state of a task from the agent.
+        """
+        context.set_code(grpc.StatusCode.UNIMPLEMENTED)
+        context.set_details('Method not implemented!')
+        raise NotImplementedError('Method not implemented!')
+
+    def ListTasks(self, request, context):
+        """List tasks with optional filtering and pagination.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -183,6 +195,11 @@ def add_A2AServiceServicer_to_server(servicer, server):
                     servicer.GetTask,
                     request_deserializer=a2a__pb2.GetTaskRequest.FromString,
                     response_serializer=a2a__pb2.Task.SerializeToString,
+            ),
+            'ListTasks': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTasks,
+                    request_deserializer=a2a__pb2.ListTasksRequest.FromString,
+                    response_serializer=a2a__pb2.ListTasksResponse.SerializeToString,
             ),
             'CancelTask': grpc.unary_unary_rpc_method_handler(
                     servicer.CancelTask,
@@ -311,6 +328,33 @@ class A2AService(object):
             '/a2a.v1.A2AService/GetTask',
             a2a__pb2.GetTaskRequest.SerializeToString,
             a2a__pb2.Task.FromString,
+            options,
+            channel_credentials,
+            insecure,
+            call_credentials,
+            compression,
+            wait_for_ready,
+            timeout,
+            metadata,
+            _registered_method=True)
+
+    @staticmethod
+    def ListTasks(request,
+            target,
+            options=(),
+            channel_credentials=None,
+            call_credentials=None,
+            insecure=False,
+            compression=None,
+            wait_for_ready=None,
+            timeout=None,
+            metadata=None):
+        return grpc.experimental.unary_unary(
+            request,
+            target,
+            '/a2a.v1.A2AService/ListTasks',
+            a2a__pb2.ListTasksRequest.SerializeToString,
+            a2a__pb2.ListTasksResponse.FromString,
             options,
             channel_credentials,
             insecure,
