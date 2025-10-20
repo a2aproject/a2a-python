@@ -16,7 +16,9 @@ Usage: $0 [OPTIONS]
 Creates a new feature branch with types generated from unmerged A2A spec changes.
 
 This script clones the A2A spec repository, checks out a specific branch,
-and creates a new local feature branch from it.
+and creates a new local feature branch from it. 
+
+The script requires uv and buf to be installed.
 
 OPTIONS:
   -r, --spec-repo       URL for the A2A spec repository.
@@ -70,6 +72,7 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+
 TMP_WORK_DIR=$(mktemp -d)
 echo "Created a temporary working directory: $TMP_WORK_DIR"
 trap 'rm -rf -- "$TMP_WORK_DIR"' EXIT
@@ -86,8 +89,14 @@ echo "Invoking the generate_types.sh script..."
 GENERATED_FILE="$ROOT_DIR/src/a2a/types.py"
 $ROOT_DIR/scripts/generate_types.sh "$GENERATED_FILE" --input-file "$TMP_WORK_DIR/spec_repo/specification/json/a2a.json"
 
-echo "Committing generated types file to the \"$FEATURE_BRANCH\" branch..."
+
+echo "Running buf generate..."
 cd $ROOT_DIR
+buf generate
+uv run "$ROOT_DIR/scripts/grpc_gen_post_processor.py"
+
+
+echo "Committing generated types file to the \"$FEATURE_BRANCH\" branch..."
 git checkout -b "$FEATURE_BRANCH"
-git add "$GENERATED_FILE"
+git add "$GENERATED_FILE" "$ROOT_DIR/src/a2a/grpc"
 git commit -m "Experimental types"
