@@ -30,6 +30,8 @@ from a2a.types import (
     GetTaskRequest,
     GetTaskResponse,
     JSONRPCErrorResponse,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     SendMessageRequest,
@@ -221,6 +223,16 @@ class JsonRpcTransport(ClientTransport):
         if isinstance(response.root, JSONRPCErrorResponse):
             raise A2AClientJSONRPCError(response.root)
         return response.root.result
+
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        # TODO: #515 - Implement method
+        raise NotImplementedError('tasks/list not implemented')
 
     async def cancel_task(
         self,

@@ -14,6 +14,8 @@ from a2a.client.transports.base import ClientTransport
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendConfiguration,
     MessageSendParams,
@@ -132,6 +134,15 @@ class BaseClient(Client):
             A `Task` object representing the current state of the task.
         """
         return await self._transport.get_task(request, context=context)
+
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        return await self._transport.list_tasks(request, context=context)
 
     async def cancel_task(
         self,

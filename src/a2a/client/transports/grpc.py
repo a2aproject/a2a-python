@@ -20,6 +20,8 @@ from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -144,6 +146,16 @@ class GrpcTransport(ClientTransport):
             )
         )
         return proto_utils.FromProto.task(task)
+
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        # TODO: #515 - Implement method
+        raise NotImplementedError('tasks/list not implemented')
 
     async def cancel_task(
         self,

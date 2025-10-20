@@ -32,6 +32,8 @@ from a2a.types import (
     InternalError,
     InvalidParamsError,
     ListTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -120,6 +122,15 @@ class DefaultRequestHandler(RequestHandler):
 
         # Apply historyLength parameter if specified
         return apply_history_length(task, params.history_length)
+
+    async def on_list_tasks(
+        self,
+        params: ListTasksParams,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResult:
+        """Default handler for 'tasks/list'."""
+        # TODO: #515 - Implement method
+        raise NotImplementedError('tasks/list not implemented')
 
     async def on_cancel_task(
         self, params: TaskIdParams, context: ServerCallContext | None = None

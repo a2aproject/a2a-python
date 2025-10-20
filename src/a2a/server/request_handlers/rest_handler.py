@@ -304,4 +304,5 @@ class RESTHandler:
         Raises:
             NotImplementedError: This method is not yet implemented.
         """
+        # TODO: #515 - Implement method
         raise NotImplementedError('list tasks not implemented')
