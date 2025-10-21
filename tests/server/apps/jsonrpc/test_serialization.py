@@ -122,7 +122,7 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
     app_instance = A2AStarletteApplication(agent_card_with_api_key, handler)
     client = TestClient(app_instance.build())
 
-    large_string = 'a' * 2_000_000  # 2MB string
+    large_string = 'a' * 11 * 1_000_000  # 11MB string
     payload = {
         'jsonrpc': '2.0',
         'method': 'test',
@@ -130,22 +130,10 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
         'params': {'data': large_string},
     }
 
-    # Starlette/FastAPI's default max request size is around 1MB.
-    # This test will likely fail with a 413 Payload Too Large if the default is not increased.
-    # If the application is expected to handle larger payloads, the server configuration needs to be adjusted.
-    # For this test, we expect a 413 or a graceful JSON-RPC error if the app handles it.
-
-    try:
-        response = client.post('/', json=payload)
-        # If the app handles it gracefully and returns a JSON-RPC error
-        if response.status_code == 200:
-            data = response.json()
-            assert data['error']['code'] == InvalidRequestError().code
-        else:
-            assert response.status_code == 413
-    except Exception as e:
-        # Depending on server setup, it might just drop the connection for very large payloads
-        assert isinstance(e, ConnectionResetError | RuntimeError)
+    response = client.post('/', json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['error']['code'] == InvalidRequestError().code
 
 
 def test_handle_unicode_characters(agent_card_with_api_key: AgentCard):
