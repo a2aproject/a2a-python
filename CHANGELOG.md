@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.3.10](https://github.com/a2aproject/a2a-python/compare/v0.3.9...v0.3.10) (2025-10-21)
+
+
+### Features
+
+* add `get_artifact_text()` helper method ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+* Add a `ClientFactory.connect()` method for easy client creation ([d585635](https://github.com/a2aproject/a2a-python/commit/d5856359034f4d3d1e4578804727f47a3cd7c322))
+
+
+### Bug Fixes
+
+* change `MAX_CONTENT_LENGTH` (for file attachment) in json-rpc to be larger size (10mb) ([#518](https://github.com/a2aproject/a2a-python/issues/518)) ([5b81385](https://github.com/a2aproject/a2a-python/commit/5b813856b4b4e07510a4ef41980d388e47c73b8e))
+* correct `new_artifact` methods signature ([#503](https://github.com/a2aproject/a2a-python/issues/503)) ([ee026aa](https://github.com/a2aproject/a2a-python/commit/ee026aa356042b9eb212eee59fa5135b280a3077))
+
+
+### Code Refactoring
+
+* **utils:** move part helpers to their own file ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+
 ## [0.3.9](https://github.com/a2aproject/a2a-python/compare/v0.3.8...v0.3.9) (2025-10-15)
 
 
