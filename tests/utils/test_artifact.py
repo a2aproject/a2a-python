@@ -3,8 +3,14 @@ import uuid
 
 from unittest.mock import patch
 
-from a2a.types import DataPart, Part, TextPart
+from a2a.types import (
+    Artifact,
+    DataPart,
+    Part,
+    TextPart,
+)
 from a2a.utils.artifact import (
+    get_artifact_text,
     new_artifact,
     new_data_artifact,
     new_text_artifact,
@@ -81,6 +87,72 @@ class TestArtifact(unittest.TestCase):
         )
         self.assertEqual(artifact.name, name)
         self.assertEqual(artifact.description, description)
+
+
+class TestGetArtifactText(unittest.TestCase):
+    def test_get_artifact_text_single_part(self):
+        # Setup
+        artifact = Artifact(
+            name='test-artifact',
+            parts=[Part(root=TextPart(text='Hello world'))],
+            artifact_id='test-artifact-id',
+        )
+
+        # Exercise
+        result = get_artifact_text(artifact)
+
+        # Verify
+        assert result == 'Hello world'
+
+    def test_get_artifact_text_multiple_parts(self):
+        # Setup
+        artifact = Artifact(
+            name='test-artifact',
+            parts=[
+                Part(root=TextPart(text='First line')),
+                Part(root=TextPart(text='Second line')),
+                Part(root=TextPart(text='Third line')),
+            ],
+            artifact_id='test-artifact-id',
+        )
+
+        # Exercise
+        result = get_artifact_text(artifact)
+
+        # Verify - default delimiter is newline
+        assert result == 'First line\nSecond line\nThird line'
+
+    def test_get_artifact_text_custom_delimiter(self):
+        # Setup
+        artifact = Artifact(
+            name='test-artifact',
+            parts=[
+                Part(root=TextPart(text='First part')),
+                Part(root=TextPart(text='Second part')),
+                Part(root=TextPart(text='Third part')),
+            ],
+            artifact_id='test-artifact-id',
+        )
+
+        # Exercise
+        result = get_artifact_text(artifact, delimiter=' | ')
+
+        # Verify
+        assert result == 'First part | Second part | Third part'
+
+    def test_get_artifact_text_empty_parts(self):
+        # Setup
+        artifact = Artifact(
+            name='test-artifact',
+            parts=[],
+            artifact_id='test-artifact-id',
+        )
+
+        # Exercise
+        result = get_artifact_text(artifact)
+
+        # Verify
+        assert result == ''
 
 
 if __name__ == '__main__':
