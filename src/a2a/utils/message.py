@@ -8,7 +8,7 @@ from a2a.types import (
     Role,
     TextPart,
 )
-from a2a.utils import get_text_parts
+from a2a.utils.parts import get_text_parts
 
 
 def new_agent_text_message(

@@ -5,7 +5,7 @@ import uuid
 from typing import Any
 
 from a2a.types import Artifact, DataPart, Part, TextPart
-from a2a.utils import get_text_parts
+from a2a.utils.parts import get_text_parts
 
 
 def new_artifact(
