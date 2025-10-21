@@ -1,7 +1,5 @@
 """Utility functions for creating and handling A2A Parts objects."""
 
-import uuid
-
 from typing import Any
 
 from a2a.types import (
