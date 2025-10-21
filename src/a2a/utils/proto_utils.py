@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from google.protobuf import json_format, struct_pb2
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a import types
 from a2a.grpc import a2a_pb2
@@ -566,6 +567,24 @@ class ToProto:
             case _:
                 return a2a_pb2.Role.ROLE_UNSPECIFIED
 
+    @classmethod
+    def list_tasks_request(
+        cls, params: types.ListTasksParams
+    ) -> a2a_pb2.ListTasksRequest:
+        last_updated_time = None
+        if params.last_updated_after is not None:
+            last_updated_time = Timestamp()
+            last_updated_time.FromMilliseconds(params.last_updated_after)
+        return a2a_pb2.ListTasksRequest(
+            context_id=params.context_id,
+            status=cls.task_state(params.status) if params.status else None,
+            page_size=params.page_size,
+            page_token=params.page_token,
+            history_length=params.history_length,
+            last_updated_time=last_updated_time,
+            include_artifacts=params.include_artifacts,
+        )
+
 
 class FromProto:
     """Converts proto types to Python types."""
@@ -795,6 +814,28 @@ class FromProto:
                 )
             )
         return types.TaskIdParams(id=m.group(1))
+
+    @classmethod
+    def list_tasks_result(
+        cls,
+        response: a2a_pb2.ListTasksResponse,
+        page_size: int,
+    ) -> types.ListTasksResult:
+        """Converts a ListTasksResponse to a ListTasksResult.
+
+        Args:
+            response: The ListTasksResponse to convert.
+            page_size: The maximum number of tasks returned in this response.
+
+        Returns:
+            A `ListTasksResult` object.
+        """
+        return types.ListTasksResult(
+            next_page_token=response.next_page_token,
+            page_size=page_size,
+            tasks=[cls.task(t) for t in response.tasks],
+            total_size=response.total_size,
+        )
 
     @classmethod
     def task_push_notification_config_request(

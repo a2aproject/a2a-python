@@ -2,6 +2,8 @@ import logging
 
 from collections.abc import AsyncGenerator
 
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+
 
 try:
     import grpc
@@ -154,8 +156,11 @@ class GrpcTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTasksResult:
         """Retrieves tasks for an agent."""
-        # TODO: #515 - Implement method
-        raise NotImplementedError('tasks/list not implemented')
+        response = await self.stub.ListTasks(
+            proto_utils.ToProto.list_tasks_request(request)
+        )
+        page_size = request.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+        return proto_utils.FromProto.list_tasks_result(response, page_size)
 
     async def cancel_task(
         self,
