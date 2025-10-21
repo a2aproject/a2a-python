@@ -1,4 +1,3 @@
-
 from a2a.types import (
     DataPart,
     FilePart,
@@ -8,9 +7,9 @@ from a2a.types import (
     TextPart,
 )
 from a2a.utils.parts import (
-    get_text_parts,
     get_data_parts,
     get_file_parts,
+    get_text_parts,
 )
 
 

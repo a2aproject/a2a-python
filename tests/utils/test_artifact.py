@@ -93,7 +93,7 @@ class TestGetArtifactText(unittest.TestCase):
     def test_get_artifact_text_single_part(self):
         # Setup
         artifact = Artifact(
-            name="test-artifact",
+            name='test-artifact',
             parts=[Part(root=TextPart(text='Hello world'))],
             artifact_id='test-artifact-id',
         )
@@ -107,7 +107,7 @@ class TestGetArtifactText(unittest.TestCase):
     def test_get_artifact_text_multiple_parts(self):
         # Setup
         artifact = Artifact(
-            name="test-artifact",
+            name='test-artifact',
             parts=[
                 Part(root=TextPart(text='First line')),
                 Part(root=TextPart(text='Second line')),
@@ -125,7 +125,7 @@ class TestGetArtifactText(unittest.TestCase):
     def test_get_artifact_text_custom_delimiter(self):
         # Setup
         artifact = Artifact(
-            name="test-artifact",
+            name='test-artifact',
             parts=[
                 Part(root=TextPart(text='First part')),
                 Part(root=TextPart(text='Second part')),
@@ -143,7 +143,7 @@ class TestGetArtifactText(unittest.TestCase):
     def test_get_artifact_text_empty_parts(self):
         # Setup
         artifact = Artifact(
-            name="test-artifact",
+            name='test-artifact',
             parts=[],
             artifact_id='test-artifact-id',
         )
@@ -153,6 +153,7 @@ class TestGetArtifactText(unittest.TestCase):
 
         # Verify
         assert result == ''
+
 
 if __name__ == '__main__':
     unittest.main()
