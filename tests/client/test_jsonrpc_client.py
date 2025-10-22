@@ -379,6 +379,60 @@ class TestJsonRpcTransport:
         assert response.model_dump() == success_response.model_dump()
 
     @pytest.mark.asyncio
+    async def test_send_message_success_with_extensions(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello', extensions=['test'])
+        )
+        success_response = create_text_message_object(
+            role=Role.agent, content='Hi there!', extensions=['test']
+        )
+        rpc_response = SendMessageSuccessResponse(
+            id='123', jsonrpc='2.0', result=success_response
+        )
+        response = httpx.Response(
+            200, json=rpc_response.model_dump(mode='json')
+        )
+        response.request = httpx.Request('POST', 'http://agent.example.com/api')
+        mock_httpx_client.post.return_value = response
+
+        response = await client.send_message(request=params)
+
+        assert isinstance(response, Message)
+        assert response.model_dump() == success_response.model_dump()
+
+    @pytest.mark.asyncio
+    async def test_send_message_success_with_metadata(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello', metadata={'test': 'test'})
+        )
+        success_response = create_text_message_object(
+            role=Role.agent, content='Hi there!', metadata={'test': 'test'}
+        )
+        rpc_response = SendMessageSuccessResponse(
+            id='123', jsonrpc='2.0', result=success_response
+        )
+        response = httpx.Response(
+            200, json=rpc_response.model_dump(mode='json')
+        )
+        response.request = httpx.Request('POST', 'http://agent.example.com/api')
+        mock_httpx_client.post.return_value = response
+
+        response = await client.send_message(request=params)
+
+        assert isinstance(response, Message)
+        assert response.model_dump() == success_response.model_dump()
+
+    @pytest.mark.asyncio
     async def test_send_message_error_response(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
