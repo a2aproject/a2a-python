@@ -9,8 +9,8 @@ from a2a.types import Message, Part, Role, TextPart
 def create_text_message_object(
     role: Role = Role.user,
     content: str = '',
-    extensions: list[Any] | None = None,
-    metadata: dict[Any, Any] | None = None,
+    extensions: list[str] | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Message:
     """Create a Message object containing a single TextPart.
 
