@@ -140,6 +140,7 @@ class ToProto:
             task_id=message.task_id or '',
             role=cls.role(message.role),
             metadata=cls.metadata(message.metadata),
+            extensions=message.extensions or [],
         )
 
     @classmethod
