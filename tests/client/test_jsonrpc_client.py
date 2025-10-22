@@ -386,7 +386,9 @@ class TestJsonRpcTransport:
             httpx_client=mock_httpx_client, agent_card=mock_agent_card
         )
         params = MessageSendParams(
-            message=create_text_message_object(content='Hello', extensions=['test'])
+            message=create_text_message_object(
+                content='Hello', extensions=['test']
+            )
         )
         success_response = create_text_message_object(
             role=Role.agent, content='Hi there!', extensions=['test']
@@ -413,7 +415,9 @@ class TestJsonRpcTransport:
             httpx_client=mock_httpx_client, agent_card=mock_agent_card
         )
         params = MessageSendParams(
-            message=create_text_message_object(content='Hello', metadata={'test': 'test'})
+            message=create_text_message_object(
+                content='Hello', metadata={'test': 'test'}
+            )
         )
         success_response = create_text_message_object(
             role=Role.agent, content='Hi there!', metadata={'test': 'test'}
