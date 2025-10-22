@@ -18,6 +18,18 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+all = [
+    { name = "cryptography" },
+    { name = "fastapi" },
+    { name = "grpcio" },
+    { name = "grpcio-reflection" },
+    { name = "grpcio-tools" },
+    { name = "opentelemetry-api" },
+    { name = "opentelemetry-sdk" },
+    { name = "sqlalchemy", extra = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"] },
+    { name = "sse-starlette" },
+    { name = "starlette" },
+]
 encryption = [
     { name = "cryptography" },
 ]
@@ -69,30 +81,45 @@ dev = [
     { name = "types-protobuf" },
     { name = "types-requests" },
     { name = "uv-dynamic-versioning" },
+    { name = "uvicorn" },
 ]
 
 [package.metadata]
 requires-dist = [
+    { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
+    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
     { name = "fastapi", marker = "extra == 'http-server'", specifier = ">=0.115.2" },
     { name = "google-api-core", specifier = ">=1.26.0" },
+    { name = "grpcio", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
+    { name = "grpcio-reflection", marker = "extra == 'all'", specifier = ">=1.7.0" },
     { name = "grpcio-reflection", marker = "extra == 'grpc'", specifier = ">=1.7.0" },
+    { name = "grpcio-tools", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", specifier = ">=0.28.1" },
     { name = "httpx-sse", specifier = ">=0.4.0" },
+    { name = "opentelemetry-api", marker = "extra == 'all'", specifier = ">=1.33.0" },
     { name = "opentelemetry-api", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
+    { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.33.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
     { name = "protobuf", specifier = ">=5.29.5" },
     { name = "pydantic", specifier = ">=2.11.3" },
-    { name = "sqlalchemy", extras = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["aiomysql", "asyncio"], marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["aiomysql", "asyncio"], marker = "extra == 'mysql'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["aiomysql", "asyncio"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["aiosqlite", "asyncio"], marker = "extra == 'all'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["aiosqlite", "asyncio"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["aiosqlite", "asyncio"], marker = "extra == 'sqlite'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'postgresql'", specifier = ">=2.0.0" },
+    { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
+    { name = "sse-starlette", marker = "extra == 'all'" },
     { name = "sse-starlette", marker = "extra == 'http-server'" },
+    { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["encryption", "grpc", "http-server", "mysql", "postgresql", "sql", "sqlite", "telemetry"]
+provides-extras = ["all", "encryption", "grpc", "http-server", "mysql", "postgresql", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -115,6 +142,7 @@ dev = [
     { name = "types-protobuf" },
     { name = "types-requests" },
     { name = "uv-dynamic-versioning", specifier = ">=0.8.2" },
+    { name = "uvicorn", specifier = ">=0.35.0" },
 ]
 
 [[package]]
@@ -1992,6 +2020,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/9a/9e/1cf1ddf02e5459076b6fe0e90e1315df461b94c0db6c09b07e5730a0e0fb/uv_dynamic_versioning-0.8.2.tar.gz", hash = "sha256:a9c228a46f5752d99cfead1ed83b40628385cbfb537179488d280853c786bf82", size = 41559, upload-time = "2025-05-02T05:08:30.843Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/bc/55/a6cffd78511faebf208d4ba1f119d489680668f8d36114564c6f499054b9/uv_dynamic_versioning-0.8.2-py3-none-any.whl", hash = "sha256:400ade6b4a3fc02895c3d24dd0214171e4d60106def343b39ad43143a2615e8c", size = 8851, upload-time = "2025-05-02T05:08:29.33Z" },
+]
+
+[[package]]
+name = "uvicorn"
+version = "0.38.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "click" },
+    { name = "h11" },
+    { name = "typing-extensions", marker = "python_full_version < '3.11'" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/cb/ce/f06b84e2697fef4688ca63bdb2fdf113ca0a3be33f94488f2cadb690b0cf/uvicorn-0.38.0.tar.gz", hash = "sha256:fd97093bdd120a2609fc0d3afe931d4d4ad688b6e75f0f929fde1bc36fe0e91d", size = 80605, upload-time = "2025-10-18T13:46:44.63Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/ee/d9/d88e73ca598f4f6ff671fb5fde8a32925c2e08a637303a1d12883c7305fa/uvicorn-0.38.0-py3-none-any.whl", hash = "sha256:48c0afd214ceb59340075b4a052ea1ee91c16fbc2a9b1469cca0e54566977b02", size = 68109, upload-time = "2025-10-18T13:46:42.958Z" },
 ]
 
 [[package]]
