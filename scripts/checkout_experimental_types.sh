@@ -60,10 +60,6 @@ while [[ $# -gt 0 ]]; do
       FEATURE_BRANCH="$2"
       shift 2
       ;;
-    -t|--tmp-dir)
-      TMP_WORK_DIR="$2"
-      shift 2
-      ;;
     *)
       echo "Error: Unknown option '$1'" >&2
       usage
@@ -83,7 +79,7 @@ git clone $A2A_SPEC_REPO spec_repo
 cd spec_repo
 
 echo "Checking out the \"$A2A_SPEC_BRANCH\" branch..."
-git checkout $A2A_SPEC_BRANCH
+git checkout "$A2A_SPEC_BRANCH"
 
 echo "Invoking the generate_types.sh script..."
 GENERATED_FILE="$ROOT_DIR/src/a2a/types.py"
@@ -91,7 +87,7 @@ $ROOT_DIR/scripts/generate_types.sh "$GENERATED_FILE" --input-file "$TMP_WORK_DI
 
 
 echo "Running buf generate..."
-cd $ROOT_DIR
+cd "$ROOT_DIR"
 buf generate
 uv run "$ROOT_DIR/scripts/grpc_gen_post_processor.py"
 
