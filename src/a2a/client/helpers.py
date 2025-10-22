@@ -25,7 +25,7 @@ def create_text_message_object(
     """
     return Message(
         role=role,
-        parts=[Part(TextPart(text=content or ''))],
+        parts=[Part(TextPart(text=content))],
         message_id=str(uuid4()),
         extensions=extensions or [],
         metadata=metadata or {},
