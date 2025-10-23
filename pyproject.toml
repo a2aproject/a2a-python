@@ -11,8 +11,6 @@ dependencies = [
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
   "pydantic>=2.11.3",
-  "protobuf>=5.29.5",
-  "google-api-core>=1.26.0",
 ]
 
 classifiers = [
@@ -29,9 +27,12 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-http-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
+proto = ["protobuf>=5.29.5", "google-api-core>=1.26.0"]
+jsonrpc-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
+rest-server = ["fastapi>=0.115.2", "sse-starlette", "starlette", "a2a-sdk[proto]"]
+http-server = ["a2a-sdk[jsonrpc-server]", "a2a-sdk[rest-server]"]
 encryption = ["cryptography>=43.0.0"]
-grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
+grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "a2a-sdk[proto]"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
