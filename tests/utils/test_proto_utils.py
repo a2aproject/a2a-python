@@ -6,6 +6,7 @@ from a2a import types
 from a2a.grpc import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
+from google.protobuf.timestamp_pb2 import Timestamp
 
 
 # --- Test Data ---
@@ -52,6 +53,43 @@ def sample_task(sample_message: types.Message) -> types.Task:
                 ],
             )
         ],
+    )
+
+
+@pytest.fixture
+def sample_proto_task() -> a2a_pb2.Task:
+    sample_message = a2a_pb2.Message(
+        message_id='msg-1',
+        context_id='ctx-1',
+        task_id='task-1',
+        role=a2a_pb2.ROLE_USER,
+        content=[
+            a2a_pb2.Part(text='Hello'),
+            a2a_pb2.Part(
+                file=a2a_pb2.FilePart(
+                    file_with_uri='file:///test.txt',
+                    mime_type='text/plain',
+                    name='test.txt',
+                )
+            ),
+            a2a_pb2.Part(data=a2a_pb2.DataPart(data={'key': 'value'})),
+        ],
+        metadata={'source': 'test'},
+    )
+    return a2a_pb2.Task(
+        id='task-1',
+        context_id='ctx-1',
+        status=a2a_pb2.TaskStatus(
+            state=a2a_pb2.TASK_STATE_WORKING,
+            update=sample_message,
+        ),
+        artifacts=[
+            a2a_pb2.Artifact(
+                artifact_id='art-1',
+                parts=[a2a_pb2.Part(text='Artifact content')],
+            )
+        ],
+        history=[sample_message],
     )
 
 
@@ -127,6 +165,45 @@ class TestToProto:
         with pytest.raises(ValueError, match='Unsupported part type'):
             proto_utils.ToProto.part(mock_part)
 
+    @pytest.mark.parametrize(
+        'params,expected',
+        [
+            pytest.param(
+                types.ListTasksParams(),
+                a2a_pb2.ListTasksRequest(),
+                id='empty',
+            ),
+            pytest.param(
+                types.ListTasksParams(
+                    context_id='ctx-1',
+                    history_length=256,
+                    include_artifacts=True,
+                    last_updated_after=1761042977029,
+                    metadata={'meta': 'data'},
+                    page_size=16,
+                    page_token='1',
+                    status=types.TaskState.working,
+                ),
+                a2a_pb2.ListTasksRequest(
+                    context_id='ctx-1',
+                    history_length=256,
+                    include_artifacts=True,
+                    last_updated_time=Timestamp(
+                        seconds=1761042977, nanos=29000000
+                    ),
+                    page_size=16,
+                    page_token='1',
+                    status=a2a_pb2.TaskState.TASK_STATE_WORKING,
+                ),
+                id='full',
+            ),
+        ],
+    )
+    def test_list_tasks_request(self, params, expected):
+        request = proto_utils.ToProto.list_tasks_request(params)
+
+        assert request == expected
+
 
 class TestFromProto:
     def test_part_unsupported_type(self):
@@ -142,6 +219,20 @@ class TestFromProto:
         with pytest.raises(ServerError) as exc_info:
             proto_utils.FromProto.task_query_params(request)
         assert isinstance(exc_info.value.error, types.InvalidParamsError)
+
+    def test_list_tasks_result(self, sample_proto_task):
+        response = a2a_pb2.ListTasksResponse(
+            next_page_token='1',
+            tasks=[sample_proto_task],
+            total_size=1,
+        )
+
+        result = proto_utils.FromProto.list_tasks_result(response, 10)
+
+        assert result.next_page_token == '1'
+        assert result.page_size == 10
+        assert len(result.tasks) == 1
+        assert result.total_size == 1
 
 
 class TestProtoUtils:

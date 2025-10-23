@@ -36,6 +36,7 @@ from a2a.types import (
     JSONRPCRequest,
     JSONRPCResponse,
     ListTaskPushNotificationConfigRequest,
+    ListTasksRequest,
     MethodNotFoundError,
     SendMessageRequest,
     SendStreamingMessageRequest,
@@ -160,6 +161,7 @@ class JSONRPCApplication(ABC):
         SendMessageRequest
         | SendStreamingMessageRequest
         | GetTaskRequest
+        | ListTasksRequest
         | CancelTaskRequest
         | SetTaskPushNotificationConfigRequest
         | GetTaskPushNotificationConfigRequest
@@ -440,6 +442,10 @@ class JSONRPCApplication(ABC):
                 )
             case GetTaskRequest():
                 handler_result = await self.handler.on_get_task(
+                    request_obj, context
+                )
+            case ListTasksRequest():
+                handler_result = await self.handler.list_tasks(
                     request_obj, context
                 )
             case SetTaskPushNotificationConfigRequest():

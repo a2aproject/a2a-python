@@ -31,6 +31,8 @@ from a2a.types import (
     TaskIdParams,
     TaskPushNotificationConfig,
     TaskQueryParams,
+    ListTasksParams,
+    ListTasksResult,
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 
@@ -559,6 +561,42 @@ class TestJsonRpcTransport:
         mock_send_request.assert_called_once()
         sent_payload = mock_send_request.call_args.args[0]
         assert sent_payload['method'] == 'tasks/get'
+
+    @pytest.mark.asyncio
+    async def test_list_tasks_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = ListTasksParams()
+        mock_rpc_response = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': {
+                'nextPageToken': '',
+                'tasks': [MINIMAL_TASK],
+                'pageSize': 10,
+                'totalSize': 1,
+            },
+        }
+
+        with patch.object(
+            client, '_send_request', new_callable=AsyncMock
+        ) as mock_send_request:
+            mock_send_request.return_value = mock_rpc_response
+            response = await client.list_tasks(request=params)
+
+        assert isinstance(response, ListTasksResult)
+        assert (
+            response.model_dump()
+            == ListTasksResult(
+                next_page_token='',
+                page_size=10,
+                tasks=[Task.model_validate(MINIMAL_TASK)],
+                total_size=1,
+            ).model_dump()
+        )
 
     @pytest.mark.asyncio
     async def test_cancel_task_success(

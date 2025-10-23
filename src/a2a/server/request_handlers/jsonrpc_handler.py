@@ -28,6 +28,8 @@ from a2a.types import (
     ListTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigResponse,
     ListTaskPushNotificationConfigSuccessResponse,
+    ListTasksRequest,
+    ListTasksResponse,
     Message,
     SendMessageRequest,
     SendMessageResponse,
@@ -358,6 +360,23 @@ class JSONRPCHandler:
         return GetTaskResponse(
             root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
         )
+
+    async def list_tasks(
+        self,
+        request: ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResponse:
+        """Handles the 'tasks/list' JSON-RPC method.
+
+        Args:
+            request: The incoming `ListTasksRequest` object.
+            context: Context provided by the server.
+
+        Returns:
+            A `ListTasksResponse` object containing the Task or a JSON-RPC error.
+        """
+        # TODO: #515 - Implement method
+        raise NotImplementedError('tasks/list not implemented')
 
     async def list_push_notification_config(
         self,

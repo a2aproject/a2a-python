@@ -331,6 +331,23 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             await self.abort_context(e, context)
         return a2a_pb2.Task()
 
+    async def ListTasks(
+        self,
+        request: a2a_pb2.ListTasksRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> a2a_pb2.ListTasksResponse:
+        """Handles the 'ListTasks' gRPC method.
+
+        Args:
+            request: The incoming `ListTasksRequest` object.
+            context: Context provided by the server.
+
+        Returns:
+            A `ListTasksResponse` object.
+        """
+        # TODO: #515 - Implement method
+        raise NotImplementedError('tasks/list not implemented')
+
     async def GetAgentCard(
         self,
         request: a2a_pb2.GetAgentCardRequest,
