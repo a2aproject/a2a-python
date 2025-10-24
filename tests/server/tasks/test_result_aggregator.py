@@ -21,7 +21,7 @@ from a2a.types import (
 
 # Helper to create a simple message
 def create_sample_message(
-    content='test message', msg_id='msg1', role=Role.user
+    content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.user
 ):
     return Message(
         message_id=msg_id,
@@ -32,7 +32,9 @@ def create_sample_message(
 
 # Helper to create a simple task
 def create_sample_task(
-    task_id='task1', status_state=TaskState.submitted, context_id='ctx1'
+    task_id: str = 'task1',
+    status_state: TaskState = TaskState.submitted,
+    context_id: str = 'ctx1',
 ):
     return Task(
         id=task_id,

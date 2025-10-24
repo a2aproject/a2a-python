@@ -22,12 +22,12 @@ from a2a.types import (
 
 
 @pytest.fixture
-def task_manager():
+def task_manager() -> ClientTaskManager:
     return ClientTaskManager()
 
 
 @pytest.fixture
-def sample_task():
+def sample_task() -> Task:
     return Task(
         id='task123',
         context_id='context456',
@@ -38,7 +38,7 @@ def sample_task():
 
 
 @pytest.fixture
-def sample_message():
+def sample_message() -> Message:
     return Message(
         message_id='msg1',
         role=Role.user,

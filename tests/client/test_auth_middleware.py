@@ -1,8 +1,9 @@
+from a2a.client.auth.credentials import InMemoryContextCredentialStore
 import json
 
 from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any
+from typing import Any, Generator
 
 import httpx
 import pytest
@@ -100,13 +101,15 @@ async def send_message(
 
 
 @pytest.fixture
-def store():
+def store() -> Generator[InMemoryContextCredentialStore, Any, None]:
     store = InMemoryContextCredentialStore()
     yield store
 
 
 @pytest.mark.asyncio
-async def test_auth_interceptor_skips_when_no_agent_card(store):
+async def test_auth_interceptor_skips_when_no_agent_card(
+    store: InMemoryContextCredentialStore,
+):
     """
     Tests that the AuthInterceptor does not modify the request when no AgentCard is provided.
     """
@@ -126,7 +129,9 @@ async def test_auth_interceptor_skips_when_no_agent_card(store):
 
 
 @pytest.mark.asyncio
-async def test_in_memory_context_credential_store(store):
+async def test_in_memory_context_credential_store(
+    store: InMemoryContextCredentialStore,
+):
     """
     Verifies that InMemoryContextCredentialStore correctly stores and retrieves
     credentials based on the session ID in the client context.
@@ -284,7 +289,9 @@ bearer_test_case = AuthTestCase(
     [api_key_test_case, oauth2_test_case, oidc_test_case, bearer_test_case],
 )
 @respx.mock
-async def test_auth_interceptor_variants(test_case, store):
+async def test_auth_interceptor_variants(
+    test_case: AuthTestCase, store: InMemoryContextCredentialStore
+):
     """
     Parametrized test verifying that AuthInterceptor correctly attaches credentials
     based on the defined security scheme in the AgentCard.
@@ -329,7 +336,7 @@ async def test_auth_interceptor_variants(test_case, store):
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
-    store,
+    store: InMemoryContextCredentialStore,
 ):
     """
     Tests that AuthInterceptor skips a scheme if it's listed in security requirements

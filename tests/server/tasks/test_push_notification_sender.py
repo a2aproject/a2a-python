@@ -15,7 +15,9 @@ from a2a.types import (
 )
 
 
-def create_sample_task(task_id='task123', status_state=TaskState.completed):
+def create_sample_task(
+    task_id: str = 'task123', status_state: TaskState = TaskState.completed
+):
     return Task(
         id=task_id,
         context_id='ctx456',
@@ -24,7 +26,9 @@ def create_sample_task(task_id='task123', status_state=TaskState.completed):
 
 
 def create_sample_push_config(
-    url='http://example.com/callback', config_id='cfg1', token=None
+    url: str = 'http://example.com/callback',
+    config_id: str = 'cfg1',
+    token: str | None = None,
 ):
     return PushNotificationConfig(id=config_id, url=url, token=token)
 

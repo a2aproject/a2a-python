@@ -19,12 +19,12 @@ from a2a.types import (
 
 
 @pytest.fixture
-def mock_transport():
+def mock_transport() -> AsyncMock:
     return AsyncMock(spec=ClientTransport)
 
 
 @pytest.fixture
-def sample_agent_card():
+def sample_agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for testing',
@@ -38,7 +38,7 @@ def sample_agent_card():
 
 
 @pytest.fixture
-def sample_message():
+def sample_message() -> Message:
     return Message(
         role=Role.user,
         message_id='msg-1',
@@ -47,7 +47,7 @@ def sample_message():
 
 
 @pytest.fixture
-def base_client(sample_agent_card, mock_transport):
+def base_client(sample_agent_card: AgentCard, mock_transport: AsyncMock):
     config = ClientConfig(streaming=True)
     return BaseClient(
         card=sample_agent_card,

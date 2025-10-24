@@ -178,7 +178,7 @@ class TestExceptionRaising:
         (500, 'Server Error', 'HTTP Error 500: Server Error'),
     ],
 )
-def test_http_error_parametrized(status_code, message, expected):
+def test_http_error_parametrized(status_code: int, message: str, expected: str):
     """Parametrized test for HTTP errors with different status codes."""
     error = A2AClientHTTPError(status_code, message)
     assert error.status_code == status_code
@@ -194,7 +194,7 @@ def test_http_error_parametrized(status_code, message, expected):
         ('Parsing failed', 'JSON Error: Parsing failed'),
     ],
 )
-def test_json_error_parametrized(message, expected):
+def test_json_error_parametrized(message: str, expected: str):
     """Parametrized test for JSON errors with different messages."""
     error = A2AClientJSONError(message)
     assert error.message == message

@@ -128,7 +128,7 @@ def sample_task_status_update_event() -> TaskStatusUpdateEvent:
 
 @pytest.fixture
 def sample_task_artifact_update_event(
-    sample_artifact,
+    sample_artifact: Artifact,
 ) -> TaskArtifactUpdateEvent:
     """Provides a sample TaskArtifactUpdateEvent."""
     return TaskArtifactUpdateEvent(

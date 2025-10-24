@@ -299,9 +299,9 @@ async def test_abort_context_error_mapping(  # noqa: PLR0913
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-    server_error,
-    grpc_status_code,
-    error_message_part,
+    server_error: ServerError,
+    grpc_status_code: grpc.StatusCode,
+    error_message_part: str,
 ):
     mock_request_handler.on_get_task.side_effect = server_error
     request_proto = a2a_pb2.GetTaskRequest(name='tasks/any')

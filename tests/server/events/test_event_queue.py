@@ -170,7 +170,7 @@ async def test_enqueue_event_propagates_to_children(
 
 @pytest.mark.asyncio
 async def test_enqueue_event_when_closed(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test that no event is enqueued if the parent queue is closed."""
     await event_queue.close()  # Close the queue first
@@ -199,7 +199,7 @@ async def test_enqueue_event_when_closed(
 
 
 @pytest.fixture
-def expected_queue_closed_exception():
+def expected_queue_closed_exception() -> type[Exception]:
     if sys.version_info < (3, 13):
         return asyncio.QueueEmpty
     return asyncio.QueueShutDown
@@ -207,7 +207,7 @@ def expected_queue_closed_exception():
 
 @pytest.mark.asyncio
 async def test_dequeue_event_closed_and_empty_no_wait(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test dequeue_event raises QueueEmpty when closed, empty, and no_wait=True."""
     await event_queue.close()
@@ -222,7 +222,7 @@ async def test_dequeue_event_closed_and_empty_no_wait(
 
 @pytest.mark.asyncio
 async def test_dequeue_event_closed_and_empty_waits_then_raises(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test dequeue_event raises QueueEmpty eventually when closed, empty, and no_wait=False."""
     await event_queue.close()
