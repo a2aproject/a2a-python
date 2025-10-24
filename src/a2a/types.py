@@ -1271,6 +1271,69 @@ class ListTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
     """
 
 
+class ListTasksParams(A2ABaseModel):
+    """
+    Parameters for listing tasks with optional filtering criteria.
+    """
+
+    context_id: str | None = None
+    """
+    Filter tasks by context ID to get tasks from a specific conversation or session.
+    """
+    history_length: int | None = None
+    """
+    Number of recent messages to include in each task's history. Must be non-negative. Defaults to 0 if not specified.
+    """
+    include_artifacts: bool | None = None
+    """
+    Whether to include artifacts in the returned tasks. Defaults to false to reduce payload size.
+    """
+    last_updated_after: int | None = None
+    """
+    Filter tasks updated after this timestamp (milliseconds since epoch). Only tasks with a last updated time greater than or equal to this value will be returned.
+    """
+    metadata: dict[str, Any] | None = None
+    """
+    Request-specific metadata.
+    """
+    page_size: int | None = None
+    """
+    Maximum number of tasks to return. Must be between 1 and 100. Defaults to 50 if not specified.
+    """
+    page_token: str | None = None
+    """
+    Token for pagination. Use the nextPageToken from a previous ListTasksResult response.
+    """
+    status: TaskState | None = None
+    """
+    Filter tasks by their current status state.
+    """
+
+
+class ListTasksRequest(A2ABaseModel):
+    """
+    JSON-RPC request model for the 'tasks/list' method.
+    """
+
+    id: str | int
+    """
+    A unique identifier established by the client. It must be a String, a Number, or null.
+    The server must reply with the same value in the response. This property is omitted for notifications.
+    """
+    jsonrpc: Literal['2.0'] = '2.0'
+    """
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
+    """
+    method: Literal['tasks/list'] = 'tasks/list'
+    """
+    A String containing the name of the method to be invoked.
+    """
+    params: ListTasksParams | None = None
+    """
+    A Structured value that holds the parameter values to be used during the invocation of the method.
+    """
+
+
 class MessageSendConfiguration(A2ABaseModel):
     """
     Defines configuration options for a `message/send` or `message/stream` request.
@@ -1694,6 +1757,7 @@ class A2ARequest(
         SendMessageRequest
         | SendStreamingMessageRequest
         | GetTaskRequest
+        | ListTasksRequest
         | CancelTaskRequest
         | SetTaskPushNotificationConfigRequest
         | GetTaskPushNotificationConfigRequest
@@ -1707,6 +1771,7 @@ class A2ARequest(
         SendMessageRequest
         | SendStreamingMessageRequest
         | GetTaskRequest
+        | ListTasksRequest
         | CancelTaskRequest
         | SetTaskPushNotificationConfigRequest
         | GetTaskPushNotificationConfigRequest
@@ -1936,6 +2001,48 @@ class GetTaskSuccessResponse(A2ABaseModel):
     """
 
 
+class ListTasksResult(A2ABaseModel):
+    """
+    Result object for tasks/list method containing an array of tasks and pagination information.
+    """
+
+    next_page_token: str
+    """
+    Token for retrieving the next page. Empty string if no more results.
+    """
+    page_size: int
+    """
+    Maximum number of tasks returned in this response.
+    """
+    tasks: list[Task]
+    """
+    Array of tasks matching the specified criteria.
+    """
+    total_size: int
+    """
+    Total number of tasks available (before pagination).
+    """
+
+
+class ListTasksSuccessResponse(A2ABaseModel):
+    """
+    JSON-RPC success response model for the 'tasks/list' method.
+    """
+
+    id: str | int | None = None
+    """
+    The identifier established by the client.
+    """
+    jsonrpc: Literal['2.0'] = '2.0'
+    """
+    The version of the JSON-RPC protocol. MUST be exactly "2.0".
+    """
+    result: ListTasksResult
+    """
+    The result object on success.
+    """
+
+
 class SendMessageSuccessResponse(A2ABaseModel):
     """
     Represents a successful JSON-RPC response for the `message/send` method.
@@ -1998,6 +2105,7 @@ class JSONRPCResponse(
         | SendStreamingMessageSuccessResponse
         | GetTaskSuccessResponse
         | CancelTaskSuccessResponse
+        | ListTasksSuccessResponse
         | SetTaskPushNotificationConfigSuccessResponse
         | GetTaskPushNotificationConfigSuccessResponse
         | ListTaskPushNotificationConfigSuccessResponse
@@ -2011,6 +2119,7 @@ class JSONRPCResponse(
         | SendStreamingMessageSuccessResponse
         | GetTaskSuccessResponse
         | CancelTaskSuccessResponse
+        | ListTasksSuccessResponse
         | SetTaskPushNotificationConfigSuccessResponse
         | GetTaskPushNotificationConfigSuccessResponse
         | ListTaskPushNotificationConfigSuccessResponse
@@ -2020,6 +2129,15 @@ class JSONRPCResponse(
     """
     A discriminated union representing all possible JSON-RPC 2.0 responses
     for the A2A specification methods.
+    """
+
+
+class ListTasksResponse(
+    RootModel[JSONRPCErrorResponse | ListTasksSuccessResponse]
+):
+    root: JSONRPCErrorResponse | ListTasksSuccessResponse
+    """
+    JSON-RPC response for the 'tasks/list' method.
     """
 
 
