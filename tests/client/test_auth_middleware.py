@@ -1,9 +1,8 @@
-from a2a.client.auth.credentials import InMemoryContextCredentialStore
 import json
 
-from collections.abc import Callable
+from collections.abc import Callable, Generator
 from dataclasses import dataclass
-from typing import Any, Generator
+from typing import Any
 
 import httpx
 import pytest
@@ -18,6 +17,7 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
+from a2a.client.auth.credentials import InMemoryContextCredentialStore
 from a2a.types import (
     APIKeySecurityScheme,
     AgentCapabilities,

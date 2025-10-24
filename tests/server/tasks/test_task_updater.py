@@ -1,6 +1,3 @@
-from a2a.server.tasks.task_updater import TaskUpdater
-
-
 import asyncio
 import uuid
 
@@ -11,6 +8,7 @@ import pytest
 from a2a.server.events import EventQueue
 from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskUpdater
+from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
     Message,
     Part,

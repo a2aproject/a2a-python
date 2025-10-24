@@ -1,10 +1,8 @@
-from unittest.mock import MagicMock
-
-
 import asyncio
 
 from typing import NoReturn
 from unittest import mock
+from unittest.mock import MagicMock
 
 import pytest
 
