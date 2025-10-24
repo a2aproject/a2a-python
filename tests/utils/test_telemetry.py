@@ -1,6 +1,7 @@
 import asyncio
 
-from typing import Any, Generator, NoReturn
+from collections.abc import Generator
+from typing import Any, NoReturn
 from unittest import mock
 
 import pytest

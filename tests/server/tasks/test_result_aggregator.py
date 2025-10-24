@@ -1,9 +1,10 @@
 import asyncio
-from typing_extensions import override
 import unittest
 
 from collections.abc import AsyncIterator
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from typing_extensions import override
 
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.tasks.result_aggregator import ResultAggregator
