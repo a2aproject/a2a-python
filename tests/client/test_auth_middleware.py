@@ -1,6 +1,6 @@
 import json
 
-from collections.abc import Callable, Generator
+from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
@@ -101,7 +101,7 @@ async def send_message(
 
 
 @pytest.fixture
-def store() -> Generator[InMemoryContextCredentialStore, Any, None]:
+def store():
     store = InMemoryContextCredentialStore()
     yield store
 
