@@ -1,6 +1,6 @@
 import asyncio
 
-from typing import NoReturn
+from typing import Any, Generator, NoReturn
 from unittest import mock
 
 import pytest
@@ -22,12 +22,14 @@ def mock_tracer(mock_span: mock.MagicMock) -> mock.MagicMock:
 
 
 @pytest.fixture(autouse=True)
-def patch_trace_get_tracer(mock_tracer: mock.MagicMock):
+def patch_trace_get_tracer(
+    mock_tracer: mock.MagicMock,
+) -> Generator[None, Any, None]:
     with mock.patch('opentelemetry.trace.get_tracer', return_value=mock_tracer):
         yield
 
 
-def test_trace_function_sync_success(mock_span: mock.MagicMock):
+def test_trace_function_sync_success(mock_span: mock.MagicMock) -> None:
     @trace_function
     def foo(x, y):
         return x + y

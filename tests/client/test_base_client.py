@@ -47,7 +47,9 @@ def sample_message() -> Message:
 
 
 @pytest.fixture
-def base_client(sample_agent_card: AgentCard, mock_transport: AsyncMock):
+def base_client(
+    sample_agent_card: AgentCard, mock_transport: AsyncMock
+) -> BaseClient:
     config = ClientConfig(streaming=True)
     return BaseClient(
         card=sample_agent_card,

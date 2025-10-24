@@ -28,7 +28,7 @@ class TestInMemoryQueueManager:
         return queue
 
     @pytest.mark.asyncio
-    async def test_init(self, queue_manager: InMemoryQueueManager):
+    async def test_init(self, queue_manager: InMemoryQueueManager) -> None:
         """Test that the InMemoryQueueManager initializes with empty task queue and a lock."""
         assert queue_manager._task_queue == {}
         assert isinstance(queue_manager._lock, asyncio.Lock)

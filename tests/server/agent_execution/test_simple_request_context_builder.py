@@ -26,23 +26,25 @@ from a2a.types import (
 
 # Helper to create a simple message
 def create_sample_message(
-    content='test message',
-    msg_id='msg1',
-    role=Role.user,
-    reference_task_ids=None,
-):
+    content: str = 'test message',
+    msg_id: str = 'msg1',
+    role: Role = Role.user,
+    reference_task_ids: list[str] | None = None,
+) -> Message:
     return Message(
         message_id=msg_id,
         role=role,
         parts=[Part(root=TextPart(text=content))],
-        referenceTaskIds=reference_task_ids if reference_task_ids else [],
+        reference_task_ids=reference_task_ids if reference_task_ids else [],
     )
 
 
 # Helper to create a simple task
 def create_sample_task(
-    task_id='task1', status_state=TaskState.submitted, context_id='ctx1'
-):
+    task_id: str = 'task1',
+    status_state: TaskState = TaskState.submitted,
+    context_id: str = 'ctx1',
+) -> Task:
     return Task(
         id=task_id,
         context_id=context_id,

@@ -8,7 +8,6 @@ import pytest
 from a2a.server.events import EventQueue
 from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskUpdater
-from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
     Message,
     Part,
@@ -54,7 +53,7 @@ def sample_parts() -> list[Part]:
     return [Part(root=TextPart(text='Test part'))]
 
 
-def test_init(event_queue: AsyncMock):
+def test_init(event_queue: AsyncMock) -> None:
     """Test that TaskUpdater initializes correctly."""
     task_updater = TaskUpdater(
         event_queue=event_queue,

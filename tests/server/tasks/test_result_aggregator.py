@@ -1,4 +1,5 @@
 import asyncio
+from typing_extensions import override
 import unittest
 
 from collections.abc import AsyncIterator
@@ -22,7 +23,7 @@ from a2a.types import (
 # Helper to create a simple message
 def create_sample_message(
     content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.user
-):
+) -> Message:
     return Message(
         message_id=msg_id,
         role=role,
@@ -35,7 +36,7 @@ def create_sample_task(
     task_id: str = 'task1',
     status_state: TaskState = TaskState.submitted,
     context_id: str = 'ctx1',
-):
+) -> Task:
     return Task(
         id=task_id,
         context_id=context_id,
@@ -45,8 +46,10 @@ def create_sample_task(
 
 # Helper to create a TaskStatusUpdateEvent
 def create_sample_status_update(
-    task_id='task1', status_state=TaskState.working, context_id='ctx1'
-):
+    task_id: str = 'task1',
+    status_state: TaskState = TaskState.working,
+    context_id: str = 'ctx1',
+) -> TaskStatusUpdateEvent:
     return TaskStatusUpdateEvent(
         task_id=task_id,
         context_id=context_id,
@@ -56,6 +59,7 @@ def create_sample_status_update(
 
 
 class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
+    @override
     def setUp(self):
         self.mock_task_manager = AsyncMock(spec=TaskManager)
         self.mock_event_consumer = AsyncMock(spec=EventConsumer)

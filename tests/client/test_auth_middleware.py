@@ -17,7 +17,6 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.client.auth.credentials import InMemoryContextCredentialStore
 from a2a.types import (
     APIKeySecurityScheme,
     AgentCapabilities,

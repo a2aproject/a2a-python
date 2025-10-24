@@ -106,7 +106,7 @@ class TestRequestContext:
         context = RequestContext()
         assert context.get_user_input() == ''
 
-    def test_attach_related_task(self, mock_task: Mock):
+    def test_attach_related_task(self, mock_task: Mock) -> None:
         """Test attach_related_task adds a task to related_tasks."""
         context = RequestContext()
         assert len(context.related_tasks) == 0
@@ -257,7 +257,7 @@ class TestRequestContext:
         assert context.metadata == {'key': 'value'}
 
     def test_init_with_existing_ids_in_message(
-        self, mock_message, mock_params
+        self, mock_message: Mock, mock_params: Mock
     ) -> None:
         """Test initialization with existing IDs in the message."""
         mock_message.task_id = 'existing-task-id'
@@ -270,7 +270,7 @@ class TestRequestContext:
         # No new UUIDs should be generated
 
     def test_init_with_task_id_and_existing_task_id_match(
-        self, mock_params: Mock, mock_task
+        self, mock_params: Mock, mock_task: Mock
     ) -> None:
         """Test initialization succeeds when task_id matches task.id."""
         mock_params.message.task_id = mock_task.id
