@@ -36,7 +36,7 @@ class TestInMemoryQueueManager:
     @pytest.mark.asyncio
     async def test_add_new_queue(
         self, queue_manager: InMemoryQueueManager, event_queue: MagicMock
-    ):
+    ) -> None:
         """Test adding a new queue to the manager."""
         task_id = 'test_task_id'
         await queue_manager.add(task_id, event_queue)
