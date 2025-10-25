@@ -21,7 +21,6 @@ class TestRequestContext:
     @pytest.fixture
     def mock_message(self) -> Mock:
         """Fixture for a mock Message."""
-
         return Mock(spec=Message, task_id=None, context_id=None)
 
     @pytest.fixture
