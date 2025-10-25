@@ -57,7 +57,7 @@ def make_dict_serializable(value: Any) -> Any:
     Returns:
         A serializable value.
     """
-    if isinstance(value, (str, int, float, bool)) or value is None:
+    if isinstance(value, str | int | float | bool) or value is None:
         return value
     if isinstance(value, dict):
         return {k: make_dict_serializable(v) for k, v in value.items()}
@@ -140,6 +140,7 @@ class ToProto:
             task_id=message.task_id or '',
             role=cls.role(message.role),
             metadata=cls.metadata(message.metadata),
+            extensions=message.extensions or [],
         )
 
     @classmethod
