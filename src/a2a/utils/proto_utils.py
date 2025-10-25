@@ -240,6 +240,7 @@ class ToProto:
             metadata=cls.metadata(artifact.metadata),
             name=artifact.name,
             parts=[cls.part(p) for p in artifact.parts],
+            extensions=artifact.extensions or [],
         )
 
     @classmethod
@@ -696,6 +697,7 @@ class FromProto:
             metadata=cls.metadata(artifact.metadata),
             name=artifact.name,
             parts=[cls.part(p) for p in artifact.parts],
+            extensions=artifact.extensions or None,
         )
 
     @classmethod
