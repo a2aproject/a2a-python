@@ -2,7 +2,7 @@
 
 1. Run the tests
     ```bash
-    uv run pytest -v -s client/test_client.py
+    uv run pytest -v -s client/test_client_factory.py
     ```
 
 In case of failures, you can cleanup the cache:
