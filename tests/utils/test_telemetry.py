@@ -42,7 +42,7 @@ def test_trace_function_sync_success(mock_span: mock.MagicMock) -> None:
     mock_span.record_exception.assert_not_called()
 
 
-def test_trace_function_sync_exception(mock_span: mock.MagicMock):
+def test_trace_function_sync_exception(mock_span: mock.MagicMock) -> None:
     @trace_function
     def bar() -> NoReturn:
         raise ValueError('fail')
