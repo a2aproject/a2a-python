@@ -174,7 +174,7 @@ class TestRequestContext:
 
     def test_check_or_generate_context_id_with_existing_context_id(
         self, mock_params: Mock
-    ):
+    ) -> None:
         """Test _check_or_generate_context_id with existing context ID."""
         existing_id = 'existing-context-id'
         mock_params.message.context_id = existing_id
