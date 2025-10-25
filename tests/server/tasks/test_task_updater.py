@@ -69,7 +69,7 @@ def test_init(event_queue: AsyncMock) -> None:
 @pytest.mark.asyncio
 async def test_update_status_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test updating status without a message."""
     await task_updater.update_status(TaskState.working)
 
