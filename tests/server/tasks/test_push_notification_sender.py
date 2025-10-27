@@ -34,7 +34,7 @@ def create_sample_push_config(
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         self.mock_config_store = AsyncMock()
         self.sender = BasePushNotificationSender(
@@ -42,11 +42,11 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             config_store=self.mock_config_store,
         )
 
-    def test_constructor_stores_client_and_config_store(self):
+    def test_constructor_stores_client_and_config_store(self) -> None:
         self.assertEqual(self.sender._client, self.mock_httpx_client)
         self.assertEqual(self.sender._config_store, self.mock_config_store)
 
-    async def test_send_notification_success(self):
+    async def test_send_notification_success(self) -> None:
         task_id = 'task_send_success'
         task_data = create_sample_task(task_id=task_id)
         config = create_sample_push_config(url='http://notify.me/here')
@@ -68,7 +68,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
         mock_response.raise_for_status.assert_called_once()
 
-    async def test_send_notification_with_token_success(self):
+    async def test_send_notification_with_token_success(self) -> None:
         task_id = 'task_send_success'
         task_data = create_sample_task(task_id=task_id)
         config = create_sample_push_config(
@@ -92,7 +92,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
         mock_response.raise_for_status.assert_called_once()
 
-    async def test_send_notification_no_config(self):
+    async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
         task_data = create_sample_task(task_id=task_id)
         self.mock_config_store.get_info.return_value = []
@@ -105,7 +105,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     @patch('a2a.server.tasks.base_push_notification_sender.logger')
     async def test_send_notification_http_status_error(
         self, mock_logger: MagicMock
-    ):
+    ) -> None:
         task_id = 'task_send_http_err'
         task_data = create_sample_task(task_id=task_id)
         config = create_sample_push_config(url='http://notify.me/http_error')
@@ -129,7 +129,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
         mock_logger.exception.assert_called_once()
 
-    async def test_send_notification_multiple_configs(self):
+    async def test_send_notification_multiple_configs(self) -> None:
         task_id = 'task_multiple_configs'
         task_data = create_sample_task(task_id=task_id)
         config1 = create_sample_push_config(

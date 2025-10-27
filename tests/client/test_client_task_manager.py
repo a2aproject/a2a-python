@@ -46,13 +46,15 @@ def sample_message() -> Message:
     )
 
 
-def test_get_task_no_task_id_returns_none(task_manager: ClientTaskManager):
+def test_get_task_no_task_id_returns_none(
+    task_manager: ClientTaskManager,
+) -> None:
     assert task_manager.get_task() is None
 
 
 def test_get_task_or_raise_no_task_raises_error(
     task_manager: ClientTaskManager,
-):
+) -> None:
     with pytest.raises(A2AClientInvalidStateError, match='no current Task'):
         task_manager.get_task_or_raise()
 
@@ -60,7 +62,7 @@ def test_get_task_or_raise_no_task_raises_error(
 @pytest.mark.asyncio
 async def test_save_task_event_with_task(
     task_manager: ClientTaskManager, sample_task: Task
-):
+) -> None:
     await task_manager.save_task_event(sample_task)
     assert task_manager.get_task() == sample_task
     assert task_manager._task_id == sample_task.id
@@ -70,7 +72,7 @@ async def test_save_task_event_with_task(
 @pytest.mark.asyncio
 async def test_save_task_event_with_task_already_set_raises_error(
     task_manager: ClientTaskManager, sample_task: Task
-):
+) -> None:
     await task_manager.save_task_event(sample_task)
     with pytest.raises(
         A2AClientInvalidArgsError,
@@ -82,7 +84,7 @@ async def test_save_task_event_with_task_already_set_raises_error(
 @pytest.mark.asyncio
 async def test_save_task_event_with_status_update(
     task_manager: ClientTaskManager, sample_task: Task, sample_message: Message
-):
+) -> None:
     await task_manager.save_task_event(sample_task)
     status_update = TaskStatusUpdateEvent(
         task_id=sample_task.id,
@@ -98,7 +100,7 @@ async def test_save_task_event_with_status_update(
 @pytest.mark.asyncio
 async def test_save_task_event_with_artifact_update(
     task_manager: ClientTaskManager, sample_task: Task
-):
+) -> None:
     await task_manager.save_task_event(sample_task)
     artifact = Artifact(
         artifact_id='art1', parts=[Part(root=TextPart(text='artifact content'))]
@@ -119,7 +121,7 @@ async def test_save_task_event_with_artifact_update(
 @pytest.mark.asyncio
 async def test_save_task_event_creates_task_if_not_exists(
     task_manager: ClientTaskManager,
-):
+) -> None:
     status_update = TaskStatusUpdateEvent(
         task_id='new_task',
         context_id='new_context',
@@ -135,7 +137,7 @@ async def test_save_task_event_creates_task_if_not_exists(
 @pytest.mark.asyncio
 async def test_process_with_task_event(
     task_manager: ClientTaskManager, sample_task: Task
-):
+) -> None:
     with patch.object(
         task_manager, 'save_task_event', new_callable=AsyncMock
     ) as mock_save:
@@ -144,7 +146,9 @@ async def test_process_with_task_event(
 
 
 @pytest.mark.asyncio
-async def test_process_with_non_task_event(task_manager: ClientTaskManager):
+async def test_process_with_non_task_event(
+    task_manager: ClientTaskManager,
+) -> None:
     with patch.object(
         task_manager, 'save_task_event', new_callable=Mock
     ) as mock_save:
@@ -155,14 +159,14 @@ async def test_process_with_non_task_event(task_manager: ClientTaskManager):
 
 def test_update_with_message(
     task_manager: ClientTaskManager, sample_task: Task, sample_message: Message
-):
+) -> None:
     updated_task = task_manager.update_with_message(sample_message, sample_task)
     assert updated_task.history == [sample_message]
 
 
 def test_update_with_message_moves_status_message(
     task_manager: ClientTaskManager, sample_task: Task, sample_message: Message
-):
+) -> None:
     status_message = Message(
         message_id='status_msg',
         role=Role.agent,

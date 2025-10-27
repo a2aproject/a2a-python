@@ -63,7 +63,7 @@ def base_client(
 @pytest.mark.asyncio
 async def test_send_message_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
-):
+) -> None:
     async def create_stream(*args, **kwargs):
         yield Task(
             id='task-123',
@@ -84,7 +84,7 @@ async def test_send_message_streaming(
 @pytest.mark.asyncio
 async def test_send_message_non_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
-):
+) -> None:
     base_client._config.streaming = False
     mock_transport.send_message.return_value = Task(
         id='task-456',
@@ -103,7 +103,7 @@ async def test_send_message_non_streaming(
 @pytest.mark.asyncio
 async def test_send_message_non_streaming_agent_capability_false(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
-):
+) -> None:
     base_client._card.capabilities.streaming = False
     mock_transport.send_message.return_value = Task(
         id='task-789',

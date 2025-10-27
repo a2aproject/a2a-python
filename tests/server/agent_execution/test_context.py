@@ -100,7 +100,7 @@ class TestRequestContext:
 
         assert context.current_task == mock_task
 
-    def test_get_user_input_no_params(self):
+    def test_get_user_input_no_params(self) -> None:
         """Test get_user_input with no params returns empty string."""
         context = RequestContext()
         assert context.get_user_input() == ''

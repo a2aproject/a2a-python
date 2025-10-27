@@ -87,7 +87,7 @@ async def test_update_status_without_message(
 @pytest.mark.asyncio
 async def test_update_status_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test updating status with a message."""
     await task_updater.update_status(TaskState.working, message=sample_message)
 
@@ -105,7 +105,7 @@ async def test_update_status_with_message(
 @pytest.mark.asyncio
 async def test_update_status_final(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test updating status with final=True."""
     await task_updater.update_status(TaskState.completed, final=True)
 
@@ -120,7 +120,7 @@ async def test_update_status_final(
 @pytest.mark.asyncio
 async def test_add_artifact_with_custom_id_and_name(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_parts: list[Part]
-):
+) -> None:
     """Test adding an artifact with a custom ID and name."""
     await task_updater.add_artifact(
         parts=sample_parts,
@@ -140,7 +140,7 @@ async def test_add_artifact_with_custom_id_and_name(
 @pytest.mark.asyncio
 async def test_add_artifact_generates_id(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_parts: list[Part]
-):
+) -> None:
     """Test add_artifact generates an ID if artifact_id is None."""
     known_uuid = uuid.UUID('12345678-1234-5678-1234-567812345678')
     with patch('uuid.uuid4', return_value=known_uuid):
@@ -159,7 +159,7 @@ async def test_add_artifact_generates_id(
 @pytest.mark.asyncio
 async def test_add_artifact_generates_custom_id(
     event_queue: AsyncMock, sample_parts: list[Part]
-):
+) -> None:
     """Test add_artifact uses a custom ID generator when provided."""
     artifact_id_generator = Mock(spec=IDGenerator)
     artifact_id_generator.generate.return_value = 'custom-artifact-id'
@@ -194,7 +194,7 @@ async def test_add_artifact_with_append_last_chunk(
     sample_parts: list[Part],
     append_val: bool,
     last_chunk_val: bool,
-):
+) -> None:
     """Test add_artifact with append and last_chunk flags."""
     await task_updater.add_artifact(
         parts=sample_parts,
@@ -216,7 +216,7 @@ async def test_add_artifact_with_append_last_chunk(
 @pytest.mark.asyncio
 async def test_complete_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as completed without a message."""
     await task_updater.complete()
 
@@ -232,7 +232,7 @@ async def test_complete_without_message(
 @pytest.mark.asyncio
 async def test_complete_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as completed with a message."""
     await task_updater.complete(message=sample_message)
 
@@ -248,7 +248,7 @@ async def test_complete_with_message(
 @pytest.mark.asyncio
 async def test_submit_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as submitted without a message."""
     await task_updater.submit()
 
@@ -264,7 +264,7 @@ async def test_submit_without_message(
 @pytest.mark.asyncio
 async def test_submit_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as submitted with a message."""
     await task_updater.submit(message=sample_message)
 
@@ -280,7 +280,7 @@ async def test_submit_with_message(
 @pytest.mark.asyncio
 async def test_start_work_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as working without a message."""
     await task_updater.start_work()
 
@@ -296,7 +296,7 @@ async def test_start_work_without_message(
 @pytest.mark.asyncio
 async def test_start_work_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as working with a message."""
     await task_updater.start_work(message=sample_message)
 
@@ -309,7 +309,9 @@ async def test_start_work_with_message(
     assert event.status.message == sample_message
 
 
-def test_new_agent_message(task_updater: TaskUpdater, sample_parts: list[Part]):
+def test_new_agent_message(
+    task_updater: TaskUpdater, sample_parts: list[Part]
+) -> None:
     """Test creating a new agent message."""
     with patch(
         'uuid.uuid4',
@@ -327,7 +329,7 @@ def test_new_agent_message(task_updater: TaskUpdater, sample_parts: list[Part]):
 
 def test_new_agent_message_with_metadata(
     task_updater: TaskUpdater, sample_parts: list[Part]
-):
+) -> None:
     """Test creating a new agent message with metadata and final=True."""
     metadata = {'key': 'value'}
 
@@ -349,7 +351,7 @@ def test_new_agent_message_with_metadata(
 
 def test_new_agent_message_with_custom_id_generator(
     event_queue: AsyncMock, sample_parts: list[Part]
-):
+) -> None:
     """Test creating a new agent message with a custom message ID generator."""
     message_id_generator = Mock(spec=IDGenerator)
     message_id_generator.generate.return_value = 'custom-message-id'
@@ -368,7 +370,7 @@ def test_new_agent_message_with_custom_id_generator(
 @pytest.mark.asyncio
 async def test_failed_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as failed without a message."""
     await task_updater.failed()
 
@@ -384,7 +386,7 @@ async def test_failed_without_message(
 @pytest.mark.asyncio
 async def test_failed_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as failed with a message."""
     await task_updater.failed(message=sample_message)
 
@@ -400,7 +402,7 @@ async def test_failed_with_message(
 @pytest.mark.asyncio
 async def test_reject_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as rejected without a message."""
     await task_updater.reject()
 
@@ -416,7 +418,7 @@ async def test_reject_without_message(
 @pytest.mark.asyncio
 async def test_reject_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as rejected with a message."""
     await task_updater.reject(message=sample_message)
 
@@ -432,7 +434,7 @@ async def test_reject_with_message(
 @pytest.mark.asyncio
 async def test_requires_input_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as input required without a message."""
     await task_updater.requires_input()
 
@@ -448,7 +450,7 @@ async def test_requires_input_without_message(
 @pytest.mark.asyncio
 async def test_requires_input_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as input required with a message."""
     await task_updater.requires_input(message=sample_message)
 
@@ -464,7 +466,7 @@ async def test_requires_input_with_message(
 @pytest.mark.asyncio
 async def test_requires_input_final_true(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as input required with final=True."""
     await task_updater.requires_input(final=True)
 
@@ -480,7 +482,7 @@ async def test_requires_input_final_true(
 @pytest.mark.asyncio
 async def test_requires_input_with_message_and_final(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as input required with message and final=True."""
     await task_updater.requires_input(message=sample_message, final=True)
 
@@ -496,7 +498,7 @@ async def test_requires_input_with_message_and_final(
 @pytest.mark.asyncio
 async def test_requires_auth_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as auth required without a message."""
     await task_updater.requires_auth()
 
@@ -512,7 +514,7 @@ async def test_requires_auth_without_message(
 @pytest.mark.asyncio
 async def test_requires_auth_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as auth required with a message."""
     await task_updater.requires_auth(message=sample_message)
 
@@ -528,7 +530,7 @@ async def test_requires_auth_with_message(
 @pytest.mark.asyncio
 async def test_requires_auth_final_true(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as auth required with final=True."""
     await task_updater.requires_auth(final=True)
 
@@ -544,7 +546,7 @@ async def test_requires_auth_final_true(
 @pytest.mark.asyncio
 async def test_requires_auth_with_message_and_final(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as auth required with message and final=True."""
     await task_updater.requires_auth(message=sample_message, final=True)
 
@@ -560,7 +562,7 @@ async def test_requires_auth_with_message_and_final(
 @pytest.mark.asyncio
 async def test_cancel_without_message(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     """Test marking a task as cancelled without a message."""
     await task_updater.cancel()
 
@@ -576,7 +578,7 @@ async def test_cancel_without_message(
 @pytest.mark.asyncio
 async def test_cancel_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
-):
+) -> None:
     """Test marking a task as cancelled with a message."""
     await task_updater.cancel(message=sample_message)
 
@@ -592,7 +594,7 @@ async def test_cancel_with_message(
 @pytest.mark.asyncio
 async def test_update_status_raises_error_if_terminal_state_reached(
     task_updater: TaskUpdater, event_queue: AsyncMock
-):
+) -> None:
     await task_updater.complete()
     event_queue.reset_mock()
     with pytest.raises(RuntimeError):
@@ -601,7 +603,9 @@ async def test_update_status_raises_error_if_terminal_state_reached(
 
 
 @pytest.mark.asyncio
-async def test_concurrent_updates_race_condition(event_queue: AsyncMock):
+async def test_concurrent_updates_race_condition(
+    event_queue: AsyncMock,
+) -> None:
     task_updater = TaskUpdater(
         event_queue=event_queue,
         task_id='test-task-id',
@@ -620,7 +624,9 @@ async def test_concurrent_updates_race_condition(event_queue: AsyncMock):
 
 
 @pytest.mark.asyncio
-async def test_reject_concurrently_with_complete(event_queue: AsyncMock):
+async def test_reject_concurrently_with_complete(
+    event_queue: AsyncMock,
+) -> None:
     """Test for race conditions when reject and complete are called concurrently."""
     task_updater = TaskUpdater(
         event_queue=event_queue,

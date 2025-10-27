@@ -53,24 +53,24 @@ def create_sample_task(
 
 
 class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock_task_store = AsyncMock(spec=TaskStore)
 
-    def test_init_with_populate_true_and_task_store(self):
+    def test_init_with_populate_true_and_task_store(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=True, task_store=self.mock_task_store
         )
         self.assertTrue(builder._should_populate_referred_tasks)
         self.assertEqual(builder._task_store, self.mock_task_store)
 
-    def test_init_with_populate_false_task_store_none(self):
+    def test_init_with_populate_false_task_store_none(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=False, task_store=None
         )
         self.assertFalse(builder._should_populate_referred_tasks)
         self.assertIsNone(builder._task_store)
 
-    def test_init_with_populate_false_task_store_provided(self):
+    def test_init_with_populate_false_task_store_provided(self) -> None:
         # Even if populate is false, task_store might still be provided (though not used by build for related_tasks)
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=False,
@@ -79,7 +79,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertFalse(builder._should_populate_referred_tasks)
         self.assertEqual(builder._task_store, self.mock_task_store)
 
-    async def test_build_basic_context_no_populate(self):
+    async def test_build_basic_context_no_populate(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=False,
             task_store=self.mock_task_store,
@@ -119,7 +119,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.related_tasks, [])  # Initialized to []
         self.mock_task_store.get.assert_not_called()
 
-    async def test_build_populate_true_with_reference_task_ids(self):
+    async def test_build_populate_true_with_reference_task_ids(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=True, task_store=self.mock_task_store
         )
@@ -169,7 +169,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertIn(mock_ref_task1, request_context.related_tasks)
         self.assertIn(mock_ref_task3, request_context.related_tasks)
 
-    async def test_build_populate_true_params_none(self):
+    async def test_build_populate_true_params_none(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=True, task_store=self.mock_task_store
         )
@@ -184,7 +184,9 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.related_tasks, [])
         self.mock_task_store.get.assert_not_called()
 
-    async def test_build_populate_true_reference_ids_empty_or_none(self):
+    async def test_build_populate_true_reference_ids_empty_or_none(
+        self,
+    ) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=True, task_store=self.mock_task_store
         )
@@ -226,7 +228,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context_none.related_tasks, [])
         self.mock_task_store.get.assert_not_called()
 
-    async def test_build_populate_true_task_store_none(self):
+    async def test_build_populate_true_task_store_none(self) -> None:
         # This scenario might be prevented by constructor logic if should_populate_referred_tasks is True,
         # but testing defensively. The builder might allow task_store=None if it's set post-init,
         # or if constructor logic changes. Current SimpleRequestContextBuilder takes it at init.
@@ -251,7 +253,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.related_tasks, [])
         # No mock_task_store to check calls on, this test is mostly for graceful handling.
 
-    async def test_build_populate_false_with_reference_task_ids(self):
+    async def test_build_populate_false_with_reference_task_ids(self) -> None:
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=False,
             task_store=self.mock_task_store,

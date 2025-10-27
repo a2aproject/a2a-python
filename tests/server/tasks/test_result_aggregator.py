@@ -61,7 +61,7 @@ def create_sample_status_update(
 
 class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     @override
-    def setUp(self):
+    def setUp(self) -> None:
         self.mock_task_manager = AsyncMock(spec=TaskManager)
         self.mock_event_consumer = AsyncMock(spec=EventConsumer)
         self.aggregator = ResultAggregator(
@@ -69,17 +69,17 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             # event_consumer is not passed to constructor
         )
 
-    def test_init_stores_task_manager(self):
+    def test_init_stores_task_manager(self) -> None:
         self.assertEqual(self.aggregator.task_manager, self.mock_task_manager)
         # event_consumer is also stored, can be tested if needed, but focus is on task_manager per req.
 
-    async def test_current_result_property_with_message_set(self):
+    async def test_current_result_property_with_message_set(self) -> None:
         sample_message = create_sample_message(content='hola')
         self.aggregator._message = sample_message
         self.assertEqual(await self.aggregator.current_result, sample_message)
         self.mock_task_manager.get_task.assert_not_called()
 
-    async def test_current_result_property_with_message_none(self):
+    async def test_current_result_property_with_message_none(self) -> None:
         expected_task = create_sample_task(task_id='task_from_tm')
         self.mock_task_manager.get_task.return_value = expected_task
         self.aggregator._message = None
@@ -89,7 +89,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(current_res, expected_task)
         self.mock_task_manager.get_task.assert_called_once()
 
-    async def test_consume_and_emit(self):
+    async def test_consume_and_emit(self) -> None:
         event1 = create_sample_message(content='event one', msg_id='e1')
         event2 = create_sample_task(
             task_id='task_event', status_state=TaskState.working
@@ -127,7 +127,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.process.assert_any_call(event2)
         self.mock_task_manager.process.assert_any_call(event3)
 
-    async def test_consume_all_only_message_event(self):
+    async def test_consume_all_only_message_event(self) -> None:
         sample_message = create_sample_message(content='final message')
 
         async def mock_consume_generator():
@@ -143,7 +143,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.process.assert_not_called()  # Process is not called if message is returned directly
         self.mock_task_manager.get_task.assert_not_called()  # Should not be called if message is returned
 
-    async def test_consume_all_other_event_types(self):
+    async def test_consume_all_other_event_types(self) -> None:
         task_event = create_sample_task(task_id='task_other_event')
         status_update_event = create_sample_status_update(
             task_id='task_other_event', status_state=TaskState.completed
@@ -169,7 +169,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.process.assert_any_call(status_update_event)
         self.mock_task_manager.get_task.assert_called_once()
 
-    async def test_consume_all_empty_stream(self):
+    async def test_consume_all_empty_stream(self) -> None:
         empty_task_state = create_sample_task(task_id='empty_stream_task')
 
         async def mock_consume_generator():
@@ -187,7 +187,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.process.assert_not_called()
         self.mock_task_manager.get_task.assert_called_once()
 
-    async def test_consume_all_event_consumer_exception(self):
+    async def test_consume_all_event_consumer_exception(self) -> None:
         class TestException(Exception):
             pass
 
@@ -213,7 +213,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_task_manager.get_task.assert_not_called()
 
-    async def test_consume_and_break_on_message(self):
+    async def test_consume_and_break_on_message(self) -> None:
         sample_message = create_sample_message(content='interrupt message')
         event_after = create_sample_task('task_after_msg')
 
@@ -241,7 +241,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     @patch('asyncio.create_task')
     async def test_consume_and_break_on_auth_required_task_event(
         self, mock_create_task: MagicMock
-    ):
+    ) -> None:
         auth_task = create_sample_task(
             task_id='auth_task', status_state=TaskState.auth_required
         )
@@ -293,7 +293,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     @patch('asyncio.create_task')
     async def test_consume_and_break_on_auth_required_status_update_event(
         self, mock_create_task: MagicMock
-    ):
+    ) -> None:
         auth_status_update = create_sample_status_update(
             task_id='auth_status_task', status_state=TaskState.auth_required
         )
@@ -332,7 +332,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             self.aggregator._continue_consuming.call_args[0][0], AsyncIterator
         )
 
-    async def test_consume_and_break_completes_normally(self):
+    async def test_consume_and_break_completes_normally(self) -> None:
         event1 = create_sample_message('event one normal', msg_id='n1')
         event2 = create_sample_task('normal_task')
         final_task_state = create_sample_task(
@@ -364,7 +364,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.process.assert_not_called()
         self.mock_task_manager.get_task.assert_not_called()
 
-    async def test_consume_and_break_event_consumer_exception(self):
+    async def test_consume_and_break_event_consumer_exception(self) -> None:
         class TestInterruptException(Exception):
             pass
 
@@ -394,7 +394,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     @patch('asyncio.create_task')
     async def test_consume_and_break_non_blocking(
         self, mock_create_task: MagicMock
-    ):
+    ) -> None:
         """Test that with blocking=False, the method returns after the first event."""
         first_event = create_sample_task('non_blocking_task')
         event_after = create_sample_message('should be consumed later')
@@ -432,7 +432,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     @patch('asyncio.create_task')  # To verify _continue_consuming is called
     async def test_continue_consuming_processes_remaining_events(
         self, mock_create_task: MagicMock
-    ):
+    ) -> None:
         # This test focuses on verifying that if an interrupt occurs,
         # the events *after* the interrupting one are processed by _continue_consuming.
 

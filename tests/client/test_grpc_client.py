@@ -179,7 +179,7 @@ async def test_send_message_task_response(
     mock_grpc_stub: AsyncMock,
     sample_message_send_params: MessageSendParams,
     sample_task: Task,
-):
+) -> None:
     """Test send_message that returns a Task."""
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
         task=proto_utils.ToProto.task(sample_task)
@@ -198,7 +198,7 @@ async def test_send_message_message_response(
     mock_grpc_stub: AsyncMock,
     sample_message_send_params: MessageSendParams,
     sample_message: Message,
-):
+) -> None:
     """Test send_message that returns a Message."""
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
         msg=proto_utils.ToProto.message(sample_message)
@@ -223,7 +223,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
     sample_task: Task,
     sample_task_status_update_event: TaskStatusUpdateEvent,
     sample_task_artifact_update_event: TaskArtifactUpdateEvent,
-):
+) -> None:
     """Test send_message_streaming that yields responses."""
     stream = MagicMock()
     stream.read = AsyncMock(
@@ -268,7 +268,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
 @pytest.mark.asyncio
 async def test_get_task(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
-):
+) -> None:
     """Test retrieving a task."""
     mock_grpc_stub.GetTask.return_value = proto_utils.ToProto.task(sample_task)
     params = TaskQueryParams(id=sample_task.id)
@@ -286,7 +286,7 @@ async def test_get_task(
 @pytest.mark.asyncio
 async def test_get_task_with_history(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
-):
+) -> None:
     """Test retrieving a task with history."""
     mock_grpc_stub.GetTask.return_value = proto_utils.ToProto.task(sample_task)
     history_len = 10
@@ -304,7 +304,7 @@ async def test_get_task_with_history(
 @pytest.mark.asyncio
 async def test_cancel_task(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
-):
+) -> None:
     """Test cancelling a task."""
     cancelled_task = sample_task.model_copy()
     cancelled_task.status.state = TaskState.canceled
@@ -326,7 +326,7 @@ async def test_set_task_callback_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
-):
+) -> None:
     """Test setting a task push notification config with a valid task id."""
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
         proto_utils.ToProto.task_push_notification_config(
@@ -355,7 +355,7 @@ async def test_set_task_callback_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
-):
+) -> None:
     """Test setting a task push notification config with an invalid task id."""
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
         name=(
@@ -382,7 +382,7 @@ async def test_get_task_callback_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
-):
+) -> None:
     """Test retrieving a task push notification config with a valid task id."""
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
         proto_utils.ToProto.task_push_notification_config(
@@ -412,7 +412,7 @@ async def test_get_task_callback_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
-):
+) -> None:
     """Test retrieving a task push notification config with an invalid task id."""
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
         name=(

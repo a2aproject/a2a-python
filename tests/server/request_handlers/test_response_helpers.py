@@ -22,7 +22,7 @@ from a2a.types import (
 
 
 class TestResponseHelpers(unittest.TestCase):
-    def test_build_error_response_with_a2a_error(self):
+    def test_build_error_response_with_a2a_error(self) -> None:
         request_id = 'req1'
         specific_error = TaskNotFoundError()
         a2a_error = A2AError(root=specific_error)  # Correctly wrap
@@ -36,7 +36,7 @@ class TestResponseHelpers(unittest.TestCase):
             response_wrapper.root.error, specific_error
         )  # build_error_response unwraps A2AError
 
-    def test_build_error_response_with_jsonrpc_error(self):
+    def test_build_error_response_with_jsonrpc_error(self) -> None:
         request_id = 123
         json_rpc_error = InvalidParamsError(
             message='Custom invalid params'
@@ -51,7 +51,7 @@ class TestResponseHelpers(unittest.TestCase):
             response_wrapper.root.error, json_rpc_error
         )  # No .root access for json_rpc_error
 
-    def test_build_error_response_with_a2a_wrapping_jsonrpc_error(self):
+    def test_build_error_response_with_a2a_wrapping_jsonrpc_error(self) -> None:
         request_id = 'req_wrap'
         specific_jsonrpc_error = InvalidParamsError(message='Detail error')
         a2a_error_wrapping = A2AError(
@@ -65,7 +65,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(response_wrapper.root.id, request_id)
         self.assertEqual(response_wrapper.root.error, specific_jsonrpc_error)
 
-    def test_build_error_response_with_request_id_string(self):
+    def test_build_error_response_with_request_id_string(self) -> None:
         request_id = 'string_id_test'
         # Pass an A2AError-wrapped specific error for consistency with how build_error_response handles A2AError
         error = A2AError(root=TaskNotFoundError())
@@ -75,7 +75,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertIsInstance(response_wrapper.root, JSONRPCErrorResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
 
-    def test_build_error_response_with_request_id_int(self):
+    def test_build_error_response_with_request_id_int(self) -> None:
         request_id = 456
         error = A2AError(root=TaskNotFoundError())
         response_wrapper = build_error_response(
@@ -84,7 +84,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertIsInstance(response_wrapper.root, JSONRPCErrorResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
 
-    def test_build_error_response_with_request_id_none(self):
+    def test_build_error_response_with_request_id_none(self) -> None:
         request_id = None
         error = A2AError(root=TaskNotFoundError())
         response_wrapper = build_error_response(
@@ -103,7 +103,7 @@ class TestResponseHelpers(unittest.TestCase):
             history=[],
         )
 
-    def test_prepare_response_object_successful_response(self):
+    def test_prepare_response_object_successful_response(self) -> None:
         request_id = 'req_success'
         task_result = self._create_sample_task()
         response_wrapper = prepare_response_object(
@@ -121,7 +121,7 @@ class TestResponseHelpers(unittest.TestCase):
     @patch('a2a.server.request_handlers.response_helpers.build_error_response')
     def test_prepare_response_object_with_a2a_error_instance(
         self, mock_build_error
-    ):
+    ) -> None:
         request_id = 'req_a2a_err'
         specific_error = TaskNotFoundError()
         a2a_error_instance = A2AError(
@@ -152,7 +152,7 @@ class TestResponseHelpers(unittest.TestCase):
     @patch('a2a.server.request_handlers.response_helpers.build_error_response')
     def test_prepare_response_object_with_jsonrpcerror_base_instance(
         self, mock_build_error
-    ):
+    ) -> None:
         request_id = 789
         # Use the base JSONRPCError class instance
         json_rpc_base_error = JSONRPCError(
@@ -182,7 +182,7 @@ class TestResponseHelpers(unittest.TestCase):
     @patch('a2a.server.request_handlers.response_helpers.build_error_response')
     def test_prepare_response_object_specific_error_model_as_unexpected(
         self, mock_build_error
-    ):
+    ) -> None:
         request_id = 'req_specific_unexpected'
         # Pass a specific error model (like TaskNotFoundError) directly, NOT wrapped in A2AError
         # This should be treated as an "unexpected" type by prepare_response_object's current logic
@@ -221,7 +221,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(args[2], GetTaskResponse)
         self.assertEqual(response_wrapper, mock_final_wrapped_response)
 
-    def test_prepare_response_object_with_request_id_string(self):
+    def test_prepare_response_object_with_request_id_string(self) -> None:
         request_id = 'string_id_prep'
         task_result = self._create_sample_task()
         response_wrapper = prepare_response_object(
@@ -234,7 +234,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertIsInstance(response_wrapper.root, GetTaskSuccessResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
 
-    def test_prepare_response_object_with_request_id_int(self):
+    def test_prepare_response_object_with_request_id_int(self) -> None:
         request_id = 101112
         task_result = self._create_sample_task()
         response_wrapper = prepare_response_object(
@@ -247,7 +247,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertIsInstance(response_wrapper.root, GetTaskSuccessResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
 
-    def test_prepare_response_object_with_request_id_none(self):
+    def test_prepare_response_object_with_request_id_none(self) -> None:
         request_id = None
         task_result = self._create_sample_task()
         response_wrapper = prepare_response_object(
