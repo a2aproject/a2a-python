@@ -374,6 +374,17 @@ class ToProto:
             | a2a_pb2.DeleteTaskPushNotificationConfigRequest
         ),
     ) -> tuple[str, str]:
+        """Parses the task ID and push notification config ID from the request.
+
+        Args:
+            request: The request to parse.
+
+        Returns:
+            A tuple containing the task ID and push notification config ID.
+
+        Raises:
+            ServerError: If the request name is invalid.
+        """
         m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
         if not m:
           raise ServerError(
