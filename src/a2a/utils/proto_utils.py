@@ -367,6 +367,26 @@ class ToProto:
         )
 
     @classmethod
+    def task_push_notification_config_params(
+        cls,
+        request: (
+            a2a_pb2.GetTaskPushNotificationConfigRequest
+            | a2a_pb2.DeleteTaskPushNotificationConfigRequest
+        ),
+    ) -> tuple[str, str]:
+        m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
+        if not m:
+          raise ServerError(
+              error=types.InvalidParamsError(
+                  message=f'No task or config id for {request.name}'
+              )
+          )
+        return (
+            m.group(1),
+            m.group(2),
+        )
+
+    @classmethod
     def agent_card(
         cls,
         card: types.AgentCard,
