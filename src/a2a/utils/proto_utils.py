@@ -387,11 +387,11 @@ class ToProto:
         """
         m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
         if not m:
-          raise ServerError(
-              error=types.InvalidParamsError(
-                  message=f'No task or config id for {request.name}'
-              )
-          )
+            raise ServerError(
+                error=types.InvalidParamsError(
+                    message=f'No task or config id for {request.name}'
+                )
+            )
         return (
             m.group(1),
             m.group(2),
