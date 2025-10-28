@@ -18,6 +18,7 @@ from a2a.client.errors import (
 )
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import (
     AgentCard,
     CancelTaskRequest,
@@ -59,6 +60,7 @@ class JsonRpcTransport(ClientTransport):
     def __init__(
         self,
         httpx_client: httpx.AsyncClient,
+        client_extensions: list[str] | None = None,
         agent_card: AgentCard | None = None,
         url: str | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
@@ -72,6 +74,7 @@ class JsonRpcTransport(ClientTransport):
             raise ValueError('Must provide either agent_card or url')
 
         self.httpx_client = httpx_client
+        self.client_extensions = client_extensions
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self._needs_extended_card = (
@@ -79,6 +82,20 @@ class JsonRpcTransport(ClientTransport):
             if agent_card
             else True
         )
+
+    def _update_extension_header(
+        self, http_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        if self.client_extensions:
+            headers = http_kwargs.get('headers', {})
+            existing_extensions = headers.get(HTTP_EXTENSION_HEADER, '')
+            split = (
+                existing_extensions.split(', ') if existing_extensions else []
+            )
+            updated_extensions = list(set(self.client_extensions + split))
+            headers[HTTP_EXTENSION_HEADER] = ', '.join(updated_extensions)
+            http_kwargs['headers'] = headers
+        return http_kwargs
 
     async def _apply_interceptors(
         self,
@@ -122,6 +139,7 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
+        modified_kwargs = self._update_extension_header(modified_kwargs)
         response_data = await self._send_request(payload, modified_kwargs)
         response = SendMessageResponse.model_validate(response_data)
         if isinstance(response.root, JSONRPCErrorResponse):
@@ -147,6 +165,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
 
+        modified_kwargs = self._update_extension_header(modified_kwargs)
         modified_kwargs.setdefault(
             'timeout', self.httpx_client.timeout.as_dict().get('read', None)
         )

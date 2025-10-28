@@ -77,6 +77,7 @@ class ClientFactory:
                 TransportProtocol.jsonrpc,
                 lambda card, url, config, interceptors: JsonRpcTransport(
                     config.httpx_client or httpx.AsyncClient(),
+                    config.extensions or None,
                     card,
                     url,
                     interceptors,
@@ -87,6 +88,7 @@ class ClientFactory:
                 TransportProtocol.http_json,
                 lambda card, url, config, interceptors: RestTransport(
                     config.httpx_client or httpx.AsyncClient(),
+                    config.extensions or None,
                     card,
                     url,
                     interceptors,
