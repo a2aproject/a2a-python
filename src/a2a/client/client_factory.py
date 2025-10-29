@@ -76,11 +76,11 @@ class ClientFactory:
             self.register(
                 TransportProtocol.jsonrpc,
                 lambda card, url, config, interceptors: JsonRpcTransport(
-                    httpx_client=config.httpx_client or httpx.AsyncClient(),
-                    agent_card=card,
-                    url=url,
-                    interceptors=interceptors,
-                    client_extensions=config.extensions or None,
+                    config.httpx_client or httpx.AsyncClient(),
+                    card,
+                    url,
+                    interceptors,
+                    config.extensions or None,
                 ),
             )
         if TransportProtocol.http_json in supported:

@@ -44,14 +44,31 @@ class TestRestTransportExtensions:
         )
         http_kwargs = {}
         result_kwargs = client._update_extension_header(http_kwargs)
-        actual_extensions = set(
-            result_kwargs['headers'][HTTP_EXTENSION_HEADER].split(', ')
-        )
-        expected_extensions = {'test_extension_1', 'test_extension_2'}
+        header_value = result_kwargs['headers'][HTTP_EXTENSION_HEADER]
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
+
+        expected_extensions = {
+            'test_extension_1',
+            'test_extension_2',
+        }
+        assert len(actual_extensions_list) == 2
         assert actual_extensions == expected_extensions
 
+    @pytest.mark.parametrize(
+        'existing_header, expected_count',
+        [
+            ('test_extension_1, test_extension_2', 3),
+            ('test_extension_1,test_extension_2', 3),
+            ('test_extension_1', 3),
+        ],
+    )
     def test_update_extension_header_merge_with_existing_extensions(
-        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        existing_header: str,
+        expected_count: int,
     ):
         extensions = ['test_extension_2', 'test_extension_3']
         client = RestTransport(
@@ -59,20 +76,19 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
             client_extensions=extensions,
         )
-        http_kwargs = {
-            'headers': {
-                HTTP_EXTENSION_HEADER: 'test_extension_1, test_extension_2'
-            }
-        }
+        http_kwargs = {'headers': {HTTP_EXTENSION_HEADER: existing_header}}
         result_kwargs = client._update_extension_header(http_kwargs)
-        actual_extensions = set(
-            result_kwargs['headers'][HTTP_EXTENSION_HEADER].split(', ')
-        )
+
+        header_value = result_kwargs['headers'][HTTP_EXTENSION_HEADER]
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
+
         expected_extensions = {
             'test_extension_1',
             'test_extension_2',
             'test_extension_3',
         }
+        assert len(actual_extensions_list) == expected_count
         assert actual_extensions == expected_extensions
 
     def test_update_extension_header_with_other_headers(
@@ -124,8 +140,15 @@ class TestRestTransportExtensions:
 
         headers = kwargs.get('headers', {})
         assert HTTP_EXTENSION_HEADER in headers
-        actual_extensions = set(headers[HTTP_EXTENSION_HEADER].split(', '))
-        expected_extensions = {'test_extension_1', 'test_extension_2'}
+        header_value = kwargs['headers'][HTTP_EXTENSION_HEADER]
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
+
+        expected_extensions = {
+            'test_extension_1',
+            'test_extension_2',
+        }
+        assert len(actual_extensions_list) == 2
         assert actual_extensions == expected_extensions
 
     @pytest.mark.asyncio
@@ -140,8 +163,8 @@ class TestRestTransportExtensions:
         extensions = ['test_extension']
         client = RestTransport(
             httpx_client=mock_httpx_client,
-            client_extensions=extensions,
             agent_card=mock_agent_card,
+            client_extensions=extensions,
         )
         params = MessageSendParams(
             message=create_text_message_object(content='Hello stream')
