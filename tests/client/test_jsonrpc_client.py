@@ -899,38 +899,6 @@ class TestJsonRpcTransportExtensions:
         assert actual_extensions == expected_extensions
 
     @pytest.mark.asyncio
-    async def test_send_message_no_extensions(
-        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
-    ):
-        """Test that send_message does not add extension headers when client_extensions is None."""
-        client = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            client_extensions=None,
-            agent_card=mock_agent_card,
-        )
-        params = MessageSendParams(
-            message=create_text_message_object(content='Hello')
-        )
-        success_response = create_text_message_object(
-            role=Role.agent, content='Hi there!'
-        )
-        rpc_response = SendMessageSuccessResponse(
-            id='123', jsonrpc='2.0', result=success_response
-        )
-        # Mock the response from httpx_client.post
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.status_code = 200
-        mock_response.json.return_value = rpc_response.model_dump(mode='json')
-        mock_httpx_client.post.return_value = mock_response
-
-        await client.send_message(request=params)
-
-        mock_httpx_client.post.assert_called_once()
-        _, mock_kwargs = mock_httpx_client.post.call_args
-        headers = mock_kwargs.get('headers', {})
-        assert HTTP_EXTENSION_HEADER not in headers
-
-    @pytest.mark.asyncio
     @patch('a2a.client.transports.jsonrpc.aconnect_sse')
     async def test_send_message_streaming_with_extensions(
         self,

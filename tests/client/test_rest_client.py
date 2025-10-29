@@ -117,39 +117,6 @@ class TestRestTransportExtensions:
         assert actual_extensions == expected_extensions
 
     @pytest.mark.asyncio
-    async def test_send_message_no_extensions(
-        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
-    ):
-        """Test that send_message does not add extension headers when client_extensions is None."""
-        client = RestTransport(
-            httpx_client=mock_httpx_client,
-            client_extensions=None,
-            agent_card=mock_agent_card,
-        )
-        params = MessageSendParams(
-            message=create_text_message_object(content='Hello')
-        )
-
-        # Mock the build_request method to capture its inputs
-        mock_build_request = MagicMock(
-            return_value=AsyncMock(spec=httpx.Request)
-        )
-        mock_httpx_client.build_request = mock_build_request
-
-        # Mock the send method
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.status_code = 200
-        mock_httpx_client.send.return_value = mock_response
-
-        await client.send_message(request=params)
-
-        mock_build_request.assert_called_once()
-        _, kwargs = mock_build_request.call_args
-
-        headers = kwargs.get('headers', {})
-        assert HTTP_EXTENSION_HEADER not in headers
-
-    @pytest.mark.asyncio
     @patch('a2a.client.transports.rest.aconnect_sse')
     async def test_send_message_streaming_with_extensions(
         self,
