@@ -68,15 +68,20 @@ class RestTransport(ClientTransport):
     def _update_extension_header(
         self, http_kwargs: dict[str, Any]
     ) -> dict[str, Any]:
-        if self.client_extensions:
-            headers = http_kwargs.get('headers', {})
-            existing_extensions = headers.get(HTTP_EXTENSION_HEADER, '')
-            split = (
-                existing_extensions.split(', ') if existing_extensions else []
-            )
-            updated_extensions = list(set(self.client_extensions + split))
-            headers[HTTP_EXTENSION_HEADER] = ', '.join(updated_extensions)
-            http_kwargs['headers'] = headers
+        if not self.client_extensions:
+            return http_kwargs
+
+        headers = http_kwargs.setdefault('headers', {})
+        existing_extensions_str = headers.get(HTTP_EXTENSION_HEADER, '')
+
+        existing_extensions = [
+            e.strip() for e in existing_extensions_str.split(',') if e.strip()
+        ]
+
+        all_extensions = set(self.client_extensions)
+        all_extensions.update(existing_extensions)
+
+        headers[HTTP_EXTENSION_HEADER] = ', '.join(list(all_extensions))
         return http_kwargs
 
     async def _apply_interceptors(
