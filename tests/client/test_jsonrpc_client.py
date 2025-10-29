@@ -794,7 +794,9 @@ class TestJsonRpcTransportExtensions:
     ):
         extensions = ['test_extension_1', 'test_extension_2']
         client = JsonRpcTransport(
-            mock_httpx_client, extensions, mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
         )
         http_kwargs = {}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -809,7 +811,9 @@ class TestJsonRpcTransportExtensions:
     ):
         extensions = ['test_extension_1']
         client = JsonRpcTransport(
-            mock_httpx_client, extensions, mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
         )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -824,7 +828,9 @@ class TestJsonRpcTransportExtensions:
     ):
         extensions = ['test_extension_1', 'test_extension_2']
         client = JsonRpcTransport(
-            mock_httpx_client, extensions, mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
         )
         http_kwargs = {
             'headers': {

@@ -37,7 +37,11 @@ class TestRestTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         extensions = ['test_extension_1', 'test_extension_2']
-        client = RestTransport(mock_httpx_client, extensions, mock_agent_card)
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
+        )
         http_kwargs = {}
         result_kwargs = client._update_extension_header(http_kwargs)
         actual_extensions = set(
@@ -50,7 +54,11 @@ class TestRestTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         extensions = ['test_extension_2', 'test_extension_3']
-        client = RestTransport(mock_httpx_client, extensions, mock_agent_card)
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
+        )
         http_kwargs = {
             'headers': {
                 HTTP_EXTENSION_HEADER: 'test_extension_1, test_extension_2'
@@ -71,7 +79,11 @@ class TestRestTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         extensions = ['test_extension_1']
-        client = RestTransport(mock_httpx_client, extensions, mock_agent_card)
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            client_extensions=extensions,
+        )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
         headers = result_kwargs.get('headers', {})
