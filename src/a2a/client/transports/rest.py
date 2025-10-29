@@ -41,10 +41,10 @@ class RestTransport(ClientTransport):
     def __init__(
         self,
         httpx_client: httpx.AsyncClient,
-        client_extensions: list[str] | None = None,
         agent_card: AgentCard | None = None,
         url: str | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
+        client_extensions: list[str] | None = None,
     ):
         """Initializes the RestTransport."""
         if url:
@@ -56,7 +56,6 @@ class RestTransport(ClientTransport):
         if self.url.endswith('/'):
             self.url = self.url[:-1]
         self.httpx_client = httpx_client
-        self.client_extensions = client_extensions
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self._needs_extended_card = (
@@ -64,6 +63,7 @@ class RestTransport(ClientTransport):
             if agent_card
             else True
         )
+        self.client_extensions = client_extensions
 
     def _update_extension_header(
         self, http_kwargs: dict[str, Any]
