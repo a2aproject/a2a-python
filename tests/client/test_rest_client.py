@@ -40,7 +40,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -74,7 +74,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {'headers': {HTTP_EXTENSION_HEADER: existing_header}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -98,7 +98,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -111,11 +111,11 @@ class TestRestTransportExtensions:
     async def test_send_message_with_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
-        """Test that send_message adds client_extensions to headers."""
+        """Test that send_message adds extensions to headers."""
         extensions = ['test_extension_1', 'test_extension_2']
         client = RestTransport(
             httpx_client=mock_httpx_client,
-            client_extensions=extensions,
+            extensions=extensions,
             agent_card=mock_agent_card,
         )
         params = MessageSendParams(
@@ -164,7 +164,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         params = MessageSendParams(
             message=create_text_message_object(content='Hello stream')

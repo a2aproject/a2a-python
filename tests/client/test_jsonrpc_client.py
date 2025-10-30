@@ -796,7 +796,7 @@ class TestJsonRpcTransportExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -818,7 +818,7 @@ class TestJsonRpcTransportExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -847,7 +847,7 @@ class TestJsonRpcTransportExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         http_kwargs = {'headers': {HTTP_EXTENSION_HEADER: existing_header}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -864,26 +864,26 @@ class TestJsonRpcTransportExtensions:
         assert len(actual_extensions_list) == 3
         assert actual_extensions == expected_extensions
 
-    def test_update_extension_header_no_client_extensions(
+    def test_update_extension_header_no_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=None,
+            extensions=None,
         )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
         assert HTTP_EXTENSION_HEADER not in result_kwargs['headers']
         assert result_kwargs['headers']['X_Other'] == 'Test'
 
-    def test_update_extension_header_empty_client_extensions(
+    def test_update_extension_header_empty_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=[],
+            extensions=[],
         )
         http_kwargs = {'headers': {'X_Other': 'Test'}}
         result_kwargs = client._update_extension_header(http_kwargs)
@@ -894,12 +894,12 @@ class TestJsonRpcTransportExtensions:
     async def test_send_message_with_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
-        """Test that send_message adds extension headers when client_extensions are provided."""
+        """Test that send_message adds extension headers when extensions are provided."""
         extensions = ['test_extension_1', 'test_extension_2']
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         params = MessageSendParams(
             message=create_text_message_object(content='Hello')
@@ -947,7 +947,7 @@ class TestJsonRpcTransportExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
-            client_extensions=extensions,
+            extensions=extensions,
         )
         params = MessageSendParams(
             message=create_text_message_object(content='Hello stream')

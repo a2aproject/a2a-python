@@ -63,7 +63,7 @@ class JsonRpcTransport(ClientTransport):
         agent_card: AgentCard | None = None,
         url: str | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
-        client_extensions: list[str] | None = None,
+        extensions: list[str] | None = None,
     ):
         """Initializes the JsonRpcTransport."""
         if url:
@@ -81,12 +81,12 @@ class JsonRpcTransport(ClientTransport):
             if agent_card
             else True
         )
-        self.client_extensions = client_extensions
+        self.extensions = extensions
 
     def _update_extension_header(
         self, http_kwargs: dict[str, Any]
     ) -> dict[str, Any]:
-        if not self.client_extensions:
+        if not self.extensions:
             return http_kwargs
 
         headers = http_kwargs.setdefault('headers', {})
@@ -96,10 +96,10 @@ class JsonRpcTransport(ClientTransport):
             e.strip() for e in existing_extensions_str.split(',') if e.strip()
         ]
 
-        all_extensions = set(self.client_extensions)
+        all_extensions = set(self.extensions)
         all_extensions.update(existing_extensions)
 
-        headers[HTTP_EXTENSION_HEADER] = ', '.join(list(all_extensions))
+        headers[HTTP_EXTENSION_HEADER] = ','.join(list(all_extensions))
         return http_kwargs
 
     async def _apply_interceptors(
