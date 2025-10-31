@@ -98,9 +98,9 @@ class TransportProtocol(str, Enum):
     Supported A2A transport protocols.
     """
 
-    jsonrpc = 'JSONRPC'
-    grpc = 'GRPC'
-    http_json = 'HTTP+JSON'
+    JSONRPC = 'JSONRPC'
+    GRPC = 'GRPC'
+    HTTP_JSON = 'HTTP+JSON'
 
 
 class AgentInterface(A2ABaseModel):
@@ -112,9 +112,9 @@ class AgentInterface(A2ABaseModel):
     transport: TransportProtocol = Field(
         ...,
         examples=[
-            TransportProtocol.jsonrpc,
-            TransportProtocol.grpc,
-            TransportProtocol.http_json,
+            TransportProtocol.JSONRPC,
+            TransportProtocol.GRPC,
+            TransportProtocol.HTTP_JSON,
         ],
     )
     """
@@ -1782,11 +1782,11 @@ class AgentCard(A2ABaseModel):
     A human-readable name for the agent.
     """
     preferred_transport: TransportProtocol | None = Field(
-        default=TransportProtocol.jsonrpc,
+        default=TransportProtocol.JSONRPC,
         examples=[
-            TransportProtocol.jsonrpc,
-            TransportProtocol.grpc,
-            TransportProtocol.http_json,
+            TransportProtocol.JSONRPC,
+            TransportProtocol.GRPC,
+            TransportProtocol.HTTP_JSON,
         ],
     )
     """
