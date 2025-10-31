@@ -244,6 +244,62 @@ class TestProtoUtils:
             proto_utils.FromProto.task_push_notification_config(request)
         assert isinstance(exc_info.value.error, types.InvalidParamsError)
 
+    @pytest.mark.parametrize(
+        'request_type, name, expected_task_id, expected_config_id',
+        [
+            (
+                a2a_pb2.GetTaskPushNotificationConfigRequest,
+                'tasks/task-123/pushNotificationConfigs/config-456',
+                'task-123',
+                'config-456',
+            ),
+            (
+                a2a_pb2.DeleteTaskPushNotificationConfigRequest,
+                'tasks/task-abc/pushNotificationConfigs/config-def',
+                'task-abc',
+                'config-def',
+            ),
+        ],
+    )
+    def test_task_push_notification_config_params_valid(
+        self, request_type, name, expected_task_id, expected_config_id
+    ):
+        """Test valid name in task_push_notification_config_params."""
+        request = request_type(name=name)
+        task_id, config_id = (
+            proto_utils.ToProto.task_push_notification_config_params(request)
+        )
+        assert task_id == expected_task_id
+        assert config_id == expected_config_id
+
+    @pytest.mark.parametrize(
+        'request_type',
+        [
+            a2a_pb2.GetTaskPushNotificationConfigRequest,
+            a2a_pb2.DeleteTaskPushNotificationConfigRequest,
+        ],
+    )
+    @pytest.mark.parametrize(
+        'name',
+        [
+            'invalid-name-format',
+            'tasks/task-123',
+            'tasks/task-123/pushNotificationConfigs',
+            'tasks//pushNotificationConfigs/config-456',
+            'tasks/task-123/pushNotificationConfigs/',
+            'foo/task-123/bar/config-456',
+        ],
+    )
+    def test_task_push_notification_config_params_invalid(
+        self, request_type, name
+    ):
+        """Test invalid names in task_push_notification_config_params."""
+        request = request_type(name=name)
+        with pytest.raises(ServerError) as exc_info:
+            proto_utils.ToProto.task_push_notification_config_params(request)
+        assert isinstance(exc_info.value.error, types.InvalidParamsError)
+        assert 'No task or config id for' in exc_info.value.error.message
+
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""
         assert proto_utils.ToProto.message(None) is None
