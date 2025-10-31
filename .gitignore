@@ -11,3 +11,4 @@ coverage.xml
 .nox
 spec.json
 .vscode/
+.python-version
