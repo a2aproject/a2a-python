@@ -85,3 +85,11 @@ class A2AClientJSONRPCError(A2AClientError):
         """
         self.error = error.error
         super().__init__(f'JSON-RPC Error {error.error}')
+
+
+class A2AClientProcessExitedError(A2AClientError):
+    """Client exception raised when an underlying subprocess exits unexpectedly."""
+
+    def __init__(self, message: str = 'Subprocess exited unexpectedly'):
+        self.message = message
+        super().__init__(f'Process exited: {message}')

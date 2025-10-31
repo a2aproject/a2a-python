@@ -3,6 +3,7 @@
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
+from a2a.client.transports.stdio import StdioTransport
 
 
 try:
@@ -16,4 +17,5 @@ __all__ = [
     'GrpcTransport',
     'JsonRpcTransport',
     'RestTransport',
+    'StdioTransport',
 ]

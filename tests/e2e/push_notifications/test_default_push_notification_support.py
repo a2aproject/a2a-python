@@ -6,7 +6,7 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from agent_app import create_agent_app
+from agent_app import create_agent_app, agent_app_factory
 from notifications_app import Notification, create_notifications_app
 from utils import (
     create_app_process,
@@ -41,7 +41,7 @@ def notifications_server():
     port = find_free_port()
     url = f'http://{host}:{port}'
 
-    process = create_app_process(create_notifications_app(), host, port)
+    process = create_app_process(create_notifications_app, host, port)
     process.start()
     try:
         wait_for_server_ready(f'{url}/health')
@@ -69,9 +69,7 @@ def agent_server(notifications_client: httpx.AsyncClient):
     port = find_free_port()
     url = f'http://{host}:{port}'
 
-    process = create_app_process(
-        create_agent_app(url, notifications_client), host, port
-    )
+    process = create_app_process(agent_app_factory(url), host, port)
     process.start()
     try:
         wait_for_server_ready(f'{url}/v1/card')

@@ -15,8 +15,15 @@ def find_free_port():
         return s.getsockname()[1]
 
 
-def run_server(app, host, port) -> None:
-    """Runs a uvicorn server."""
+def run_server(app_or_factory, host, port) -> None:
+    """Runs a uvicorn server.
+
+    Accepts either a FastAPI application instance or a zero-argument factory
+    callable that returns one. Constructing the app inside the child process
+    avoids pickling nested route function closures when using the 'spawn'
+    start method (default on macOS).
+    """
+    app = app_or_factory() if callable(app_or_factory) else app_or_factory
     uvicorn.run(app, host=host, port=port, log_level='warning')
 
 
@@ -36,10 +43,15 @@ def wait_for_server_ready(url: str, timeout: int = 10) -> None:
         time.sleep(0.1)
 
 
-def create_app_process(app, host, port) -> Process:
-    """Creates a separate process for a given application."""
+def create_app_process(app_or_factory, host, port) -> Process:
+    """Creates a separate process for a given application or factory.
+
+    Passing the factory (rather than a fully constructed FastAPI app) ensures
+    the app is built in the child process, mitigating pickling errors like:
+        AttributeError: Can't pickle local object 'FastAPI.setup.<locals>.openapi'
+    """
     return Process(
         target=run_server,
-        args=(app, host, port),
+        args=(app_or_factory, host, port),
         daemon=True,
     )

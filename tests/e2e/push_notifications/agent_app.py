@@ -2,6 +2,7 @@ import httpx
 
 from fastapi import FastAPI
 
+from functools import partial
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.apps import A2ARESTFastAPIApplication
 from a2a.server.events import EventQueue
@@ -125,11 +126,14 @@ class TestAgentExecutor(AgentExecutor):
         raise NotImplementedError('cancel not supported')
 
 
-def create_agent_app(
-    url: str, notification_client: httpx.AsyncClient
-) -> FastAPI:
-    """Creates a new HTTP+REST FastAPI application for the test agent."""
+def create_agent_app(url: str) -> FastAPI:
+    """Creates a new HTTP+REST FastAPI application for the test agent.
+
+    The app constructs its own httpx.AsyncClient for push notifications to
+    avoid passing non-picklable client objects across process boundaries.
+    """
     push_config_store = InMemoryPushNotificationConfigStore()
+    notification_client = httpx.AsyncClient()
     app = A2ARESTFastAPIApplication(
         agent_card=test_agent_card(url),
         http_handler=DefaultRequestHandler(
@@ -143,3 +147,13 @@ def create_agent_app(
         ),
     )
     return app.build()
+
+
+# Helper to allow passing a picklable factory to multiprocessing.Process.
+def _build_agent_app(url: str):
+    return create_agent_app(url)
+
+
+def agent_app_factory(url: str):
+    """Returns a picklable callable building the agent app when invoked."""
+    return partial(_build_agent_app, url)
