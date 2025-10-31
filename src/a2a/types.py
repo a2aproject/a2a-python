@@ -93,13 +93,30 @@ class AgentExtension(A2ABaseModel):
     """
 
 
+class TransportProtocol(str, Enum):
+    """
+    Supported A2A transport protocols.
+    """
+
+    jsonrpc = 'JSONRPC'
+    grpc = 'GRPC'
+    http_json = 'HTTP+JSON'
+
+
 class AgentInterface(A2ABaseModel):
     """
     Declares a combination of a target URL and a transport protocol for interacting with the agent.
     This allows agents to expose the same functionality over multiple transport mechanisms.
     """
 
-    transport: str = Field(..., examples=['JSONRPC', 'GRPC', 'HTTP+JSON'])
+    transport: TransportProtocol = Field(
+        ..., 
+        examples=[
+            TransportProtocol.jsonrpc, 
+            TransportProtocol.grpc, 
+            TransportProtocol.http_json,
+        ]
+    )
     """
     The transport protocol supported at this URL.
     """
@@ -1020,17 +1037,6 @@ class TextPart(A2ABaseModel):
     The string content of the text part.
     """
 
-
-class TransportProtocol(str, Enum):
-    """
-    Supported A2A transport protocols.
-    """
-
-    jsonrpc = 'JSONRPC'
-    grpc = 'GRPC'
-    http_json = 'HTTP+JSON'
-
-
 class UnsupportedOperationError(A2ABaseModel):
     """
     An A2A-specific error indicating that the requested operation is not supported by the agent.
@@ -1774,8 +1780,13 @@ class AgentCard(A2ABaseModel):
     """
     A human-readable name for the agent.
     """
-    preferred_transport: str | None = Field(
-        default='JSONRPC', examples=['JSONRPC', 'GRPC', 'HTTP+JSON']
+    preferred_transport: TransportProtocol | None = Field(
+        default=TransportProtocol.jsonrpc, 
+        examples=[
+            TransportProtocol.jsonrpc, 
+            TransportProtocol.grpc, 
+            TransportProtocol.http_json
+        ]
     )
     """
     The transport protocol for the preferred endpoint (the main 'url' field).
