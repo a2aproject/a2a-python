@@ -42,22 +42,64 @@
 
 ### 🔧 Installation
 
-Install the core SDK and any desired extras using your preferred package manager.
+The project is managed with [uv](https://github.com/astral-sh/uv) for fast, reproducible Python environments.
 
-| Feature                  | `uv` Command                               | `pip` Command                                |
-| ------------------------ | ------------------------------------------ | -------------------------------------------- |
-| **Core SDK**             | `uv add a2a-sdk`                           | `pip install a2a-sdk`                        |
-| **All Extras**           | `uv add "a2a-sdk[all]"`                    | `pip install "a2a-sdk[all]"`                 |
-| **HTTP Server**          | `uv add "a2a-sdk[http-server]"`            | `pip install "a2a-sdk[http-server]"`         |
-| **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
-| **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
-| **Encryption**           | `uv add "a2a-sdk[encryption]"`             | `pip install "a2a-sdk[encryption]"`          |
-|                          |                                            |                                              |
-| **Database Drivers**     |                                            |                                              |
-| **PostgreSQL**           | `uv add "a2a-sdk[postgresql]"`             | `pip install "a2a-sdk[postgresql]"`          |
-| **MySQL**                | `uv add "a2a-sdk[mysql]"`                  | `pip install "a2a-sdk[mysql]"`               |
-| **SQLite**               | `uv add "a2a-sdk[sqlite]"`                 | `pip install "a2a-sdk[sqlite]"`              |
-| **All SQL Drivers**      | `uv add "a2a-sdk[sql]"`                    | `pip install "a2a-sdk[sql]"`                 |
+#### Using uv (recommended)
+
+Initialize / sync the environment (installs core deps):
+
+```bash
+uv sync  # reads pyproject.toml and installs base dependencies
+```
+
+Install extras:
+
+```bash
+uv add 'a2a-sdk[http-server]'        # HTTP server support
+uv add 'a2a-sdk[grpc]'               # gRPC support
+uv add 'a2a-sdk[telemetry]'          # OpenTelemetry tracing
+uv add 'a2a-sdk[encryption]'         # cryptography
+uv add 'a2a-sdk[sql]'                # all database drivers
+uv add 'a2a-sdk[all]'                # everything
+```
+
+Run tests:
+
+```bash
+uv run pytest
+```
+
+Format & lint:
+
+```bash
+uv run ruff check .
+uv run ruff format .
+```
+
+Add a new dev dependency (example mypy):
+
+```bash
+uv add --group dev mypy
+```
+
+#### Using pip (alternative)
+
+Install the core SDK and any desired extras using pip.
+
+| Feature                   | `uv` Command                    | `pip` Command                        |
+| ------------------------- | ------------------------------- | ------------------------------------ |
+| **Core SDK**              | `uv add a2a-sdk`                | `pip install a2a-sdk`                |
+| **All Extras**            | `uv add "a2a-sdk[all]"`         | `pip install "a2a-sdk[all]"`         |
+| **HTTP Server**           | `uv add "a2a-sdk[http-server]"` | `pip install "a2a-sdk[http-server]"` |
+| **gRPC Support**          | `uv add "a2a-sdk[grpc]"`        | `pip install "a2a-sdk[grpc]"`        |
+| **OpenTelemetry Tracing** | `uv add "a2a-sdk[telemetry]"`   | `pip install "a2a-sdk[telemetry]"`   |
+| **Encryption**            | `uv add "a2a-sdk[encryption]"`  | `pip install "a2a-sdk[encryption]"`  |
+|                           |                                 |                                      |
+| **Database Drivers**      |                                 |                                      |
+| **PostgreSQL**            | `uv add "a2a-sdk[postgresql]"`  | `pip install "a2a-sdk[postgresql]"`  |
+| **MySQL**                 | `uv add "a2a-sdk[mysql]"`       | `pip install "a2a-sdk[mysql]"`       |
+| **SQLite**                | `uv add "a2a-sdk[sqlite]"`      | `pip install "a2a-sdk[sqlite]"`      |
+| **All SQL Drivers**       | `uv add "a2a-sdk[sql]"`         | `pip install "a2a-sdk[sql]"`         |
 
 ## Examples
 
