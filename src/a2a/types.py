@@ -110,12 +110,12 @@ class AgentInterface(A2ABaseModel):
     """
 
     transport: TransportProtocol = Field(
-        ..., 
+        ...,
         examples=[
-            TransportProtocol.jsonrpc, 
-            TransportProtocol.grpc, 
+            TransportProtocol.jsonrpc,
+            TransportProtocol.grpc,
             TransportProtocol.http_json,
-        ]
+        ],
     )
     """
     The transport protocol supported at this URL.
@@ -1037,6 +1037,7 @@ class TextPart(A2ABaseModel):
     The string content of the text part.
     """
 
+
 class UnsupportedOperationError(A2ABaseModel):
     """
     An A2A-specific error indicating that the requested operation is not supported by the agent.
@@ -1781,12 +1782,12 @@ class AgentCard(A2ABaseModel):
     A human-readable name for the agent.
     """
     preferred_transport: TransportProtocol | None = Field(
-        default=TransportProtocol.jsonrpc, 
+        default=TransportProtocol.jsonrpc,
         examples=[
-            TransportProtocol.jsonrpc, 
-            TransportProtocol.grpc, 
-            TransportProtocol.http_json
-        ]
+            TransportProtocol.jsonrpc,
+            TransportProtocol.grpc,
+            TransportProtocol.http_json,
+        ],
     )
     """
     The transport protocol for the preferred endpoint (the main 'url' field).
