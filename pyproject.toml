@@ -47,30 +47,6 @@ all = [
   "a2a-sdk[telemetry]",
 ]
 
-# Development/testing extras mirror dependency-groups.dev for editable installs
-dev = [
-  "datamodel-code-generator>=0.30.0",
-  "mypy>=1.15.0",
-  "pytest>=8.3.5",
-  "pytest-asyncio>=0.26.0",
-  "pytest-cov>=6.1.1",
-  "pytest-mock>=3.14.0",
-  "respx>=0.20.2",
-  "ruff>=0.12.8",
-  "uv-dynamic-versioning>=0.8.2",
-  "types-protobuf",
-  "types-requests",
-  "pre-commit",
-  "fastapi>=0.115.2",
-  "sse-starlette",
-  "starlette",
-  "pyupgrade",
-  "autoflake",
-  "no_implicit_optional",
-  "trio",
-  "uvicorn>=0.35.0",
-]
-
 [project.urls]
 homepage = "https://a2a-protocol.org/"
 repository = "https://github.com/a2aproject/a2a-python"
