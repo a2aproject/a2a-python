@@ -80,6 +80,7 @@ class ClientFactory:
                     card,
                     url,
                     interceptors,
+                    config.extensions or None,
                 ),
             )
         if TransportProtocol.http_json in supported:
@@ -90,6 +91,7 @@ class ClientFactory:
                     card,
                     url,
                     interceptors,
+                    config.extensions or None,
                 ),
             )
         if TransportProtocol.grpc in supported:

@@ -13,6 +13,7 @@ from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2
 from a2a.types import (
     AgentCard,
@@ -43,6 +44,7 @@ class RestTransport(ClientTransport):
         agent_card: AgentCard | None = None,
         url: str | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
+        extensions: list[str] | None = None,
     ):
         """Initializes the RestTransport."""
         if url:
@@ -61,6 +63,26 @@ class RestTransport(ClientTransport):
             if agent_card
             else True
         )
+        self.extensions = extensions
+
+    def _update_extension_header(
+        self, http_kwargs: dict[str, Any]
+    ) -> dict[str, Any]:
+        if not self.extensions:
+            return http_kwargs
+
+        headers = http_kwargs.setdefault('headers', {})
+        existing_extensions_str = headers.get(HTTP_EXTENSION_HEADER, '')
+
+        existing_extensions = [
+            e.strip() for e in existing_extensions_str.split(',') if e.strip()
+        ]
+
+        all_extensions = set(self.extensions)
+        all_extensions.update(existing_extensions)
+
+        headers[HTTP_EXTENSION_HEADER] = ','.join(list(all_extensions))
+        return http_kwargs
 
     async def _apply_interceptors(
         self,
@@ -98,6 +120,7 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
+        modified_kwargs = self._update_extension_header(modified_kwargs)
         return payload, modified_kwargs
 
     async def send_message(
