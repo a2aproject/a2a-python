@@ -27,11 +27,10 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-proto = ["protobuf>=5.29.5"]
 jsonrpc-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
-http-server = ["a2a-sdk[jsonrpc-server]", "a2a-sdk[proto]"]
+http-server = ["a2a-sdk[jsonrpc-server]", "protobuf>=5.29.5"]
 encryption = ["cryptography>=43.0.0"]
-grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "google-api-core>=1.26.0", "a2a-sdk[proto]"]
+grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0", "google-api-core>=1.26.0", "protobuf>=5.29.5"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
