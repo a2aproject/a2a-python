@@ -12,7 +12,7 @@ try:
     from google.protobuf import json_format, struct_pb2
 except ImportError as e:
     raise ImportError(
-        'proto-utils requires protobuf. Install with "pip install a2a-sdk[proto]"'
+        'proto-utils requires protobuf. Install with "pip install a2a-sdk[grpc] or a2a-sdk[http-server] depending on need"'
     ) from e
 
 from a2a import types
