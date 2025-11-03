@@ -18,7 +18,7 @@ from a2a.client.errors import (
 )
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
+from a2a.client.transports.utils import get_http_args, update_extension_header
 from a2a.types import (
     AgentCard,
     CancelTaskRequest,
@@ -83,25 +83,6 @@ class JsonRpcTransport(ClientTransport):
         )
         self.extensions = extensions
 
-    def _update_extension_header(
-        self, http_kwargs: dict[str, Any]
-    ) -> dict[str, Any]:
-        if not self.extensions:
-            return http_kwargs
-
-        headers = http_kwargs.setdefault('headers', {})
-        existing_extensions_str = headers.get(HTTP_EXTENSION_HEADER, '')
-
-        existing_extensions = [
-            e.strip() for e in existing_extensions_str.split(',') if e.strip()
-        ]
-
-        all_extensions = set(self.extensions)
-        all_extensions.update(existing_extensions)
-
-        headers[HTTP_EXTENSION_HEADER] = ','.join(list(all_extensions))
-        return http_kwargs
-
     async def _apply_interceptors(
         self,
         method_name: str,
@@ -125,11 +106,6 @@ class JsonRpcTransport(ClientTransport):
             )
         return final_request_payload, final_http_kwargs
 
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
-
     async def send_message(
         self,
         request: MessageSendParams,
@@ -141,10 +117,12 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'message/send',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
-        modified_kwargs = self._update_extension_header(modified_kwargs)
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SendMessageResponse.model_validate(response_data)
         if isinstance(response.root, JSONRPCErrorResponse):
@@ -166,11 +144,13 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'message/stream',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
 
-        modified_kwargs = self._update_extension_header(modified_kwargs)
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         modified_kwargs.setdefault(
             'timeout', self.httpx_client.timeout.as_dict().get('read', None)
         )
@@ -237,7 +217,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
@@ -257,7 +237,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/cancel',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
@@ -279,7 +259,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/set',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
@@ -303,7 +283,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
@@ -327,7 +307,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/resubscribe',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
 
@@ -369,7 +349,7 @@ class JsonRpcTransport(ClientTransport):
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
             card = await resolver.get_agent_card(
-                http_kwargs=self._get_http_args(context)
+                http_kwargs=get_http_args(context)
             )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
@@ -383,7 +363,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             request.method,
             request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
 

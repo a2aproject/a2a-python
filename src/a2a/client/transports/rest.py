@@ -13,7 +13,7 @@ from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
+from a2a.client.transports.utils import get_http_args, update_extension_header
 from a2a.grpc import a2a_pb2
 from a2a.types import (
     AgentCard,
@@ -65,25 +65,6 @@ class RestTransport(ClientTransport):
         )
         self.extensions = extensions
 
-    def _update_extension_header(
-        self, http_kwargs: dict[str, Any]
-    ) -> dict[str, Any]:
-        if not self.extensions:
-            return http_kwargs
-
-        headers = http_kwargs.setdefault('headers', {})
-        existing_extensions_str = headers.get(HTTP_EXTENSION_HEADER, '')
-
-        existing_extensions = [
-            e.strip() for e in existing_extensions_str.split(',') if e.strip()
-        ]
-
-        all_extensions = set(self.extensions)
-        all_extensions.update(existing_extensions)
-
-        headers[HTTP_EXTENSION_HEADER] = ','.join(list(all_extensions))
-        return http_kwargs
-
     async def _apply_interceptors(
         self,
         request_payload: dict[str, Any],
@@ -94,11 +75,6 @@ class RestTransport(ClientTransport):
         final_request_payload = request_payload
         # TODO: Implement interceptors for other transports
         return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
 
     async def _prepare_send_message(
         self, request: MessageSendParams, context: ClientCallContext | None
@@ -117,10 +93,12 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
-        modified_kwargs = self._update_extension_header(modified_kwargs)
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         return payload, modified_kwargs
 
     async def send_message(
@@ -231,7 +209,7 @@ class RestTransport(ClientTransport):
         """Retrieves the current state and history of a specific task."""
         _payload, modified_kwargs = await self._apply_interceptors(
             request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_get_request(
@@ -256,7 +234,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_post_request(
@@ -280,7 +258,7 @@ class RestTransport(ClientTransport):
         )
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
-            payload, self._get_http_args(context), context
+            payload, get_http_args(context), context
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
@@ -304,7 +282,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_get_request(
@@ -325,7 +303,7 @@ class RestTransport(ClientTransport):
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Reconnects to get task updates."""
-        http_kwargs = self._get_http_args(context) or {}
+        http_kwargs = get_http_args(context) or {}
         http_kwargs.setdefault('timeout', None)
 
         async with aconnect_sse(
@@ -360,7 +338,7 @@ class RestTransport(ClientTransport):
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
             card = await resolver.get_agent_card(
-                http_kwargs=self._get_http_args(context)
+                http_kwargs=get_http_args(context)
             )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
@@ -372,7 +350,7 @@ class RestTransport(ClientTransport):
 
         _, modified_kwargs = await self._apply_interceptors(
             {},
-            self._get_http_args(context),
+            get_http_args(context),
             context,
         )
         response_data = await self._send_get_request(

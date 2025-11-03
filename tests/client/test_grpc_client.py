@@ -1,9 +1,11 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import grpc
 import pytest
 
+from a2a.client.middleware import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCapabilities,
@@ -40,6 +42,8 @@ def mock_grpc_stub() -> AsyncMock:
     stub.CancelTask = AsyncMock()
     stub.CreateTaskPushNotificationConfig = AsyncMock()
     stub.GetTaskPushNotificationConfig = AsyncMock()
+    stub.TaskSubscription = MagicMock()
+    stub.GetAgentCard = AsyncMock()
     return stub
 
 
@@ -278,7 +282,8 @@ async def test_get_task(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=None
-        )
+        ),
+        metadata=[],
     )
     assert response.id == sample_task.id
 
@@ -297,7 +302,8 @@ async def test_get_task_with_history(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=history_len
-        )
+        ),
+        metadata=[],
     )
 
 
@@ -316,7 +322,8 @@ async def test_cancel_task(
     response = await grpc_transport.cancel_task(params)
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
-        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}')
+        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
+        metadata=[],
     )
     assert response.status.state == TaskState.canceled
 
@@ -345,7 +352,8 @@ async def test_set_task_callback_with_valid_task(
             config=proto_utils.ToProto.task_push_notification_config(
                 sample_task_push_notification_config
             ),
-        )
+        ),
+        metadata=[],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -402,7 +410,8 @@ async def test_get_task_callback_with_valid_task(
                 f'tasks/{params.id}/'
                 f'pushNotificationConfigs/{params.push_notification_config_id}'
             ),
-        )
+        ),
+        metadata=[],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -434,3 +443,302 @@ async def test_get_task_callback_with_invalid_task(
         'Bad TaskPushNotificationConfig resource name'
         in exc_info.value.error.message
     )
+
+
+class TestGrpcTransportExtensions:
+    def test_get_metadata_no_initial(self, sample_agent_card: AgentCard):
+        extensions = ['test_extension_1', 'test_extension_2']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        metadata = transport._get_metadata(None)
+        metadata_dict = dict(metadata)
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        actual_extensions = set(metadata_dict[HTTP_EXTENSION_HEADER].split(','))
+        assert actual_extensions == set(extensions)
+
+    def test_get_metadata_with_existing(self, sample_agent_card: AgentCard):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        context = ClientCallContext(
+            state={'grpc_metadata': [('x-other', 'Test')]}
+        )
+        metadata = transport._get_metadata(context)
+        metadata_dict = dict(metadata)
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+        assert metadata_dict['x-other'] == 'Test'
+
+    @pytest.mark.parametrize(
+        'existing_header, expected_extensions',
+        [
+            (
+                'test_extension_2, test_extension_3',
+                {'test_extension_1', 'test_extension_2', 'test_extension_3'},
+            ),
+            (
+                'test_extension_3',
+                {'test_extension_1', 'test_extension_2', 'test_extension_3'},
+            ),
+        ],
+    )
+    def test_get_metadata_merge_with_existing(
+        self,
+        sample_agent_card: AgentCard,
+        existing_header: str,
+        expected_extensions: set,
+    ):
+        extensions = ['test_extension_1', 'test_extension_2']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        context = ClientCallContext(
+            state={'grpc_metadata': [(HTTP_EXTENSION_HEADER, existing_header)]}
+        )
+        metadata = transport._get_metadata(context)
+        metadata_dict = dict(metadata)
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        actual_extensions = set(metadata_dict[HTTP_EXTENSION_HEADER].split(','))
+        assert actual_extensions == expected_extensions
+
+    def test_get_metadata_no_extensions(self, sample_agent_card: AgentCard):
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=None,
+        )
+        context = ClientCallContext(
+            state={'grpc_metadata': [('x-other', 'Test')]}
+        )
+        metadata = transport._get_metadata(context)
+        metadata_dict = dict(metadata)
+        assert HTTP_EXTENSION_HEADER not in metadata_dict
+        assert metadata_dict['x-other'] == 'Test'
+
+    def test_get_metadata_empty_extensions(self, sample_agent_card: AgentCard):
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=[],
+        )
+        context = ClientCallContext(
+            state={'grpc_metadata': [('x-other', 'Test')]}
+        )
+        metadata = transport._get_metadata(context)
+        metadata_dict = dict(metadata)
+        assert HTTP_EXTENSION_HEADER not in metadata_dict
+        assert metadata_dict['x-other'] == 'Test'
+
+    @pytest.mark.asyncio
+    async def test_send_message_with_extensions(
+        self,
+        mock_grpc_stub: AsyncMock,
+        sample_agent_card: AgentCard,
+        sample_message_send_params: MessageSendParams,
+    ):
+        extensions = ['test_extension_1', 'test_extension_2']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
+            msg=proto_utils.ToProto.message(sample_message_send_params.message)
+        )
+
+        await transport.send_message(sample_message_send_params)
+
+        mock_grpc_stub.SendMessage.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.SendMessage.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert set(metadata_dict[HTTP_EXTENSION_HEADER].split(',')) == set(
+            extensions
+        )
+
+    @pytest.mark.asyncio
+    async def test_send_message_streaming_with_extensions(
+        self,
+        mock_grpc_stub: AsyncMock,
+        sample_agent_card: AgentCard,
+        sample_message_send_params: MessageSendParams,
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        stream = MagicMock()
+        stream.read = AsyncMock(side_effect=[grpc.aio.EOF])
+        mock_grpc_stub.SendStreamingMessage.return_value = stream
+
+        async for _ in transport.send_message_streaming(
+            sample_message_send_params
+        ):
+            pass
+
+        mock_grpc_stub.SendStreamingMessage.assert_called_once()
+        _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_resubscribe_with_extensions(
+        self, mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        stream = MagicMock()
+        stream.read = AsyncMock(side_effect=[grpc.aio.EOF])
+        mock_grpc_stub.TaskSubscription.return_value = stream
+
+        async for _ in transport.resubscribe(TaskIdParams(id='task-1')):
+            pass
+
+        mock_grpc_stub.TaskSubscription.assert_called_once()
+        _, kwargs = mock_grpc_stub.TaskSubscription.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_get_task_with_extensions(
+        self, mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.GetTask.return_value = a2a_pb2.Task()
+
+        await transport.get_task(TaskQueryParams(id='task-1'))
+
+        mock_grpc_stub.GetTask.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.GetTask.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_cancel_task_with_extensions(
+        self, mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.CancelTask.return_value = a2a_pb2.Task()
+
+        await transport.cancel_task(TaskIdParams(id='task-1'))
+
+        mock_grpc_stub.CancelTask.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.CancelTask.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_set_task_callback_with_extensions(
+        self,
+        mock_grpc_stub: AsyncMock,
+        sample_agent_card: AgentCard,
+        sample_task_push_notification_config: TaskPushNotificationConfig,
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
+            proto_utils.ToProto.task_push_notification_config(
+                sample_task_push_notification_config
+            )
+        )
+
+        await transport.set_task_callback(sample_task_push_notification_config)
+
+        mock_grpc_stub.CreateTaskPushNotificationConfig.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.CreateTaskPushNotificationConfig.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_get_task_callback_with_extensions(
+        self,
+        mock_grpc_stub: AsyncMock,
+        sample_agent_card: AgentCard,
+        sample_task_push_notification_config: TaskPushNotificationConfig,
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
+            proto_utils.ToProto.task_push_notification_config(
+                sample_task_push_notification_config
+            )
+        )
+
+        await transport.get_task_callback(
+            GetTaskPushNotificationConfigParams(
+                id=sample_task_push_notification_config.task_id,
+                push_notification_config_id=sample_task_push_notification_config.push_notification_config.id,
+            )
+        )
+
+        mock_grpc_stub.GetTaskPushNotificationConfig.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.GetTaskPushNotificationConfig.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
+
+    @pytest.mark.asyncio
+    async def test_get_card_with_extensions(
+        self, mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
+    ):
+        extensions = ['test_extension']
+        transport = GrpcTransport(
+            channel=AsyncMock(),
+            agent_card=sample_agent_card,
+            extensions=extensions,
+        )
+        transport.stub = mock_grpc_stub
+        mock_grpc_stub.GetAgentCard.return_value = (
+            proto_utils.ToProto.agent_card(sample_agent_card)
+        )
+
+        await transport.get_card()
+
+        mock_grpc_stub.GetAgentCard.assert_awaited_once()
+        _, kwargs = mock_grpc_stub.GetAgentCard.call_args
+        metadata_dict = dict(kwargs['metadata'])
+        assert HTTP_EXTENSION_HEADER in metadata_dict
+        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
