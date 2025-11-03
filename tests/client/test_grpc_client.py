@@ -719,26 +719,3 @@ class TestGrpcTransportExtensions:
         metadata_dict = dict(kwargs['metadata'])
         assert HTTP_EXTENSION_HEADER in metadata_dict
         assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'
-
-    @pytest.mark.asyncio
-    async def test_get_card_with_extensions(
-        self, mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
-    ):
-        extensions = ['test_extension']
-        transport = GrpcTransport(
-            channel=AsyncMock(),
-            agent_card=sample_agent_card,
-            extensions=extensions,
-        )
-        transport.stub = mock_grpc_stub
-        mock_grpc_stub.GetAgentCard.return_value = (
-            proto_utils.ToProto.agent_card(sample_agent_card)
-        )
-
-        await transport.get_card()
-
-        mock_grpc_stub.GetAgentCard.assert_awaited_once()
-        _, kwargs = mock_grpc_stub.GetAgentCard.call_args
-        metadata_dict = dict(kwargs['metadata'])
-        assert HTTP_EXTENSION_HEADER in metadata_dict
-        assert metadata_dict[HTTP_EXTENSION_HEADER] == 'test_extension'

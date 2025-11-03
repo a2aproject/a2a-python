@@ -229,7 +229,6 @@ class GrpcTransport(ClientTransport):
 
         card_pb = await self.stub.GetAgentCard(
             a2a_pb2.GetAgentCardRequest(),
-            metadata=self._get_metadata(context),  # probaby not needed
         )
         card = proto_utils.FromProto.agent_card(card_pb)
         self.agent_card = card
