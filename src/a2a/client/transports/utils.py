@@ -18,7 +18,7 @@ def update_extension_header(
     existing_extensions = [
         e.strip() for e in existing_extensions_str.split(',') if e.strip()
     ]
-    all_extensions = set(extensions)
-    all_extensions.update(existing_extensions)
-    headers[HTTP_EXTENSION_HEADER] = ','.join(list(all_extensions))
+    all_extensions = set(existing_extensions)
+    all_extensions.update(extensions)
+    headers[HTTP_EXTENSION_HEADER] = ','.join(all_extensions)
     return http_kwargs
