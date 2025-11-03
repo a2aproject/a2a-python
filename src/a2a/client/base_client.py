@@ -36,11 +36,14 @@ class BaseClient(Client):
         transport: ClientTransport,
         consumers: list[Consumer],
         middleware: list[ClientCallInterceptor],
+        extensions: list[str],
     ):
-        super().__init__(consumers, middleware)
+        super().__init__(consumers, middleware, extensions)
         self._card = card
         self._config = config
         self._transport = transport
+        if self._extensions:
+            self._config.extensions = self._extensions
 
     async def send_message(
         self,

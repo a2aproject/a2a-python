@@ -93,7 +93,8 @@ class Client(ABC):
         self,
         consumers: list[Consumer] | None = None,
         middleware: list[ClientCallInterceptor] | None = None,
-        # iva todo add optional extensions- it can override value from the config, if it is provided
+        # iva todo - it can override value from the config, if it is provided
+        extensions: list[str] | None = None,
     ):
         """Initializes the client with consumers and middleware.
 
@@ -105,8 +106,11 @@ class Client(ABC):
             middleware = []
         if consumers is None:
             consumers = []
+        if extensions is None:
+            extensions = []
         self._consumers = consumers
         self._middleware = middleware
+        self._extensions = extensions
 
     @abstractmethod
     async def send_message(

@@ -220,6 +220,9 @@ class JsonRpcTransport(ClientTransport):
             get_http_args(context),
             context,
         )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskResponse.model_validate(response_data)
         if isinstance(response.root, JSONRPCErrorResponse):
@@ -239,6 +242,9 @@ class JsonRpcTransport(ClientTransport):
             rpc_request.model_dump(mode='json', exclude_none=True),
             get_http_args(context),
             context,
+        )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = CancelTaskResponse.model_validate(response_data)
@@ -261,6 +267,9 @@ class JsonRpcTransport(ClientTransport):
             rpc_request.model_dump(mode='json', exclude_none=True),
             get_http_args(context),
             context,
+        )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SetTaskPushNotificationConfigResponse.model_validate(
@@ -286,6 +295,9 @@ class JsonRpcTransport(ClientTransport):
             get_http_args(context),
             context,
         )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskPushNotificationConfigResponse.model_validate(
             response_data
@@ -310,7 +322,9 @@ class JsonRpcTransport(ClientTransport):
             get_http_args(context),
             context,
         )
-
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         modified_kwargs.setdefault('timeout', None)
 
         async with aconnect_sse(
@@ -365,6 +379,9 @@ class JsonRpcTransport(ClientTransport):
             request.model_dump(mode='json', exclude_none=True),
             get_http_args(context),
             context,
+        )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
         )
 
         response_data = await self._send_request(

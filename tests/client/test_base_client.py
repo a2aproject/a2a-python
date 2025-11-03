@@ -55,6 +55,7 @@ def base_client(sample_agent_card, mock_transport):
         transport=mock_transport,
         consumers=[],
         middleware=[],
+        extensions=[],
     )
 
 

@@ -212,6 +212,9 @@ class RestTransport(ClientTransport):
             get_http_args(context),
             context,
         )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
             {'historyLength': str(request.history_length)}
@@ -237,6 +240,9 @@ class RestTransport(ClientTransport):
             get_http_args(context),
             context,
         )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
         )
@@ -259,6 +265,9 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload, get_http_args(context), context
+        )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
@@ -285,6 +294,9 @@ class RestTransport(ClientTransport):
             get_http_args(context),
             context,
         )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
+        )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
             {},
@@ -305,12 +317,13 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         http_kwargs = get_http_args(context) or {}
         http_kwargs.setdefault('timeout', None)
+        modified_kwargs = update_extension_header(http_kwargs, self.extensions)
 
         async with aconnect_sse(
             self.httpx_client,
             'GET',
             f'{self.url}/v1/tasks/{request.id}:subscribe',
-            **http_kwargs,
+            **modified_kwargs,
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
@@ -352,6 +365,9 @@ class RestTransport(ClientTransport):
             {},
             get_http_args(context),
             context,
+        )
+        modified_kwargs = update_extension_header(
+            modified_kwargs, self.extensions
         )
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs

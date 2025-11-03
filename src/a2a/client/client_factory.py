@@ -115,6 +115,7 @@ class ClientFactory:
         relative_card_path: str | None = None,
         resolver_http_kwargs: dict[str, Any] | None = None,
         extra_transports: dict[str, TransportProducer] | None = None,
+        extensions: list[str] | None = None,
     ) -> Client:
         """Convenience method for constructing a client.
 
@@ -168,7 +169,7 @@ class ClientFactory:
         factory = cls(client_config)
         for label, generator in (extra_transports or {}).items():
             factory.register(label, generator)
-        return factory.create(card, consumers, interceptors)
+        return factory.create(card, consumers, interceptors, extensions)
 
     def register(self, label: str, generator: TransportProducer) -> None:
         """Register a new transport producer for a given transport label."""
@@ -179,6 +180,7 @@ class ClientFactory:
         card: AgentCard,
         consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
+        extensions: list[str] | None = None,
     ) -> Client:
         """Create a new `Client` for the provided `AgentCard`.
 
@@ -228,12 +230,22 @@ class ClientFactory:
         if consumers:
             all_consumers.extend(consumers)
 
+        all_extensions = self._config.extensions.copy()
+        if extensions:
+            all_extensions.extend(extensions)
+            self._config.extensions = all_extensions
+
         transport = self._registry[transport_protocol](
             card, transport_url, self._config, interceptors or []
         )
 
         return BaseClient(
-            card, self._config, transport, all_consumers, interceptors or []
+            card,
+            self._config,
+            transport,
+            all_consumers,
+            interceptors or [],
+            all_extensions,
         )
 
 
