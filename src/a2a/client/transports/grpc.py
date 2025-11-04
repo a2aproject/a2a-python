@@ -13,11 +13,13 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
+from google.protobuf import struct_pb2
+
 from a2a.client.client import ClientConfig
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
-from a2a.client.transports.utils import update_extension_header
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCard,
@@ -59,24 +61,6 @@ class GrpcTransport(ClientTransport):
         )
         self.extensions = extensions
 
-    def _get_metadata(
-        self, context: ClientCallContext | None
-    ) -> list[tuple[str, str]]:
-        http_kwargs: dict[str, Any] = {}
-        if context and context.state.get('grpc_metadata'):
-            # Convert existing metadata to headers format for update_extension_header
-            http_kwargs['headers'] = {
-                k: v for k, v in context.state['grpc_metadata']
-            }
-
-        updated_kwargs = update_extension_header(http_kwargs, self.extensions)
-
-        metadata = []
-        if 'headers' in updated_kwargs:
-            metadata.extend(updated_kwargs['headers'].items())
-
-        return metadata
-
     @classmethod
     def create(
         cls,
@@ -105,7 +89,7 @@ class GrpcTransport(ClientTransport):
                 ),
                 metadata=proto_utils.ToProto.metadata(request.metadata),
             ),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         if response.HasField('task'):
             return proto_utils.FromProto.task(response.task)
@@ -128,7 +112,7 @@ class GrpcTransport(ClientTransport):
                 ),
                 metadata=proto_utils.ToProto.metadata(request.metadata),
             ),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(request.metadata),
         )
         while True:
             response = await stream.read()
@@ -136,6 +120,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield proto_utils.FromProto.stream_response(response)
 
+    # iva todo TaskIdParams has metadata
     async def resubscribe(
         self, request: TaskIdParams, *, context: ClientCallContext | None = None
     ) -> AsyncGenerator[
@@ -144,7 +129,7 @@ class GrpcTransport(ClientTransport):
         """Reconnects to get task updates."""
         stream = self.stub.TaskSubscription(
             a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}'),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         while True:
             response = await stream.read()
@@ -152,6 +137,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield proto_utils.FromProto.stream_response(response)
 
+    # iva todo TaskQueryParams has metadata
     async def get_task(
         self,
         request: TaskQueryParams,
@@ -164,7 +150,7 @@ class GrpcTransport(ClientTransport):
                 name=f'tasks/{request.id}',
                 history_length=request.history_length,
             ),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         return proto_utils.FromProto.task(task)
 
@@ -177,7 +163,7 @@ class GrpcTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         task = await self.stub.CancelTask(
             a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}'),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         return proto_utils.FromProto.task(task)
 
@@ -196,10 +182,11 @@ class GrpcTransport(ClientTransport):
                     request
                 ),
             ),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         return proto_utils.FromProto.task_push_notification_config(config)
 
+    # iva todo GetTaskPushNotificationConfigParams has metadata
     async def get_task_callback(
         self,
         request: GetTaskPushNotificationConfigParams,
@@ -211,7 +198,7 @@ class GrpcTransport(ClientTransport):
             a2a_pb2.GetTaskPushNotificationConfigRequest(
                 name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
             ),
-            metadata=self._get_metadata(context),
+            metadata=self._update_extension_metadata(),
         )
         return proto_utils.FromProto.task_push_notification_config(config)
 
@@ -234,6 +221,33 @@ class GrpcTransport(ClientTransport):
         self.agent_card = card
         self._needs_extended_card = False
         return card
+
+    def _update_extension_metadata(
+        self, metadata: dict[str, Any] | None = None
+    ) -> struct_pb2.Struct | None:
+        """Gets the metadata for the gRPC call."""
+        if metadata is None:
+            metadata = {}
+
+        if self.extensions:
+            existing_extensions_str = str(
+                metadata.get(HTTP_EXTENSION_HEADER, '')
+            )
+            existing_extensions = {
+                e.strip()
+                for e in existing_extensions_str.split(',')
+                if e.strip()
+            }
+
+            all_extensions = set(existing_extensions)
+            all_extensions.update(self.extensions)
+
+            if all_extensions:
+                metadata[HTTP_EXTENSION_HEADER] = ','.join(all_extensions)
+            elif HTTP_EXTENSION_HEADER in metadata:
+                del metadata[HTTP_EXTENSION_HEADER]
+
+        return proto_utils.ToProto.metadata(metadata if metadata else None)
 
     async def close(self) -> None:
         """Closes the gRPC channel."""

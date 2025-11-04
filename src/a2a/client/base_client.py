@@ -42,8 +42,7 @@ class BaseClient(Client):
         self._card = card
         self._config = config
         self._transport = transport
-        if self._extensions:
-            self._config.extensions = self._extensions
+        self._config.extensions = self._extensions
 
     async def send_message(
         self,
