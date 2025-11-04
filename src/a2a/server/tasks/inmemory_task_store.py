@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from typing import Any
+
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore, TasksPage
 from a2a.types import ListTasksParams, Task
@@ -64,7 +66,7 @@ class InMemoryTaskStore(TaskStore):
             ]
 
         # Reduce payload
-        base_updates = {}
+        base_updates: dict[str, Any] = {}
         if not params.include_artifacts:
             base_updates = {'artifacts': []}
         for i in range(len(tasks)):
