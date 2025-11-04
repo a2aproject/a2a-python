@@ -45,20 +45,20 @@ def event_queue() -> EventQueue:
     return EventQueue()
 
 
-def test_constructor_default_max_queue_size():
+def test_constructor_default_max_queue_size() -> None:
     """Test that the queue is created with the default max size."""
     eq = EventQueue()
     assert eq.queue.maxsize == DEFAULT_MAX_QUEUE_SIZE
 
 
-def test_constructor_max_queue_size():
+def test_constructor_max_queue_size() -> None:
     """Test that the asyncio.Queue is created with the specified max_queue_size."""
     custom_size = 123
     eq = EventQueue(max_queue_size=custom_size)
     assert eq.queue.maxsize == custom_size
 
 
-def test_constructor_invalid_max_queue_size():
+def test_constructor_invalid_max_queue_size() -> None:
     """Test that a ValueError is raised for non-positive max_queue_size."""
     with pytest.raises(
         ValueError, match='max_queue_size must be greater than 0'
@@ -170,7 +170,7 @@ async def test_enqueue_event_propagates_to_children(
 
 @pytest.mark.asyncio
 async def test_enqueue_event_when_closed(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test that no event is enqueued if the parent queue is closed."""
     await event_queue.close()  # Close the queue first
@@ -199,7 +199,7 @@ async def test_enqueue_event_when_closed(
 
 
 @pytest.fixture
-def expected_queue_closed_exception():
+def expected_queue_closed_exception() -> type[Exception]:
     if sys.version_info < (3, 13):
         return asyncio.QueueEmpty
     return asyncio.QueueShutDown
@@ -207,7 +207,7 @@ def expected_queue_closed_exception():
 
 @pytest.mark.asyncio
 async def test_dequeue_event_closed_and_empty_no_wait(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test dequeue_event raises QueueEmpty when closed, empty, and no_wait=True."""
     await event_queue.close()
@@ -222,7 +222,7 @@ async def test_dequeue_event_closed_and_empty_no_wait(
 
 @pytest.mark.asyncio
 async def test_dequeue_event_closed_and_empty_waits_then_raises(
-    event_queue: EventQueue, expected_queue_closed_exception
+    event_queue: EventQueue, expected_queue_closed_exception: type[Exception]
 ) -> None:
     """Test dequeue_event raises QueueEmpty eventually when closed, empty, and no_wait=False."""
     await event_queue.close()
@@ -409,7 +409,6 @@ async def test_close_immediate_propagates_to_children(
     event_queue: EventQueue,
 ) -> None:
     """Test that immediate parameter is propagated to child queues."""
-
     child_queue = event_queue.tap()
 
     # Add events to both parent and child
@@ -430,7 +429,6 @@ async def test_close_immediate_propagates_to_children(
 @pytest.mark.asyncio
 async def test_clear_events_current_queue_only(event_queue: EventQueue) -> None:
     """Test clear_events clears only the current queue when clear_child_queues=False."""
-
     child_queue = event_queue.tap()
     event1 = Message(**MESSAGE_PAYLOAD)
     event2 = Task(**MINIMAL_TASK)
@@ -454,7 +452,6 @@ async def test_clear_events_current_queue_only(event_queue: EventQueue) -> None:
 @pytest.mark.asyncio
 async def test_clear_events_with_children(event_queue: EventQueue) -> None:
     """Test clear_events clears both current queue and child queues."""
-
     # Create child queues and add events
     child_queue1 = event_queue.tap()
     child_queue2 = event_queue.tap()
