@@ -92,7 +92,7 @@ else:
         Response = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
 
-MAX_CONTENT_LENGTH = 1_000_000
+MAX_CONTENT_LENGTH = 10_000_000
 
 
 class StarletteUserProxy(A2AUser):
