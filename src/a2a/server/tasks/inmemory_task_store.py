@@ -2,8 +2,9 @@ import asyncio
 import logging
 
 from a2a.server.context import ServerCallContext
-from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task
+from a2a.server.tasks.task_store import TaskStore, TasksPage
+from a2a.types import ListTasksParams, Task
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
 logger = logging.getLogger(__name__)
@@ -42,6 +43,59 @@ class InMemoryTaskStore(TaskStore):
             else:
                 logger.debug('Task %s not found in store.', task_id)
             return task
+
+    async def list(
+        self,
+        params: ListTasksParams,
+        context: ServerCallContext | None = None,
+    ) -> TasksPage:
+        """Retrieves a list of tasks from the store."""
+        async with self.lock:
+            tasks = list(self.tasks.values())
+
+        # Apply filtering
+        if params.context_id:
+            tasks = [
+                task for task in tasks if task.context_id == params.context_id
+            ]
+        if params.status is not None:
+            tasks = [
+                task for task in tasks if task.status.state == params.status
+            ]
+
+        # Reduce payload
+        base_updates = {}
+        if not params.include_artifacts:
+            base_updates = {'artifacts': []}
+        for i in range(len(tasks)):
+            updates = dict(base_updates)
+            history = tasks[i].history
+            if params.history_length is not None and history:
+                limited_history = (
+                    history[-params.history_length :]
+                    if params.history_length > 0
+                    else []
+                )
+                updates['history'] = limited_history
+            tasks[i] = tasks[i].model_copy(update=updates)
+
+        # Apply pagination
+        total_size = len(tasks)
+        page_token = int(params.page_token) if params.page_token else 0
+        page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+        tasks = tasks[page_token * page_size : (page_token + 1) * page_size]
+
+        next_page_token = (
+            str(page_token + 1)
+            if (page_token + 1) * page_size < total_size
+            else ''
+        )
+
+        return TasksPage(
+            next_page_token=next_page_token,
+            tasks=tasks,
+            total_size=total_size,
+        )
 
     async def delete(
         self, task_id: str, context: ServerCallContext | None = None

@@ -585,6 +585,16 @@ class ToProto:
             include_artifacts=params.include_artifacts,
         )
 
+    @classmethod
+    def list_tasks_response(
+        cls, result: types.ListTasksResult
+    ) -> a2a_pb2.ListTasksResponse:
+        return a2a_pb2.ListTasksResponse(
+            next_page_token=result.next_page_token,
+            tasks=[cls.task(t) for t in result.tasks],
+            total_size=result.total_size,
+        )
+
 
 class FromProto:
     """Converts proto types to Python types."""
@@ -931,6 +941,22 @@ class FromProto:
             else None,
             id=m.group(1),
             metadata=None,
+        )
+
+    @classmethod
+    def list_tasks_params(
+        cls, request: a2a_pb2.ListTasksRequest
+    ) -> types.ListTasksParams:
+        return types.ListTasksParams(
+            context_id=request.context_id,
+            history_length=request.history_length,
+            include_artifacts=request.include_artifacts,
+            last_updated_after=request.last_updated_time.ToMilliseconds()
+            if request.last_updated_time
+            else None,
+            page_size=request.page_size,
+            page_token=request.page_token,
+            status=cls.task_state(request.status) if request.status else None,
         )
 
     @classmethod

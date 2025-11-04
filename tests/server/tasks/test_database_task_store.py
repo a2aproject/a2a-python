@@ -26,6 +26,7 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TextPart,
+    ListTasksParams,
 )
 
 
@@ -169,6 +170,123 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
     assert retrieved_task.context_id == task_to_save.context_id
     assert retrieved_task.status.state == TaskState.submitted
     await db_store_parameterized.delete(task_to_save.id)  # Cleanup
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'params, expected_ids, total_count, next_page_token',
+    [
+        # No parameters, should return all tasks
+        (
+            ListTasksParams(),
+            ['task-4', 'task-3', 'task-2', 'task-1', 'task-0'],
+            5,
+            '',
+        ),
+        # Pagination (first page)
+        (
+            ListTasksParams(page_size=2, page_token='0'),
+            ['task-4', 'task-3'],
+            5,
+            '1',
+        ),
+        # Pagination (second page)
+        (
+            ListTasksParams(page_size=2, page_token='1'),
+            ['task-2', 'task-1'],
+            5,
+            '2',
+        ),
+        # Filtering by context_id
+        (ListTasksParams(context_id='context-1'), ['task-3', 'task-1'], 2, ''),
+        # Filtering by status
+        (
+            ListTasksParams(status=TaskState.working),
+            ['task-3', 'task-1'],
+            2,
+            '',
+        ),
+        # Combined filtering (context_id and status)
+        (
+            ListTasksParams(context_id='context-0', status=TaskState.submitted),
+            ['task-2', 'task-0'],
+            2,
+            '',
+        ),
+        # Combined filtering and pagination
+        (
+            ListTasksParams(
+                context_id='context-0', page_size=1, page_token='0'
+            ),
+            ['task-4'],
+            3,
+            '1',
+        ),
+    ],
+)
+async def test_list_tasks(
+    db_store_parameterized: DatabaseTaskStore,
+    params: ListTasksParams,
+    expected_ids: list[str],
+    total_count: int,
+    next_page_token: str,
+) -> None:
+    """Test listing tasks with various filters and pagination."""
+    tasks_to_create = [
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-0',
+                'context_id': 'context-0',
+                'status': TaskStatus(state=TaskState.submitted),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-1',
+                'context_id': 'context-1',
+                'status': TaskStatus(state=TaskState.working),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-2',
+                'context_id': 'context-0',
+                'status': TaskStatus(state=TaskState.submitted),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-3',
+                'context_id': 'context-1',
+                'status': TaskStatus(state=TaskState.working),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-4',
+                'context_id': 'context-0',
+                'status': TaskStatus(state=TaskState.completed),
+                'kind': 'task',
+            }
+        ),
+    ]
+    for task in tasks_to_create:
+        await db_store_parameterized.save(task)
+
+    page = await db_store_parameterized.list(params)
+
+    retrieved_ids = [task.id for task in page.tasks]
+    assert retrieved_ids == expected_ids
+    assert page.total_size == total_count
+    assert page.next_page_token == next_page_token
+
+    # Cleanup
+    for task in tasks_to_create:
+        await db_store_parameterized.delete(task.id)
 
 
 @pytest.mark.asyncio

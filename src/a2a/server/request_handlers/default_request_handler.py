@@ -45,6 +45,7 @@ from a2a.types import (
     TaskState,
     UnsupportedOperationError,
 )
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import ServerError
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -129,8 +130,13 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> ListTasksResult:
         """Default handler for 'tasks/list'."""
-        # TODO: #515 - Implement method
-        raise NotImplementedError('tasks/list not implemented')
+        page = await self.task_store.list(params, context)
+        return ListTasksResult(
+            next_page_token=page.next_page_token,
+            page_size=params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE,
+            tasks=page.tasks,
+            total_size=page.total_size,
+        )
 
     async def on_cancel_task(
         self, params: TaskIdParams, context: ServerCallContext | None = None
@@ -590,3 +596,9 @@ class DefaultRequestHandler(RequestHandler):
         await self._push_config_store.delete_info(
             params.id, params.push_notification_config_id
         )
+
+
+def _next_page_token(current_page_token: str) -> str:
+    if not current_page_token:
+        return '1'
+    return str(int(current_page_token) + 1)

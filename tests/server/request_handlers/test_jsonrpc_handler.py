@@ -36,6 +36,7 @@ from a2a.types import (
     GetAuthenticatedExtendedCardRequest,
     GetAuthenticatedExtendedCardResponse,
     GetAuthenticatedExtendedCardSuccessResponse,
+    ListTasksResult,
     GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
@@ -48,6 +49,10 @@ from a2a.types import (
     ListTaskPushNotificationConfigParams,
     ListTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigSuccessResponse,
+    ListTasksParams,
+    ListTasksRequest,
+    ListTasksResponse,
+    ListTasksSuccessResponse,
     Message,
     MessageSendConfiguration,
     MessageSendParams,
@@ -136,6 +141,36 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         self.assertIsInstance(response.root, JSONRPCErrorResponse)
         assert response.root.error == TaskNotFoundError()  # type: ignore
+
+    async def test_on_list_tasks_success(self) -> None:
+        request_handler = AsyncMock(spec=DefaultRequestHandler)
+        handler = JSONRPCHandler(self.mock_agent_card, request_handler)
+        mock_result = ListTasksResult(
+            next_page_token='123',
+            page_size=2,
+            tasks=[
+                Task(**MINIMAL_TASK),
+                Task(**MINIMAL_TASK).model_copy(update={'id': 'task_456'}),
+            ],
+            total_size=10,
+        )
+        request_handler.on_list_tasks.return_value = mock_result
+        request = ListTasksRequest(
+            id='1',
+            method='tasks/list',
+            params=ListTasksParams(
+                page_size=10,
+                page_token='token',
+                filter='filter',
+            ),
+        )
+        call_context = ServerCallContext(state={'foo': 'bar'})
+
+        response = await handler.list_tasks(request, call_context)
+
+        request_handler.on_list_tasks.assert_awaited_once()
+        self.assertIsInstance(response.root, ListTasksSuccessResponse)
+        self.assertEqual(response.root.result, mock_result)
 
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)

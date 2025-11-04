@@ -345,8 +345,15 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         Returns:
             A `ListTasksResponse` object.
         """
-        # TODO: #515 - Implement method
-        raise NotImplementedError('tasks/list not implemented')
+        try:
+            server_context = self.context_builder.build(context)
+            result = await self.request_handler.on_list_tasks(
+                proto_utils.FromProto.list_tasks_params(request), server_context
+            )
+            return proto_utils.ToProto.list_tasks_response(result)
+        except ServerError as e:
+            await self.abort_context(e, context)
+        return a2a_pb2.ListTasksResponse()
 
     async def GetAgentCard(
         self,

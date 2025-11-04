@@ -21,6 +21,7 @@ from a2a.server.agent_execution import (
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.tasks.task_store import TasksPage
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
     InMemoryTaskStore,
@@ -36,6 +37,8 @@ from a2a.types import (
     InternalError,
     InvalidParamsError,
     ListTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendConfiguration,
     MessageSendParams,
@@ -143,6 +146,33 @@ async def test_on_get_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+
+
+@pytest.mark.asyncio
+async def test_on_list_tasks_success():
+    """Test on_list_tasks successfully returns a page of tasks ."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_page = MagicMock(spec=TasksPage)
+    mock_page.tasks = [
+        create_sample_task(task_id='task1'),
+        create_sample_task(task_id='task2'),
+    ]
+    mock_page.next_page_token = '123'
+    mock_page.total_size = 2
+    mock_task_store.list.return_value = mock_page
+    request_handler = DefaultRequestHandler(
+        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+    )
+    params = ListTasksParams(page_size=10)
+    context = create_server_call_context()
+
+    result = await request_handler.on_list_tasks(params, context)
+
+    mock_task_store.list.assert_awaited_once_with(params, context)
+    assert result.tasks == mock_page.tasks
+    assert result.next_page_token == mock_page.next_page_token
+    assert result.total_size == mock_page.total_size
+    assert result.page_size == params.page_size
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@ import logging
 
 
 try:
-    from sqlalchemy import Table, delete, select
+    from sqlalchemy import Table, delete, func, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -21,8 +21,9 @@ except ImportError as e:
 
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
-from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task  # Task is the Pydantic model
+from a2a.server.tasks.task_store import TaskStore, TasksPage
+from a2a.types import ListTasksParams, Task
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
 logger = logging.getLogger(__name__)
@@ -146,6 +147,54 @@ class DatabaseTaskStore(TaskStore):
 
             logger.debug('Task %s not found in store.', task_id)
             return None
+
+    async def list(
+        self, params: ListTasksParams, context: ServerCallContext | None = None
+    ) -> TasksPage:
+        """Retrieves all tasks from the database."""
+        await self._ensure_initialized()
+        async with self.async_session_maker() as session:
+            page_number = int(params.page_token) if params.page_token else 0
+            page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+            offset = page_number * page_size
+
+            # Base query for filtering
+            base_stmt = select(self.task_model)
+            if params.context_id:
+                base_stmt = base_stmt.where(
+                    self.task_model.context_id == params.context_id
+                )
+            if params.status is not None:
+                base_stmt = base_stmt.where(
+                    self.task_model.status['state'].as_string()
+                    == params.status.value
+                )
+
+            # Get total count
+            count_stmt = select(func.count()).select_from(base_stmt.alias())
+            total_count = (await session.execute(count_stmt)).scalar_one()
+
+            # Get paginated results
+            stmt = (
+                base_stmt.order_by(self.task_model.id.desc())
+                .limit(page_size)
+                .offset(offset)
+            )
+            result = await session.execute(stmt)
+            tasks_models = result.scalars().all()
+            tasks = [self._from_orm(task_model) for task_model in tasks_models]
+
+            next_page_token = (
+                str(page_number + 1)
+                if total_count > (page_number + 1) * page_size
+                else ''
+            )
+
+            return TasksPage(
+                tasks=tasks,
+                total_size=total_count,
+                next_page_token=next_page_token,
+            )
 
     async def delete(
         self, task_id: str, context: ServerCallContext | None = None

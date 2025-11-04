@@ -21,6 +21,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
     TaskIdParams,
     TaskNotFoundError,
     TaskQueryParams,
@@ -264,6 +265,29 @@ class RESTHandler:
             return MessageToDict(proto_utils.ToProto.task(task))
         raise ServerError(error=TaskNotFoundError())
 
+    async def list_tasks(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the 'tasks/list' REST method.
+
+        This method is currently not implemented.
+
+        Args:
+            request: The incoming `Request` object.
+            context: Context provided by the server.
+
+        Returns:
+            A list of dict representing the`Task` objects.
+
+        Raises:
+            NotImplementedError: This method is not yet implemented.
+        """
+        params = ListTasksParams.model_validate(request.query_params)
+        result = await self.request_handler.on_list_tasks(params, context)
+        return MessageToDict(proto_utils.ToProto.list_tasks_response(result))
+
     async def list_push_notifications(
         self,
         request: Request,
@@ -284,25 +308,3 @@ class RESTHandler:
             NotImplementedError: This method is not yet implemented.
         """
         raise NotImplementedError('list notifications not implemented')
-
-    async def list_tasks(
-        self,
-        request: Request,
-        context: ServerCallContext,
-    ) -> dict[str, Any]:
-        """Handles the 'tasks/list' REST method.
-
-        This method is currently not implemented.
-
-        Args:
-            request: The incoming `Request` object.
-            context: Context provided by the server.
-
-        Returns:
-            A list of dict representing the`Task` objects.
-
-        Raises:
-            NotImplementedError: This method is not yet implemented.
-        """
-        # TODO: #515 - Implement method
-        raise NotImplementedError('list tasks not implemented')
