@@ -40,9 +40,9 @@ class BaseClient(Client):
     ):
         super().__init__(consumers, middleware, extensions)
         self._card = card
+        config.extensions = extensions
         self._config = config
         self._transport = transport
-        self._config.extensions = self._extensions
 
     async def send_message(
         self,

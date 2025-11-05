@@ -93,7 +93,6 @@ class Client(ABC):
         self,
         consumers: list[Consumer] | None = None,
         middleware: list[ClientCallInterceptor] | None = None,
-        # iva todo - it can override value from the config, if it is provided
         extensions: list[str] | None = None,
     ):
         """Initializes the client with consumers and middleware.
@@ -118,8 +117,6 @@ class Client(ABC):
         request: Message,
         *,
         context: ClientCallContext | None = None,
-        # iva todo add optional extensions- it can override value from the config, if it is provided
-        # and to the other ones as well
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the server.
 
