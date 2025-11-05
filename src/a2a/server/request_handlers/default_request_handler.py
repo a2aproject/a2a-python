@@ -596,9 +596,3 @@ class DefaultRequestHandler(RequestHandler):
         await self._push_config_store.delete_info(
             params.id, params.push_notification_config_id
         )
-
-
-def _next_page_token(current_page_token: str) -> str:
-    if not current_page_token:
-        return '1'
-    return str(int(current_page_token) + 1)
