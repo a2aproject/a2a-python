@@ -10,6 +10,7 @@ from a2a.types import (
     AgentCard,
     Artifact,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
     Message,
     MessageSendParams,
     Part,
@@ -25,7 +26,6 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
-    ListTasksParams,
 )
 from a2a.utils import get_text_parts, proto_utils
 from a2a.utils.errors import ServerError

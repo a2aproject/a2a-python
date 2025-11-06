@@ -22,6 +22,8 @@ from a2a.types import (
     AgentCard,
     AgentSkill,
     InvalidParamsError,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     PushNotificationConfig,
@@ -31,8 +33,6 @@ from a2a.types import (
     TaskIdParams,
     TaskPushNotificationConfig,
     TaskQueryParams,
-    ListTasksParams,
-    ListTasksResult,
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 

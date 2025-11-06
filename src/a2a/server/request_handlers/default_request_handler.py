@@ -131,10 +131,22 @@ class DefaultRequestHandler(RequestHandler):
     ) -> ListTasksResult:
         """Default handler for 'tasks/list'."""
         page = await self.task_store.list(params, context)
+        processed_tasks = []
+        for task in page.tasks:
+            processed_task = task
+            if params.include_artifacts is not True:
+                processed_task = processed_task.model_copy(
+                    update={'artifacts': None}
+                )
+            if params.history_length is not None:
+                processed_task = apply_history_length(
+                    processed_task, params.history_length
+                )
+            processed_tasks.append(processed_task)
         return ListTasksResult(
             next_page_token=page.next_page_token,
             page_size=params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE,
-            tasks=page.tasks,
+            tasks=processed_tasks,
             total_size=page.total_size,
         )
 

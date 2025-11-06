@@ -21,7 +21,6 @@ from a2a.server.agent_execution import (
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
-from a2a.server.tasks.task_store import TasksPage
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
     InMemoryTaskStore,
@@ -31,14 +30,15 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.task_store import TasksPage
 from a2a.types import (
+    Artifact,
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     InternalError,
     InvalidParamsError,
     ListTaskPushNotificationConfigParams,
     ListTasksParams,
-    ListTasksResult,
     Message,
     MessageSendConfiguration,
     MessageSendParams,
@@ -56,9 +56,7 @@ from a2a.types import (
     TextPart,
     UnsupportedOperationError,
 )
-from a2a.utils import (
-    new_task,
-)
+from a2a.utils import new_agent_text_message, new_task
 
 
 class DummyAgentExecutor(AgentExecutor):
@@ -155,7 +153,17 @@ async def test_on_list_tasks_success():
     mock_page = MagicMock(spec=TasksPage)
     mock_page.tasks = [
         create_sample_task(task_id='task1'),
-        create_sample_task(task_id='task2'),
+        create_sample_task(task_id='task2').model_copy(
+            update={
+                'artifacts': [
+                    Artifact(
+                        artifact_id='artifact1',
+                        parts=[Part(root=TextPart(text='Hello world!'))],
+                        name='conversion_result',
+                    )
+                ]
+            }
+        ),
     ]
     mock_page.next_page_token = '123'
     mock_page.total_size = 2
@@ -163,7 +171,7 @@ async def test_on_list_tasks_success():
     request_handler = DefaultRequestHandler(
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
-    params = ListTasksParams(page_size=10)
+    params = ListTasksParams(include_artifacts=True, page_size=10)
     context = create_server_call_context()
 
     result = await request_handler.on_list_tasks(params, context)
@@ -173,6 +181,68 @@ async def test_on_list_tasks_success():
     assert result.next_page_token == mock_page.next_page_token
     assert result.total_size == mock_page.total_size
     assert result.page_size == params.page_size
+
+
+@pytest.mark.asyncio
+async def test_on_list_tasks_excludes_artifacts():
+    """Test on_list_tasks excludes artifacts from returned tasks."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_page = MagicMock(spec=TasksPage)
+    mock_page.tasks = [
+        create_sample_task(task_id='task1'),
+        create_sample_task(task_id='task2').model_copy(
+            update={
+                'artifacts': [
+                    Artifact(
+                        artifact_id='artifact1',
+                        parts=[Part(root=TextPart(text='Hello world!'))],
+                        name='conversion_result',
+                    )
+                ]
+            }
+        ),
+    ]
+    mock_page.next_page_token = '123'
+    mock_page.total_size = 2
+    mock_task_store.list.return_value = mock_page
+    request_handler = DefaultRequestHandler(
+        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+    )
+    params = ListTasksParams(include_artifacts=False, page_size=10)
+    context = create_server_call_context()
+
+    result = await request_handler.on_list_tasks(params, context)
+
+    assert result.tasks[1].artifacts == None
+
+
+@pytest.mark.asyncio
+async def test_on_list_tasks_applies_history_length():
+    """Test on_list_tasks applies history length filter."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_page = MagicMock(spec=TasksPage)
+    history = [
+        new_agent_text_message('Hello 1!'),
+        new_agent_text_message('Hello 2!'),
+    ]
+    mock_page.tasks = [
+        create_sample_task(task_id='task1'),
+        create_sample_task(task_id='task2').model_copy(
+            update={'history': history}
+        ),
+    ]
+    mock_page.next_page_token = '123'
+    mock_page.total_size = 2
+    mock_task_store.list.return_value = mock_page
+    request_handler = DefaultRequestHandler(
+        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+    )
+    params = ListTasksParams(history_length=1, page_size=10)
+    context = create_server_call_context()
+
+    result = await request_handler.on_list_tasks(params, context)
+
+    assert result.tasks[1].history == [history[1]]
 
 
 @pytest.mark.asyncio

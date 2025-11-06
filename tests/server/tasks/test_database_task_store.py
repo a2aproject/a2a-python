@@ -19,6 +19,7 @@ from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types import (
     Artifact,
+    ListTasksParams,
     Message,
     Part,
     Role,
@@ -26,7 +27,6 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TextPart,
-    ListTasksParams,
 )
 
 

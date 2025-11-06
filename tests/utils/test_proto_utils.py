@@ -2,11 +2,12 @@ from unittest import mock
 
 import pytest
 
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from a2a import types
 from a2a.grpc import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
-from google.protobuf.timestamp_pb2 import Timestamp
 
 
 # --- Test Data ---
