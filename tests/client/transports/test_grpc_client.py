@@ -65,7 +65,14 @@ def grpc_transport(
 ) -> GrpcTransport:
     """Provides a GrpcTransport instance."""
     channel = AsyncMock()
-    transport = GrpcTransport(channel=channel, agent_card=sample_agent_card)
+    transport = GrpcTransport(
+        channel=channel,
+        agent_card=sample_agent_card,
+        extensions=[
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        ],
+    )
     transport.stub = mock_grpc_stub
     return transport
 
@@ -189,6 +196,13 @@ async def test_send_message_task_response(
     response = await grpc_transport.send_message(sample_message_send_params)
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+        )
+    ]
     assert isinstance(response, Task)
     assert response.id == sample_task.id
 
@@ -208,6 +222,13 @@ async def test_send_message_message_response(
     response = await grpc_transport.send_message(sample_message_send_params)
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+        )
+    ]
     assert isinstance(response, Message)
     assert response.message_id == sample_message.message_id
     assert get_text_parts(response.parts) == get_text_parts(
@@ -256,6 +277,13 @@ async def test_send_message_streaming(  # noqa: PLR0913
     ]
 
     mock_grpc_stub.SendStreamingMessage.assert_called_once()
+    _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+        )
+    ]
     assert isinstance(responses[0], Message)
     assert responses[0].message_id == sample_message.message_id
     assert isinstance(responses[1], Task)
@@ -279,7 +307,13 @@ async def test_get_task(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=None
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.id == sample_task.id
 
@@ -298,7 +332,13 @@ async def test_get_task_with_history(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=history_len
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            )
+        ],
     )
 
 
@@ -317,7 +357,13 @@ async def test_cancel_task(
     response = await grpc_transport.cancel_task(params)
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
-        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}')
+        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.status.state == TaskState.canceled
 
@@ -346,7 +392,13 @@ async def test_set_task_callback_with_valid_task(
             config=proto_utils.ToProto.task_push_notification_config(
                 sample_task_push_notification_config
             ),
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -403,7 +455,13 @@ async def test_get_task_callback_with_valid_task(
                 f'tasks/{params.id}/'
                 f'pushNotificationConfigs/{params.push_notification_config_id}'
             ),
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -435,61 +493,3 @@ async def test_get_task_callback_with_invalid_task(
         'Bad TaskPushNotificationConfig resource name'
         in exc_info.value.error.message
     )
-
-
-@pytest.mark.asyncio
-async def test_send_message_with_extensions(
-    mock_grpc_stub: AsyncMock,
-    sample_agent_card: AgentCard,
-    sample_message_send_params: MessageSendParams,
-    sample_task: Task,
-) -> None:
-    """Test send_message with extensions."""
-    extensions = ['test_extension_1', 'test_extension_2']
-    channel = AsyncMock()
-    transport = GrpcTransport(
-        channel=channel, agent_card=sample_agent_card, extensions=extensions
-    )
-    transport.stub = mock_grpc_stub
-
-    mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
-        task=proto_utils.ToProto.task(sample_task)
-    )
-
-    await transport.send_message(sample_message_send_params)
-
-    mock_grpc_stub.SendMessage.assert_awaited_once()
-    args, _ = mock_grpc_stub.SendMessage.call_args
-    request = args[0]
-    metadata = proto_utils.FromProto.metadata(request.metadata)
-    assert HTTP_EXTENSION_HEADER in metadata
-    assert metadata[HTTP_EXTENSION_HEADER] == 'test_extension_1,test_extension_2'
-
-
-@pytest.mark.asyncio
-async def test_send_message_streaming_with_extensions(
-    mock_grpc_stub: AsyncMock,
-    sample_agent_card: AgentCard,
-    sample_message_send_params: MessageSendParams,
-) -> None:
-    """Test send_message_streaming with extensions."""
-    extensions = ['test_extension_1', 'test_extension_2']
-    channel = AsyncMock()
-    transport = GrpcTransport(
-        channel=channel, agent_card=sample_agent_card, extensions=extensions
-    )
-    transport.stub = mock_grpc_stub
-
-    stream = MagicMock()
-    stream.read = AsyncMock(side_effect=[grpc.aio.EOF])
-    mock_grpc_stub.SendStreamingMessage.return_value = stream
-
-    async for _ in transport.send_message_streaming(sample_message_send_params):
-        pass
-
-    mock_grpc_stub.SendStreamingMessage.assert_called_once()
-    args, _ = mock_grpc_stub.SendStreamingMessage.call_args
-    request = args[0]
-    metadata = proto_utils.FromProto.metadata(request.metadata)
-    assert HTTP_EXTENSION_HEADER in metadata
-    assert metadata[HTTP_EXTENSION_HEADER] == 'test_extension_1,test_extension_2'
