@@ -7,19 +7,6 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 def get_http_args(context: ClientCallContext | None) -> dict[str, Any] | None:
     return context.state.get('http_kwargs') if context else None
 
-
-def __merge_extensions(
-    existing_extensions: str, new_extensions: list[str]
-) -> str:
-    existing_extensions_list = [
-        e.strip() for e in existing_extensions.split(',') if e.strip()
-    ]
-    new_extensions = [
-        ext for ext in new_extensions if ext not in existing_extensions_list
-    ]
-    return ','.join(existing_extensions_list + new_extensions)
-
-
 def update_extension_header(
     http_kwargs: dict[str, Any], extensions: list[str] | None
 ) -> dict[str, Any]:
