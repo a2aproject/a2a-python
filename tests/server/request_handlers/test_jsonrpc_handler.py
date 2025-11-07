@@ -160,7 +160,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             params=ListTasksParams(
                 page_size=10,
                 page_token='token',
-                filter='filter',
             ),
         )
         call_context = ServerCallContext(state={'foo': 'bar'})
