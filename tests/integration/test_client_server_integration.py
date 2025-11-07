@@ -22,6 +22,8 @@ from a2a.types import (
     GetTaskPushNotificationConfigParams,
     Message,
     MessageSendParams,
+    ListTasksParams,
+    ListTasksResult,
     Part,
     PushNotificationConfig,
     Role,
@@ -105,6 +107,12 @@ def mock_request_handler() -> AsyncMock:
         lambda params, context: params
     )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
+    handler.on_list_tasks.return_value = ListTasksResult(
+        tasks=[TASK_FROM_BLOCKING],
+        next_page_token='',
+        page_size=50,
+        total_size=1,
+    )
 
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT
@@ -430,6 +438,63 @@ async def test_grpc_transport_get_task(
     assert result.id == GET_TASK_RESPONSE.id
     handler.on_get_task.assert_awaited_once()
     assert handler.on_get_task.call_args[0][0].id == GET_TASK_RESPONSE.id
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport_setup_fixture',
+    [
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ],
+)
+async def test_http_transport_list_tasks(
+    transport_setup_fixture: str, request
+) -> None:
+    transport_setup: TransportSetup = request.getfixturevalue(
+        transport_setup_fixture
+    )
+    transport = transport_setup.transport
+    handler = transport_setup.handler
+
+    print(handler.on_list_tasks.call_args)
+
+    params = ListTasksParams()
+    result = await transport.list_tasks(params)
+
+    handler.on_list_tasks.assert_awaited_once_with(params, ANY)
+    assert result.next_page_token == ''
+    assert result.page_size == 50
+    assert len(result.tasks) == 1
+    assert result.total_size == 1
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_list_tasks(
+    grpc_server_and_handler: tuple[str, AsyncMock],
+    agent_card: AgentCard,
+) -> None:
+    server_address, handler = grpc_server_and_handler
+    agent_card.url = server_address
+
+    def channel_factory(address: str) -> Channel:
+        return grpc.aio.insecure_channel(address)
+
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
+
+    result = await transport.list_tasks(ListTasksParams())
+
+    handler.on_list_tasks.assert_awaited_once()
+    assert result.next_page_token == ''
+    assert result.page_size == 50
+    assert len(result.tasks) == 1
+    assert result.total_size == 1
 
     await transport.close()
 

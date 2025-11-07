@@ -590,9 +590,9 @@ class ToProto:
         cls, result: types.ListTasksResult
     ) -> a2a_pb2.ListTasksResponse:
         return a2a_pb2.ListTasksResponse(
-            next_page_token=result.next_page_token,
+            next_page_token=result.next_page_token or '',
             tasks=[cls.task(t) for t in result.tasks],
-            total_size=result.total_size,
+            total_size=result.total_size or 0,
         )
 
 
