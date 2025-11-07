@@ -874,6 +874,44 @@ async def test_on_message_send_limit_history():
     assert task is not None
     assert task.history is not None and len(task.history) > 0
 
+@pytest.mark.asyncio
+async def test_on_message_send_limit_history_non_as_no_limit():
+    task_store = InMemoryTaskStore()
+    push_store = InMemoryPushNotificationConfigStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+    )
+    params = MessageSendParams(
+        message=Message(
+            role=Role.user,
+            message_id='msg_push',
+            parts=[Part(root=TextPart(text='Hi'))],
+        ),
+        configuration=MessageSendConfiguration(
+            blocking=True,
+            accepted_output_modes=['text/plain'],
+            history_length=None
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    # verify that history_length is honored
+    assert result is not None
+    assert isinstance(result, Task)
+    assert result.history is not None and len(result.history) > 0
+    assert result.status.state == TaskState.completed
+
+    # verify that history is still persisted to the store
+    task = await task_store.get(result.id)
+    assert task is not None
+    assert task.history is not None and len(task.history) > 0
+
 
 @pytest.mark.asyncio
 async def test_on_task_get_limit_history():
