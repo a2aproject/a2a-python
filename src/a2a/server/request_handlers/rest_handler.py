@@ -279,7 +279,7 @@ class RESTHandler:
             context: Context provided by the server.
 
         Returns:
-            A list of dict representing the`Task` objects.
+            A list of `dict` representing the `Task` objects.
 
         Raises:
             NotImplementedError: This method is not yet implemented.
