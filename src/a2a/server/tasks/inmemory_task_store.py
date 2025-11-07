@@ -72,7 +72,7 @@ class InMemoryTaskStore(TaskStore):
         next_page_token = (
             str(page_token + 1)
             if (page_token + 1) * page_size < total_size
-            else ''
+            else None
         )
 
         return TasksPage(

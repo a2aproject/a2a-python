@@ -181,7 +181,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             ListTasksParams(),
             ['task-4', 'task-3', 'task-2', 'task-1', 'task-0'],
             5,
-            '',
+            None,
         ),
         # Pagination (first page)
         (
@@ -198,20 +198,25 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             '2',
         ),
         # Filtering by context_id
-        (ListTasksParams(context_id='context-1'), ['task-3', 'task-1'], 2, ''),
+        (
+            ListTasksParams(context_id='context-1'),
+            ['task-3', 'task-1'],
+            2,
+            None,
+        ),
         # Filtering by status
         (
             ListTasksParams(status=TaskState.working),
             ['task-3', 'task-1'],
             2,
-            '',
+            None,
         ),
         # Combined filtering (context_id and status)
         (
             ListTasksParams(context_id='context-0', status=TaskState.submitted),
             ['task-2', 'task-0'],
             2,
-            '',
+            None,
         ),
         # Combined filtering and pagination
         (

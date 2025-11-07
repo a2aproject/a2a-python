@@ -187,7 +187,7 @@ class DatabaseTaskStore(TaskStore):
             next_page_token = (
                 str(page_number + 1)
                 if total_count > (page_number + 1) * page_size
-                else ''
+                else None
             )
 
             return TasksPage(

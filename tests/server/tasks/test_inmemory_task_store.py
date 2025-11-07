@@ -41,7 +41,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             ListTasksParams(),
             ['task-0', 'task-1', 'task-2', 'task-3', 'task-4'],
             5,
-            '',
+            None,
         ),
         # Pagination (first page)
         (
@@ -58,20 +58,25 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             '2',
         ),
         # Filtering by context_id
-        (ListTasksParams(context_id='context-1'), ['task-1', 'task-3'], 2, ''),
+        (
+            ListTasksParams(context_id='context-1'),
+            ['task-1', 'task-3'],
+            2,
+            None,
+        ),
         # Filtering by status
         (
             ListTasksParams(status=TaskState.working),
             ['task-1', 'task-3'],
             2,
-            '',
+            None,
         ),
         # Combined filtering (context_id and status)
         (
             ListTasksParams(context_id='context-0', status=TaskState.submitted),
             ['task-0', 'task-2'],
             2,
-            '',
+            None,
         ),
         # Combined filtering and pagination
         (
