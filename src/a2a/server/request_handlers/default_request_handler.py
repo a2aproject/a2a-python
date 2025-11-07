@@ -346,7 +346,10 @@ class DefaultRequestHandler(RequestHandler):
 
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
-            if params.configuration and params.configuration.history_length is not None:
+            if (
+                params.configuration
+                and params.configuration.history_length is not None
+            ):
                 result = apply_history_length(
                     result, params.configuration.history_length
                 )

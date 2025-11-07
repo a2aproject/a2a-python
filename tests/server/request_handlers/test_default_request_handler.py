@@ -874,6 +874,7 @@ async def test_on_message_send_limit_history():
     assert task is not None
     assert task.history is not None and len(task.history) > 0
 
+
 @pytest.mark.asyncio
 async def test_on_message_send_limit_history_non_as_no_limit():
     task_store = InMemoryTaskStore()
@@ -893,7 +894,7 @@ async def test_on_message_send_limit_history_non_as_no_limit():
         configuration=MessageSendConfiguration(
             blocking=True,
             accepted_output_modes=['text/plain'],
-            history_length=None
+            history_length=None,
         ),
     )
 
