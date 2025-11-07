@@ -9,7 +9,7 @@ from a2a.types import ListTasksParams, Task
 class TasksPage(BaseModel):
     """Page with tasks."""
 
-    next_page_token: str = ''
+    next_page_token: str | None = None
     tasks: list[Task]
     total_size: int
 
