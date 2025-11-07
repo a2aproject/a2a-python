@@ -73,12 +73,14 @@ async def test_send_message_streaming(
 
     mock_transport.send_message_streaming.return_value = create_stream()
 
-    meta = {"test":1}
+    meta = {'test': 1}
     stream = base_client.send_message(sample_message, request_metadata=meta)
     events = [event async for event in stream]
 
     mock_transport.send_message_streaming.assert_called_once()
-    assert mock_transport.send_message_streaming.call_args[0][0].metadata == meta
+    assert (
+        mock_transport.send_message_streaming.call_args[0][0].metadata == meta
+    )
     assert not mock_transport.send_message.called
     assert len(events) == 1
     assert events[0][0].id == 'task-123'
@@ -95,7 +97,7 @@ async def test_send_message_non_streaming(
         status=TaskStatus(state=TaskState.completed),
     )
 
-    meta = {"test":1}
+    meta = {'test': 1}
     stream = base_client.send_message(sample_message, request_metadata=meta)
     events = [event async for event in stream]
 

@@ -73,7 +73,9 @@ class BaseClient(Client):
                 else None
             ),
         )
-        params = MessageSendParams(message=request, configuration=config, metadata=request_metadata)
+        params = MessageSendParams(
+            message=request, configuration=config, metadata=request_metadata
+        )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
