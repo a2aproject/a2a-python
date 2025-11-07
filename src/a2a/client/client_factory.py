@@ -3,10 +3,12 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
+from typing import Any
 
 import httpx
 
 from a2a.client.base_client import BaseClient
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
@@ -41,14 +43,17 @@ class ClientFactory:
     The factory is configured with a `ClientConfig` and optionally a list of
     `Consumer`s to use for all generated `Client`s. The expected use is:
 
-    factory = ClientFactory(config, consumers)
-    # Optionally register custom client implementations
-    factory.register('my_customer_transport', NewCustomTransportClient)
-    # Then with an agent card make a client with additional consumers and
-    # interceptors
-    client = factory.create(card, additional_consumers, interceptors)
-    # Now the client can be used the same regardless of transport and
-    # aligns client config with server capabilities.
+    .. code-block:: python
+
+        factory = ClientFactory(config, consumers)
+        # Optionally register custom client implementations
+        factory.register('my_customer_transport', NewCustomTransportClient)
+        # Then with an agent card make a client with additional consumers and
+        # interceptors
+        client = factory.create(card, additional_consumers, interceptors)
+
+    Now the client can be used consistently regardless of the transport. This
+    aligns the client configuration with the server's capabilities.
     """
 
     def __init__(
@@ -97,6 +102,71 @@ class ClientFactory:
                 TransportProtocol.grpc,
                 GrpcTransport.create,
             )
+
+    @classmethod
+    async def connect(  # noqa: PLR0913
+        cls,
+        agent: str | AgentCard,
+        client_config: ClientConfig | None = None,
+        consumers: list[Consumer] | None = None,
+        interceptors: list[ClientCallInterceptor] | None = None,
+        relative_card_path: str | None = None,
+        resolver_http_kwargs: dict[str, Any] | None = None,
+        extra_transports: dict[str, TransportProducer] | None = None,
+    ) -> Client:
+        """Convenience method for constructing a client.
+
+        Constructs a client that connects to the specified agent. Note that
+        creating multiple clients via this method is less efficient than
+        constructing an instance of ClientFactory and reusing that.
+
+        .. code-block:: python
+
+            # This will search for an AgentCard at /.well-known/agent-card.json
+            my_agent_url = 'https://travel.agents.example.com'
+            client = await ClientFactory.connect(my_agent_url)
+
+
+        Args:
+          agent: The base URL of the agent, or the AgentCard to connect to.
+          client_config: The ClientConfig to use when connecting to the agent.
+          consumers: A list of `Consumer` methods to pass responses to.
+          interceptors: A list of interceptors to use for each request. These
+            are used for things like attaching credentials or http headers
+            to all outbound requests.
+          relative_card_path: If the agent field is a URL, this value is used as
+            the relative path when resolving the agent card. See
+            A2AAgentCardResolver.get_agent_card for more details.
+          resolver_http_kwargs: Dictionary of arguments to provide to the httpx
+            client when resolving the agent card. This value is provided to
+            A2AAgentCardResolver.get_agent_card as the http_kwargs parameter.
+          extra_transports: Additional transport protocols to enable when
+            constructing the client.
+
+        Returns:
+          A `Client` object.
+        """
+        client_config = client_config or ClientConfig()
+        if isinstance(agent, str):
+            if not client_config.httpx_client:
+                async with httpx.AsyncClient() as client:
+                    resolver = A2ACardResolver(client, agent)
+                    card = await resolver.get_agent_card(
+                        relative_card_path=relative_card_path,
+                        http_kwargs=resolver_http_kwargs,
+                    )
+            else:
+                resolver = A2ACardResolver(client_config.httpx_client, agent)
+                card = await resolver.get_agent_card(
+                    relative_card_path=relative_card_path,
+                    http_kwargs=resolver_http_kwargs,
+                )
+        else:
+            card = agent
+        factory = cls(client_config)
+        for label, generator in (extra_transports or {}).items():
+            factory.register(label, generator)
+        return factory.create(card, consumers, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:
         """Register a new transport producer for a given transport label."""

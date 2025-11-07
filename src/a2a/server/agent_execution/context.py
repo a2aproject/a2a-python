@@ -1,8 +1,11 @@
-import uuid
-
 from typing import Any
 
 from a2a.server.context import ServerCallContext
+from a2a.server.id_generator import (
+    IDGenerator,
+    IDGeneratorContext,
+    UUIDGenerator,
+)
 from a2a.types import (
     InvalidParamsError,
     Message,
@@ -30,6 +33,8 @@ class RequestContext:
         task: Task | None = None,
         related_tasks: list[Task] | None = None,
         call_context: ServerCallContext | None = None,
+        task_id_generator: IDGenerator | None = None,
+        context_id_generator: IDGenerator | None = None,
     ):
         """Initializes the RequestContext.
 
@@ -40,6 +45,8 @@ class RequestContext:
             task: The existing `Task` object retrieved from the store, if any.
             related_tasks: A list of other tasks related to the current request (e.g., for tool use).
             call_context: The server call context associated with this request.
+            task_id_generator: ID generator for new task IDs. Defaults to UUID generator.
+            context_id_generator: ID generator for new context IDs. Defaults to UUID generator.
         """
         if related_tasks is None:
             related_tasks = []
@@ -49,6 +56,12 @@ class RequestContext:
         self._current_task = task
         self._related_tasks = related_tasks
         self._call_context = call_context
+        self._task_id_generator = (
+            task_id_generator if task_id_generator else UUIDGenerator()
+        )
+        self._context_id_generator = (
+            context_id_generator if context_id_generator else UUIDGenerator()
+        )
         # If the task id and context id were provided, make sure they
         # match the request. Otherwise, create them
         if self._params:
@@ -163,7 +176,9 @@ class RequestContext:
             return
 
         if not self._task_id and not self._params.message.task_id:
-            self._params.message.task_id = str(uuid.uuid4())
+            self._params.message.task_id = self._task_id_generator.generate(
+                IDGeneratorContext(context_id=self._context_id)
+            )
         if self._params.message.task_id:
             self._task_id = self._params.message.task_id
 
@@ -173,6 +188,10 @@ class RequestContext:
             return
 
         if not self._context_id and not self._params.message.context_id:
-            self._params.message.context_id = str(uuid.uuid4())
+            self._params.message.context_id = (
+                self._context_id_generator.generate(
+                    IDGeneratorContext(task_id=self._task_id)
+                )
+            )
         if self._params.message.context_id:
             self._context_id = self._params.message.context_id

@@ -206,7 +206,7 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
-        payload, modified_kwargs = await self._apply_interceptors(
+        _payload, modified_kwargs = await self._apply_interceptors(
             request.model_dump(mode='json', exclude_none=True),
             self._get_http_args(context),
             context,
@@ -214,7 +214,7 @@ class RestTransport(ClientTransport):
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
             {'historyLength': str(request.history_length)}
-            if request.history_length
+            if request.history_length is not None
             else {},
             modified_kwargs,
         )

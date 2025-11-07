@@ -1,5 +1,72 @@
 # Changelog
 
+## [0.3.10](https://github.com/a2aproject/a2a-python/compare/v0.3.9...v0.3.10) (2025-10-21)
+
+
+### Features
+
+* add `get_artifact_text()` helper method ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+* Add a `ClientFactory.connect()` method for easy client creation ([d585635](https://github.com/a2aproject/a2a-python/commit/d5856359034f4d3d1e4578804727f47a3cd7c322))
+
+
+### Bug Fixes
+
+* change `MAX_CONTENT_LENGTH` (for file attachment) in json-rpc to be larger size (10mb) ([#518](https://github.com/a2aproject/a2a-python/issues/518)) ([5b81385](https://github.com/a2aproject/a2a-python/commit/5b813856b4b4e07510a4ef41980d388e47c73b8e))
+* correct `new_artifact` methods signature ([#503](https://github.com/a2aproject/a2a-python/issues/503)) ([ee026aa](https://github.com/a2aproject/a2a-python/commit/ee026aa356042b9eb212eee59fa5135b280a3077))
+
+
+### Code Refactoring
+
+* **utils:** move part helpers to their own file ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+
+## [0.3.9](https://github.com/a2aproject/a2a-python/compare/v0.3.8...v0.3.9) (2025-10-15)
+
+
+### Features
+
+* custom ID generators ([051ab20](https://github.com/a2aproject/a2a-python/commit/051ab20c395daa2807b0233cf1c53493e41b60c2))
+
+
+### Bug Fixes
+
+* apply `history_length` for `message/send` requests ([#498](https://github.com/a2aproject/a2a-python/issues/498)) ([a49f94e](https://github.com/a2aproject/a2a-python/commit/a49f94ef23d81b8375e409b1c1e51afaf1da1956))
+* **client:** `A2ACardResolver.get_agent_card` will auto-populate with `agent_card_path` when `relative_card_path` is empty ([#508](https://github.com/a2aproject/a2a-python/issues/508)) ([ba24ead](https://github.com/a2aproject/a2a-python/commit/ba24eadb5b6fcd056a008e4cbcef03b3f72a37c3))
+
+
+### Documentation
+
+* Fix Docstring formatting for code samples ([#492](https://github.com/a2aproject/a2a-python/issues/492)) ([dca66c3](https://github.com/a2aproject/a2a-python/commit/dca66c3100a2b9701a1c8b65ad6853769eefd511))
+
+## [0.3.8](https://github.com/a2aproject/a2a-python/compare/v0.3.7...v0.3.8) (2025-10-06)
+
+
+### Bug Fixes
+
+* Add `__str__` and `__repr__` methods to `ServerError` ([#489](https://github.com/a2aproject/a2a-python/issues/489)) ([2c152c0](https://github.com/a2aproject/a2a-python/commit/2c152c0e636db828839dc3133756c558ab090c1a))
+* **grpc:** Fix missing extensions from protobuf ([#476](https://github.com/a2aproject/a2a-python/issues/476)) ([8dbc78a](https://github.com/a2aproject/a2a-python/commit/8dbc78a7a6d2036b0400873b50cfc95a59bdb192))
+* **rest:** send `historyLength=0` (avoid falsy omission) ([#480](https://github.com/a2aproject/a2a-python/issues/480)) ([ed28b59](https://github.com/a2aproject/a2a-python/commit/ed28b5922877c1c8386fd0a7e05471581905bc59)), closes [#479](https://github.com/a2aproject/a2a-python/issues/479)
+
+
+### Documentation
+
+* `a2a-sdk[all]` installation command in Readme ([#485](https://github.com/a2aproject/a2a-python/issues/485)) ([6ac9a7c](https://github.com/a2aproject/a2a-python/commit/6ac9a7ceb6aff1ca2f756cf75f58e169b8dcd43a))
+
+## [0.3.7](https://github.com/a2aproject/a2a-python/compare/v0.3.6...v0.3.7) (2025-09-22)
+
+
+### Bug Fixes
+
+* jsonrpc client send streaming request header and timeout field ([#475](https://github.com/a2aproject/a2a-python/issues/475)) ([675354a](https://github.com/a2aproject/a2a-python/commit/675354a4149f15eb3ba4ad277ded00ad501766dd))
+* Task state is not persisted to task store after client disconnect ([#472](https://github.com/a2aproject/a2a-python/issues/472)) ([5342ca4](https://github.com/a2aproject/a2a-python/commit/5342ca43398ec004597167f6b1a47525b69d1439)), closes [#464](https://github.com/a2aproject/a2a-python/issues/464)
+
+## [0.3.6](https://github.com/a2aproject/a2a-python/compare/v0.3.5...v0.3.6) (2025-09-09)
+
+
+### Features
+
+* add JSON-RPC `method` to `ServerCallContext.state` ([d62df7a](https://github.com/a2aproject/a2a-python/commit/d62df7a77e556f26556fc798a55dc6dacec21ea4))
+* **gRPC:** Add proto conversion utilities ([80fc33a](https://github.com/a2aproject/a2a-python/commit/80fc33aaef647826208d9020ef70e5e6592468e3))
+
 ## [0.3.5](https://github.com/a2aproject/a2a-python/compare/v0.3.4...v0.3.5) (2025-09-08)
 
 
