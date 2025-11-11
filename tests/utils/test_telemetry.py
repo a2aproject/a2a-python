@@ -1,6 +1,7 @@
 import asyncio
 
-from typing import NoReturn
+from collections.abc import Generator
+from typing import Any, NoReturn
 from unittest import mock
 
 import pytest
@@ -9,12 +10,12 @@ from a2a.utils.telemetry import trace_class, trace_function
 
 
 @pytest.fixture
-def mock_span():
+def mock_span() -> mock.MagicMock:
     return mock.MagicMock()
 
 
 @pytest.fixture
-def mock_tracer(mock_span):
+def mock_tracer(mock_span: mock.MagicMock) -> mock.MagicMock:
     tracer = mock.MagicMock()
     tracer.start_as_current_span.return_value.__enter__.return_value = mock_span
     tracer.start_as_current_span.return_value.__exit__.return_value = False
@@ -22,12 +23,14 @@ def mock_tracer(mock_span):
 
 
 @pytest.fixture(autouse=True)
-def patch_trace_get_tracer(mock_tracer):
+def patch_trace_get_tracer(
+    mock_tracer: mock.MagicMock,
+) -> Generator[None, Any, None]:
     with mock.patch('opentelemetry.trace.get_tracer', return_value=mock_tracer):
         yield
 
 
-def test_trace_function_sync_success(mock_span):
+def test_trace_function_sync_success(mock_span: mock.MagicMock) -> None:
     @trace_function
     def foo(x, y):
         return x + y
@@ -39,7 +42,7 @@ def test_trace_function_sync_success(mock_span):
     mock_span.record_exception.assert_not_called()
 
 
-def test_trace_function_sync_exception(mock_span):
+def test_trace_function_sync_exception(mock_span: mock.MagicMock) -> None:
     @trace_function
     def bar() -> NoReturn:
         raise ValueError('fail')
@@ -50,7 +53,9 @@ def test_trace_function_sync_exception(mock_span):
     mock_span.set_status.assert_any_call(mock.ANY, description='fail')
 
 
-def test_trace_function_sync_attribute_extractor_called(mock_span):
+def test_trace_function_sync_attribute_extractor_called(
+    mock_span: mock.MagicMock,
+) -> None:
     called = {}
 
     def attr_extractor(span, args, kwargs, result, exception) -> None:
@@ -67,7 +72,9 @@ def test_trace_function_sync_attribute_extractor_called(mock_span):
     assert called['called']
 
 
-def test_trace_function_sync_attribute_extractor_error_logged(mock_span):
+def test_trace_function_sync_attribute_extractor_error_logged(
+    mock_span: mock.MagicMock,
+) -> None:
     with mock.patch('a2a.utils.telemetry.logger') as logger:
 
         def attr_extractor(span, args, kwargs, result, exception) -> NoReturn:
@@ -85,7 +92,7 @@ def test_trace_function_sync_attribute_extractor_error_logged(mock_span):
 
 
 @pytest.mark.asyncio
-async def test_trace_function_async_success(mock_span):
+async def test_trace_function_async_success(mock_span: mock.MagicMock) -> None:
     @trace_function
     async def foo(x):
         await asyncio.sleep(0)
@@ -98,7 +105,9 @@ async def test_trace_function_async_success(mock_span):
 
 
 @pytest.mark.asyncio
-async def test_trace_function_async_exception(mock_span):
+async def test_trace_function_async_exception(
+    mock_span: mock.MagicMock,
+) -> None:
     @trace_function
     async def bar() -> NoReturn:
         await asyncio.sleep(0)
@@ -111,7 +120,9 @@ async def test_trace_function_async_exception(mock_span):
 
 
 @pytest.mark.asyncio
-async def test_trace_function_async_attribute_extractor_called(mock_span):
+async def test_trace_function_async_attribute_extractor_called(
+    mock_span: mock.MagicMock,
+) -> None:
     called = {}
 
     def attr_extractor(span, args, kwargs, result, exception) -> None:
@@ -127,7 +138,9 @@ async def test_trace_function_async_attribute_extractor_called(mock_span):
     assert called['called']
 
 
-def test_trace_function_with_args_and_attributes(mock_span):
+def test_trace_function_with_args_and_attributes(
+    mock_span: mock.MagicMock,
+) -> None:
     @trace_function(span_name='custom.span', attributes={'foo': 'bar'})
     def foo() -> int:
         return 1
@@ -136,7 +149,7 @@ def test_trace_function_with_args_and_attributes(mock_span):
     mock_span.set_attribute.assert_any_call('foo', 'bar')
 
 
-def test_trace_class_exclude_list(mock_span):
+def test_trace_class_exclude_list(mock_span: mock.MagicMock) -> None:
     @trace_class(exclude_list=['skip_me'])
     class MyClass:
         def a(self) -> str:
@@ -145,7 +158,7 @@ def test_trace_class_exclude_list(mock_span):
         def skip_me(self) -> str:
             return 'skip'
 
-        def __str__(self):
+        def __str__(self) -> str:
             return 'str'
 
     obj = MyClass()
@@ -156,7 +169,7 @@ def test_trace_class_exclude_list(mock_span):
     assert not hasattr(obj.skip_me, '__wrapped__')
 
 
-def test_trace_class_include_list(mock_span):
+def test_trace_class_include_list(mock_span: mock.MagicMock) -> None:
     @trace_class(include_list=['only_this'])
     class MyClass:
         def only_this(self) -> str:
@@ -172,10 +185,10 @@ def test_trace_class_include_list(mock_span):
     assert not hasattr(obj.not_this, '__wrapped__')
 
 
-def test_trace_class_dunder_not_traced(mock_span):
+def test_trace_class_dunder_not_traced(mock_span: mock.MagicMock) -> None:
     @trace_class()
     class MyClass:
-        def __init__(self):
+        def __init__(self) -> None:
             self.x = 1
 
         def foo(self) -> str:

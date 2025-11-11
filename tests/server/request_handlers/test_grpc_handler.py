@@ -61,7 +61,7 @@ async def test_send_message_success(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test successful SendMessage call."""
     request_proto = a2a_pb2.SendMessageRequest(
         request=a2a_pb2.Message(message_id='msg-1')
@@ -86,7 +86,7 @@ async def test_send_message_server_error(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test SendMessage call when handler raises a ServerError."""
     request_proto = a2a_pb2.SendMessageRequest()
     error = ServerError(error=types.InvalidParamsError(message='Bad params'))
@@ -104,7 +104,7 @@ async def test_get_task_success(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test successful GetTask call."""
     request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
     response_model = types.Task(
@@ -126,7 +126,7 @@ async def test_get_task_not_found(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test GetTask call when task is not found."""
     request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
     mock_request_handler.on_get_task.return_value = None
@@ -143,7 +143,7 @@ async def test_cancel_task_server_error(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test CancelTask call when handler raises ServerError."""
     request_proto = a2a_pb2.CancelTaskRequest(name='tasks/task-1')
     error = ServerError(error=types.TaskNotCancelableError())
@@ -162,7 +162,7 @@ async def test_send_streaming_message(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test successful SendStreamingMessage call."""
 
     async def mock_stream():
@@ -192,7 +192,7 @@ async def test_get_agent_card(
     grpc_handler: GrpcHandler,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test GetAgentCard call."""
     request_proto = a2a_pb2.GetAgentCardRequest()
     response = await grpc_handler.GetAgentCard(request_proto, mock_grpc_context)
@@ -206,7 +206,7 @@ async def test_get_agent_card_with_modifier(
     mock_request_handler: AsyncMock,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
-):
+) -> None:
     """Test GetAgentCard call with a card_modifier."""
 
     def modifier(card: types.AgentCard) -> types.AgentCard:
@@ -299,10 +299,10 @@ async def test_abort_context_error_mapping(  # noqa: PLR0913
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-    server_error,
-    grpc_status_code,
-    error_message_part,
-):
+    server_error: ServerError,
+    grpc_status_code: grpc.StatusCode,
+    error_message_part: str,
+) -> None:
     mock_request_handler.on_get_task.side_effect = server_error
     request_proto = a2a_pb2.GetTaskRequest(name='tasks/any')
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
@@ -320,7 +320,7 @@ class TestGrpcExtensions:
         grpc_handler: GrpcHandler,
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
-    ):
+    ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo'),
             (HTTP_EXTENSION_HEADER, 'bar'),
@@ -360,7 +360,7 @@ class TestGrpcExtensions:
         grpc_handler: GrpcHandler,
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
-    ):
+    ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo ,, bar,'),
             (HTTP_EXTENSION_HEADER, 'baz  , bar'),
@@ -385,7 +385,7 @@ class TestGrpcExtensions:
         grpc_handler: GrpcHandler,
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
-    ):
+    ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo'),
             (HTTP_EXTENSION_HEADER, 'bar'),
