@@ -57,22 +57,21 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [ -z "$GENERATED_FILE" ]; then
-  echo "Error: Output file path must be provided." >&2
-  echo "Usage: $0 [--input-file <path>] [--version <version>] <output-file-path>"
-  echo ""
-  echo "Options:"
-  echo "  --input-file <path>   Use a local JSON schema file instead of fetching from remote"
-  echo "  --version <version>   Specify A2A spec version (default: v0.3.0)"
-  echo "                        Can be a git tag (v1.0.0), branch (main), or commit SHA"
-  echo ""
-  echo "Environment variables:"
-  echo "  A2A_SPEC_VERSION      Override default spec version"
-  echo ""
-  echo "Examples:"
-  echo "  $0 src/a2a/types.py"
-  echo "  $0 --version v1.2.0 src/a2a/types.py"
-  echo "  $0 --input-file local/a2a.json src/a2a/types.py"
-  echo "  A2A_SPEC_VERSION=main $0 src/a2a/types.py"
+  cat >&2 <<EOF
+Error: Output file path must be provided.
+Usage: $0 [--input-file <path>] [--version <version>] <output-file-path>
+Options:
+  --input-file <path>   Use a local JSON schema file instead of fetching from remote
+  --version <version>   Specify A2A spec version (default: v0.3.0)
+                        Can be a git tag (v1.0.0), branch (main), or commit SHA
+Environment variables:
+  A2A_SPEC_VERSION      Override default spec version
+Examples:
+  $0 src/a2a/types.py
+  $0 --version v1.2.0 src/a2a/types.py
+  $0 --input-file local/a2a.json src/a2a/types.py
+  A2A_SPEC_VERSION=main $0 src/a2a/types.py
+EOF
   exit 1
 fi
 
