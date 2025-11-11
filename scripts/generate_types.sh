@@ -16,17 +16,20 @@ A2A_SPEC_VERSION="${A2A_SPEC_VERSION:-v0.3.0}"
 build_remote_url() {
   local version="$1"
   local base_url="https://raw.githubusercontent.com/a2aproject/A2A"
+  local spec_path="specification/json/a2a.json"
+  local url_part
 
-  if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+ ]]; then
+  if [[ "$version" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
     # Looks like a version tag (v1.0.0, v1.2.3)
-    echo "${base_url}/refs/tags/${version}/specification/json/a2a.json"
+    url_part="refs/tags/${version}"
   elif [[ "$version" =~ ^[0-9a-f]{7,40}$ ]]; then
     # Looks like a commit SHA (7+ hex chars)
-    echo "${base_url}/${version}/specification/json/a2a.json"
+    url_part="${version}"
   else
     # Assume it's a branch name (main, develop, etc.)
-    echo "${base_url}/refs/heads/${version}/specification/json/a2a.json"
+    url_part="refs/heads/${version}"
   fi
+  echo "${base_url}/${url_part}/${spec_path}"
 }
 
 REMOTE_URL=$(build_remote_url "$A2A_SPEC_VERSION")
