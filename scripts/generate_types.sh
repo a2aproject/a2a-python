@@ -92,13 +92,15 @@ else
   # Validate that the remote URL is accessible
   echo "  - Validating remote URL..."
   if ! curl --fail --silent --head "$REMOTE_URL" >/dev/null 2>&1; then
-    echo "" >&2
-    echo "Error: Unable to access A2A specification at version '$A2A_SPEC_VERSION'" >&2
-    echo "URL: $REMOTE_URL" >&2
-    echo "" >&2
-    echo "The version may not exist. Available versions can be found at:" >&2
-    echo "  https://github.com/a2aproject/A2A/tags" >&2
-    echo "" >&2
+    cat >&2 <<EOF
+
+Error: Unable to access A2A specification at version '$A2A_SPEC_VERSION'
+URL: $REMOTE_URL
+
+The version may not exist. Available versions can be found at:
+  https://github.com/a2aproject/A2A/tags
+
+EOF
     exit 1
   fi
 
