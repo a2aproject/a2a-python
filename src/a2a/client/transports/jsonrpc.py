@@ -18,7 +18,7 @@ from a2a.client.errors import (
 )
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
-from a2a.client.transports.utils import get_http_args, update_extension_header
+from a2a.extensions.common import update_extension_header
 from a2a.types import (
     AgentCard,
     CancelTaskRequest,
@@ -106,6 +106,11 @@ class JsonRpcTransport(ClientTransport):
             )
         return final_request_payload, final_http_kwargs
 
+    def _get_http_args(
+        self, context: ClientCallContext | None
+    ) -> dict[str, Any] | None:
+        return context.state.get('http_kwargs') if context else None
+
     async def send_message(
         self,
         request: MessageSendParams,
@@ -117,7 +122,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'message/send',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -144,7 +149,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'message/stream',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
 
@@ -217,7 +222,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -240,7 +245,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/cancel',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -265,7 +270,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/set',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -292,7 +297,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -319,7 +324,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/resubscribe',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -363,7 +368,7 @@ class JsonRpcTransport(ClientTransport):
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
             card = await resolver.get_agent_card(
-                http_kwargs=get_http_args(context)
+                http_kwargs=self._get_http_args(context)
             )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
@@ -377,7 +382,7 @@ class JsonRpcTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             request.method,
             request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(

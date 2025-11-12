@@ -794,7 +794,10 @@ class TestJsonRpcTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message adds extension headers when extensions are provided."""
-        extensions = ['test_extension_1', 'test_extension_2']
+        extensions = [
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        ]
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
@@ -827,8 +830,8 @@ class TestJsonRpcTransportExtensions:
         actual_extensions = set(actual_extensions_list)
 
         expected_extensions = {
-            'test_extension_1',
-            'test_extension_2',
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
         }
         assert len(actual_extensions_list) == 2
         assert actual_extensions == expected_extensions
@@ -842,7 +845,7 @@ class TestJsonRpcTransportExtensions:
         mock_agent_card: MagicMock,
     ):
         """Test X-A2A-Extensions header in send_message_streaming."""
-        extensions = ['test_extension']
+        extensions = ['https://example.com/test-ext/v1']
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
@@ -866,4 +869,6 @@ class TestJsonRpcTransportExtensions:
 
         headers = kwargs.get('headers', {})
         assert HTTP_EXTENSION_HEADER in headers
-        assert headers[HTTP_EXTENSION_HEADER] == 'test_extension'
+        assert (
+            headers[HTTP_EXTENSION_HEADER] == 'https://example.com/test-ext/v1'
+        )

@@ -13,7 +13,7 @@ from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
-from a2a.client.transports.utils import get_http_args, update_extension_header
+from a2a.extensions.common import update_extension_header
 from a2a.grpc import a2a_pb2
 from a2a.types import (
     AgentCard,
@@ -76,6 +76,11 @@ class RestTransport(ClientTransport):
         # TODO: Implement interceptors for other transports
         return final_request_payload, final_http_kwargs
 
+    def _get_http_args(
+        self, context: ClientCallContext | None
+    ) -> dict[str, Any] | None:
+        return context.state.get('http_kwargs') if context else None
+
     async def _prepare_send_message(
         self, request: MessageSendParams, context: ClientCallContext | None
     ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -93,7 +98,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -209,7 +214,7 @@ class RestTransport(ClientTransport):
         """Retrieves the current state and history of a specific task."""
         _payload, modified_kwargs = await self._apply_interceptors(
             request.model_dump(mode='json', exclude_none=True),
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -237,7 +242,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -264,7 +269,7 @@ class RestTransport(ClientTransport):
         )
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
-            payload, get_http_args(context), context
+            payload, self._get_http_args(context), context
         )
         modified_kwargs = update_extension_header(
             modified_kwargs, self.extensions
@@ -291,7 +296,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(pb)
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
@@ -315,7 +320,7 @@ class RestTransport(ClientTransport):
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Reconnects to get task updates."""
-        http_kwargs = get_http_args(context) or {}
+        http_kwargs = self._get_http_args(context) or {}
         http_kwargs.setdefault('timeout', None)
         modified_kwargs = update_extension_header(http_kwargs, self.extensions)
 
@@ -351,7 +356,7 @@ class RestTransport(ClientTransport):
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
             card = await resolver.get_agent_card(
-                http_kwargs=get_http_args(context)
+                http_kwargs=self._get_http_args(context)
             )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
@@ -363,7 +368,7 @@ class RestTransport(ClientTransport):
 
         _, modified_kwargs = await self._apply_interceptors(
             {},
-            get_http_args(context),
+            self._get_http_args(context),
             context,
         )
         modified_kwargs = update_extension_header(
