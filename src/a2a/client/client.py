@@ -117,6 +117,7 @@ class Client(ABC):
         request: Message,
         *,
         context: ClientCallContext | None = None,
+        request_metadata: dict[str, Any] | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the server.
 

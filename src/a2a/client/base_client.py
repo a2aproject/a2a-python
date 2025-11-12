@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from typing import Any
 
 from a2a.client.client import (
     Client,
@@ -48,6 +49,7 @@ class BaseClient(Client):
         request: Message,
         *,
         context: ClientCallContext | None = None,
+        request_metadata: dict[str, Any] | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the agent.
 
@@ -58,6 +60,7 @@ class BaseClient(Client):
         Args:
             request: The message to send to the agent.
             context: The client call context.
+            request_metadata: Extensions Metadata attached to the request.
 
         Yields:
             An async iterator of `ClientEvent` or a final `Message` response.
@@ -71,7 +74,9 @@ class BaseClient(Client):
                 else None
             ),
         )
-        params = MessageSendParams(message=request, configuration=config)
+        params = MessageSendParams(
+            message=request, configuration=config, metadata=request_metadata
+        )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
