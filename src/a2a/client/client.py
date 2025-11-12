@@ -100,6 +100,7 @@ class Client(ABC):
         Args:
             consumers: A list of callables to process events from the agent.
             middleware: A list of interceptors to process requests and responses.
+            extensions: A list of extension URIs the client supports.
         """
         if middleware is None:
             middleware = []
