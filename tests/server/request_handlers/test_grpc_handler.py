@@ -230,6 +230,42 @@ async def test_get_agent_card_with_modifier(
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_success(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+):
+    """Test successful ListTasks call."""
+    mock_request_handler.on_list_tasks.return_value = types.ListTasksResult(
+        next_page_token='123',
+        page_size=2,
+        tasks=[
+            types.Task(
+                id='task-1',
+                context_id='ctx-1',
+                status=types.TaskStatus(state=types.TaskState.completed),
+            ),
+            types.Task(
+                id='task-2',
+                context_id='ctx-1',
+                status=types.TaskStatus(state=types.TaskState.working),
+            ),
+        ],
+        total_size=10,
+    )
+
+    response = await grpc_handler.ListTasks(
+        a2a_pb2.ListTasksRequest(page_size=2), mock_grpc_context
+    )
+
+    mock_request_handler.on_list_tasks.assert_awaited_once()
+    assert isinstance(response, a2a_pb2.ListTasksResponse)
+    assert len(response.tasks) == 2
+    assert response.tasks[0].id == 'task-1'
+    assert response.tasks[1].id == 'task-2'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
     'server_error, grpc_status_code, error_message_part',
     [
