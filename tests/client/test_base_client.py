@@ -57,7 +57,6 @@ def base_client(
         transport=mock_transport,
         consumers=[],
         middleware=[],
-        extensions=[],
     )
 
 

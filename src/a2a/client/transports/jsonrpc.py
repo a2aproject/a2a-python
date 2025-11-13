@@ -116,6 +116,7 @@ class JsonRpcTransport(ClientTransport):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task | Message:
         """Sends a non-streaming message request to the agent."""
         rpc_request = SendMessageRequest(params=request, id=str(uuid4()))
@@ -125,8 +126,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SendMessageResponse.model_validate(response_data)
@@ -139,6 +140,7 @@ class JsonRpcTransport(ClientTransport):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
@@ -153,8 +155,8 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
 
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         modified_kwargs.setdefault(
             'timeout', self.httpx_client.timeout.as_dict().get('read', None)
@@ -216,6 +218,7 @@ class JsonRpcTransport(ClientTransport):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         rpc_request = GetTaskRequest(params=request, id=str(uuid4()))
@@ -225,8 +228,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskResponse.model_validate(response_data)
@@ -239,6 +242,7 @@ class JsonRpcTransport(ClientTransport):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         rpc_request = CancelTaskRequest(params=request, id=str(uuid4()))
@@ -248,8 +252,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = CancelTaskResponse.model_validate(response_data)
@@ -262,6 +266,7 @@ class JsonRpcTransport(ClientTransport):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         rpc_request = SetTaskPushNotificationConfigRequest(
@@ -273,8 +278,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SetTaskPushNotificationConfigResponse.model_validate(
@@ -289,6 +294,7 @@ class JsonRpcTransport(ClientTransport):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         rpc_request = GetTaskPushNotificationConfigRequest(
@@ -300,8 +306,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskPushNotificationConfigResponse.model_validate(
@@ -316,6 +322,7 @@ class JsonRpcTransport(ClientTransport):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
@@ -327,8 +334,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         modified_kwargs.setdefault('timeout', None)
 
@@ -362,6 +369,7 @@ class JsonRpcTransport(ClientTransport):
         self,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
@@ -385,8 +393,8 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
 
         response_data = await self._send_request(

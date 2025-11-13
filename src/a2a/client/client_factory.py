@@ -245,7 +245,6 @@ class ClientFactory:
             transport,
             all_consumers,
             interceptors or [],
-            all_extensions,
         )
 
 

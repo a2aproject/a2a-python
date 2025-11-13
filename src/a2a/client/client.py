@@ -93,24 +93,19 @@ class Client(ABC):
         self,
         consumers: list[Consumer] | None = None,
         middleware: list[ClientCallInterceptor] | None = None,
-        extensions: list[str] | None = None,
     ):
         """Initializes the client with consumers and middleware.
 
         Args:
             consumers: A list of callables to process events from the agent.
             middleware: A list of interceptors to process requests and responses.
-            extensions: A list of extension URIs the client supports.
         """
         if middleware is None:
             middleware = []
         if consumers is None:
             consumers = []
-        if extensions is None:
-            extensions = []
         self._consumers = consumers
         self._middleware = middleware
-        self._extensions = extensions
 
     @abstractmethod
     async def send_message(
@@ -119,6 +114,7 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the server.
 
@@ -137,6 +133,7 @@ class Client(ABC):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -146,6 +143,7 @@ class Client(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -155,6 +153,7 @@ class Client(ABC):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -164,6 +163,7 @@ class Client(ABC):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -173,6 +173,7 @@ class Client(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
         return
@@ -180,7 +181,10 @@ class Client(ABC):
 
     @abstractmethod
     async def get_card(
-        self, *, context: ClientCallContext | None = None
+        self,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
 

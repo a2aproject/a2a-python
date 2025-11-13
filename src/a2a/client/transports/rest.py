@@ -82,7 +82,10 @@ class RestTransport(ClientTransport):
         return context.state.get('http_kwargs') if context else None
 
     async def _prepare_send_message(
-        self, request: MessageSendParams, context: ClientCallContext | None
+        self,
+        request: MessageSendParams,
+        context: ClientCallContext | None,
+        extensions: list[str] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         pb = a2a_pb2.SendMessageRequest(
             request=proto_utils.ToProto.message(request.message),
@@ -101,8 +104,8 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         return payload, modified_kwargs
 
@@ -111,10 +114,11 @@ class RestTransport(ClientTransport):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task | Message:
         """Sends a non-streaming message request to the agent."""
         payload, modified_kwargs = await self._prepare_send_message(
-            request, context
+            request, context, extensions
         )
         response_data = await self._send_post_request(
             '/v1/message:send', payload, modified_kwargs
@@ -128,12 +132,13 @@ class RestTransport(ClientTransport):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         payload, modified_kwargs = await self._prepare_send_message(
-            request, context
+            request, context, extensions
         )
 
         modified_kwargs.setdefault('timeout', None)
@@ -210,6 +215,7 @@ class RestTransport(ClientTransport):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         _payload, modified_kwargs = await self._apply_interceptors(
@@ -217,8 +223,8 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
@@ -236,6 +242,7 @@ class RestTransport(ClientTransport):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         pb = a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
@@ -245,8 +252,8 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
@@ -260,6 +267,7 @@ class RestTransport(ClientTransport):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         pb = a2a_pb2.CreateTaskPushNotificationConfigRequest(
@@ -271,8 +279,8 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             payload, self._get_http_args(context), context
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
@@ -288,6 +296,7 @@ class RestTransport(ClientTransport):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         pb = a2a_pb2.GetTaskPushNotificationConfigRequest(
@@ -299,8 +308,8 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
@@ -316,13 +325,16 @@ class RestTransport(ClientTransport):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Reconnects to get task updates."""
         http_kwargs = self._get_http_args(context) or {}
         http_kwargs.setdefault('timeout', None)
-        modified_kwargs = update_extension_header(http_kwargs, self.extensions)
+        modified_kwargs, self.extensions = update_extension_header(
+            http_kwargs, self.extensions, extensions
+        )
 
         async with aconnect_sse(
             self.httpx_client,
@@ -350,6 +362,7 @@ class RestTransport(ClientTransport):
         self,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
@@ -371,8 +384,8 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs, self.extensions
+        modified_kwargs, self.extensions = update_extension_header(
+            modified_kwargs, self.extensions, extensions
         )
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs

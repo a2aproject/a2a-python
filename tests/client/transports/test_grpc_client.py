@@ -353,17 +353,14 @@ async def test_cancel_task(
         cancelled_task
     )
     params = TaskIdParams(id=sample_task.id)
-
-    response = await grpc_transport.cancel_task(params)
+    extensions = [
+        'https://example.com/test-ext/v3',
+    ]
+    response = await grpc_transport.cancel_task(params, extensions=extensions)
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER,
-                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[(HTTP_EXTENSION_HEADER, 'https://example.com/test-ext/v3')],
     )
     assert response.status.state == TaskState.canceled
 
@@ -493,3 +490,60 @@ async def test_get_task_callback_with_invalid_task(
         'Bad TaskPushNotificationConfig resource name'
         in exc_info.value.error.message
     )
+
+
+@pytest.mark.parametrize(
+    'initial_extensions, input_extensions, expected_metadata, expected_extensions',
+    [
+        (
+            None,
+            None,
+            None,
+            None,
+        ),  # Case 1: No initial, No input
+        (
+            ['ext1'],
+            None,
+            [(HTTP_EXTENSION_HEADER, 'ext1')],
+            ['ext1'],
+        ),  # Case 2: Initial, No input
+        (
+            None,
+            ['ext2'],
+            [(HTTP_EXTENSION_HEADER, 'ext2')],
+            ['ext2'],
+        ),  # Case 3: No initial, Input
+        (
+            ['ext1'],
+            ['ext2'],
+            [(HTTP_EXTENSION_HEADER, 'ext2')],
+            ['ext2'],
+        ),  # Case 4: Initial, Input (override)
+        (
+            ['ext1'],
+            ['ext2', 'ext3'],
+            [(HTTP_EXTENSION_HEADER, 'ext2, ext3')],
+            ['ext2', 'ext3'],
+        ),  # Case 5: Initial, Multiple inputs (override)
+        (
+            ['ext1', 'ext2'],
+            ['ext3'],
+            [(HTTP_EXTENSION_HEADER, 'ext3')],
+            ['ext3'],
+        ),  # Case 6: Multiple initial, Single input (override)
+    ],
+)
+def test_get_grpc_metadata(
+    grpc_transport: GrpcTransport,
+    initial_extensions: list[str] | None,
+    input_extensions: list[str] | None,
+    expected_metadata: list[tuple[str, str]] | None,
+    expected_extensions: list[str] | None,
+) -> None:
+    """Tests _get_grpc_metadata for correct metadata generation and self.extensions update."""
+    grpc_transport.extensions = initial_extensions
+
+    metadata = grpc_transport._get_grpc_metadata(extensions=input_extensions)
+
+    assert metadata == expected_metadata
+    assert grpc_transport.extensions == expected_extensions
