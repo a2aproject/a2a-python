@@ -144,7 +144,7 @@ class DefaultRequestHandler(RequestHandler):
                 )
             processed_tasks.append(processed_task)
         return ListTasksResult(
-            next_page_token=page.next_page_token,
+            next_page_token=page.next_page_token or '',
             page_size=params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE,
             tasks=processed_tasks,
             total_size=page.total_size,

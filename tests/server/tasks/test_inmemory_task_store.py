@@ -50,12 +50,19 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
             5,
             '1',
         ),
-        # Pagination (second page)
+        # Pagination (final page)
         (
-            ListTasksParams(page_size=2, page_token='1'),
-            ['task-2', 'task-3'],
+            ListTasksParams(page_size=2, page_token='2'),
+            ['task-4'],
             5,
-            '2',
+            None,
+        ),
+        # Pagination (out of bounds)
+        (
+            ListTasksParams(page_size=2, page_token='3'),
+            [],
+            5,
+            None,
         ),
         # Filtering by context_id
         (
