@@ -145,6 +145,7 @@ class ClientFactory:
             A2AAgentCardResolver.get_agent_card as the http_kwargs parameter.
           extra_transports: Additional transport protocols to enable when
             constructing the client.
+          extensions: List of extensions to be activated.
 
         Returns:
           A `Client` object.
@@ -190,6 +191,7 @@ class ClientFactory:
           interceptors: A list of interceptors to use for each request. These
             are used for things like attaching credentials or http headers
             to all outbound requests.
+          extensions: List of extensions to be activated.
 
         Returns:
           A `Client` object.

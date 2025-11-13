@@ -34,6 +34,7 @@ def update_extension_header(
     active_extensions: list[str] | None,
     new_extensions: list[str] | None,
 ) -> tuple[dict[str, Any], list[str] | None]:
+    """Update the X-A2A-Extensions header and update active extensions."""
     if new_extensions:
         active_extensions = new_extensions
     if active_extensions:
