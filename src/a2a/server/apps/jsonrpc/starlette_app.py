@@ -59,6 +59,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
+        disable_content_length_check: bool = False,
     ) -> None:
         """Initializes the A2AStarletteApplication.
 
@@ -76,6 +77,8 @@ class A2AStarletteApplication(JSONRPCApplication):
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
+            disable_content_length_check: An optional, if True disables the check
+            for oversized payloads.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -90,6 +93,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             context_builder=context_builder,
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
+            disable_content_length_check=disable_content_length_check,
         )
 
     def routes(
