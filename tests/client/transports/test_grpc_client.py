@@ -4,6 +4,7 @@ import grpc
 import pytest
 
 from a2a.client.transports.grpc import GrpcTransport
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCapabilities,
@@ -64,7 +65,14 @@ def grpc_transport(
 ) -> GrpcTransport:
     """Provides a GrpcTransport instance."""
     channel = AsyncMock()
-    transport = GrpcTransport(channel=channel, agent_card=sample_agent_card)
+    transport = GrpcTransport(
+        channel=channel,
+        agent_card=sample_agent_card,
+        extensions=[
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        ],
+    )
     transport.stub = mock_grpc_stub
     return transport
 
@@ -185,9 +193,19 @@ async def test_send_message_task_response(
         task=proto_utils.ToProto.task(sample_task)
     )
 
-    response = await grpc_transport.send_message(sample_message_send_params)
+    response = await grpc_transport.send_message(
+        sample_message_send_params,
+        extensions=['https://example.com/test-ext/v3'],
+    )
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v3',
+        )
+    ]
     assert isinstance(response, Task)
     assert response.id == sample_task.id
 
@@ -207,6 +225,13 @@ async def test_send_message_message_response(
     response = await grpc_transport.send_message(sample_message_send_params)
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+        )
+    ]
     assert isinstance(response, Message)
     assert response.message_id == sample_message.message_id
     assert get_text_parts(response.parts) == get_text_parts(
@@ -255,6 +280,13 @@ async def test_send_message_streaming(  # noqa: PLR0913
     ]
 
     mock_grpc_stub.SendStreamingMessage.assert_called_once()
+    _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
+    assert kwargs['metadata'] == [
+        (
+            HTTP_EXTENSION_HEADER,
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+        )
+    ]
     assert isinstance(responses[0], Message)
     assert responses[0].message_id == sample_message.message_id
     assert isinstance(responses[1], Task)
@@ -278,7 +310,13 @@ async def test_get_task(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=None
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.id == sample_task.id
 
@@ -297,7 +335,13 @@ async def test_get_task_with_history(
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
             name=f'tasks/{sample_task.id}', history_length=history_len
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
     )
 
 
@@ -312,11 +356,14 @@ async def test_cancel_task(
         cancelled_task
     )
     params = TaskIdParams(id=sample_task.id)
-
-    response = await grpc_transport.cancel_task(params)
+    extensions = [
+        'https://example.com/test-ext/v3',
+    ]
+    response = await grpc_transport.cancel_task(params, extensions=extensions)
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
-        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}')
+        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
+        metadata=[(HTTP_EXTENSION_HEADER, 'https://example.com/test-ext/v3')],
     )
     assert response.status.state == TaskState.canceled
 
@@ -345,7 +392,13 @@ async def test_set_task_callback_with_valid_task(
             config=proto_utils.ToProto.task_push_notification_config(
                 sample_task_push_notification_config
             ),
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -402,7 +455,13 @@ async def test_get_task_callback_with_valid_task(
                 f'tasks/{params.id}/'
                 f'pushNotificationConfigs/{params.push_notification_config_id}'
             ),
-        )
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER,
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -434,3 +493,50 @@ async def test_get_task_callback_with_invalid_task(
         'Bad TaskPushNotificationConfig resource name'
         in exc_info.value.error.message
     )
+
+
+@pytest.mark.parametrize(
+    'initial_extensions, input_extensions, expected_metadata',
+    [
+        (
+            None,
+            None,
+            None,
+        ),  # Case 1: No initial, No input
+        (
+            ['ext1'],
+            None,
+            [(HTTP_EXTENSION_HEADER, 'ext1')],
+        ),  # Case 2: Initial, No input
+        (
+            None,
+            ['ext2'],
+            [(HTTP_EXTENSION_HEADER, 'ext2')],
+        ),  # Case 3: No initial, Input
+        (
+            ['ext1'],
+            ['ext2'],
+            [(HTTP_EXTENSION_HEADER, 'ext2')],
+        ),  # Case 4: Initial, Input (override)
+        (
+            ['ext1'],
+            ['ext2', 'ext3'],
+            [(HTTP_EXTENSION_HEADER, 'ext2,ext3')],
+        ),  # Case 5: Initial, Multiple inputs (override)
+        (
+            ['ext1', 'ext2'],
+            ['ext3'],
+            [(HTTP_EXTENSION_HEADER, 'ext3')],
+        ),  # Case 6: Multiple initial, Single input (override)
+    ],
+)
+def test_get_grpc_metadata(
+    grpc_transport: GrpcTransport,
+    initial_extensions: list[str] | None,
+    input_extensions: list[str] | None,
+    expected_metadata: list[tuple[str, str]] | None,
+) -> None:
+    """Tests _get_grpc_metadata for correct metadata generation and self.extensions update."""
+    grpc_transport.extensions = initial_extensions
+    metadata = grpc_transport._get_grpc_metadata(input_extensions)
+    assert metadata == expected_metadata
