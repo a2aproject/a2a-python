@@ -790,7 +790,7 @@ class TestJsonRpcTransport:
 
 class TestJsonRpcTransportExtensions:
     @pytest.mark.asyncio
-    async def test_send_message_with_extensions(
+    async def test_send_message_with_default_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message adds extension headers when extensions are provided."""
@@ -838,13 +838,14 @@ class TestJsonRpcTransportExtensions:
 
     @pytest.mark.asyncio
     @patch('a2a.client.transports.jsonrpc.aconnect_sse')
-    async def test_send_message_streaming_with_extensions(
+    async def test_send_message_streaming_with_new_extensions(
         self,
         mock_aconnect_sse: AsyncMock,
         mock_httpx_client: AsyncMock,
         mock_agent_card: MagicMock,
     ):
         """Test X-A2A-Extensions header in send_message_streaming."""
+        new_extensions = ['https://example.com/test-ext/v2']
         extensions = ['https://example.com/test-ext/v1']
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
@@ -861,7 +862,9 @@ class TestJsonRpcTransportExtensions:
             mock_event_source
         )
 
-        async for _ in client.send_message_streaming(request=params):
+        async for _ in client.send_message_streaming(
+            request=params, extensions=new_extensions
+        ):
             pass
 
         mock_aconnect_sse.assert_called_once()
@@ -870,5 +873,5 @@ class TestJsonRpcTransportExtensions:
         headers = kwargs.get('headers', {})
         assert HTTP_EXTENSION_HEADER in headers
         assert (
-            headers[HTTP_EXTENSION_HEADER] == 'https://example.com/test-ext/v1'
+            headers[HTTP_EXTENSION_HEADER] == 'https://example.com/test-ext/v2'
         )

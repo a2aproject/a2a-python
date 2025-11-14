@@ -104,8 +104,9 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         return payload, modified_kwargs
 
@@ -223,8 +224,9 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
@@ -252,8 +254,9 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
@@ -279,8 +282,9 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             payload, self._get_http_args(context), context
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
@@ -308,8 +312,9 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
@@ -332,8 +337,9 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         http_kwargs = self._get_http_args(context) or {}
         http_kwargs.setdefault('timeout', None)
-        modified_kwargs, self.extensions = update_extension_header(
-            http_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            http_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
 
         async with aconnect_sse(
@@ -384,8 +390,9 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs

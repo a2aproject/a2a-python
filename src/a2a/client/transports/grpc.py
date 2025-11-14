@@ -64,11 +64,11 @@ class GrpcTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> list[tuple[str, str]] | None:
         """Creates gRPC metadata for extensions."""
-        if extensions:
-            self.extensions = extensions
-        if not self.extensions:
-            return None
-        return [(HTTP_EXTENSION_HEADER, ', '.join(self.extensions))]
+        if extensions is not None:
+            return [(HTTP_EXTENSION_HEADER, ','.join(extensions))]
+        if self.extensions is not None:
+            return [(HTTP_EXTENSION_HEADER, ','.join(self.extensions))]
+        return None
 
     @classmethod
     def create(
@@ -233,6 +233,7 @@ class GrpcTransport(ClientTransport):
 
         card_pb = await self.stub.GetAgentCard(
             a2a_pb2.GetAgentCardRequest(),
+            metadata=self._get_grpc_metadata(extensions),
         )
         card = proto_utils.FromProto.agent_card(card_pb)
         self.agent_card = card

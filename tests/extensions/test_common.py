@@ -62,89 +62,67 @@ def test_find_extension_by_uri_no_extensions():
 
 
 @pytest.mark.parametrize(
-    'active_extensions, new_extensions, existing_header, expected_extensions, expected_count, expected_returned_extensions',
+    'extensions, header, expected_extensions',
     [
         (
-            ['ext1', 'ext2'],  # active_extensions
-            None,  # new_extensions
-            '',  # existing_header
+            ['ext1', 'ext2'],  # extensions
+            '',  # header
             {
                 'ext1',
                 'ext2',
             },  # expected_extensions
-            2,  # expected_count
-            ['ext1', 'ext2'],  # expected_returned_extensions
-        ),  # Case 1: Active extensions, no new extensions, and no existing header.
+        ),  # Case 1: New extensions provided,  empty header.
         (
-            ['ext1', 'ext2'],  # active_extensions
-            None,  # new_extensions
-            'ext2, ext3',  # existing_header
+            None,  # extensions
+            'ext1, ext2',  # existing_header
             {
                 'ext1',
                 'ext2',
-                'ext3',
             },  # expected_extensions
-            3,  # expected_count
-            ['ext1', 'ext2'],  # expected_returned_extensions
-        ),  # Case 2: Active extensions, no new extensions, with an existing header containing overlapping and new extensions.
+        ),  # Case 2: Extensions is None, existing header extensions.
         (
-            ['ext1', 'ext2'],  # active_extensions
-            None,  # new_extensions
+            [],  # extensions
+            'ext1',  # existing_header
+            {},  # expected_extensions
+        ),  # Case 3: New extensions is empty list, existing header extensions.
+        (
+            ['ext1', 'ext2'],  # extensions
             'ext3',  # existing_header
             {
                 'ext1',
                 'ext2',
-                'ext3',
             },  # expected_extensions
-            3,  # expected_count
-            ['ext1', 'ext2'],  # expected_returned_extensions
-        ),  # Case 3: Active extensions, no new extensions, with an existing header containing different extensions.
-        (
-            ['ext1', 'ext2'],  # active_extensions
-            ['ext3'],  # new_extensions
-            'ext4',  # existing_header
-            {
-                'ext3',
-                'ext4',
-            },  # expected_extensions
-            2,  # expected_count
-            ['ext3'],  # expected_returned_extensions
-        ),  # Case 4: Active extensions, new extensions provided, and an existing header. New extensions should override active and merge with existing.
+        ),  # Case 4: New extensions provided, and an existing header. New extensions should override active extensions.
     ],
 )
 def test_update_extension_header_merge_with_existing_extensions(
-    active_extensions: list[str],
-    new_extensions: list[str],
-    existing_header: str,
+    extensions: list[str],
+    header: str,
     expected_extensions: set[str],
-    expected_count: int,
-    expected_returned_extensions: list[str],
 ):
-    http_kwargs = {'headers': {HTTP_EXTENSION_HEADER: existing_header}}
-    result_kwargs, actual_returned_extensions = update_extension_header(
-        http_kwargs, active_extensions, new_extensions
-    )
+    http_kwargs = {'headers': {HTTP_EXTENSION_HEADER: header}}
+    result_kwargs = update_extension_header(http_kwargs, extensions)
     header_value = result_kwargs['headers'][HTTP_EXTENSION_HEADER]
-    actual_extensions_list = [e.strip() for e in header_value.split(',')]
-    actual_extensions = set(actual_extensions_list)
-    assert len(actual_extensions_list) == expected_count
+    if not header_value:
+        actual_extensions = {}
+    else:
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
     assert actual_extensions == expected_extensions
-    assert actual_returned_extensions == expected_returned_extensions
 
 
 def test_update_extension_header_with_other_headers():
     extensions = ['ext']
     http_kwargs = {'headers': {'X_Other': 'Test'}}
-    result_kwargs, _ = update_extension_header(http_kwargs, extensions, None)
+    result_kwargs = update_extension_header(http_kwargs, extensions)
     headers = result_kwargs.get('headers', {})
     assert HTTP_EXTENSION_HEADER in headers
     assert headers[HTTP_EXTENSION_HEADER] == 'ext'
     assert headers['X_Other'] == 'Test'
 
 
-@pytest.mark.parametrize('extensions', [(None), ([])])
-def test_update_extension_header_no_or_empty_extensions(extensions):
+def test_update_extension_header_with_other_headers_extensions_none():
     http_kwargs = {'headers': {'X_Other': 'Test'}}
-    result_kwargs, _ = update_extension_header(http_kwargs, extensions, None)
+    result_kwargs = update_extension_header(http_kwargs, None)
     assert HTTP_EXTENSION_HEADER not in result_kwargs['headers']
     assert result_kwargs['headers']['X_Other'] == 'Test'

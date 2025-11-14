@@ -126,8 +126,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SendMessageResponse.model_validate(response_data)
@@ -155,8 +156,9 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
 
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         modified_kwargs.setdefault(
             'timeout', self.httpx_client.timeout.as_dict().get('read', None)
@@ -228,8 +230,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskResponse.model_validate(response_data)
@@ -252,8 +255,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = CancelTaskResponse.model_validate(response_data)
@@ -278,8 +282,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SetTaskPushNotificationConfigResponse.model_validate(
@@ -306,8 +311,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskPushNotificationConfigResponse.model_validate(
@@ -334,8 +340,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
         modified_kwargs.setdefault('timeout', None)
 
@@ -393,8 +400,9 @@ class JsonRpcTransport(ClientTransport):
             self._get_http_args(context),
             context,
         )
-        modified_kwargs, self.extensions = update_extension_header(
-            modified_kwargs, self.extensions, extensions
+        modified_kwargs = update_extension_header(
+            modified_kwargs,
+            extensions if extensions is not None else self.extensions,
         )
 
         response_data = await self._send_request(

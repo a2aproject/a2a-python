@@ -193,14 +193,17 @@ async def test_send_message_task_response(
         task=proto_utils.ToProto.task(sample_task)
     )
 
-    response = await grpc_transport.send_message(sample_message_send_params)
+    response = await grpc_transport.send_message(
+        sample_message_send_params,
+        extensions=['https://example.com/test-ext/v3'],
+    )
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
         (
             HTTP_EXTENSION_HEADER,
-            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            'https://example.com/test-ext/v3',
         )
     ]
     assert isinstance(response, Task)
@@ -226,7 +229,7 @@ async def test_send_message_message_response(
     assert kwargs['metadata'] == [
         (
             HTTP_EXTENSION_HEADER,
-            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
         )
     ]
     assert isinstance(response, Message)
@@ -281,7 +284,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
     assert kwargs['metadata'] == [
         (
             HTTP_EXTENSION_HEADER,
-            'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
         )
     ]
     assert isinstance(responses[0], Message)
@@ -311,7 +314,7 @@ async def test_get_task(
         metadata=[
             (
                 HTTP_EXTENSION_HEADER,
-                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
     )
@@ -336,7 +339,7 @@ async def test_get_task_with_history(
         metadata=[
             (
                 HTTP_EXTENSION_HEADER,
-                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
     )
@@ -393,7 +396,7 @@ async def test_set_task_callback_with_valid_task(
         metadata=[
             (
                 HTTP_EXTENSION_HEADER,
-                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
     )
@@ -456,7 +459,7 @@ async def test_get_task_callback_with_valid_task(
         metadata=[
             (
                 HTTP_EXTENSION_HEADER,
-                'https://example.com/test-ext/v1, https://example.com/test-ext/v2',
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
     )
@@ -493,10 +496,9 @@ async def test_get_task_callback_with_invalid_task(
 
 
 @pytest.mark.parametrize(
-    'initial_extensions, input_extensions, expected_metadata, expected_extensions',
+    'initial_extensions, input_extensions, expected_metadata',
     [
         (
-            None,
             None,
             None,
             None,
@@ -505,31 +507,26 @@ async def test_get_task_callback_with_invalid_task(
             ['ext1'],
             None,
             [(HTTP_EXTENSION_HEADER, 'ext1')],
-            ['ext1'],
         ),  # Case 2: Initial, No input
         (
             None,
             ['ext2'],
             [(HTTP_EXTENSION_HEADER, 'ext2')],
-            ['ext2'],
         ),  # Case 3: No initial, Input
         (
             ['ext1'],
             ['ext2'],
             [(HTTP_EXTENSION_HEADER, 'ext2')],
-            ['ext2'],
         ),  # Case 4: Initial, Input (override)
         (
             ['ext1'],
             ['ext2', 'ext3'],
-            [(HTTP_EXTENSION_HEADER, 'ext2, ext3')],
-            ['ext2', 'ext3'],
+            [(HTTP_EXTENSION_HEADER, 'ext2,ext3')],
         ),  # Case 5: Initial, Multiple inputs (override)
         (
             ['ext1', 'ext2'],
             ['ext3'],
             [(HTTP_EXTENSION_HEADER, 'ext3')],
-            ['ext3'],
         ),  # Case 6: Multiple initial, Single input (override)
     ],
 )
@@ -538,12 +535,8 @@ def test_get_grpc_metadata(
     initial_extensions: list[str] | None,
     input_extensions: list[str] | None,
     expected_metadata: list[tuple[str, str]] | None,
-    expected_extensions: list[str] | None,
 ) -> None:
     """Tests _get_grpc_metadata for correct metadata generation and self.extensions update."""
     grpc_transport.extensions = initial_extensions
-
-    metadata = grpc_transport._get_grpc_metadata(extensions=input_extensions)
-
+    metadata = grpc_transport._get_grpc_metadata(input_extensions)
     assert metadata == expected_metadata
-    assert grpc_transport.extensions == expected_extensions
