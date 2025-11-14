@@ -185,6 +185,7 @@ class JSONRPCApplication(ABC):
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
+        disable_content_length_check: bool = False,
     ) -> None:
         """Initializes the JSONRPCApplication.
 
@@ -202,6 +203,8 @@ class JSONRPCApplication(ABC):
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
+            disable_content_length_check: An optional, if True disables the check
+              for oversized payloads.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -220,6 +223,7 @@ class JSONRPCApplication(ABC):
             extended_card_modifier=extended_card_modifier,
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._disable_content_length_check = disable_content_length_check
 
     def _generate_error_response(
         self, request_id: str | int | None, error: JSONRPCError | A2AError
@@ -261,6 +265,22 @@ class JSONRPCApplication(ABC):
             status_code=200,
         )
 
+    def _check_content_length(self, request: Request) -> bool:
+        """Checks if the request content length exceeds the maximum allowed size.
+
+        Args:
+            request: The incoming Starlette Request object.
+
+        Returns:
+            True if the content length is within the allowed limit, False otherwise.
+        """
+        if not self._disable_content_length_check:
+            with contextlib.suppress(Exception):
+                content_length = int(request.headers.get('content-length', '0'))
+                if content_length and content_length > MAX_CONTENT_LENGTH:
+                    return False
+        return True
+
     async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911
         """Handles incoming POST requests to the main A2A endpoint.
 
@@ -291,18 +311,15 @@ class JSONRPCApplication(ABC):
                     request_id, str | int
                 ):
                     request_id = None
-            # Treat very large payloads as invalid request (-32600) before routing
-            with contextlib.suppress(Exception):
-                content_length = int(request.headers.get('content-length', '0'))
-                if content_length and content_length > MAX_CONTENT_LENGTH:
-                    return self._generate_error_response(
-                        request_id,
-                        A2AError(
-                            root=InvalidRequestError(
-                                message='Payload too large'
-                            )
-                        ),
-                    )
+            # If content length check is not disabled,
+            # treat very large payloads as invalid request (-32600) before routing
+            if not self._check_content_length(request):
+                return self._generate_error_response(
+                    request_id,
+                    A2AError(
+                        root=InvalidRequestError(message='Payload too large')
+                    ),
+                )
             logger.debug('Request body: %s', body)
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
             try:
