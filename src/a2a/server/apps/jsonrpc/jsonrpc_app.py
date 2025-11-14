@@ -295,7 +295,7 @@ class JSONRPCApplication(ABC):
                     request_id, str | int
                 ):
                     request_id = None
-            # If content lenght check is not disabled,
+            # If content length check is not disabled,
             # treat very large payloads as invalid request (-32600) before routing
             if not self._disable_content_length_check:
                 with contextlib.suppress(Exception):

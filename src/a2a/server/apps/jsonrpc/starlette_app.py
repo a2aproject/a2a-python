@@ -78,7 +78,7 @@ class A2AStarletteApplication(JSONRPCApplication):
               the extended agent card before it is served. It receives the
               call context.
             disable_content_length_check: An optional, if True disables the check
-            for oversized payloads.
+              for oversized payloads.
         """
         if not _package_starlette_installed:
             raise ImportError(
