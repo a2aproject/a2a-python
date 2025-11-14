@@ -6,6 +6,7 @@ from fastapi import FastAPI
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
+from a2a.server.apps.jsonrpc.jsonrpc_app import MAX_CONTENT_LENGTH
 from a2a.server.apps import A2AFastAPIApplication, A2AStarletteApplication
 from a2a.types import (
     APIKeySecurityScheme,
@@ -134,6 +135,32 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
     assert response.status_code == 200
     data = response.json()
     assert data['error']['code'] == InvalidRequestError().code
+
+
+def test_handle_oversized_payload_with_check_disabled(
+    agent_card_with_api_key: AgentCard,
+):
+    """Test handling of oversized JSON payloads when the check is disabled."""
+    handler = mock.AsyncMock()
+    app_instance = A2AStarletteApplication(
+        agent_card_with_api_key, handler, disable_content_length_check=True
+    )
+    client = TestClient(app_instance.build())
+
+    large_string = 'a' * 11 * 1_000_000  # 11MB string
+    payload = {
+        'jsonrpc': '2.0',
+        'method': 'test',
+        'id': 1,
+        'params': {'data': large_string},
+    }
+
+    response = client.post('/', json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    # With the check disabled, it shouldn't return InvalidRequestError due to size.
+    # It will likely error out deeper in the handler, but not with the size-specific code.
+    assert data['error']['code'] != InvalidRequestError().code
 
 
 def test_handle_unicode_characters(agent_card_with_api_key: AgentCard):
