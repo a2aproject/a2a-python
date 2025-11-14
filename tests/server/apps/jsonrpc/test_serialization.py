@@ -6,7 +6,6 @@ from fastapi import FastAPI
 from pydantic import ValidationError
 from starlette.testclient import TestClient
 
-from a2a.server.apps.jsonrpc.jsonrpc_app import MAX_CONTENT_LENGTH
 from a2a.server.apps import A2AFastAPIApplication, A2AStarletteApplication
 from a2a.types import (
     APIKeySecurityScheme,
