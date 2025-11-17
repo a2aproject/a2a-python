@@ -77,7 +77,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
-        disable_content_length_check: bool = False,
+        max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
     ) -> None:
         """Initializes the A2AFastAPIApplication.
 
@@ -95,8 +95,8 @@ class A2AFastAPIApplication(JSONRPCApplication):
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
-            disable_content_length_check: An optional, if True disables the check
-              for oversized payloads.
+            max_content_length: The maximum allowed content length for incoming
+              requests. Defaults to 10MB. Set to None for unbounded maximum.
         """
         if not _package_fastapi_installed:
             raise ImportError(
@@ -111,7 +111,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
             context_builder=context_builder,
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
-            disable_content_length_check=disable_content_length_check,
+            max_content_length=max_content_length,
         )
 
     def add_routes_to_app(

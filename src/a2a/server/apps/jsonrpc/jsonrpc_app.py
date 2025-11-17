@@ -91,8 +91,6 @@ else:
         Response = Any
         HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
 
-MAX_CONTENT_LENGTH = 10_000_000
-
 
 class StarletteUserProxy(A2AUser):
     """Adapts the Starlette User class to the A2A user representation."""
@@ -134,7 +132,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         """
         user: A2AUser = UnauthenticatedUser()
         state = {}
-        with contextlib.suppress(Exception):
+        with contextlib.suppress(AttributeError):
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
@@ -185,7 +183,7 @@ class JSONRPCApplication(ABC):
             [AgentCard, ServerCallContext], AgentCard
         ]
         | None = None,
-        disable_content_length_check: bool = False,
+        max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
     ) -> None:
         """Initializes the JSONRPCApplication.
 
@@ -203,8 +201,8 @@ class JSONRPCApplication(ABC):
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
-            disable_content_length_check: An optional, if True disables the check
-              for oversized payloads.
+            max_content_length: The maximum allowed content length for incoming
+              requests. Defaults to 10MB. Set to None for unbounded maximum.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -223,7 +221,7 @@ class JSONRPCApplication(ABC):
             extended_card_modifier=extended_card_modifier,
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
-        self._disable_content_length_check = disable_content_length_check
+        self._max_content_length = max_content_length
 
     def _generate_error_response(
         self, request_id: str | int | None, error: JSONRPCError | A2AError
@@ -265,19 +263,19 @@ class JSONRPCApplication(ABC):
             status_code=200,
         )
 
-    def _check_content_length(self, request: Request) -> bool:
-        """Checks if the request content length exceeds the maximum allowed size.
+    def _allowed_content_length(self, request: Request) -> bool:
+        """Checks if the request content length is within the allowed maximum.
 
         Args:
             request: The incoming Starlette Request object.
 
         Returns:
-            True if the content length is within the allowed limit, False otherwise.
+            False if the content length is larger than the allowed maximum, True otherwise.
         """
-        if not self._disable_content_length_check:
-            with contextlib.suppress(Exception):
+        if self._max_content_length is not None:
+            with contextlib.suppress(ValueError):
                 content_length = int(request.headers.get('content-length', '0'))
-                if content_length and content_length > MAX_CONTENT_LENGTH:
+                if content_length and content_length > self._max_content_length:
                     return False
         return True
 
@@ -311,9 +309,8 @@ class JSONRPCApplication(ABC):
                     request_id, str | int
                 ):
                     request_id = None
-            # If content length check is not disabled,
-            # treat very large payloads as invalid request (-32600) before routing
-            if not self._check_content_length(request):
+            # Treat payloads lager than allowed as invalid request (-32600) before routing
+            if not self._allowed_content_length(request):
                 return self._generate_error_response(
                     request_id,
                     A2AError(
