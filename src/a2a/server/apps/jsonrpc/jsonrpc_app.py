@@ -132,7 +132,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         """
         user: A2AUser = UnauthenticatedUser()
         state = {}
-        with contextlib.suppress(AttributeError):
+        with contextlib.suppress(Exception):
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
