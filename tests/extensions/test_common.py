@@ -128,7 +128,7 @@ def test_update_extension_header_with_other_headers_extensions_none():
     assert result_kwargs['headers']['X_Other'] == 'Test'
 
 
-def test_update_extension_header_empty_header():
+def test_update_extension_header_headers_not_in_kwargs():
     extensions = ['ext']
     http_kwargs = {}
     result_kwargs = update_extension_header(http_kwargs, extensions)
