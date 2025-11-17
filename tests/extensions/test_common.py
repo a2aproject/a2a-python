@@ -126,3 +126,12 @@ def test_update_extension_header_with_other_headers_extensions_none():
     result_kwargs = update_extension_header(http_kwargs, None)
     assert HTTP_EXTENSION_HEADER not in result_kwargs['headers']
     assert result_kwargs['headers']['X_Other'] == 'Test'
+
+
+def test_update_extension_header_empty_header():
+    extensions = ['ext']
+    http_kwargs = {}
+    result_kwargs = update_extension_header(http_kwargs, extensions)
+    headers = result_kwargs.get('headers', {})
+    assert HTTP_EXTENSION_HEADER in headers
+    assert headers[HTTP_EXTENSION_HEADER] == 'ext'

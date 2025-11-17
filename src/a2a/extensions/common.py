@@ -33,7 +33,7 @@ def update_extension_header(
     http_kwargs: dict[str, Any],
     extensions: list[str] | None,
 ) -> dict[str, Any]:
-    """Update the X-A2A-Extensions header and update active extensions."""
+    """Update the X-A2A-Extensions header with active extensions."""
     if extensions is not None:
         headers = http_kwargs.setdefault('headers', {})
         headers[HTTP_EXTENSION_HEADER] = ','.join(extensions)
