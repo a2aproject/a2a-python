@@ -184,6 +184,192 @@ class TestJSONRPCApplicationOptionalDeps:
         ):
             _app = DummyJSONRPCApp(**mock_app_params)
 
+    @pytest.mark.asyncio
+    async def test_stream_send_timeout_applied_to_event_source_response(
+        self, mock_app_params: dict
+    ):
+        """Test that stream_send_timeout is correctly applied to EventSourceResponse."""
+        from unittest.mock import patch
+
+        class DummyJSONRPCApp(JSONRPCApplication):
+            def __init__(self, **kwargs):
+                # Skip parent __init__ to avoid package checks
+                self.stream_send_timeout = kwargs.get(
+                    'stream_send_timeout', None
+                )
+                self.agent_card = kwargs.get('agent_card')
+                self.extended_agent_card = kwargs.get('extended_agent_card')
+                self.card_modifier = kwargs.get('card_modifier')
+                self.extended_card_modifier = kwargs.get(
+                    'extended_card_modifier'
+                )
+                self.max_content_length = kwargs.get(
+                    'max_content_length', 10 * 1024 * 1024
+                )
+                self.handler = kwargs.get('http_handler')
+
+            def build(self, **kwargs):
+                return object()
+
+        # Test with app-level timeout
+        app = DummyJSONRPCApp(stream_send_timeout=30.0, **mock_app_params)
+
+        # Mock context
+        context = MagicMock(spec=ServerCallContext)
+        context.state = {}
+        context.activated_extensions = None
+
+        # Mock streaming handler result
+        async def mock_generator():
+            yield SendMessageResponse(
+                root=SendMessageSuccessResponse(
+                    message=Message(
+                        message_id='1',
+                        role=Role.assistant,
+                        parts=[Part(TextPart(text='test'))],
+                    )
+                )
+            )
+
+        handler_result = mock_generator()
+
+        with patch(
+            'a2a.server.apps.jsonrpc.jsonrpc_app.EventSourceResponse'
+        ) as mock_esr:
+            mock_esr.return_value = MagicMock()
+
+            # Call the method
+            response = app._create_response(context, handler_result)
+
+            # Assert EventSourceResponse was called with correct timeout
+            mock_esr.assert_called_once()
+            call_args = mock_esr.call_args
+            assert call_args[1]['send_timeout'] == 30.0
+
+    @pytest.mark.asyncio
+    async def test_stream_send_timeout_none_disables_timeout(
+        self, mock_app_params: dict
+    ):
+        """Test that stream_send_timeout=None disables the timeout."""
+        from unittest.mock import patch
+
+        class DummyJSONRPCApp(JSONRPCApplication):
+            def __init__(self, **kwargs):
+                # Skip parent __init__ to avoid package checks
+                self.stream_send_timeout = kwargs.get(
+                    'stream_send_timeout', None
+                )
+                self.agent_card = kwargs.get('agent_card')
+                self.extended_agent_card = kwargs.get('extended_agent_card')
+                self.card_modifier = kwargs.get('card_modifier')
+                self.extended_card_modifier = kwargs.get(
+                    'extended_card_modifier'
+                )
+                self.max_content_length = kwargs.get(
+                    'max_content_length', 10 * 1024 * 1024
+                )
+                self.handler = kwargs.get('http_handler')
+
+            def build(self, **kwargs):
+                return object()
+
+        # Test with None timeout (default)
+        app = DummyJSONRPCApp(stream_send_timeout=None, **mock_app_params)
+
+        # Mock context
+        context = MagicMock(spec=ServerCallContext)
+        context.state = {}
+        context.activated_extensions = None
+
+        # Mock streaming handler result
+        async def mock_generator():
+            yield SendMessageResponse(
+                root=SendMessageSuccessResponse(
+                    message=Message(
+                        message_id='1',
+                        role=Role.assistant,
+                        parts=[Part(TextPart(text='test'))],
+                    )
+                )
+            )
+
+        handler_result = mock_generator()
+
+        with patch(
+            'a2a.server.apps.jsonrpc.jsonrpc_app.EventSourceResponse'
+        ) as mock_esr:
+            mock_esr.return_value = MagicMock()
+
+            # Call the method
+            response = app._create_response(context, handler_result)
+
+            # Assert EventSourceResponse was called with None (disabled timeout)
+            mock_esr.assert_called_once()
+            call_args = mock_esr.call_args
+            assert call_args[1]['send_timeout'] is None
+
+    @pytest.mark.asyncio
+    async def test_stream_send_timeout_context_override(
+        self, mock_app_params: dict
+    ):
+        """Test that context.state can override the app-level stream_send_timeout."""
+        from unittest.mock import patch
+
+        class DummyJSONRPCApp(JSONRPCApplication):
+            def __init__(self, **kwargs):
+                # Skip parent __init__ to avoid package checks
+                self.stream_send_timeout = kwargs.get(
+                    'stream_send_timeout', None
+                )
+                self.agent_card = kwargs.get('agent_card')
+                self.extended_agent_card = kwargs.get('extended_agent_card')
+                self.card_modifier = kwargs.get('card_modifier')
+                self.extended_card_modifier = kwargs.get(
+                    'extended_card_modifier'
+                )
+                self.max_content_length = kwargs.get(
+                    'max_content_length', 10 * 1024 * 1024
+                )
+                self.handler = kwargs.get('http_handler')
+
+            def build(self, **kwargs):
+                return object()
+
+        # Test with app-level timeout
+        app = DummyJSONRPCApp(stream_send_timeout=30.0, **mock_app_params)
+
+        # Mock context with override
+        context = MagicMock(spec=ServerCallContext)
+        context.state = {'stream_send_timeout': 60.0}
+        context.activated_extensions = None
+
+        # Mock streaming handler result
+        async def mock_generator():
+            yield SendMessageResponse(
+                root=SendMessageSuccessResponse(
+                    message=Message(
+                        message_id='1',
+                        role=Role.assistant,
+                        parts=[Part(TextPart(text='test'))],
+                    )
+                )
+            )
+
+        handler_result = mock_generator()
+
+        with patch(
+            'a2a.server.apps.jsonrpc.jsonrpc_app.EventSourceResponse'
+        ) as mock_esr:
+            mock_esr.return_value = MagicMock()
+
+            # Call the method
+            response = app._create_response(context, handler_result)
+
+            # Assert EventSourceResponse was called with context override
+            mock_esr.assert_called_once()
+            call_args = mock_esr.call_args
+            assert call_args[1]['send_timeout'] == 60.0
+
 
 class TestJSONRPCExtensions:
     @pytest.fixture
