@@ -820,7 +820,10 @@ async def test_base_client_sends_message_with_extensions(
         kwargs = call_args[1]
         headers = kwargs.get('headers', {})
         assert 'X-A2A-Extensions' in headers
-        assert headers['X-A2A-Extensions'] == ','.join(extensions)
+        assert (
+            headers['X-A2A-Extensions']
+            == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+        )
 
     if hasattr(transport, 'close'):
         await transport.close()
