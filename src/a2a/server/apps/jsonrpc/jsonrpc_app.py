@@ -184,6 +184,7 @@ class JSONRPCApplication(ABC):
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
+        stream_send_timeout: float | None = None,
     ) -> None:
         """Initializes the JSONRPCApplication.
 
@@ -203,6 +204,10 @@ class JSONRPCApplication(ABC):
               call context.
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
+            stream_send_timeout: The timeout in seconds for sending events in
+              streaming responses. Defaults to None, which uses Starlette's
+              default timeout. Set to a larger value or None to disable for
+              long-running agents.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -222,6 +227,7 @@ class JSONRPCApplication(ABC):
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
         self._max_content_length = max_content_length
+        self.stream_send_timeout = stream_send_timeout
 
     def _generate_error_response(
         self, request_id: str | int | None, error: JSONRPCError | A2AError
@@ -540,8 +546,14 @@ class JSONRPCApplication(ABC):
                 async for item in stream:
                     yield {'data': item.root.model_dump_json(exclude_none=True)}
 
+            send_timeout = context.state.get(
+                'stream_send_timeout', self.stream_send_timeout
+            )
+
             return EventSourceResponse(
-                event_generator(handler_result), headers=headers
+                event_generator(handler_result),
+                headers=headers,
+                send_timeout=send_timeout,
             )
         if isinstance(handler_result, JSONRPCErrorResponse):
             return JSONResponse(
