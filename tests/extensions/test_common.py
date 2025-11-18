@@ -74,7 +74,7 @@ def test_find_extension_by_uri_no_extensions():
         ),  # Case 1: New extensions provided,  empty header.
         (
             None,  # extensions
-            'ext1, ext2',  # existing_header
+            'ext1, ext2',  # header
             {
                 'ext1',
                 'ext2',
@@ -82,12 +82,12 @@ def test_find_extension_by_uri_no_extensions():
         ),  # Case 2: Extensions is None, existing header extensions.
         (
             [],  # extensions
-            'ext1',  # existing_header
+            'ext1',  # header
             {},  # expected_extensions
         ),  # Case 3: New extensions is empty list, existing header extensions.
         (
             ['ext1', 'ext2'],  # extensions
-            'ext3',  # existing_header
+            'ext3',  # header
             {
                 'ext1',
                 'ext2',
@@ -121,17 +121,26 @@ def test_update_extension_header_with_other_headers():
     assert headers['X_Other'] == 'Test'
 
 
-def test_update_extension_header_with_other_headers_extensions_none():
-    http_kwargs = {'headers': {'X_Other': 'Test'}}
-    result_kwargs = update_extension_header(http_kwargs, None)
-    assert HTTP_EXTENSION_HEADER not in result_kwargs['headers']
-    assert result_kwargs['headers']['X_Other'] == 'Test'
-
-
-def test_update_extension_header_headers_not_in_kwargs():
+@pytest.mark.parametrize(
+    'http_kwargs',
+    [
+        None,
+        {},
+    ],
+)
+def test_update_extension_header_headers_not_in_kwargs(
+    http_kwargs: dict[str, str] | None,
+):
     extensions = ['ext']
     http_kwargs = {}
     result_kwargs = update_extension_header(http_kwargs, extensions)
     headers = result_kwargs.get('headers', {})
     assert HTTP_EXTENSION_HEADER in headers
     assert headers[HTTP_EXTENSION_HEADER] == 'ext'
+
+
+def test_update_extension_header_with_other_headers_extensions_none():
+    http_kwargs = {'headers': {'X_Other': 'Test'}}
+    result_kwargs = update_extension_header(http_kwargs, None)
+    assert HTTP_EXTENSION_HEADER not in result_kwargs['headers']
+    assert result_kwargs['headers']['X_Other'] == 'Test'

@@ -99,14 +99,14 @@ class RestTransport(ClientTransport):
             ),
         )
         payload = MessageToDict(pb)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         return payload, modified_kwargs
 
@@ -219,14 +219,14 @@ class RestTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         _payload, modified_kwargs = await self._apply_interceptors(
             request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}',
@@ -249,14 +249,14 @@ class RestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         pb = a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
         payload = MessageToDict(pb)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
@@ -279,12 +279,12 @@ class RestTransport(ClientTransport):
             config=proto_utils.ToProto.task_push_notification_config(request),
         )
         payload = MessageToDict(pb)
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload, self._get_http_args(context), context
-        )
         modified_kwargs = update_extension_header(
-            modified_kwargs,
+            self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
+        )
+        payload, modified_kwargs = await self._apply_interceptors(
+            payload, modified_kwargs, context
         )
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
@@ -307,14 +307,14 @@ class RestTransport(ClientTransport):
             name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
         )
         payload = MessageToDict(pb)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_get_request(
             f'/v1/tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
@@ -335,12 +335,11 @@ class RestTransport(ClientTransport):
         Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
     ]:
         """Reconnects to get task updates."""
-        http_kwargs = self._get_http_args(context) or {}
-        http_kwargs.setdefault('timeout', None)
         modified_kwargs = update_extension_header(
-            http_kwargs,
+            self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
         )
+        modified_kwargs.setdefault('timeout', None)
 
         async with aconnect_sse(
             self.httpx_client,
@@ -385,14 +384,14 @@ class RestTransport(ClientTransport):
         if not self._needs_extended_card:
             return card
 
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         _, modified_kwargs = await self._apply_interceptors(
             {},
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs

@@ -120,15 +120,15 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task | Message:
         """Sends a non-streaming message request to the agent."""
         rpc_request = SendMessageRequest(params=request, id=str(uuid4()))
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'message/send',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SendMessageResponse.model_validate(response_data)
@@ -149,16 +149,15 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = SendStreamingMessageRequest(
             params=request, id=str(uuid4())
         )
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'message/stream',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         modified_kwargs.setdefault(
             'timeout', self.httpx_client.timeout.as_dict().get('read', None)
@@ -224,15 +223,15 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         rpc_request = GetTaskRequest(params=request, id=str(uuid4()))
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskResponse.model_validate(response_data)
@@ -249,15 +248,15 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         rpc_request = CancelTaskRequest(params=request, id=str(uuid4()))
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/cancel',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = CancelTaskResponse.model_validate(response_data)
@@ -276,15 +275,15 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = SetTaskPushNotificationConfigRequest(
             params=request, id=str(uuid4())
         )
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/set',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = SetTaskPushNotificationConfigResponse.model_validate(
@@ -305,15 +304,15 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = GetTaskPushNotificationConfigRequest(
             params=request, id=str(uuid4())
         )
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/get',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskPushNotificationConfigResponse.model_validate(
@@ -334,15 +333,15 @@ class JsonRpcTransport(ClientTransport):
     ]:
         """Reconnects to get task updates."""
         rpc_request = TaskResubscriptionRequest(params=request, id=str(uuid4()))
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/resubscribe',
             rpc_request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
             modified_kwargs,
-            extensions if extensions is not None else self.extensions,
+            context,
         )
         modified_kwargs.setdefault('timeout', None)
 
@@ -394,17 +393,16 @@ class JsonRpcTransport(ClientTransport):
             return card
 
         request = GetAuthenticatedExtendedCardRequest(id=str(uuid4()))
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         payload, modified_kwargs = await self._apply_interceptors(
             request.method,
             request.model_dump(mode='json', exclude_none=True),
-            self._get_http_args(context),
+            modified_kwargs,
             context,
         )
-        modified_kwargs = update_extension_header(
-            modified_kwargs,
-            extensions if extensions is not None else self.extensions,
-        )
-
         response_data = await self._send_request(
             payload,
             modified_kwargs,
