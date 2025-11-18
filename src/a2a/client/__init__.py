@@ -7,6 +7,7 @@ from a2a.client.auth import (
     CredentialService,
     InMemoryContextCredentialStore,
 )
+from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, ClientEvent, Consumer
 from a2a.client.client_factory import ClientFactory, minimal_agent_card
@@ -51,6 +52,7 @@ __all__ = [
     'A2AClientTimeoutError',
     'A2AGrpcClient',
     'AuthInterceptor',
+    'BaseClient',
     'Client',
     'ClientCallContext',
     'ClientCallInterceptor',
