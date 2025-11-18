@@ -205,9 +205,9 @@ class JSONRPCApplication(ABC):
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
             stream_send_timeout: The timeout in seconds for sending events in
-              streaming responses. Defaults to None, which uses Starlette's
-              default timeout. Set to a larger value or None to disable for
-              long-running agents.
+              streaming responses. Defaults to `None`, which disables the timeout.
+              This changes the default behavior from using Starlette's 5-second
+              default. Set a float value to specify a timeout.
         """
         if not _package_starlette_installed:
             raise ImportError(
