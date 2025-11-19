@@ -1,6 +1,6 @@
-# Changelog
+ # Changelog
 
-## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.4.0...v0.3.15) (2025-11-19)
+## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.3.15) (2025-11-19)
 
 
 ### Features
