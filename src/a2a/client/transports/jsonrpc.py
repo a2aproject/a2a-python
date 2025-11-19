@@ -374,7 +374,7 @@ class JsonRpcTransport(ClientTransport):
             raise A2AClientJSONRPCError(response.root)
         self.agent_card = response.root.result
         self._needs_extended_card = False
-        return card
+        return self.agent_card
 
     async def close(self) -> None:
         """Closes the httpx client."""
