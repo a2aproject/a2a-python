@@ -1,10 +1,13 @@
 import asyncio
 import logging
 
+from datetime import datetime, timezone
+
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore, TasksPage
 from a2a.types import ListTasksParams, Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.task import decode_page_token, encode_page_token
 
 
 logger = logging.getLogger(__name__)
@@ -53,27 +56,58 @@ class InMemoryTaskStore(TaskStore):
         async with self.lock:
             tasks = list(self.tasks.values())
 
-        # Apply filtering
+        # Filter tasks
         if params.context_id:
             tasks = [
                 task for task in tasks if task.context_id == params.context_id
             ]
-        if params.status is not None:
+        if params.status and params.status != 'unknown':
             tasks = [
                 task for task in tasks if task.status.state == params.status
             ]
+        if params.last_updated_after:
+            last_updated_after_iso = datetime.fromtimestamp(
+                params.last_updated_after / 1000, tz=timezone.utc
+            ).isoformat()
+            tasks = [
+                task
+                for task in tasks
+                if (
+                    task.status.timestamp
+                    and task.status.timestamp >= last_updated_after_iso
+                )
+            ]
 
-        # Apply pagination
+        # Order tasks by last update time. To ensure stable sorting, in cases where timestamps are null or not unique, do a second order comparison of IDs.
+        tasks.sort(
+            key=lambda task: (
+                task.status.timestamp is not None,
+                task.status.timestamp,
+                task.id,
+            ),
+            reverse=True,
+        )
+
+        # Paginate tasks
         total_size = len(tasks)
-        page_token = int(params.page_token) if params.page_token else 0
-        page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
-        tasks = tasks[page_token * page_size : (page_token + 1) * page_size]
-
+        start_idx = 0
+        if params.page_token:
+            start_task_id = decode_page_token(params.page_token)
+            valid_token = False
+            for i, task in enumerate(tasks):
+                if task.id == start_task_id:
+                    start_idx = i
+                    valid_token = True
+                    break
+            if not valid_token:
+                raise ValueError(f'Invalid page token: {params.page_token}')
+        end_idx = start_idx + (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
         next_page_token = (
-            str(page_token + 1)
-            if (page_token + 1) * page_size < total_size
+            encode_page_token(tasks[end_idx].id)
+            if end_idx < total_size
             else None
         )
+        tasks = tasks[start_idx:end_idx]
 
         return TasksPage(
             next_page_token=next_page_token,

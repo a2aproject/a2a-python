@@ -1,8 +1,17 @@
 import logging
 
+from datetime import datetime, timezone
+
 
 try:
-    from sqlalchemy import Table, delete, func, select
+    from sqlalchemy import (
+        Table,
+        and_,
+        delete,
+        func,
+        or_,
+        select,
+    )
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -24,6 +33,7 @@ from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore, TasksPage
 from a2a.types import ListTasksParams, Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.task import decode_page_token, encode_page_token
 
 
 logger = logging.getLogger(__name__)
@@ -154,44 +164,85 @@ class DatabaseTaskStore(TaskStore):
         """Retrieves all tasks from the database."""
         await self._ensure_initialized()
         async with self.async_session_maker() as session:
-            page_number = int(params.page_token) if params.page_token else 0
-            page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
-            offset = page_number * page_size
-
-            # Base query for filtering
             base_stmt = select(self.task_model)
+
+            # Add filters
             if params.context_id:
                 base_stmt = base_stmt.where(
                     self.task_model.context_id == params.context_id
                 )
-            if params.status is not None:
+            if params.status and params.status != 'unknown':
                 base_stmt = base_stmt.where(
                     self.task_model.status['state'].as_string()
                     == params.status.value
+                )
+            if params.last_updated_after:
+                last_updated_after_iso = datetime.fromtimestamp(
+                    params.last_updated_after / 1000, tz=timezone.utc
+                ).isoformat()
+                base_stmt = base_stmt.where(
+                    self.task_model.status['timestamp'].as_string()
+                    >= last_updated_after_iso
                 )
 
             # Get total count
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            # Get paginated results
-            stmt = (
-                base_stmt.order_by(self.task_model.id.desc())
-                .limit(page_size)
-                .offset(offset)
+            stmt = base_stmt.order_by(
+                self.task_model.status['timestamp']
+                .as_string()
+                .desc()
+                .nulls_last(),
+                self.task_model.id.desc(),
             )
+
+            # Get paginated results
+            if params.page_token:
+                start_task_id = decode_page_token(params.page_token)
+                start_task = (
+                    await session.execute(
+                        select(self.task_model).where(
+                            self.task_model.id == start_task_id
+                        )
+                    )
+                ).scalar_one_or_none()
+                if not start_task:
+                    raise ValueError(f'Invalid page token: {params.page_token}')
+                if start_task.status.timestamp:
+                    stmt = stmt.where(
+                        or_(
+                            self.task_model.status['timestamp']
+                            .as_string()
+                            .is_(None),
+                            self.task_model.status['timestamp'].as_string()
+                            >= start_task.status.timestamp,
+                        )
+                    )
+                else:
+                    stmt = stmt.where(
+                        and_(
+                            self.task_model.status['timestamp']
+                            .as_string()
+                            .is_(None),
+                            self.task_model.id <= start_task.id,
+                        )
+                    )
+            page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+            stmt = stmt.limit(page_size + 1)  # Add 1 for next page token
+
             result = await session.execute(stmt)
             tasks_models = result.scalars().all()
             tasks = [self._from_orm(task_model) for task_model in tasks_models]
 
             next_page_token = (
-                str(page_number + 1)
-                if total_count > (page_number + 1) * page_size
+                encode_page_token(tasks[-1].id)
+                if len(tasks) == page_size + 1
                 else None
             )
 
             return TasksPage(
-                tasks=tasks,
+                tasks=tasks[:page_size],
                 total_size=total_count,
                 next_page_token=next_page_token,
             )

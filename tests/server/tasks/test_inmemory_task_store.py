@@ -39,28 +39,31 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
         # No parameters, should return all tasks
         (
             ListTasksParams(),
-            ['task-0', 'task-1', 'task-2', 'task-3', 'task-4'],
+            ['task-2', 'task-1', 'task-0', 'task-4', 'task-3'],
             5,
+            None,
+        ),
+        # Unknown context
+        (
+            ListTasksParams(context_id='nonexistent'),
+            [],
+            0,
             None,
         ),
         # Pagination (first page)
         (
-            ListTasksParams(page_size=2, page_token='0'),
-            ['task-0', 'task-1'],
+            ListTasksParams(page_size=2),
+            ['task-2', 'task-1'],
             5,
-            '1',
+            'dGFzay0w',  # base64 for 'task-0'
         ),
         # Pagination (final page)
         (
-            ListTasksParams(page_size=2, page_token='2'),
-            ['task-4'],
-            5,
-            None,
-        ),
-        # Pagination (out of bounds)
-        (
-            ListTasksParams(page_size=2, page_token='3'),
-            [],
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0z',  # base64 for 'task-3'
+            ),
+            ['task-3'],
             5,
             None,
         ),
@@ -81,18 +84,19 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
         # Combined filtering (context_id and status)
         (
             ListTasksParams(context_id='context-0', status=TaskState.submitted),
-            ['task-0', 'task-2'],
+            ['task-2', 'task-0'],
             2,
             None,
         ),
         # Combined filtering and pagination
         (
             ListTasksParams(
-                context_id='context-0', page_size=1, page_token='0'
+                context_id='context-0',
+                page_size=1,
             ),
-            ['task-0'],
+            ['task-2'],
             3,
-            '1',
+            'dGFzay0w',  # base64 for 'task-0'
         ),
     ],
 )
@@ -110,7 +114,9 @@ async def test_list_tasks(
             update={
                 'id': 'task-0',
                 'context_id': 'context-0',
-                'status': TaskStatus(state=TaskState.submitted),
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
+                ),
                 'kind': 'task',
             }
         ),
@@ -118,7 +124,9 @@ async def test_list_tasks(
             update={
                 'id': 'task-1',
                 'context_id': 'context-1',
-                'status': TaskStatus(state=TaskState.working),
+                'status': TaskStatus(
+                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
+                ),
                 'kind': 'task',
             }
         ),
@@ -126,7 +134,9 @@ async def test_list_tasks(
             update={
                 'id': 'task-2',
                 'context_id': 'context-0',
-                'status': TaskStatus(state=TaskState.submitted),
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-02T00:00:00Z'
+                ),
                 'kind': 'task',
             }
         ),
@@ -156,6 +166,67 @@ async def test_list_tasks(
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
     assert page.next_page_token == next_page_token
+
+    # Cleanup
+    for task in tasks_to_create:
+        await store.delete(task.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'params, expected_error_message',
+    [
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='invalid',
+            ),
+            'Token is not a valid base64-encoded cursor.',
+        ),
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0xMDA=',  # base64 for 'task-100'
+            ),
+            'Invalid page token: dGFzay0xMDA=',
+        ),
+    ],
+)
+async def test_list_tasks_fails(
+    params: ListTasksParams, expected_error_message: str
+) -> None:
+    """Test listing tasks with invalid parameters that should fail."""
+    store = InMemoryTaskStore()
+    task = Task(**MINIMAL_TASK)
+    tasks_to_create = [
+        task.model_copy(
+            update={
+                'id': 'task-0',
+                'context_id': 'context-0',
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+        task.model_copy(
+            update={
+                'id': 'task-1',
+                'context_id': 'context-1',
+                'status': TaskStatus(
+                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+    ]
+    for task in tasks_to_create:
+        await store.save(task)
+
+    with pytest.raises(ValueError) as excinfo:
+        await store.list(params)
+
+    assert expected_error_message in str(excinfo.value)
 
     # Cleanup
     for task in tasks_to_create:

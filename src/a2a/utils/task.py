@@ -1,6 +1,9 @@
 """Utility functions for creating A2A Task objects."""
 
+import binascii
 import uuid
+
+from base64 import b64decode, b64encode
 
 from a2a.types import Artifact, Message, Task, TaskState, TaskStatus, TextPart
 
@@ -92,3 +95,39 @@ def apply_history_length(task: Task, history_length: int | None) -> Task:
         return task.model_copy(update={'history': limited_history})
 
     return task
+
+
+_ENCODING = 'utf-8'
+
+
+def encode_page_token(task_id: str) -> str:
+    """Encodes page token for tasks pagination.
+
+    Args:
+        task_id: The ID of the task.
+
+    Returns:
+        The encoded page token.
+    """
+    return b64encode(task_id.encode(_ENCODING)).decode(_ENCODING)
+
+
+def decode_page_token(page_token: str) -> str:
+    """Decodes page token for tasks pagination.
+
+    Args:
+        page_token: The encoded page token.
+
+    Returns:
+        The decoded task ID.
+    """
+    encoded_str = page_token
+    missing_padding = len(encoded_str) % 4
+    if missing_padding:
+        encoded_str += '=' * (4 - missing_padding)
+    print(f'input: {encoded_str}')
+    try:
+        decoded = b64decode(encoded_str.encode(_ENCODING)).decode(_ENCODING)
+    except (binascii.Error, UnicodeDecodeError) as e:
+        raise ValueError('Token is not a valid base64-encoded cursor.') from e
+    return decoded
