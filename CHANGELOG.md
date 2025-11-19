@@ -1,13 +1,5 @@
 # Changelog
 
-## [0.4.0](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.4.0) (2025-11-19)
-
-
-### Features
-
-* Add client-side extension support ([#525](https://github.com/a2aproject/a2a-python/issues/525)) ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
-* **rest, jsonrpc:** Add client-side extension support ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
-
 ## [0.3.14](https://github.com/a2aproject/a2a-python/compare/v0.3.13...v0.3.14) (2025-11-17)
 
 
