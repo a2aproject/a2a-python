@@ -32,7 +32,7 @@ done
 SPELLING_ALLOW_FILE=".github/actions/spelling/allow.txt"
 if [ -f "$SPELLING_ALLOW_FILE" ]; then
     echo "Sorting and de-duplicating $SPELLING_ALLOW_FILE"
-    sort -u "$SPELLING_ALLOW_FILE" -o "$SPELLING_ALLOW_FILE"
+    sort -fu "$SPELLING_ALLOW_FILE" -o "$SPELLING_ALLOW_FILE"
 fi
 
 CHANGED_FILES=""
