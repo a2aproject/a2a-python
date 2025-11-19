@@ -1,5 +1,70 @@
 # Changelog
 
+## [0.3.14](https://github.com/a2aproject/a2a-python/compare/v0.3.13...v0.3.14) (2025-11-17)
+
+
+### Features
+
+* **jsonrpc:** add option to disable oversized payload check in JSONRPC applications ([ba142df](https://github.com/a2aproject/a2a-python/commit/ba142df821d1c06be0b96e576fd43015120fcb0b))
+
+## [0.3.13](https://github.com/a2aproject/a2a-python/compare/v0.3.12...v0.3.13) (2025-11-13)
+
+
+### Bug Fixes
+
+* return entire history when history_length=0 ([#537](https://github.com/a2aproject/a2a-python/issues/537)) ([acdc0de](https://github.com/a2aproject/a2a-python/commit/acdc0de4fa03d34a6b287ab252ff51b19c3016b5))
+
+## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
+
+
+### Bug Fixes
+
+* **grpc:** Add `extensions` to `Artifact` converters. ([#523](https://github.com/a2aproject/a2a-python/issues/523)) ([c03129b](https://github.com/a2aproject/a2a-python/commit/c03129b99a663ae1f1ae72f20e4ead7807ede941))
+
+## [0.3.11](https://github.com/a2aproject/a2a-python/compare/v0.3.10...v0.3.11) (2025-11-07)
+
+
+### Bug Fixes
+
+* add metadata to send message request ([12b4a1d](https://github.com/a2aproject/a2a-python/commit/12b4a1d565a53794f5b55c8bd1728221c906ed41))
+
+## [0.3.10](https://github.com/a2aproject/a2a-python/compare/v0.3.9...v0.3.10) (2025-10-21)
+
+
+### Features
+
+* add `get_artifact_text()` helper method ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+* Add a `ClientFactory.connect()` method for easy client creation ([d585635](https://github.com/a2aproject/a2a-python/commit/d5856359034f4d3d1e4578804727f47a3cd7c322))
+
+
+### Bug Fixes
+
+* change `MAX_CONTENT_LENGTH` (for file attachment) in json-rpc to be larger size (10mb) ([#518](https://github.com/a2aproject/a2a-python/issues/518)) ([5b81385](https://github.com/a2aproject/a2a-python/commit/5b813856b4b4e07510a4ef41980d388e47c73b8e))
+* correct `new_artifact` methods signature ([#503](https://github.com/a2aproject/a2a-python/issues/503)) ([ee026aa](https://github.com/a2aproject/a2a-python/commit/ee026aa356042b9eb212eee59fa5135b280a3077))
+
+
+### Code Refactoring
+
+* **utils:** move part helpers to their own file ([9155888](https://github.com/a2aproject/a2a-python/commit/9155888d258ca4d047002997e6674f3f15a67232))
+
+## [0.3.9](https://github.com/a2aproject/a2a-python/compare/v0.3.8...v0.3.9) (2025-10-15)
+
+
+### Features
+
+* custom ID generators ([051ab20](https://github.com/a2aproject/a2a-python/commit/051ab20c395daa2807b0233cf1c53493e41b60c2))
+
+
+### Bug Fixes
+
+* apply `history_length` for `message/send` requests ([#498](https://github.com/a2aproject/a2a-python/issues/498)) ([a49f94e](https://github.com/a2aproject/a2a-python/commit/a49f94ef23d81b8375e409b1c1e51afaf1da1956))
+* **client:** `A2ACardResolver.get_agent_card` will auto-populate with `agent_card_path` when `relative_card_path` is empty ([#508](https://github.com/a2aproject/a2a-python/issues/508)) ([ba24ead](https://github.com/a2aproject/a2a-python/commit/ba24eadb5b6fcd056a008e4cbcef03b3f72a37c3))
+
+
+### Documentation
+
+* Fix Docstring formatting for code samples ([#492](https://github.com/a2aproject/a2a-python/issues/492)) ([dca66c3](https://github.com/a2aproject/a2a-python/commit/dca66c3100a2b9701a1c8b65ad6853769eefd511))
+
 ## [0.3.8](https://github.com/a2aproject/a2a-python/compare/v0.3.7...v0.3.8) (2025-10-06)
 
 

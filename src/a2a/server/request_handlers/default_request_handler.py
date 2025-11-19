@@ -44,6 +44,7 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
+from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -118,25 +119,7 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(error=TaskNotFoundError())
 
         # Apply historyLength parameter if specified
-        if params.history_length is not None and task.history:
-            # Limit history to the most recent N messages
-            limited_history = (
-                task.history[-params.history_length :]
-                if params.history_length > 0
-                else []
-            )
-            # Create a new task instance with limited history
-            task = Task(
-                id=task.id,
-                context_id=task.context_id,
-                status=task.status,
-                artifacts=task.artifacts,
-                history=limited_history,
-                metadata=task.metadata,
-                kind=task.kind,
-            )
-
-        return task
+        return apply_history_length(task, params.history_length)
 
     async def on_cancel_task(
         self, params: TaskIdParams, context: ServerCallContext | None = None
@@ -363,6 +346,10 @@ class DefaultRequestHandler(RequestHandler):
 
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
+            if params.configuration:
+                result = apply_history_length(
+                    result, params.configuration.history_length
+                )
 
         await self._send_push_notification_if_needed(task_id, result_aggregator)
 

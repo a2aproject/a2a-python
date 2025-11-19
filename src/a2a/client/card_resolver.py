@@ -53,7 +53,7 @@ class A2ACardResolver:
         Args:
             relative_card_path: Optional path to the agent card endpoint,
                 relative to the base URL. If None, uses the default public
-                agent card path.
+                agent card path. Use `'/'` for an empty path.
             http_kwargs: Optional dictionary of keyword arguments to pass to the
                 underlying httpx.get request.
 
@@ -65,7 +65,7 @@ class A2ACardResolver:
             A2AClientJSONError: If the response body cannot be decoded as JSON
                 or validated against the AgentCard schema.
         """
-        if relative_card_path is None:
+        if not relative_card_path:
             # Use the default public agent card path configured during initialization
             path_segment = self.agent_card_path
         else:

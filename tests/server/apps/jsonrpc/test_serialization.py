@@ -122,7 +122,7 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
     app_instance = A2AStarletteApplication(agent_card_with_api_key, handler)
     client = TestClient(app_instance.build())
 
-    large_string = 'a' * 2_000_000  # 2MB string
+    large_string = 'a' * 11 * 1_000_000  # 11MB string
     payload = {
         'jsonrpc': '2.0',
         'method': 'test',
@@ -130,22 +130,46 @@ def test_handle_oversized_payload(agent_card_with_api_key: AgentCard):
         'params': {'data': large_string},
     }
 
-    # Starlette/FastAPI's default max request size is around 1MB.
-    # This test will likely fail with a 413 Payload Too Large if the default is not increased.
-    # If the application is expected to handle larger payloads, the server configuration needs to be adjusted.
-    # For this test, we expect a 413 or a graceful JSON-RPC error if the app handles it.
+    response = client.post('/', json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['error']['code'] == InvalidRequestError().code
 
-    try:
-        response = client.post('/', json=payload)
-        # If the app handles it gracefully and returns a JSON-RPC error
-        if response.status_code == 200:
-            data = response.json()
-            assert data['error']['code'] == InvalidRequestError().code
-        else:
-            assert response.status_code == 413
-    except Exception as e:
-        # Depending on server setup, it might just drop the connection for very large payloads
-        assert isinstance(e, ConnectionResetError | RuntimeError)
+
+@pytest.mark.parametrize(
+    'max_content_length',
+    [
+        None,
+        11 * 1024 * 1024,
+        30 * 1024 * 1024,
+    ],
+)
+def test_handle_oversized_payload_with_max_content_length(
+    agent_card_with_api_key: AgentCard,
+    max_content_length: int | None,
+):
+    """Test handling of JSON payloads with sizes within custom max_content_length."""
+    handler = mock.AsyncMock()
+    app_instance = A2AStarletteApplication(
+        agent_card_with_api_key, handler, max_content_length=max_content_length
+    )
+    client = TestClient(app_instance.build())
+
+    large_string = 'a' * 11 * 1_000_000  # 11MB string
+    payload = {
+        'jsonrpc': '2.0',
+        'method': 'test',
+        'id': 1,
+        'params': {'data': large_string},
+    }
+
+    response = client.post('/', json=payload)
+    assert response.status_code == 200
+    data = response.json()
+    # When max_content_length is set, requests up to that size should not be
+    # rejected due to payload size. The request might fail for other reasons,
+    # but it shouldn't be an InvalidRequestError related to the content length.
+    assert data['error']['code'] != InvalidRequestError().code
 
 
 def test_handle_unicode_characters(agent_card_with_api_key: AgentCard):

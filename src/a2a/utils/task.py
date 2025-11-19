@@ -70,3 +70,23 @@ def completed_task(
         artifacts=artifacts,
         history=history,
     )
+
+
+def apply_history_length(task: Task, history_length: int | None) -> Task:
+    """Applies history_length parameter on task and returns a new task object.
+
+    Args:
+        task: The original task object with complete history
+        history_length: History length configuration value
+
+    Returns:
+        A new task object with limited history
+    """
+    # Apply historyLength parameter if specified
+    if history_length is not None and history_length > 0 and task.history:
+        # Limit history to the most recent N messages
+        limited_history = task.history[-history_length:]
+        # Create a new task instance with limited history
+        return task.model_copy(update={'history': limited_history})
+
+    return task
