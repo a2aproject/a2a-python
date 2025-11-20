@@ -203,6 +203,7 @@ class ToProto:
                 if task.history
                 else None
             ),
+            metadata=cls.metadata(task.metadata),
         )
 
     @classmethod
