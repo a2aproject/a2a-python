@@ -773,7 +773,7 @@ class TestJsonRpcTransport:
             mock_send_request.return_value = rpc_response
             card = await client.get_card()
 
-        assert card == agent_card
+        assert card == AGENT_CARD_EXTENDED
         mock_send_request.assert_called_once()
         sent_payload = mock_send_request.call_args.args[0]
         assert sent_payload['method'] == 'agent/getAuthenticatedExtendedCard'
