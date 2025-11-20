@@ -3,7 +3,7 @@ from typing import Any
 import pytest
 
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import Task
+from a2a.types.a2a_pb2 import Task
 
 
 MINIMAL_TASK: dict[str, Any] = {

@@ -14,12 +14,15 @@ from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
-    TransportProtocol,
 )
+
+TRANSPORT_PROTOCOLS_JSONRPC = 'JSONRPC'
+TRANSPORT_PROTOCOLS_GRPC = 'GRPC'
+TRANSPORT_PROTOCOLS_HTTP_JSON = 'HTTP+JSON'
 
 
 try:
@@ -66,15 +69,15 @@ class ClientFactory:
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults(config.supported_transports)
+        self._register_defaults(config.supported_protocol_bindings)
 
     def _register_defaults(
-        self, supported: list[str | TransportProtocol]
+        self, supported: list[str]
     ) -> None:
         # Empty support list implies JSON-RPC only.
-        if TransportProtocol.jsonrpc in supported or not supported:
+        if TRANSPORT_PROTOCOLS_JSONRPC in supported or not supported:
             self.register(
-                TransportProtocol.jsonrpc,
+                TRANSPORT_PROTOCOLS_JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -83,9 +86,9 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TransportProtocol.http_json in supported:
+        if TRANSPORT_PROTOCOLS_HTTP_JSON in supported:
             self.register(
-                TransportProtocol.http_json,
+                TRANSPORT_PROTOCOLS_HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -94,14 +97,14 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TransportProtocol.grpc in supported:
+        if TRANSPORT_PROTOCOLS_GRPC in supported:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
             self.register(
-                TransportProtocol.grpc,
+                TRANSPORT_PROTOCOLS_GRPC,
                 GrpcTransport.create,
             )
 
@@ -200,14 +203,14 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
+        server_preferred = card.preferred_transport or TRANSPORT_PROTOCOLS_JSONRPC
         server_set = {server_preferred: card.url}
         if card.additional_interfaces:
             server_set.update(
-                {x.transport: x.url for x in card.additional_interfaces}
+                {x.protocol_binding: x.url for x in card.additional_interfaces}
             )
-        client_set = self._config.supported_transports or [
-            TransportProtocol.jsonrpc
+        client_set = self._config.supported_protocol_bindings or [
+            TRANSPORT_PROTOCOLS_JSONRPC
         ]
         transport_protocol = None
         transport_url = None
@@ -267,7 +270,7 @@ def minimal_agent_card(
         url=url,
         preferred_transport=transports[0] if transports else None,
         additional_interfaces=[
-            AgentInterface(transport=t, url=url) for t in transports[1:]
+            AgentInterface(protocol_binding=t, url=url) for t in transports[1:]
         ]
         if len(transports) > 1
         else [],

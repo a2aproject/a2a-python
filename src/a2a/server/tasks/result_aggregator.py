@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 
 from a2a.server.events import Event, EventConsumer
 from a2a.server.tasks.task_manager import TaskManager
-from a2a.types import Message, Task, TaskState, TaskStatusUpdateEvent
+from a2a.types.a2a_pb2 import Message, Task, TaskState, TaskStatusUpdateEvent
 
 
 logger = logging.getLogger(__name__)
@@ -134,7 +134,7 @@ class ResultAggregator:
             should_interrupt = False
             is_auth_required = (
                 isinstance(event, Task | TaskStatusUpdateEvent)
-                and event.status.state == TaskState.auth_required
+                and event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
             )
 
             # Always interrupt on auth_required, as it needs external action.

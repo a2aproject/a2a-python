@@ -1,29 +1,33 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, AsyncGenerator
 from typing import Any
 
 from a2a.client.client import (
     Client,
     ClientCallContext,
     ClientConfig,
-    ClientEvent,
     Consumer,
+    ClientEvent,
 )
 from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.errors import A2AClientInvalidStateError
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
     Message,
-    MessageSendConfiguration,
-    MessageSendParams,
+    SendMessageConfiguration,
+    SendMessageRequest,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
+    SubscribeToTaskRequest,
+    CancelTaskRequest,
     TaskPushNotificationConfig,
-    TaskQueryParams,
+    GetTaskRequest,
     TaskStatusUpdateEvent,
+    StreamResponse,
+    SetTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
 )
 
 
@@ -50,7 +54,7 @@ class BaseClient(Client):
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncIterator[ClientEvent | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the agent.
 
         This method handles both streaming and non-streaming (polling) interactions
@@ -64,9 +68,9 @@ class BaseClient(Client):
             extensions: List of extensions to be activated.
 
         Yields:
-            An async iterator of `ClientEvent` or a final `Message` response.
+            An async iterator of `ClientEvent`
         """
-        config = MessageSendConfiguration(
+        config = SendMessageConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
             push_notification_config=(
@@ -75,59 +79,59 @@ class BaseClient(Client):
                 else None
             ),
         )
-        params = MessageSendParams(
-            message=request, configuration=config, metadata=request_metadata
+        sendMessageRequest = SendMessageRequest(
+            request=request, configuration=config, metadata=request_metadata
         )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
-                params, context=context, extensions=extensions
+                sendMessageRequest, context=context, extensions=extensions
             )
-            result = (
-                (response, None) if isinstance(response, Task) else response
-            )
-            await self.consume(result, self._card)
-            yield result
+
+            # In non-streaming case we convert to a StreamResponse so that the
+            # client always sees the same iterator.
+            stream_response = StreamResponse()
+            client_event: ClientEvent
+            if response.HasField("task"):
+                stream_response.task = response.task
+                client_event = (stream_response, response.task)
+
+            elif response.HasField("message"):
+                stream_response.msg = response.msg
+                client_event = (stream_response, None)
+
+            await self.consume(client_event, self._card)
+            yield client_event
             return
 
-        tracker = ClientTaskManager()
         stream = self._transport.send_message_streaming(
-            params, context=context, extensions=extensions
+            sendMessageRequest, context=context, extensions=extensions
         )
+        async for client_event in self._process_stream(stream):
+            yield client_event
 
-        first_event = await anext(stream)
-        # The response from a server may be either exactly one Message or a
-        # series of Task updates. Separate out the first message for special
-        # case handling, which allows us to simplify further stream processing.
-        if isinstance(first_event, Message):
-            await self.consume(first_event, self._card)
-            yield first_event
-            return
+    async def _process_stream(self, stream: AsyncIterator[StreamResponse]) -> AsyncGenerator[ClientEvent]:
+        tracker = ClientTaskManager()
+        async for stream_response in stream:
+            client_event: ClientEvent
+            # When we get a message in the stream then we don't expect any
+            # further messages so yield and return
+            if stream_response.HasField("message"):
+                client_event = (stream_response, None)
+                await self.consume(client_event, self._card)
+                yield client_event
+                return
 
-        yield await self._process_response(tracker, first_event)
-
-        async for event in stream:
-            yield await self._process_response(tracker, event)
-
-    async def _process_response(
-        self,
-        tracker: ClientTaskManager,
-        event: Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
-    ) -> ClientEvent:
-        if isinstance(event, Message):
-            raise A2AClientInvalidStateError(
-                'received a streamed Message from server after first response; this is not supported'
-            )
-        await tracker.process(event)
-        task = tracker.get_task_or_raise()
-        update = None if isinstance(event, Task) else event
-        client_event = (task, update)
-        await self.consume(client_event, self._card)
-        return client_event
+            # Otherwise track the task / task update then yield to the client
+            await tracker.process(stream_response)
+            updated_task = tracker.get_task_or_raise()
+            client_event = (stream_response, updated_task)
+            await self.consume(client_event, self._card)
+            yield client_event
 
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -135,7 +139,7 @@ class BaseClient(Client):
         """Retrieves the current state and history of a specific task.
 
         Args:
-            request: The `TaskQueryParams` object specifying the task ID.
+            request: The `GetTaskRequest` object specifying the task ID.
             context: The client call context.
             extensions: List of extensions to be activated.
 
@@ -148,7 +152,7 @@ class BaseClient(Client):
 
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -156,7 +160,7 @@ class BaseClient(Client):
         """Requests the agent to cancel a specific task.
 
         Args:
-            request: The `TaskIdParams` object specifying the task ID.
+            request: The `CancelTaskRequest` object specifying the task ID.
             context: The client call context.
             extensions: List of extensions to be activated.
 
@@ -169,7 +173,7 @@ class BaseClient(Client):
 
     async def set_task_callback(
         self,
-        request: TaskPushNotificationConfig,
+        request: SetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -190,7 +194,7 @@ class BaseClient(Client):
 
     async def get_task_callback(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -209,9 +213,9 @@ class BaseClient(Client):
             request, context=context, extensions=extensions
         )
 
-    async def resubscribe(
+    async def subscribe(
         self,
-        request: TaskIdParams,
+        request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -240,12 +244,13 @@ class BaseClient(Client):
         # Note: resubscribe can only be called on an existing task. As such,
         # we should never see Message updates, despite the typing of the service
         # definition indicating it may be possible.
-        async for event in self._transport.resubscribe(
+        stream = self._transport.subscribe(
             request, context=context, extensions=extensions
-        ):
-            yield await self._process_response(tracker, event)
+        )
+        async for client_event in self._process_stream(stream):
+            yield client_event
 
-    async def get_card(
+    async def get_extended_agent_card(
         self,
         *,
         context: ClientCallContext | None = None,
@@ -263,7 +268,7 @@ class BaseClient(Client):
         Returns:
             The `AgentCard` for the agent.
         """
-        card = await self._transport.get_card(
+        card = await self._transport.get_extended_agent_card(
             context=context, extensions=extensions
         )
         self._card = card

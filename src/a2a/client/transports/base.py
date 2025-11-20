@@ -2,17 +2,18 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator
 
 from a2a.client.middleware import ClientCallContext
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    Message,
-    MessageSendParams,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    SendMessageRequest,
+    SendMessageResponse,
+    SetTaskPushNotificationConfigRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskStatusUpdateEvent,
 )
 
 
@@ -22,23 +23,21 @@ class ClientTransport(ABC):
     @abstractmethod
     async def send_message(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> Task | Message:
+    ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
 
     @abstractmethod
     async def send_message_streaming(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         return
         yield
@@ -46,7 +45,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -56,7 +55,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -66,7 +65,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def set_task_callback(
         self,
-        request: TaskPushNotificationConfig,
+        request: SetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -76,7 +75,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def get_task_callback(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -84,27 +83,25 @@ class ClientTransport(ABC):
         """Retrieves the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def resubscribe(
+    async def subscribe(
         self,
-        request: TaskIdParams,
+        request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         return
         yield
 
     @abstractmethod
-    async def get_card(
+    async def get_extended_agent_card(
         self,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> AgentCard:
-        """Retrieves the AgentCard."""
+        """Retrieves the Extended AgentCard."""
 
     @abstractmethod
     async def close(self) -> None:

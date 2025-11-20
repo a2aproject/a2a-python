@@ -3,7 +3,7 @@
 # response types
 from typing import TypeVar
 
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     CancelTaskResponse,
     CancelTaskSuccessResponse,

@@ -5,8 +5,8 @@ import pytest
 
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2, a2a_pb2_grpc
-from a2a.types import (
+from a2a.types import a2a_pb2, a2a_pb2_grpc
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Artifact,
@@ -95,7 +95,7 @@ def sample_task() -> Task:
     return Task(
         id='task-1',
         context_id='ctx-1',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
 
 
@@ -128,7 +128,7 @@ def sample_task_status_update_event() -> TaskStatusUpdateEvent:
     return TaskStatusUpdateEvent(
         task_id='task-1',
         context_id='ctx-1',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=False,
         metadata={},
     )
@@ -351,7 +351,7 @@ async def test_cancel_task(
 ) -> None:
     """Test cancelling a task."""
     cancelled_task = sample_task.model_copy()
-    cancelled_task.status.state = TaskState.canceled
+    cancelled_task.status.state = TaskState.TASK_STATE_CANCELLED
     mock_grpc_stub.CancelTask.return_value = proto_utils.ToProto.task(
         cancelled_task
     )
@@ -365,7 +365,7 @@ async def test_cancel_task(
         a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
         metadata=[(HTTP_EXTENSION_HEADER, 'https://example.com/test-ext/v3')],
     )
-    assert response.status.state == TaskState.canceled
+    assert response.status.state == TaskState.TASK_STATE_CANCELLED
 
 
 @pytest.mark.asyncio

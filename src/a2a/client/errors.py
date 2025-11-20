@@ -1,6 +1,6 @@
 """Custom exceptions for the A2A client."""
 
-from a2a.types import JSONRPCErrorResponse
+from a2a.types.a2a_pb2 import JSONRPCErrorResponse
 
 
 class A2AClientError(Exception):

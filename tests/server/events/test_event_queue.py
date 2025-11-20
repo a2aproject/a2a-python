@@ -11,7 +11,7 @@ from unittest.mock import (
 import pytest
 
 from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE, EventQueue
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     Artifact,
     JSONRPCError,
@@ -103,7 +103,7 @@ async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
     event = TaskStatusUpdateEvent(
         task_id='task_123',
         context_id='session-xyz',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=True,
     )
     await event_queue.enqueue_event(event)

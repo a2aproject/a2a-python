@@ -1,6 +1,6 @@
 from typing import Any
 
-from a2a.types import AgentCard, AgentExtension
+from a2a.types.a2a_pb2 import AgentCard, AgentExtension
 
 
 HTTP_EXTENSION_HEADER = 'X-A2A-Extensions'

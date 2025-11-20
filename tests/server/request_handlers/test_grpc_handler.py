@@ -6,7 +6,7 @@ import pytest
 
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2
+from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.utils.errors import ServerError
@@ -69,7 +69,7 @@ async def test_send_message_success(
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.completed),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
     )
     mock_request_handler.on_message_send.return_value = response_model
 
@@ -110,7 +110,7 @@ async def test_get_task_success(
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.working),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
     )
     mock_request_handler.on_get_task.return_value = response_model
 
@@ -169,7 +169,7 @@ async def test_send_streaming_message(
         yield types.Task(
             id='task-1',
             context_id='ctx-1',
-            status=types.TaskStatus(state=types.TaskState.working),
+            status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
         )
 
     mock_request_handler.on_message_send_stream.return_value = mock_stream()
@@ -332,7 +332,7 @@ class TestGrpcExtensions:
             return types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.completed),
+                status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
             )
 
         mock_request_handler.on_message_send.side_effect = side_effect
@@ -397,7 +397,7 @@ class TestGrpcExtensions:
             yield types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.working),
+                status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
             )
 
         mock_request_handler.on_message_send_stream.side_effect = side_effect

@@ -14,10 +14,10 @@ from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.grpc import GrpcTransport
-from a2a.grpc import a2a_pb2_grpc
+from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
@@ -43,28 +43,28 @@ from a2a.types import (
 TASK_FROM_STREAM = Task(
     id='task-123-stream',
     context_id='ctx-456-stream',
-    status=TaskStatus(state=TaskState.completed),
+    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     kind='task',
 )
 
 TASK_FROM_BLOCKING = Task(
     id='task-789-blocking',
     context_id='ctx-101-blocking',
-    status=TaskStatus(state=TaskState.completed),
+    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     kind='task',
 )
 
 GET_TASK_RESPONSE = Task(
     id='task-get-456',
     context_id='ctx-get-789',
-    status=TaskStatus(state=TaskState.working),
+    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     kind='task',
 )
 
 CANCEL_TASK_RESPONSE = Task(
     id='task-cancel-789',
     context_id='ctx-cancel-101',
-    status=TaskStatus(state=TaskState.canceled),
+    status=TaskStatus(state=TaskState.TASK_STATE_CANCELLED),
     kind='task',
 )
 
@@ -78,7 +78,7 @@ CALLBACK_CONFIG = TaskPushNotificationConfig(
 RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     task_id='task-resub-456',
     context_id='ctx-resub-789',
-    status=TaskStatus(state=TaskState.working),
+    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     final=False,
 )
 

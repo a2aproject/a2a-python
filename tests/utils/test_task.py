@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from a2a.types import Artifact, Message, Part, Role, TextPart
+from a2a.types.a2a_pb2 import Artifact, Message, Part, Role, TextPart
 from a2a.utils.task import completed_task, new_task
 
 

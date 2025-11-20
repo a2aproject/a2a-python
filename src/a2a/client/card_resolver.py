@@ -7,11 +7,12 @@ import httpx
 
 from pydantic import ValidationError
 
+from google.protobuf.json_format import ParseDict
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
@@ -85,7 +86,7 @@ class A2ACardResolver:
                 target_url,
                 agent_card_data,
             )
-            agent_card = AgentCard.model_validate(agent_card_data)
+            agent_card = ParseDict(agent_card_data, AgentCard())
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(
                 e.response.status_code,

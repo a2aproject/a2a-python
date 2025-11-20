@@ -37,7 +37,7 @@ from a2a.server.models import (
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig
+from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 if TYPE_CHECKING:

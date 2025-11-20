@@ -5,13 +5,14 @@ from a2a.client.errors import (
     A2AClientInvalidStateError,
 )
 from a2a.server.events.event_queue import Event
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+    StreamResponse,
 )
 from a2a.utils import append_artifact_to_task
 
@@ -66,8 +67,8 @@ class ClientTaskManager:
             raise A2AClientInvalidStateError('no current Task')
         return task
 
-    async def save_task_event(
-        self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+    async def process(
+        self, event: StreamResponse,
     ) -> Task | None:
         """Processes a task-related event (Task, Status, Artifact) and saves the updated task state.
 
@@ -83,74 +84,58 @@ class ClientTaskManager:
             ClientError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
-        if isinstance(event, Task):
+        if event.HasField('message'):
+            # Messages are not processed here.
+            return None
+
+        if event.HasField('task'):
             if self._current_task:
                 raise A2AClientInvalidArgsError(
                     'Task is already set, create new manager for new tasks.'
                 )
-            await self._save_task(event)
-            return event
-        task_id_from_event = (
-            event.id if isinstance(event, Task) else event.task_id
-        )
-        if not self._task_id:
-            self._task_id = task_id_from_event
-        if not self._context_id:
-            self._context_id = event.context_id
-
-        logger.debug(
-            'Processing save of task event of type %s for task_id: %s',
-            type(event).__name__,
-            task_id_from_event,
-        )
+            await self._save_task(event.task)
+            return event.task
 
         task = self._current_task
-        if not task:
-            task = Task(
-                status=TaskStatus(state=TaskState.unknown),
-                id=task_id_from_event,
-                context_id=self._context_id if self._context_id else '',
-            )
-        if isinstance(event, TaskStatusUpdateEvent):
+
+        if event.HasField('status_update'):
+            status_update = event.status_update
+            if not task:
+                task = Task(
+                    status=TaskStatus(state=TaskState.TASK_STATE_UNSPECIFIED),
+                    id=status_update.task_id,
+                    context_id=status_update.context_id,
+                )
+
             logger.debug(
                 'Updating task %s status to: %s',
-                event.task_id,
-                event.status.state,
+                status_update.task_id,
+                status_update.status.state,
             )
-            if event.status.message:
-                if not task.history:
-                    task.history = [event.status.message]
-                else:
-                    task.history.append(event.status.message)
-            if event.metadata:
-                if not task.metadata:
-                    task.metadata = {}
-                task.metadata.update(event.metadata)
-            task.status = event.status
-        else:
+            if status_update.status.message:
+                # "Repeated" fields are merged by appending.
+                task.history.MergeFrom([status_update.status.message])
+
+            if status_update.metadata:
+                task.metadata.MergeFrom(status_update.metadata)
+
+            task.status = status_update.status
+            await self._save_task(task)
+
+        if event.HasField('artifact_update'):
+            artifact_update = event.artifact_update
+            if not task:
+                task = Task(
+                    status=TaskStatus(state=TaskState.TASK_STATE_UNSPECIFIED),
+                    id=artifact_update.task_id,
+                    context_id=artifact_update.context_id,
+                )
+
             logger.debug('Appending artifact to task %s', task.id)
-            append_artifact_to_task(task, event)
-        self._current_task = task
-        return task
+            append_artifact_to_task(task, artifact_update)
+            await self._save_task(task)
 
-    async def process(self, event: Event) -> Event:
-        """Processes an event, updates the task state if applicable, stores it, and returns the event.
-
-        If the event is task-related (`Task`, `TaskStatusUpdateEvent`, `TaskArtifactUpdateEvent`),
-        the internal task state is updated and persisted.
-
-        Args:
-            event: The event object received from the agent.
-
-        Returns:
-            The same event object that was processed.
-        """
-        if isinstance(
-            event, Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-        ):
-            await self.save_task_event(event)
-
-        return event
+        return self._current_task
 
     async def _save_task(self, task: Task) -> None:
         """Saves the given task to the `_current_task` and updated `_task_id` and `_context_id`.
@@ -179,14 +164,9 @@ class ClientTaskManager:
             The updated `Task` object (updated in-place).
         """
         if task.status.message:
-            if task.history:
-                task.history.append(task.status.message)
-            else:
-                task.history = [task.status.message]
-            task.status.message = None
-        if task.history:
-            task.history.append(message)
-        else:
-            task.history = [message]
+            task.history.MergeFrom([task.status.message])
+            task.status.ClearField('message')
+
+        task.history.MergeFrom([message])
         self._current_task = task
         return task

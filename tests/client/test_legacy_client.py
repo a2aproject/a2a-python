@@ -6,7 +6,7 @@ import httpx
 import pytest
 
 from a2a.client import A2AClient, A2AGrpcClient
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Message,
@@ -76,7 +76,7 @@ async def test_a2a_client_send_message(
     mock_response_task = Task(
         id='task-123',
         context_id='ctx-456',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
 
     client._transport.send_message = AsyncMock(return_value=mock_response_task)
@@ -103,7 +103,7 @@ async def test_a2a_grpc_client_get_task(
     mock_response_task = Task(
         id='task-456',
         context_id='ctx-789',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     )
 
     client.get_task = AsyncMock(return_value=mock_response_task)

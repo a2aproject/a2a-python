@@ -30,7 +30,7 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     InternalError,
@@ -67,7 +67,7 @@ class DummyAgentExecutor(AgentExecutor):
             parts = [Part(root=TextPart(text=f'Event {i}'))]
             try:
                 await task_updater.update_status(
-                    TaskState.working,
+                    TaskState.TASK_STATE_WORKING,
                     message=task_updater.new_agent_message(parts),
                 )
             except RuntimeError:
@@ -84,7 +84,7 @@ class DummyAgentExecutor(AgentExecutor):
 
 # Helper to create a simple task for tests
 def create_sample_task(
-    task_id='task1', status_state=TaskState.submitted, context_id='ctx1'
+    task_id='task1', status_state=TaskState.TASK_STATE_SUBMITTED, context_id='ctx1'
 ) -> Task:
     return Task(
         id=task_id,
@@ -189,7 +189,7 @@ async def test_on_cancel_task_queue_tap_returns_none():
     mock_result_aggregator_instance.consume_all.return_value = (
         create_sample_task(
             task_id='tap_none_task',
-            status_state=TaskState.canceled,  # Expected final state
+            status_state=TaskState.TASK_STATE_CANCELLED,  # Expected final state
         )
     )
 
@@ -220,7 +220,7 @@ async def test_on_cancel_task_queue_tap_returns_none():
 
     mock_result_aggregator_instance.consume_all.assert_awaited_once()
     assert result_task is not None
-    assert result_task.status.state == TaskState.canceled
+    assert result_task.status.state == TaskState.TASK_STATE_CANCELLED
 
 
 @pytest.mark.asyncio
@@ -240,7 +240,7 @@ async def test_on_cancel_task_cancels_running_agent():
     # Mock ResultAggregator
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     mock_result_aggregator_instance.consume_all.return_value = (
-        create_sample_task(task_id=task_id, status_state=TaskState.canceled)
+        create_sample_task(task_id=task_id, status_state=TaskState.TASK_STATE_CANCELLED)
     )
 
     request_handler = DefaultRequestHandler(
@@ -282,7 +282,7 @@ async def test_on_cancel_task_completes_during_cancellation():
     # Mock ResultAggregator
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     mock_result_aggregator_instance.consume_all.return_value = (
-        create_sample_task(task_id=task_id, status_state=TaskState.completed)
+        create_sample_task(task_id=task_id, status_state=TaskState.TASK_STATE_COMPLETED)
     )
 
     request_handler = DefaultRequestHandler(
@@ -371,7 +371,7 @@ async def test_on_message_send_with_push_notification():
     task_id = 'push_task_1'
     context_id = 'push_ctx_1'
     sample_initial_task = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.submitted
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_SUBMITTED
     )
 
     # TaskManager will be created inside on_message_send.
@@ -416,7 +416,7 @@ async def test_on_message_send_with_push_notification():
     # Mock ResultAggregator and its consume_and_break_on_interrupt
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     final_task_result = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.completed
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_COMPLETED
     )
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
@@ -471,12 +471,12 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
 
     # Create a task that will be returned after the first event
     initial_task = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.working
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_WORKING
     )
 
     # Create a final task that will be available during background processing
     final_task = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.completed
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_COMPLETED
     )
 
     mock_task_store.get.return_value = None
@@ -626,7 +626,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
     # Mock ResultAggregator and its consume_and_break_on_interrupt
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     final_task_result = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.completed
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_COMPLETED
     )
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
@@ -777,7 +777,7 @@ class HelloAgentExecutor(AgentExecutor):
         try:
             parts = [Part(root=TextPart(text='I am working'))]
             await updater.update_status(
-                TaskState.working,
+                TaskState.TASK_STATE_WORKING,
                 message=updater.new_agent_message(parts),
             )
         except Exception as e:
@@ -821,7 +821,7 @@ async def test_on_message_send_non_blocking():
 
     assert result is not None
     assert isinstance(result, Task)
-    assert result.status.state == TaskState.submitted
+    assert result.status.state == TaskState.TASK_STATE_SUBMITTED
 
     # Polling for 500ms until task is completed.
     task: Task | None = None
@@ -829,11 +829,11 @@ async def test_on_message_send_non_blocking():
         await asyncio.sleep(0.1)
         task = await task_store.get(result.id)
         assert task is not None
-        if task.status.state == TaskState.completed:
+        if task.status.state == TaskState.TASK_STATE_COMPLETED:
             break
 
     assert task is not None
-    assert task.status.state == TaskState.completed
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
     assert (
         result.history
         and task.history
@@ -872,7 +872,7 @@ async def test_on_message_send_limit_history():
     assert result is not None
     assert isinstance(result, Task)
     assert result.history is not None and len(result.history) == 1
-    assert result.status.state == TaskState.completed
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
 
     # verify that history is still persisted to the store
     task = await task_store.get(result.id)
@@ -945,7 +945,7 @@ async def test_on_message_send_interrupted_flow():
 
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     interrupt_task_result = create_sample_task(
-        task_id=task_id, status_state=TaskState.auth_required
+        task_id=task_id, status_state=TaskState.TASK_STATE_AUTH_REQUIRED
     )
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
@@ -1002,12 +1002,12 @@ async def test_on_message_send_stream_with_push_notification():
 
     # Initial task state for TaskManager
     initial_task_for_tm = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.submitted
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_SUBMITTED
     )
 
     # Task state for RequestContext
     task_for_rc = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.working
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_WORKING
     )  # Example state after message update
 
     mock_task_store.get.return_value = None  # New task for TaskManager
@@ -1056,10 +1056,10 @@ async def test_on_message_send_stream_with_push_notification():
 
     # Events to be yielded by consume_and_emit
     event1_task_update = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.working
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_WORKING
     )
     event2_final_task = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.completed
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_COMPLETED
     )
 
     async def event_stream_gen():
@@ -1291,7 +1291,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
 
     # Task exists and is non-final
     task_for_resub = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.working
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_WORKING
     )
     mock_task_store.get.return_value = task_for_resub
 
@@ -1317,10 +1317,10 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     allow_finish = asyncio.Event()
 
     first_event = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.working
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_WORKING
     )
     second_event = create_sample_task(
-        task_id=task_id, context_id=context_id, status_state=TaskState.completed
+        task_id=task_id, context_id=context_id, status_state=TaskState.TASK_STATE_COMPLETED
     )
 
     async def exec_side_effect(_request, queue: EventQueue):
@@ -1513,9 +1513,9 @@ async def test_disconnect_persists_final_task_to_store():
                 cast('str', context.task_id),
                 cast('str', context.context_id),
             )
-            await updater.update_status(TaskState.working)
+            await updater.update_status(TaskState.TASK_STATE_WORKING)
             await self.allow_finish.wait()
-            await updater.update_status(TaskState.completed)
+            await updater.update_status(TaskState.TASK_STATE_COMPLETED)
 
         async def cancel(
             self, context: RequestContext, event_queue: EventQueue
@@ -1540,11 +1540,11 @@ async def test_disconnect_persists_final_task_to_store():
     agen = handler.on_message_send_stream(params, create_server_call_context())
     first = await agen.__anext__()
     if isinstance(first, TaskStatusUpdateEvent):
-        assert first.status.state == TaskState.working
+        assert first.status.state == TaskState.TASK_STATE_WORKING
         task_id = first.task_id
     else:
         assert (
-            isinstance(first, Task) and first.status.state == TaskState.working
+            isinstance(first, Task) and first.status.state == TaskState.TASK_STATE_WORKING
         )
         task_id = first.id
 
@@ -1567,7 +1567,7 @@ async def test_disconnect_persists_final_task_to_store():
     # Verify task is persisted as completed
     persisted = await task_store.get(task_id, create_server_call_context())
     assert persisted is not None
-    assert persisted.status.state == TaskState.completed
+    assert persisted.status.state == TaskState.TASK_STATE_COMPLETED
 
 
 async def wait_until(predicate, timeout: float = 0.2, interval: float = 0.0):
@@ -2431,10 +2431,10 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
 
 
 TERMINAL_TASK_STATES = {
-    TaskState.completed,
-    TaskState.canceled,
-    TaskState.failed,
-    TaskState.rejected,
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELLED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
 }
 
 

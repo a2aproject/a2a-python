@@ -20,7 +20,7 @@ except ImportError as e:
 
 from collections.abc import Callable
 
-import a2a.grpc.a2a_pb2_grpc as a2a_grpc
+import a2a.types.a2a_pb2_grpc as a2a_grpc
 
 from a2a import types
 from a2a.auth.user import UnauthenticatedUser
@@ -28,10 +28,10 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
-from a2a.grpc import a2a_pb2
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import AgentCard, TaskNotFoundError
+from a2a.types import a2a_pb2
+from a2a.types.a2a_pb2 import AgentCard, TaskNotFoundError
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate, validate_async_generator

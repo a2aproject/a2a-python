@@ -11,7 +11,7 @@ from a2a.server.agent_execution.simple_request_context_builder import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     MessageSendParams,
     Part,
@@ -42,7 +42,7 @@ def create_sample_message(
 # Helper to create a simple task
 def create_sample_task(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.submitted,
+    status_state: TaskState = TaskState.TASK_STATE_SUBMITTED,
     context_id: str = 'ctx1',
 ) -> Task:
     return Task(

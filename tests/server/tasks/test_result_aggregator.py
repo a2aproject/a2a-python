@@ -9,7 +9,7 @@ from typing_extensions import override
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.tasks.result_aggregator import ResultAggregator
 from a2a.server.tasks.task_manager import TaskManager
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     Part,
     Role,
@@ -35,7 +35,7 @@ def create_sample_message(
 # Helper to create a simple task
 def create_sample_task(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.submitted,
+    status_state: TaskState = TaskState.TASK_STATE_SUBMITTED,
     context_id: str = 'ctx1',
 ) -> Task:
     return Task(
@@ -48,7 +48,7 @@ def create_sample_task(
 # Helper to create a TaskStatusUpdateEvent
 def create_sample_status_update(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.working,
+    status_state: TaskState = TaskState.TASK_STATE_WORKING,
     context_id: str = 'ctx1',
 ) -> TaskStatusUpdateEvent:
     return TaskStatusUpdateEvent(
@@ -92,10 +92,10 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     async def test_consume_and_emit(self) -> None:
         event1 = create_sample_message(content='event one', msg_id='e1')
         event2 = create_sample_task(
-            task_id='task_event', status_state=TaskState.working
+            task_id='task_event', status_state=TaskState.TASK_STATE_WORKING
         )
         event3 = create_sample_status_update(
-            task_id='task_event', status_state=TaskState.completed
+            task_id='task_event', status_state=TaskState.TASK_STATE_COMPLETED
         )
 
         # Mock event_consumer.consume() to be an async generator
@@ -146,10 +146,10 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     async def test_consume_all_other_event_types(self) -> None:
         task_event = create_sample_task(task_id='task_other_event')
         status_update_event = create_sample_status_update(
-            task_id='task_other_event', status_state=TaskState.completed
+            task_id='task_other_event', status_state=TaskState.TASK_STATE_COMPLETED
         )
         final_task_state = create_sample_task(
-            task_id='task_other_event', status_state=TaskState.completed
+            task_id='task_other_event', status_state=TaskState.TASK_STATE_COMPLETED
         )
 
         async def mock_consume_generator():
@@ -243,7 +243,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self, mock_create_task: MagicMock
     ) -> None:
         auth_task = create_sample_task(
-            task_id='auth_task', status_state=TaskState.auth_required
+            task_id='auth_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
         )
         event_after_auth = create_sample_message('after auth')
 
@@ -295,10 +295,10 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self, mock_create_task: MagicMock
     ) -> None:
         auth_status_update = create_sample_status_update(
-            task_id='auth_status_task', status_state=TaskState.auth_required
+            task_id='auth_status_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
         )
         current_task_state_after_update = create_sample_task(
-            task_id='auth_status_task', status_state=TaskState.auth_required
+            task_id='auth_status_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
         )
 
         async def mock_consume_generator():
@@ -336,7 +336,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         event1 = create_sample_message('event one normal', msg_id='n1')
         event2 = create_sample_task('normal_task')
         final_task_state = create_sample_task(
-            'normal_task', status_state=TaskState.completed
+            'normal_task', status_state=TaskState.TASK_STATE_COMPLETED
         )
 
         async def mock_consume_generator():
@@ -437,7 +437,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         # the events *after* the interrupting one are processed by _continue_consuming.
 
         auth_event = create_sample_task(
-            'task_auth_for_continue', status_state=TaskState.auth_required
+            'task_auth_for_continue', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
         )
         event_after_auth1 = create_sample_message(
             'after auth 1', msg_id='cont1'

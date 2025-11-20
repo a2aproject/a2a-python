@@ -4,7 +4,7 @@ import uuid
 
 from typing import Any
 
-from a2a.types import Artifact, DataPart, Part, TextPart
+from a2a.types.a2a_pb2 import Artifact, DataPart, Part, TextPart
 from a2a.utils.parts import get_text_parts
 
 

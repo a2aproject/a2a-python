@@ -3,7 +3,7 @@ from collections.abc import AsyncGenerator
 
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     ListTaskPushNotificationConfigParams,

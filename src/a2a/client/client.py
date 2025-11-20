@@ -9,18 +9,21 @@ import httpx
 
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
     Message,
     PushNotificationConfig,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
     TaskStatusUpdateEvent,
-    TransportProtocol,
+    StreamResponse,
+    SendMessageRequest,
+    GetTaskRequest,
+    CancelTaskRequest,
+    SetTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    SubscribeToTaskRequest,
 )
 
 
@@ -45,7 +48,7 @@ class ClientConfig:
     grpc_channel_factory: Callable[[str], Channel] | None = None
     """Generates a grpc connection channel for a given url."""
 
-    supported_transports: list[TransportProtocol | str] = dataclasses.field(
+    supported_protocol_bindings: list[str] = dataclasses.field(
         default_factory=list
     )
     """Ordered list of transports for connecting to agent
@@ -71,14 +74,11 @@ class ClientConfig:
     """A list of extension URIs the client supports."""
 
 
-UpdateEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None
-# Alias for emitted events from client
-ClientEvent = tuple[Task, UpdateEvent]
+ClientEvent = tuple[StreamResponse, Task | None]
+
 # Alias for an event consuming callback. It takes either a (task, update) pair
 # or a message as well as the agent card for the agent this came from.
-Consumer = Callable[
-    [ClientEvent | Message, AgentCard], Coroutine[None, Any, Any]
-]
+Consumer = Callable[[ClientEvent, AgentCard], Coroutine[None, Any, Any]]
 
 
 class Client(ABC):
@@ -115,7 +115,7 @@ class Client(ABC):
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncIterator[ClientEvent | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the server.
 
         This will automatically use the streaming or non-streaming approach
@@ -130,7 +130,7 @@ class Client(ABC):
     @abstractmethod
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -140,7 +140,7 @@ class Client(ABC):
     @abstractmethod
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -150,7 +150,7 @@ class Client(ABC):
     @abstractmethod
     async def set_task_callback(
         self,
-        request: TaskPushNotificationConfig,
+        request: SetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -160,7 +160,7 @@ class Client(ABC):
     @abstractmethod
     async def get_task_callback(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -168,9 +168,9 @@ class Client(ABC):
         """Retrieves the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def resubscribe(
+    async def subscribe(
         self,
-        request: TaskIdParams,
+        request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -180,7 +180,7 @@ class Client(ABC):
         yield
 
     @abstractmethod
-    async def get_card(
+    async def get_extended_agent_card(
         self,
         *,
         context: ClientCallContext | None = None,
@@ -200,7 +200,7 @@ class Client(ABC):
 
     async def consume(
         self,
-        event: tuple[Task, UpdateEvent] | Message | None,
+        event: ClientEvent,
         card: AgentCard,
     ) -> None:
         """Processes the event via all the registered `Consumer`s."""

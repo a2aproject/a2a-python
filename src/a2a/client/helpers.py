@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from a2a.types import Message, Part, Role, TextPart
+from a2a.types.a2a_pb2 import Message, Part, Role, TextPart
 
 
 def create_text_message_object(

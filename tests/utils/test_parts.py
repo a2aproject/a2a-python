@@ -1,4 +1,4 @@
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     DataPart,
     FilePart,
     FileWithBytes,

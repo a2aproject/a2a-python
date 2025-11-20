@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from a2a.server.tasks import TaskManager
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     InvalidParamsError,
     Message,
@@ -100,7 +100,7 @@ async def test_save_task_event_status_update(
     initial_task = Task(**MINIMAL_TASK)
     mock_task_store.get.return_value = initial_task
     new_status = TaskStatus(
-        state=TaskState.working,
+        state=TaskState.TASK_STATE_WORKING,
         message=Message(
             role=Role.agent,
             parts=[Part(TextPart(text='content'))],
@@ -155,7 +155,7 @@ async def test_save_task_event_metadata_update(
         task_id=MINIMAL_TASK['id'],
         context_id=MINIMAL_TASK['context_id'],
         metadata=new_metadata,
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=False,
     )
     await task_manager.save_task_event(event)
@@ -174,7 +174,7 @@ async def test_ensure_task_existing(
     event = TaskStatusUpdateEvent(
         task_id=MINIMAL_TASK['id'],
         context_id=MINIMAL_TASK['context_id'],
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=False,
     )
     retrieved_task = await task_manager.ensure_task(event)
@@ -197,13 +197,13 @@ async def test_ensure_task_nonexistent(
     event = TaskStatusUpdateEvent(
         task_id='new-task',
         context_id='some-context',
-        status=TaskStatus(state=TaskState.submitted),
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         final=False,
     )
     new_task = await task_manager_without_id.ensure_task(event)
     assert new_task.id == 'new-task'
     assert new_task.context_id == 'some-context'
-    assert new_task.status.state == TaskState.submitted
+    assert new_task.status.state == TaskState.TASK_STATE_SUBMITTED
     mock_task_store.save.assert_called_once_with(new_task, None)
     assert task_manager_without_id.task_id == 'new-task'
     assert task_manager_without_id.context_id == 'some-context'
@@ -214,7 +214,7 @@ def test_init_task_obj(task_manager: TaskManager) -> None:
     new_task = task_manager._init_task_obj('new-task', 'new-context')  # type: ignore
     assert new_task.id == 'new-task'
     assert new_task.context_id == 'new-context'
-    assert new_task.status.state == TaskState.submitted
+    assert new_task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert new_task.history == []
 
 
@@ -237,7 +237,7 @@ async def test_save_task_event_mismatched_id_raises_error(
     mismatched_task = Task(
         id='wrong-id',
         context_id='session-xyz',
-        status=TaskStatus(state=TaskState.submitted),
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
 
     with pytest.raises(ServerError) as exc_info:
@@ -268,7 +268,7 @@ async def test_save_task_event_new_task_no_task_id(
     assert task_manager_without_id.task_id == 'new-task-id'
     assert task_manager_without_id.context_id == 'some-context'
     # initial submit should be updated to working
-    assert task.status.state == TaskState.working
+    assert task.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio
@@ -302,7 +302,7 @@ async def test_save_task_event_no_task_existing(
     event = TaskStatusUpdateEvent(
         task_id='event-task-id',
         context_id='some-context',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         final=True,
     )
     await task_manager_without_id.save_task_event(event)
@@ -312,6 +312,6 @@ async def test_save_task_event_no_task_existing(
     saved_task = call_args[0][0]
     assert saved_task.id == 'event-task-id'
     assert saved_task.context_id == 'some-context'
-    assert saved_task.status.state == TaskState.completed
+    assert saved_task.status.state == TaskState.TASK_STATE_COMPLETED
     assert task_manager_without_id.task_id == 'event-task-id'
     assert task_manager_without_id.context_id == 'some-context'

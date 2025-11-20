@@ -9,7 +9,7 @@ from a2a.server.id_generator import (
     IDGeneratorContext,
     UUIDGenerator,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
@@ -50,10 +50,10 @@ class TaskUpdater:
         self._lock = asyncio.Lock()
         self._terminal_state_reached = False
         self._terminal_states = {
-            TaskState.completed,
-            TaskState.canceled,
-            TaskState.failed,
-            TaskState.rejected,
+            TaskState.TASK_STATE_COMPLETED,
+            TaskState.TASK_STATE_CANCELLED,
+            TaskState.TASK_STATE_FAILED,
+            TaskState.TASK_STATE_REJECTED,
         }
         self._artifact_id_generator = (
             artifact_id_generator if artifact_id_generator else UUIDGenerator()
@@ -154,39 +154,39 @@ class TaskUpdater:
     async def complete(self, message: Message | None = None) -> None:
         """Marks the task as completed and publishes a final status update."""
         await self.update_status(
-            TaskState.completed,
+            TaskState.TASK_STATE_COMPLETED,
             message=message,
             final=True,
         )
 
     async def failed(self, message: Message | None = None) -> None:
         """Marks the task as failed and publishes a final status update."""
-        await self.update_status(TaskState.failed, message=message, final=True)
+        await self.update_status(TaskState.TASK_STATE_FAILED, message=message, final=True)
 
     async def reject(self, message: Message | None = None) -> None:
         """Marks the task as rejected and publishes a final status update."""
         await self.update_status(
-            TaskState.rejected, message=message, final=True
+            TaskState.TASK_STATE_REJECTED, message=message, final=True
         )
 
     async def submit(self, message: Message | None = None) -> None:
         """Marks the task as submitted and publishes a status update."""
         await self.update_status(
-            TaskState.submitted,
+            TaskState.TASK_STATE_SUBMITTED,
             message=message,
         )
 
     async def start_work(self, message: Message | None = None) -> None:
         """Marks the task as working and publishes a status update."""
         await self.update_status(
-            TaskState.working,
+            TaskState.TASK_STATE_WORKING,
             message=message,
         )
 
     async def cancel(self, message: Message | None = None) -> None:
         """Marks the task as cancelled and publishes a finalstatus update."""
         await self.update_status(
-            TaskState.canceled, message=message, final=True
+            TaskState.TASK_STATE_CANCELLED, message=message, final=True
         )
 
     async def requires_input(
@@ -194,7 +194,7 @@ class TaskUpdater:
     ) -> None:
         """Marks the task as input required and publishes a status update."""
         await self.update_status(
-            TaskState.input_required,
+            TaskState.TASK_STATE_INPUT_REQUIRED,
             message=message,
             final=final,
         )
@@ -204,7 +204,7 @@ class TaskUpdater:
     ) -> None:
         """Marks the task as auth required and publishes a status update."""
         await self.update_status(
-            TaskState.auth_required, message=message, final=final
+            TaskState.TASK_STATE_AUTH_REQUIRED, message=message, final=final
         )
 
     def new_agent_message(

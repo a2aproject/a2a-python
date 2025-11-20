@@ -8,7 +8,7 @@ from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     MessageSendParams,
     Part,
@@ -43,7 +43,7 @@ def create_task_obj(message_send_params: MessageSendParams) -> Task:
     return Task(
         id=str(uuid4()),
         context_id=message_send_params.message.context_id,
-        status=TaskStatus(state=TaskState.submitted),
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         history=[message_send_params.message],
     )
 

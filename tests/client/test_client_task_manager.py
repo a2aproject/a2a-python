@@ -7,7 +7,7 @@ from a2a.client.errors import (
     A2AClientInvalidArgsError,
     A2AClientInvalidStateError,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
@@ -31,7 +31,7 @@ def sample_task() -> Task:
     return Task(
         id='task123',
         context_id='context456',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         history=[],
         artifacts=[],
     )
@@ -89,11 +89,11 @@ async def test_save_task_event_with_status_update(
     status_update = TaskStatusUpdateEvent(
         task_id=sample_task.id,
         context_id=sample_task.context_id,
-        status=TaskStatus(state=TaskState.completed, message=sample_message),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED, message=sample_message),
         final=True,
     )
     updated_task = await task_manager.save_task_event(status_update)
-    assert updated_task.status.state == TaskState.completed
+    assert updated_task.status.state == TaskState.TASK_STATE_COMPLETED
     assert updated_task.history == [sample_message]
 
 
@@ -125,13 +125,13 @@ async def test_save_task_event_creates_task_if_not_exists(
     status_update = TaskStatusUpdateEvent(
         task_id='new_task',
         context_id='new_context',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=False,
     )
     updated_task = await task_manager.save_task_event(status_update)
     assert updated_task is not None
     assert updated_task.id == 'new_task'
-    assert updated_task.status.state == TaskState.working
+    assert updated_task.status.state == TaskState.TASK_STATE_WORKING
 
 
 @pytest.mark.asyncio

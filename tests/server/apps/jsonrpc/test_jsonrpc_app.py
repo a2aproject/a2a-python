@@ -25,7 +25,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
 )  # For mock spec
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     Message,
     MessageSendParams,

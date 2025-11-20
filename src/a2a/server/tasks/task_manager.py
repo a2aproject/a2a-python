@@ -3,7 +3,7 @@ import logging
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     InvalidParamsError,
     Message,
     Task,
@@ -226,7 +226,7 @@ class TaskManager:
         return Task(
             id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.submitted),
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
             history=history,
         )
 

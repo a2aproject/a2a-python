@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import MessageSendParams, Task
+from a2a.types.a2a_pb2 import MessageSendParams, Task
 
 
 class RequestContextBuilder(ABC):

@@ -1,6 +1,6 @@
 """Custom exceptions for A2A server-side errors."""
 
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,

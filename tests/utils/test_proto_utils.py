@@ -3,7 +3,7 @@ from unittest import mock
 import pytest
 
 from a2a import types
-from a2a.grpc import a2a_pb2
+from a2a.types import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
 
@@ -41,7 +41,7 @@ def sample_task(sample_message: types.Message) -> types.Task:
         id='task-1',
         context_id='ctx-1',
         status=types.TaskStatus(
-            state=types.TaskState.working, message=sample_message
+            state=types.TaskState.TASK_STATE_WORKING, message=sample_message
         ),
         history=[sample_message],
         artifacts=[
@@ -170,7 +170,7 @@ class TestProtoUtils:
         )
 
         for state in types.TaskState:
-            if state not in (types.TaskState.unknown, types.TaskState.rejected):
+            if state not in (types.TaskState.TASK_STATE_UNSPECIFIED, types.TaskState.TASK_STATE_REJECTED):
                 proto_state = proto_utils.ToProto.task_state(state)
                 assert proto_utils.FromProto.task_state(proto_state) == state
 
@@ -179,10 +179,10 @@ class TestProtoUtils:
             proto_utils.FromProto.task_state(
                 a2a_pb2.TaskState.TASK_STATE_UNSPECIFIED
             )
-            == types.TaskState.unknown
+            == types.TaskState.TASK_STATE_UNSPECIFIED
         )
         assert (
-            proto_utils.ToProto.task_state(types.TaskState.unknown)
+            proto_utils.ToProto.task_state(types.TaskState.TASK_STATE_UNSPECIFIED)
             == a2a_pb2.TaskState.TASK_STATE_UNSPECIFIED
         )
 

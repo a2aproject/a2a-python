@@ -4,7 +4,7 @@ import pytest
 
 from pydantic import ValidationError
 
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     A2ARequest,
     APIKeySecurityScheme,
@@ -379,12 +379,12 @@ def test_message():
 
 def test_task_status():
     status = TaskStatus(**MINIMAL_TASK_STATUS)
-    assert status.state == TaskState.submitted
+    assert status.state == TaskState.TASK_STATE_SUBMITTED
     assert status.message is None
     assert status.timestamp is None
 
     status_full = TaskStatus(**FULL_TASK_STATUS)
-    assert status_full.state == TaskState.working
+    assert status_full.state == TaskState.TASK_STATE_WORKING
     assert isinstance(status_full.message, Message)
     assert status_full.timestamp == '2023-10-27T10:00:00Z'
 
@@ -396,14 +396,14 @@ def test_task():
     task = Task(**MINIMAL_TASK)
     assert task.id == 'task-abc'
     assert task.context_id == 'session-xyz'
-    assert task.status.state == TaskState.submitted
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert task.history is None
     assert task.artifacts is None
     assert task.metadata is None
 
     task_full = Task(**FULL_TASK)
     assert task_full.id == 'task-abc'
-    assert task_full.status.state == TaskState.working
+    assert task_full.status.state == TaskState.TASK_STATE_WORKING
     assert task_full.history is not None and len(task_full.history) == 2
     assert isinstance(task_full.history[0], Message)
     assert task_full.artifacts is not None and len(task_full.artifacts) == 1
@@ -672,7 +672,7 @@ def test_send_message_streaming_status_update_response() -> None:
     assert response.root.id == 1
     assert isinstance(response.root, SendStreamingMessageSuccessResponse)
     assert isinstance(response.root.result, TaskStatusUpdateEvent)
-    assert response.root.result.status.state == TaskState.submitted
+    assert response.root.result.status.state == TaskState.TASK_STATE_SUBMITTED
     assert response.root.result.task_id == '1'
     assert not response.root.result.final
 
@@ -1525,7 +1525,7 @@ def test_subclass_enums() -> None:
 
     assert Role.user == 'user'
 
-    assert TaskState.working == 'working'
+    assert TaskState.TASK_STATE_WORKING == 'working'
 
 
 def test_get_task_push_config_params() -> None:

@@ -18,7 +18,7 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     A2ARequest,
     AgentCard,

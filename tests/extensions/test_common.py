@@ -5,7 +5,7 @@ from a2a.extensions.common import (
     get_requested_extensions,
     update_extension_header,
 )
-from a2a.types import AgentCapabilities, AgentCard, AgentExtension
+from a2a.types.a2a_pb2 import AgentCapabilities, AgentCard, AgentExtension
 
 
 def test_get_requested_extensions():

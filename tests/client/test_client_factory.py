@@ -7,7 +7,7 @@ import pytest
 
 from a2a.client import ClientConfig, ClientFactory
 from a2a.client.transports import JsonRpcTransport, RestTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,

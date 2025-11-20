@@ -19,7 +19,7 @@ from a2a.client import (
     ClientFactory,
     minimal_agent_card,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     Part,
     PushNotificationConfig,
@@ -172,7 +172,7 @@ async def test_notification_triggering_after_config_change_e2e(
     assert isinstance(responses[0], tuple)
     assert isinstance(responses[0][0], Task)
     task = responses[0][0]
-    assert task.status.state == TaskState.input_required
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
     # Verify that no notification has been sent yet.
     response = await http_client.get(

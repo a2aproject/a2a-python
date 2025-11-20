@@ -3,7 +3,7 @@ from typing import Any
 
 from a2a.client.auth.credentials import CredentialService
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     APIKeySecurityScheme,
     HTTPAuthSecurityScheme,

@@ -10,7 +10,12 @@ from a2a.server.tasks.base_push_notification_sender import (
 from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
+from a2a.types.a2a_pb2 import (
+    PushNotificationConfig,
+    Task,
+    TaskState,
+    TaskStatus,
+)
 
 
 # Suppress logging for cleaner test output, can be enabled for debugging
@@ -18,7 +23,7 @@ from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
 
 
 def create_sample_task(
-    task_id: str = 'task123', status_state: TaskState = TaskState.completed
+    task_id: str = 'task123', status_state: TaskState = TaskState.TASK_STATE_COMPLETED
 ) -> Task:
     return Task(
         id=task_id,

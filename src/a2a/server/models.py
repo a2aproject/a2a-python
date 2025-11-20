@@ -12,7 +12,7 @@ else:
 
 from pydantic import BaseModel
 
-from a2a.types import Artifact, Message, TaskStatus
+from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:

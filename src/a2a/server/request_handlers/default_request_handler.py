@@ -26,7 +26,7 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     InternalError,
@@ -51,10 +51,10 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 TERMINAL_TASK_STATES = {
-    TaskState.completed,
-    TaskState.canceled,
-    TaskState.failed,
-    TaskState.rejected,
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELLED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
 }
 
 
@@ -175,7 +175,7 @@ class DefaultRequestHandler(RequestHandler):
                 )
             )
 
-        if result.status.state != TaskState.canceled:
+        if result.status.state != TaskState.TASK_STATE_CANCELLED:
             raise ServerError(
                 error=TaskNotCancelableError(
                     message=f'Task cannot be canceled - current state: {result.status.state}'

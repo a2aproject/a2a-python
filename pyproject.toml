@@ -13,6 +13,7 @@ dependencies = [
   "pydantic>=2.11.3",
   "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
+  "json-rpc>=1.15.0",
 ]
 
 classifiers = [
@@ -114,7 +115,7 @@ explicit = true
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-exclude = ["src/a2a/grpc/"]
+exclude = ["src/a2a/types/a2a_pb2\\.py", "src/a2a/types/a2a_pb2_grpc\\.py"]
 disable_error_code = [
   "import-not-found",
   "annotation-unchecked",
@@ -134,7 +135,8 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
-  "src/a2a/grpc/",
+  "src/a2a/types/a2a_pb2.py",
+  "src/a2a/types/a2a_pb2_grpc.py",
 ]
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
@@ -145,7 +147,8 @@ omit = [
     "*/tests/*",
     "*/site-packages/*",
     "*/__init__.py",
-    "src/a2a/grpc/*",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2_grpc.py",
 ]
 
 [tool.coverage.report]
@@ -257,7 +260,9 @@ exclude = [
     "node_modules",
     "venv",
     "*/migrations/*",
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
     "tests/**",
 ]
 
@@ -311,7 +316,9 @@ inline-quotes = "single"
 
 [tool.ruff.format]
 exclude = [
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
 ]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"

@@ -18,7 +18,7 @@ from a2a.client import (
 )
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentSkill,

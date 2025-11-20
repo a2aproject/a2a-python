@@ -9,25 +9,23 @@ import httpx
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from httpx_sse import SSEError, aconnect_sse
 
-from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import update_extension_header
-from a2a.grpc import a2a_pb2
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    Message,
-    MessageSendParams,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    SendMessageRequest,
+    SendMessageResponse,
+    SetTaskPushNotificationConfigRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskStatusUpdateEvent,
 )
-from a2a.utils import proto_utils
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -83,22 +81,11 @@ class RestTransport(ClientTransport):
 
     async def _prepare_send_message(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         context: ClientCallContext | None,
         extensions: list[str] | None = None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
-        pb = a2a_pb2.SendMessageRequest(
-            request=proto_utils.ToProto.message(request.message),
-            configuration=proto_utils.ToProto.message_send_configuration(
-                request.configuration
-            ),
-            metadata=(
-                proto_utils.ToProto.metadata(request.metadata)
-                if request.metadata
-                else None
-            ),
-        )
-        payload = MessageToDict(pb)
+        payload = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
@@ -112,11 +99,11 @@ class RestTransport(ClientTransport):
 
     async def send_message(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> Task | Message:
+    ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
@@ -124,19 +111,18 @@ class RestTransport(ClientTransport):
         response_data = await self._send_post_request(
             '/v1/message:send', payload, modified_kwargs
         )
-        response_pb = a2a_pb2.SendMessageResponse()
-        ParseDict(response_data, response_pb)
-        return proto_utils.FromProto.task_or_message(response_pb)
+        response: SendMessageResponse = ParseDict(
+            response_data, SendMessageResponse()
+        )
+        return response
 
     async def send_message_streaming(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
@@ -153,9 +139,8 @@ class RestTransport(ClientTransport):
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
-                    event = a2a_pb2.StreamResponse()
-                    Parse(sse.data, event)
-                    yield proto_utils.FromProto.stream_response(event)
+                    event: StreamResponse = Parse(sse.data, StreamResponse())
+                    yield event
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'
@@ -213,42 +198,42 @@ class RestTransport(ClientTransport):
 
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
+        params = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
         )
         _payload, modified_kwargs = await self._apply_interceptors(
-            request.model_dump(mode='json', exclude_none=True),
+            params,
             modified_kwargs,
             context,
         )
+
+        del params['name']  # name is part of the URL path, not query params
+
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.id}',
-            {'historyLength': str(request.history_length)}
-            if request.history_length is not None
-            else {},
+            f'/v1/{request.name}',
+            params,
             modified_kwargs,
         )
-        task = a2a_pb2.Task()
-        ParseDict(response_data, task)
-        return proto_utils.FromProto.task(task)
+        response: Task = ParseDict(response_data, Task())
+        return response
 
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
-        pb = a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
-        payload = MessageToDict(pb)
+        payload = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
@@ -259,26 +244,20 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
+            f'/v1/{request.name}:cancel', payload, modified_kwargs
         )
-        task = a2a_pb2.Task()
-        ParseDict(response_data, task)
-        return proto_utils.FromProto.task(task)
+        response: Task = ParseDict(response_data, Task())
+        return response
 
     async def set_task_callback(
         self,
-        request: TaskPushNotificationConfig,
+        request: SetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        pb = a2a_pb2.CreateTaskPushNotificationConfigRequest(
-            parent=f'tasks/{request.task_id}',
-            config_id=request.push_notification_config.id,
-            config=proto_utils.ToProto.task_push_notification_config(request),
-        )
-        payload = MessageToDict(pb)
+        payload = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
@@ -287,53 +266,51 @@ class RestTransport(ClientTransport):
             payload, modified_kwargs, context
         )
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/v1/{request.parent}/pushNotificationConfigs',
             payload,
             modified_kwargs,
         )
-        config = a2a_pb2.TaskPushNotificationConfig()
-        ParseDict(response_data, config)
-        return proto_utils.FromProto.task_push_notification_config(config)
+        response: TaskPushNotificationConfig = ParseDict(
+            response_data, TaskPushNotificationConfig()
+        )
+        return response
 
     async def get_task_callback(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
-        pb = a2a_pb2.GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
-        )
-        payload = MessageToDict(pb)
+        params = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
+        params, modified_kwargs = await self._apply_interceptors(
+            params,
             modified_kwargs,
             context,
         )
+        del params['name']  # name is part of the URL path, not query params
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
-            {},
+            f'/v1/{request.name}',
+            params,
             modified_kwargs,
         )
-        config = a2a_pb2.TaskPushNotificationConfig()
-        ParseDict(response_data, config)
-        return proto_utils.FromProto.task_push_notification_config(config)
+        response: TaskPushNotificationConfig = ParseDict(
+            response_data, TaskPushNotificationConfig()
+        )
+        return response
 
-    async def resubscribe(
+    async def subscribe(
         self,
-        request: TaskIdParams,
+        request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent | Message
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -344,14 +321,13 @@ class RestTransport(ClientTransport):
         async with aconnect_sse(
             self.httpx_client,
             'GET',
-            f'{self.url}/v1/tasks/{request.id}:subscribe',
+            f'{self.url}/v1/{request.name}:subscribe',
             **modified_kwargs,
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
-                    event = a2a_pb2.StreamResponse()
-                    Parse(sse.data, event)
-                    yield proto_utils.FromProto.stream_response(event)
+                    event: StreamResponse = Parse(sse.data, StreamResponse())
+                    yield event
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'
@@ -363,27 +339,13 @@ class RestTransport(ClientTransport):
                     503, f'Network communication error: {e}'
                 ) from e
 
-    async def get_card(
+    async def get_extended_agent_card(
         self,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> AgentCard:
-        """Retrieves the agent's card."""
-        card = self.agent_card
-        if not card:
-            resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(
-                http_kwargs=self._get_http_args(context)
-            )
-            self._needs_extended_card = (
-                card.supports_authenticated_extended_card
-            )
-            self.agent_card = card
-
-        if not self._needs_extended_card:
-            return card
-
+        """Retrieves the Extended AgentCard."""
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
@@ -396,10 +358,8 @@ class RestTransport(ClientTransport):
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs
         )
-        card = AgentCard.model_validate(response_data)
-        self.agent_card = card
-        self._needs_extended_card = False
-        return card
+        response: AgentCard = ParseDict(response_data, AgentCard())
+        return response
 
     async def close(self) -> None:
         """Closes the httpx client."""

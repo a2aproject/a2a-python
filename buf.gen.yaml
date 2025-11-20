@@ -2,7 +2,7 @@
 version: v2
 inputs:
   - git_repo: https://github.com/a2aproject/A2A.git
-    ref: main
+    ref: transports
     subdir: specification/grpc
 managed:
   enabled: true
@@ -21,11 +21,11 @@ plugins:
   # Generate python protobuf related code
   # Generates *_pb2.py files, one for each .proto
   - remote: buf.build/protocolbuffers/python:v29.3
-    out: src/a2a/grpc
+    out: src/a2a/types
   # Generate python service code.
   # Generates *_pb2_grpc.py
   - remote: buf.build/grpc/python
-    out: src/a2a/grpc
+    out: src/a2a/types
   # Generates *_pb2.pyi files.
   - remote: buf.build/protocolbuffers/pyi
-    out: src/a2a/grpc
+    out: src/a2a/types

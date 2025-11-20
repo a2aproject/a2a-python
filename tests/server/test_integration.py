@@ -23,7 +23,7 @@ from a2a.server.apps import (
     A2AStarletteApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Artifact,
@@ -457,7 +457,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     """Test cancelling a task."""
     # Setup mock response
     task_status = TaskStatus(**MINIMAL_TASK_STATUS)
-    task_status.state = TaskState.canceled  # 'cancelled' #
+    task_status.state = TaskState.TASK_STATE_CANCELLED  # 'cancelled' #
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_cancel_task.return_value = task
 

@@ -7,7 +7,7 @@ from pydantic import ValidationError
 from starlette.testclient import TestClient
 
 from a2a.server.apps import A2AFastAPIApplication, A2AStarletteApplication
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
     AgentCard,

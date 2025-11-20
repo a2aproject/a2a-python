@@ -10,7 +10,7 @@ from a2a.server.models import (
     create_push_notification_config_model,
     create_task_model,
 )
-from a2a.types import Artifact, TaskState, TaskStatus, TextPart
+from a2a.types.a2a_pb2 import Artifact, TaskState, TaskStatus, TextPart
 
 
 class TestPydanticType:
@@ -18,7 +18,7 @@ class TestPydanticType:
 
     def test_process_bind_param_with_pydantic_model(self):
         pydantic_type = PydanticType(TaskStatus)
-        status = TaskStatus(state=TaskState.working)
+        status = TaskStatus(state=TaskState.TASK_STATE_WORKING)
         dialect = MagicMock()
 
         result = pydantic_type.process_bind_param(status, dialect)

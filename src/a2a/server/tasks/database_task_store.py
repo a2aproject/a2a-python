@@ -22,7 +22,7 @@ except ImportError as e:
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task  # Task is the Pydantic model
+from a2a.types.a2a_pb2 import Task  # Task is the Pydantic model
 
 
 logger = logging.getLogger(__name__)

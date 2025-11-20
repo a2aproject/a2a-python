@@ -30,7 +30,7 @@ from a2a.server.models import (
     PushNotificationConfigModel,
 )  # Important: To get Base.metadata
 from a2a.server.tasks import DatabasePushNotificationConfigStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
     Task,
     TaskState,
@@ -81,7 +81,7 @@ else:
 
 # Minimal Task object for testing - remains the same
 task_status_submitted = TaskStatus(
-    state=TaskState.submitted, timestamp='2023-01-01T00:00:00Z'
+    state=TaskState.TASK_STATE_SUBMITTED, timestamp='2023-01-01T00:00:00Z'
 )
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',

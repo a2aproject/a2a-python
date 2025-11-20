@@ -9,7 +9,7 @@ from httpx_sse import EventSource, ServerSentEvent
 from a2a.client import create_text_message_object
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import AgentCard, MessageSendParams, Role
+from a2a.types.a2a_pb2 import AgentCard, MessageSendParams, Role
 
 
 @pytest.fixture

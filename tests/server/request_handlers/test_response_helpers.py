@@ -6,7 +6,7 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
     prepare_response_object,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     GetTaskResponse,
     GetTaskSuccessResponse,
@@ -99,7 +99,7 @@ class TestResponseHelpers(unittest.TestCase):
         return Task(
             id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.submitted),
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
             history=[],
         )
 

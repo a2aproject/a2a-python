@@ -7,7 +7,7 @@ from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
-from a2a.types import PushNotificationConfig, Task
+from a2a.types.a2a_pb2 import PushNotificationConfig, Task
 
 
 logger = logging.getLogger(__name__)

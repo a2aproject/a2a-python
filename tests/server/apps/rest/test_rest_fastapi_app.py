@@ -9,12 +9,12 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
-from a2a.grpc import a2a_pb2
+from a2a.types import a2a_pb2
 from a2a.server.apps.rest import fastapi_app, rest_adapter
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     Message,
     Part,
@@ -237,7 +237,7 @@ async def test_send_message_success_task(
         id='test_task_id',
         context_id='test_context_id',
         status=TaskStatus(
-            state=TaskState.completed,
+            state=TaskState.TASK_STATE_COMPLETED,
             message=Message(
                 message_id='test',
                 role=Role.agent,

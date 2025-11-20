@@ -5,7 +5,7 @@ import pytest
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.transports.base import ClientTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Message,
@@ -68,7 +68,7 @@ async def test_send_message_streaming(
         yield Task(
             id='task-123',
             context_id='ctx-456',
-            status=TaskStatus(state=TaskState.completed),
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         )
 
     mock_transport.send_message_streaming.return_value = create_stream()
@@ -94,7 +94,7 @@ async def test_send_message_non_streaming(
     mock_transport.send_message.return_value = Task(
         id='task-456',
         context_id='ctx-789',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
 
     meta = {'test': 1}
@@ -116,7 +116,7 @@ async def test_send_message_non_streaming_agent_capability_false(
     mock_transport.send_message.return_value = Task(
         id='task-789',
         context_id='ctx-101',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
 
     events = [event async for event in base_client.send_message(sample_message)]

@@ -2,7 +2,13 @@
 
 import uuid
 
-from a2a.types import Artifact, Message, Task, TaskState, TaskStatus, TextPart
+from a2a.types.a2a_pb2 import (
+    Artifact,
+    Message,
+    Task,
+    TaskState,
+    TaskStatus,
+)
 
 
 def new_task(request: Message) -> Task:
@@ -25,11 +31,11 @@ def new_task(request: Message) -> Task:
     if not request.parts:
         raise ValueError('Message parts cannot be empty')
     for part in request.parts:
-        if isinstance(part.root, TextPart) and not part.root.text:
-            raise ValueError('TextPart content cannot be empty')
+        if part.text is not None and not part.text:
+            raise ValueError('Message.text cannot be empty')
 
     return Task(
-        status=TaskStatus(state=TaskState.submitted),
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         id=request.task_id or str(uuid.uuid4()),
         context_id=request.context_id or str(uuid.uuid4()),
         history=[request],
@@ -64,7 +70,7 @@ def completed_task(
     if history is None:
         history = []
     return Task(
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         id=task_id,
         context_id=context_id,
         artifacts=artifacts,
@@ -87,6 +93,8 @@ def apply_history_length(task: Task, history_length: int | None) -> Task:
         # Limit history to the most recent N messages
         limited_history = task.history[-history_length:]
         # Create a new task instance with limited history
-        return task.model_copy(update={'history': limited_history})
-
+        task_copy = Task()
+        task_copy.CopyFrom(task)
+        task_copy.history = limited_history
+        return task_copy
     return task

@@ -7,7 +7,7 @@ import httpx
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
     Task,
     TaskState,
@@ -16,7 +16,7 @@ from a2a.types import (
 
 
 def create_sample_task(
-    task_id: str = 'task123', status_state: TaskState = TaskState.completed
+    task_id: str = 'task123', status_state: TaskState = TaskState.TASK_STATE_COMPLETED
 ) -> Task:
     return Task(
         id=task_id,

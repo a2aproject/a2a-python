@@ -24,7 +24,7 @@ from a2a.server.tasks import (
     PushNotificationSender,
     TaskStore,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     Artifact,
@@ -151,7 +151,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         call_context = ServerCallContext(state={'foo': 'bar'})
 
         async def streaming_coro():
-            mock_task.status.state = TaskState.canceled
+            mock_task.status.state = TaskState.TASK_STATE_CANCELLED
             yield mock_task
 
         with patch(
@@ -163,7 +163,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response.root, CancelTaskSuccessResponse)
             assert response.root.result == mock_task  # type: ignore
-            assert response.root.result.status.state == TaskState.canceled
+            assert response.root.result.status.state == TaskState.TASK_STATE_CANCELLED
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_supported(self) -> None:
@@ -358,7 +358,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskStatusUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                status=TaskStatus(state=TaskState.completed),
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
                 final=True,
             ),
         ]
@@ -424,7 +424,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskStatusUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                status=TaskStatus(state=TaskState.working),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
                 final=True,
             ),
         ]
@@ -585,7 +585,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskStatusUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                status=TaskStatus(state=TaskState.completed),
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
                 final=True,
             ),
         ]
@@ -696,7 +696,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskStatusUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                status=TaskStatus(state=TaskState.completed),
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
                 final=True,
             ),
         ]

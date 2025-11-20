@@ -7,7 +7,7 @@ import pytest
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     MessageSendParams,
     Task,

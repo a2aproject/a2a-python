@@ -5,7 +5,7 @@ from collections.abc import AsyncIterable, Callable
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import prepare_response_object
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,

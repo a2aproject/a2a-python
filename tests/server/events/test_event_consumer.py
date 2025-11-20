@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from a2a.server.events.event_consumer import EventConsumer, QueueClosed
 from a2a.server.events.event_queue import EventQueue
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     A2AError,
     Artifact,
     InternalError,
@@ -137,7 +137,7 @@ async def test_consume_all_multiple_events(
         TaskStatusUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             final=True,
         ),
     ]
@@ -180,7 +180,7 @@ async def test_consume_until_message(
         TaskStatusUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
-            status=TaskStatus(state=TaskState.working),
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
             final=True,
         ),
     ]

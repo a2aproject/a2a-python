@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     MessageSendParams,
@@ -54,7 +54,7 @@ def test_create_task_obj():
     task = create_task_obj(send_params)
     assert task.id is not None
     assert task.context_id == message.context_id
-    assert task.status.state == TaskState.submitted
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert len(task.history) == 1
     assert task.history[0] == message
 
@@ -107,7 +107,7 @@ def test_append_artifact_to_task():
     task = Task(**MINIMAL_TASK)
     assert task.id == 'task-abc'
     assert task.context_id == 'session-xyz'
-    assert task.status.state == TaskState.submitted
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert task.history is None
     assert task.artifacts is None
     assert task.metadata is None
