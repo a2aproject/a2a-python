@@ -31,7 +31,7 @@ def sample_message() -> types.Message:
             ),
             types.Part(root=types.DataPart(data={'key': 'value'})),
         ],
-        metadata={'source': 'test', 'priority': 5},
+        metadata={'source': 'test'},
     )
 
 
