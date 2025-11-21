@@ -216,7 +216,7 @@ class DatabaseTaskStore(TaskStore):
                             .as_string()
                             .is_(None),
                             self.task_model.status['timestamp'].as_string()
-                            >= start_task.status.timestamp,
+                            <= start_task.status.timestamp,
                         )
                     )
                 else:
