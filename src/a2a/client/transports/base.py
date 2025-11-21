@@ -27,6 +27,7 @@ class ClientTransport(ABC):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task | Message:
         """Sends a non-streaming message request to the agent."""
 
@@ -36,6 +37,7 @@ class ClientTransport(ABC):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
@@ -49,6 +51,7 @@ class ClientTransport(ABC):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -67,6 +70,7 @@ class ClientTransport(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -76,6 +80,7 @@ class ClientTransport(ABC):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -85,6 +90,7 @@ class ClientTransport(ABC):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -94,6 +100,7 @@ class ClientTransport(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
@@ -106,6 +113,7 @@ class ClientTransport(ABC):
         self,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the AgentCard."""
 

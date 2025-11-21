@@ -2,7 +2,7 @@ import asyncio
 
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
-from unittest.mock import ANY, AsyncMock
+from unittest.mock import ANY, AsyncMock, patch
 
 import grpc
 import httpx
@@ -11,6 +11,8 @@ import pytest_asyncio
 
 from grpc.aio import Channel
 
+from a2a.client import ClientConfig
+from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.grpc import GrpcTransport
@@ -835,3 +837,61 @@ async def test_grpc_transport_get_card(
     assert transport._needs_extended_card is False
 
     await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_base_client_sends_message_with_extensions(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """
+    Integration test for BaseClient with JSON-RPC transport to ensure extensions are included in headers.
+    """
+    transport = jsonrpc_setup.transport
+    agent_card.capabilities.streaming = False
+
+    # Create a BaseClient instance
+    client = BaseClient(
+        card=agent_card,
+        config=ClientConfig(streaming=False),
+        transport=transport,
+        consumers=[],
+        middleware=[],
+    )
+
+    message_to_send = Message(
+        role=Role.user,
+        message_id='msg-integration-test-extensions',
+        parts=[Part(root=TextPart(text='Hello, extensions test!'))],
+    )
+    extensions = [
+        'https://example.com/test-ext/v1',
+        'https://example.com/test-ext/v2',
+    ]
+
+    with patch.object(
+        transport, '_send_request', new_callable=AsyncMock
+    ) as mock_send_request:
+        mock_send_request.return_value = {
+            'id': '123',
+            'jsonrpc': '2.0',
+            'result': TASK_FROM_BLOCKING.model_dump(mode='json'),
+        }
+
+        # Call send_message on the BaseClient
+        async for _ in client.send_message(
+            request=message_to_send, extensions=extensions
+        ):
+            pass
+
+        mock_send_request.assert_called_once()
+        call_args, _ = mock_send_request.call_args
+        kwargs = call_args[1]
+        headers = kwargs.get('headers', {})
+        assert 'X-A2A-Extensions' in headers
+        assert (
+            headers['X-A2A-Extensions']
+            == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+        )
+
+    if hasattr(transport, 'close'):
+        await transport.close()
