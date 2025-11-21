@@ -1,4 +1,40 @@
-# Changelog
+ # Changelog
+
+## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.3.15) (2025-11-19)
+
+
+### Features
+
+* Add client-side extension support ([#525](https://github.com/a2aproject/a2a-python/issues/525)) ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
+* **rest, jsonrpc:** Add client-side extension support ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
+
+## [0.3.14](https://github.com/a2aproject/a2a-python/compare/v0.3.13...v0.3.14) (2025-11-17)
+
+
+### Features
+
+* **jsonrpc:** add option to disable oversized payload check in JSONRPC applications ([ba142df](https://github.com/a2aproject/a2a-python/commit/ba142df821d1c06be0b96e576fd43015120fcb0b))
+
+## [0.3.13](https://github.com/a2aproject/a2a-python/compare/v0.3.12...v0.3.13) (2025-11-13)
+
+
+### Bug Fixes
+
+* return entire history when history_length=0 ([#537](https://github.com/a2aproject/a2a-python/issues/537)) ([acdc0de](https://github.com/a2aproject/a2a-python/commit/acdc0de4fa03d34a6b287ab252ff51b19c3016b5))
+
+## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
+
+
+### Bug Fixes
+
+* **grpc:** Add `extensions` to `Artifact` converters. ([#523](https://github.com/a2aproject/a2a-python/issues/523)) ([c03129b](https://github.com/a2aproject/a2a-python/commit/c03129b99a663ae1f1ae72f20e4ead7807ede941))
+
+## [0.3.11](https://github.com/a2aproject/a2a-python/compare/v0.3.10...v0.3.11) (2025-11-07)
+
+
+### Bug Fixes
+
+* add metadata to send message request ([12b4a1d](https://github.com/a2aproject/a2a-python/commit/12b4a1d565a53794f5b55c8bd1728221c906ed41))
 
 ## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
 
