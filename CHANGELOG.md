@@ -1,4 +1,11 @@
- # Changelog
+# Changelog
+
+## [0.3.16](https://github.com/a2aproject/a2a-python/compare/v0.3.15...v0.3.16) (2025-11-21)
+
+
+### Bug Fixes
+
+* Ensure metadata propagation for `Task` `ToProto` and `FromProto` conversion ([#557](https://github.com/a2aproject/a2a-python/issues/557)) ([fc31d03](https://github.com/a2aproject/a2a-python/commit/fc31d03e8c6acb68660f6d1924262e16933c5d50))
 
 ## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.3.15) (2025-11-19)
 
