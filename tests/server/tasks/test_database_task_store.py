@@ -197,6 +197,16 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             5,
             'dGFzay0w',  # base64 for 'task-0'
         ),
+        # Pagination (same timestamp)
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0x',  # base64 for 'task-1'
+            ),
+            ['task-1', 'task-0'],
+            5,
+            'dGFzay00',  # base64 for 'task-4'
+        ),
         # Pagination (final page)
         (
             ListTasksParams(

@@ -164,6 +164,7 @@ class DatabaseTaskStore(TaskStore):
         """Retrieves all tasks from the database."""
         await self._ensure_initialized()
         async with self.async_session_maker() as session:
+            timestamp_col = self.task_model.status['timestamp'].as_string()
             base_stmt = select(self.task_model)
 
             # Add filters
@@ -181,8 +182,7 @@ class DatabaseTaskStore(TaskStore):
                     params.last_updated_after / 1000, tz=timezone.utc
                 ).isoformat()
                 base_stmt = base_stmt.where(
-                    self.task_model.status['timestamp'].as_string()
-                    >= last_updated_after_iso
+                    timestamp_col >= last_updated_after_iso
                 )
 
             # Get total count
@@ -190,10 +190,7 @@ class DatabaseTaskStore(TaskStore):
             total_count = (await session.execute(count_stmt)).scalar_one()
 
             stmt = base_stmt.order_by(
-                self.task_model.status['timestamp']
-                .as_string()
-                .desc()
-                .nulls_last(),
+                timestamp_col.desc().nulls_last(),
                 self.task_model.id.desc(),
             )
 
@@ -212,19 +209,18 @@ class DatabaseTaskStore(TaskStore):
                 if start_task.status.timestamp:
                     stmt = stmt.where(
                         or_(
-                            self.task_model.status['timestamp']
-                            .as_string()
-                            .is_(None),
-                            self.task_model.status['timestamp'].as_string()
-                            <= start_task.status.timestamp,
+                            and_(
+                                timestamp_col == start_task.status.timestamp,
+                                self.task_model.id <= start_task.id,
+                            ),
+                            timestamp_col < start_task.status.timestamp,
+                            timestamp_col.is_(None),
                         )
                     )
                 else:
                     stmt = stmt.where(
                         and_(
-                            self.task_model.status['timestamp']
-                            .as_string()
-                            .is_(None),
+                            timestamp_col.is_(None),
                             self.task_model.id <= start_task.id,
                         )
                     )
