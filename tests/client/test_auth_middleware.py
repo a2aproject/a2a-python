@@ -106,10 +106,10 @@ def store():
 
 
 @pytest.mark.asyncio
-async def test_auth_interceptor_skips_when_no_agent_card(store):
-    """
-    Tests that the AuthInterceptor does not modify the request when no AgentCard is provided.
-    """
+async def test_auth_interceptor_skips_when_no_agent_card(
+    store: InMemoryContextCredentialStore,
+) -> None:
+    """Tests that the AuthInterceptor does not modify the request when no AgentCard is provided."""
     request_payload = {'foo': 'bar'}
     http_kwargs = {'fizz': 'buzz'}
     auth_interceptor = AuthInterceptor(credential_service=store)
@@ -126,9 +126,10 @@ async def test_auth_interceptor_skips_when_no_agent_card(store):
 
 
 @pytest.mark.asyncio
-async def test_in_memory_context_credential_store(store):
-    """
-    Verifies that InMemoryContextCredentialStore correctly stores and retrieves
+async def test_in_memory_context_credential_store(
+    store: InMemoryContextCredentialStore,
+) -> None:
+    """Verifies that InMemoryContextCredentialStore correctly stores and retrieves
     credentials based on the session ID in the client context.
     """
     session_id = 'session-id'
@@ -163,11 +164,8 @@ async def test_in_memory_context_credential_store(store):
 
 @pytest.mark.asyncio
 @respx.mock
-async def test_client_with_simple_interceptor():
-    """
-    Ensures that a custom HeaderInterceptor correctly injects a static header
-    into outbound HTTP requests from the A2AClient.
-    """
+async def test_client_with_simple_interceptor() -> None:
+    """Ensures that a custom HeaderInterceptor correctly injects a static header into outbound HTTP requests from the A2AClient."""
     url = 'http://agent.com/rpc'
     interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
     card = AgentCard(
@@ -196,9 +194,7 @@ async def test_client_with_simple_interceptor():
 
 @dataclass
 class AuthTestCase:
-    """
-    Represents a test scenario for verifying authentication behavior in AuthInterceptor.
-    """
+    """Represents a test scenario for verifying authentication behavior in AuthInterceptor."""
 
     url: str
     """The endpoint URL of the agent to which the request is sent."""
@@ -284,11 +280,10 @@ bearer_test_case = AuthTestCase(
     [api_key_test_case, oauth2_test_case, oidc_test_case, bearer_test_case],
 )
 @respx.mock
-async def test_auth_interceptor_variants(test_case, store):
-    """
-    Parametrized test verifying that AuthInterceptor correctly attaches credentials
-    based on the defined security scheme in the AgentCard.
-    """
+async def test_auth_interceptor_variants(
+    test_case: AuthTestCase, store: InMemoryContextCredentialStore
+) -> None:
+    """Parametrized test verifying that AuthInterceptor correctly attaches credentials based on the defined security scheme in the AgentCard."""
     await store.set_credentials(
         test_case.session_id, test_case.scheme_name, test_case.credential
     )
@@ -329,12 +324,9 @@ async def test_auth_interceptor_variants(test_case, store):
 
 @pytest.mark.asyncio
 async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
-    store,
-):
-    """
-    Tests that AuthInterceptor skips a scheme if it's listed in security requirements
-    but not defined in security_schemes.
-    """
+    store: InMemoryContextCredentialStore,
+) -> None:
+    """Tests that AuthInterceptor skips a scheme if it's listed in security requirements but not defined in security_schemes."""
     scheme_name = 'missing'
     session_id = 'session-id'
     credential = 'dummy-token'

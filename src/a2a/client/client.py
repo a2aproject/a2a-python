@@ -67,6 +67,9 @@ class ClientConfig:
     )
     """Push notification callbacks to use for every request."""
 
+    extensions: list[str] = dataclasses.field(default_factory=list)
+    """A list of extension URIs the client supports."""
+
 
 UpdateEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None
 # Alias for emitted events from client
@@ -110,6 +113,8 @@ class Client(ABC):
         request: Message,
         *,
         context: ClientCallContext | None = None,
+        request_metadata: dict[str, Any] | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the server.
 
@@ -128,6 +133,7 @@ class Client(ABC):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -137,6 +143,7 @@ class Client(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -146,6 +153,7 @@ class Client(ABC):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -155,6 +163,7 @@ class Client(ABC):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -164,6 +173,7 @@ class Client(ABC):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
         return
@@ -171,7 +181,10 @@ class Client(ABC):
 
     @abstractmethod
     async def get_card(
-        self, *, context: ClientCallContext | None = None
+        self,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
 
