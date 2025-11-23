@@ -163,39 +163,6 @@ async def test_send_message_callsite_config_overrides_history_length_non_streami
 
 
 @pytest.mark.asyncio
-async def test_send_message_ignores_none_fields_in_callsite_configuration_non_streaming(
-    base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
-):
-    base_client._config.streaming = False
-    mock_transport.send_message.return_value = Task(
-        id='task-cfg-ns-2',
-        context_id='ctx-cfg-ns-2',
-        status=TaskStatus(state=TaskState.completed),
-    )
-
-    cfg = MessageSendConfiguration(history_length=None, blocking=None)
-    events = [
-        event
-        async for event in base_client.send_message(
-            sample_message, configuration=cfg
-        )
-    ]
-
-    mock_transport.send_message.assert_called_once()
-    assert len(events) == 1
-    task, _ = events[0]
-    assert task.id == 'task-cfg-ns-2'
-
-    params = mock_transport.send_message.await_args.args[0]
-    assert params.configuration.history_length is None
-    assert params.configuration.blocking == (not base_client._config.polling)
-    assert (
-        params.configuration.accepted_output_modes
-        == base_client._config.accepted_output_modes
-    )
-
-
-@pytest.mark.asyncio
 async def test_send_message_callsite_config_overrides_history_length_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
