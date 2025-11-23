@@ -139,7 +139,12 @@ async def test_send_message_callsite_config_overrides_history_length_non_streami
         status=TaskStatus(state=TaskState.completed),
     )
 
-    cfg = MessageSendConfiguration(history_length=2)
+    # history_length だけでなく、複数フィールドを明示的に上書き
+    cfg = MessageSendConfiguration(
+        history_length=2,
+        blocking=False,
+        accepted_output_modes=['application/json'],
+    )
     events = [
         event
         async for event in base_client.send_message(
@@ -155,11 +160,8 @@ async def test_send_message_callsite_config_overrides_history_length_non_streami
 
     params = mock_transport.send_message.await_args.args[0]
     assert params.configuration.history_length == 2
-    assert params.configuration.blocking == (not base_client._config.polling)
-    assert (
-        params.configuration.accepted_output_modes
-        == base_client._config.accepted_output_modes
-    )
+    assert params.configuration.blocking is False
+    assert params.configuration.accepted_output_modes == ['application/json']
 
 
 @pytest.mark.asyncio
@@ -178,7 +180,11 @@ async def test_send_message_callsite_config_overrides_history_length_streaming(
 
     mock_transport.send_message_streaming.return_value = create_stream()
 
-    cfg = MessageSendConfiguration(history_length=0)
+    cfg = MessageSendConfiguration(
+        history_length=0,
+        blocking=True,
+        accepted_output_modes=['text/plain'],
+    )
     events = [
         event
         async for event in base_client.send_message(
@@ -194,8 +200,5 @@ async def test_send_message_callsite_config_overrides_history_length_streaming(
 
     params = mock_transport.send_message_streaming.call_args.args[0]
     assert params.configuration.history_length == 0
-    assert params.configuration.blocking == (not base_client._config.polling)
-    assert (
-        params.configuration.accepted_output_modes
-        == base_client._config.accepted_output_modes
-    )
+    assert params.configuration.blocking is True
+    assert params.configuration.accepted_output_modes == ['text/plain']
