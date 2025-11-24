@@ -9,7 +9,13 @@ from httpx_sse import EventSource, ServerSentEvent
 from a2a.client import create_text_message_object
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import AgentCard, MessageSendParams, Role
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+    MessageSendParams,
+    Role,
+)
 
 
 @pytest.fixture
@@ -119,3 +125,106 @@ class TestRestTransportExtensions:
         assert (
             headers[HTTP_EXTENSION_HEADER] == 'https://example.com/test-ext/v2'
         )
+
+    @pytest.mark.asyncio
+    async def test_get_card_no_card_provided_with_extensions(
+        self, mock_httpx_client: AsyncMock
+    ):
+        """Test get_card with extensions set in Client when no card is initially provided.
+        Tests that the extensions are added to the HTTP GET request."""
+        extensions = [
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        ]
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            url='http://agent.example.com/api',
+            extensions=extensions,
+        )
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'name': 'Test Agent',
+            'description': 'Test Agent Description',
+            'url': 'http://agent.example.com/api',
+            'version': '1.0.0',
+            'default_input_modes': ['text'],
+            'default_output_modes': ['text'],
+            'capabilities': AgentCapabilities().model_dump(),
+            'skills': [],
+        }
+        mock_httpx_client.get.return_value = mock_response
+
+        await client.get_card()
+
+        mock_httpx_client.get.assert_called_once()
+        _, mock_kwargs = mock_httpx_client.get.call_args
+
+        headers = mock_kwargs.get('headers', {})
+        assert HTTP_EXTENSION_HEADER in headers
+        header_value = headers[HTTP_EXTENSION_HEADER]
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
+
+        expected_extensions = {
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        }
+        assert len(actual_extensions_list) == 2
+        assert actual_extensions == expected_extensions
+
+    @pytest.mark.asyncio
+    async def test_get_card_with_extended_card_support_with_extensions(
+        self, mock_httpx_client: AsyncMock
+    ):
+        """Test get_card with extensions passed to get_card call when extended card support is enabled.
+        Tests that the extensions are added to the GET request."""
+        extensions = [
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        ]
+        agent_card = AgentCard(
+            name='Test Agent',
+            description='Test Agent Description',
+            url='http://agent.example.com/api',
+            version='1.0.0',
+            default_input_modes=['text'],
+            default_output_modes=['text'],
+            capabilities=AgentCapabilities(),
+            skills=[],
+            supports_authenticated_extended_card=True,
+        )
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=agent_card,
+        )
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = agent_card.model_dump(mode='json')
+        mock_httpx_client.send.return_value = mock_response
+
+        with patch.object(
+            client, '_send_get_request', new_callable=AsyncMock
+        ) as mock_send_get_request:
+            mock_send_get_request.return_value = agent_card.model_dump(
+                mode='json'
+            )
+            await client.get_card(extensions=extensions)
+
+        mock_send_get_request.assert_called_once()
+        _, _, mock_kwargs = mock_send_get_request.call_args[0]
+
+        headers = mock_kwargs.get('headers', {})
+        assert HTTP_EXTENSION_HEADER in headers
+        header_value = headers[HTTP_EXTENSION_HEADER]
+        actual_extensions_list = [e.strip() for e in header_value.split(',')]
+        actual_extensions = set(actual_extensions_list)
+
+        expected_extensions = {
+            'https://example.com/test-ext/v1',
+            'https://example.com/test-ext/v2',
+        }
+        assert len(actual_extensions_list) == 2
+        assert actual_extensions == expected_extensions

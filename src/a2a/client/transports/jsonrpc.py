@@ -378,12 +378,14 @@ class JsonRpcTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
         card = self.agent_card
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(
-                http_kwargs=self._get_http_args(context)
-            )
+            card = await resolver.get_agent_card(http_kwargs=modified_kwargs)
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
             )
@@ -393,10 +395,6 @@ class JsonRpcTransport(ClientTransport):
             return card
 
         request = GetAuthenticatedExtendedCardRequest(id=str(uuid4()))
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
         payload, modified_kwargs = await self._apply_interceptors(
             request.method,
             request.model_dump(mode='json', exclude_none=True),
