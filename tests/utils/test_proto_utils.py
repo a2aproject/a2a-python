@@ -54,6 +54,7 @@ def sample_task(sample_message: types.Message) -> types.Task:
                 ],
             )
         ],
+        metadata={'source': 'test'},
     )
 
 
@@ -600,3 +601,30 @@ class TestProtoUtils:
         assert final_result['nested']['another_large'] == 12345678901234567890
         assert isinstance(final_result['nested']['another_large'], int)
         assert final_result['nested']['normal'] == 'text'
+
+    def test_task_conversion_roundtrip(
+        self, sample_task: types.Task, sample_message: types.Message
+    ):
+        """Test conversion of Task to proto and back."""
+        proto_task = proto_utils.ToProto.task(sample_task)
+        assert isinstance(proto_task, a2a_pb2.Task)
+
+        roundtrip_task = proto_utils.FromProto.task(proto_task)
+        assert roundtrip_task.id == 'task-1'
+        assert roundtrip_task.context_id == 'ctx-1'
+        assert roundtrip_task.status == types.TaskStatus(
+            state=types.TaskState.working, message=sample_message
+        )
+        assert roundtrip_task.history == [sample_message]
+        assert roundtrip_task.artifacts == [
+            types.Artifact(
+                artifact_id='art-1',
+                description='',
+                metadata={},
+                name='',
+                parts=[
+                    types.Part(root=types.TextPart(text='Artifact content'))
+                ],
+            )
+        ]
+        assert roundtrip_task.metadata == {'source': 'test'}

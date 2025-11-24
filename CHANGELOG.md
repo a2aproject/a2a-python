@@ -1,4 +1,18 @@
- # Changelog
+# Changelog
+
+## [0.3.17](https://github.com/a2aproject/a2a-python/compare/v0.3.16...v0.3.17) (2025-11-24)
+
+
+### Features
+
+* **client:** allow specifying `history_length` via call-site `MessageSendConfiguration` in `BaseClient.send_message` ([53bbf7a](https://github.com/a2aproject/a2a-python/commit/53bbf7ae3ad58fb0c10b14da05cf07c0a7bd9651))
+
+## [0.3.16](https://github.com/a2aproject/a2a-python/compare/v0.3.15...v0.3.16) (2025-11-21)
+
+
+### Bug Fixes
+
+* Ensure metadata propagation for `Task` `ToProto` and `FromProto` conversion ([#557](https://github.com/a2aproject/a2a-python/issues/557)) ([fc31d03](https://github.com/a2aproject/a2a-python/commit/fc31d03e8c6acb68660f6d1924262e16933c5d50))
 
 ## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.3.15) (2025-11-19)
 

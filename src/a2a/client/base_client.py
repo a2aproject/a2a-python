@@ -49,6 +49,7 @@ class BaseClient(Client):
         self,
         request: Message,
         *,
+        configuration: MessageSendConfiguration | None = None,
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
         extensions: list[str] | None = None,
@@ -61,6 +62,7 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
+            configuration: Optional per-call overrides for message sending behavior.
             context: The client call context.
             request_metadata: Extensions Metadata attached to the request.
             extensions: List of extensions to be activated.
@@ -68,7 +70,7 @@ class BaseClient(Client):
         Yields:
             An async iterator of `ClientEvent` or a final `Message` response.
         """
-        config = MessageSendConfiguration(
+        base_config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
             push_notification_config=(
@@ -77,6 +79,15 @@ class BaseClient(Client):
                 else None
             ),
         )
+        if configuration is not None:
+            update_data = configuration.model_dump(
+                exclude_unset=True,
+                by_alias=False,
+            )
+            config = base_config.model_copy(update=update_data)
+        else:
+            config = base_config
+
         params = MessageSendParams(
             message=request, configuration=config, metadata=request_metadata
         )
