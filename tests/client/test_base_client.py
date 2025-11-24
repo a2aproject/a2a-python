@@ -157,7 +157,7 @@ async def test_send_message_callsite_config_overrides_non_streaming(
     task, _ = events[0]
     assert task.id == 'task-cfg-ns-1'
 
-    params = mock_transport.send_message.await_args.args[0]
+    params = mock_transport.send_message.call_args[0][0]
     assert params.configuration.history_length == 2
     assert params.configuration.blocking is False
     assert params.configuration.accepted_output_modes == ['application/json']
@@ -197,7 +197,7 @@ async def test_send_message_callsite_config_overrides_streaming(
     task, _ = events[0]
     assert task.id == 'task-cfg-s-1'
 
-    params = mock_transport.send_message_streaming.call_args.args[0]
+    params = mock_transport.send_message_streaming.call_args[0][0]
     assert params.configuration.history_length == 0
     assert params.configuration.blocking is True
     assert params.configuration.accepted_output_modes == ['text/plain']
