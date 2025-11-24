@@ -1,3 +1,5 @@
+from typing import Any
+
 from a2a.types import AgentCard, AgentExtension
 
 
@@ -25,3 +27,15 @@ def find_extension_by_uri(card: AgentCard, uri: str) -> AgentExtension | None:
             return ext
 
     return None
+
+
+def update_extension_header(
+    http_kwargs: dict[str, Any] | None,
+    extensions: list[str] | None,
+) -> dict[str, Any]:
+    """Update the X-A2A-Extensions header with active extensions."""
+    http_kwargs = http_kwargs or {}
+    if extensions is not None:
+        headers = http_kwargs.setdefault('headers', {})
+        headers[HTTP_EXTENSION_HEADER] = ','.join(extensions)
+    return http_kwargs

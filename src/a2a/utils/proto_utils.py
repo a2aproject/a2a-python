@@ -203,6 +203,7 @@ class ToProto:
                 if task.history
                 else None
             ),
+            metadata=cls.metadata(task.metadata),
         )
 
     @classmethod
@@ -660,6 +661,7 @@ class FromProto:
             status=cls.task_status(task.status),
             artifacts=[cls.artifact(a) for a in task.artifacts],
             history=[cls.message(h) for h in task.history],
+            metadata=cls.metadata(task.metadata),
         )
 
     @classmethod
