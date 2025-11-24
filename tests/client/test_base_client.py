@@ -129,7 +129,7 @@ async def test_send_message_non_streaming_agent_capability_false(
 
 
 @pytest.mark.asyncio
-async def test_send_message_callsite_config_overrides_multiple_fields_non_streaming(
+async def test_send_message_callsite_config_overrides_non_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
     base_client._config.streaming = False
@@ -164,7 +164,7 @@ async def test_send_message_callsite_config_overrides_multiple_fields_non_stream
 
 
 @pytest.mark.asyncio
-async def test_send_message_callsite_config_overrides_multiple_fields_streaming(
+async def test_send_message_callsite_config_overrides_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
     base_client._config.streaming = True
