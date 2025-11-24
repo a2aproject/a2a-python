@@ -2,6 +2,8 @@ import logging
 
 from collections.abc import AsyncGenerator
 
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+
 
 try:
     import grpc
@@ -22,6 +24,8 @@ from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -167,6 +171,19 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
         return proto_utils.FromProto.task(task)
+
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        response = await self.stub.ListTasks(
+            proto_utils.ToProto.list_tasks_request(request)
+        )
+        page_size = request.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+        return proto_utils.FromProto.list_tasks_result(response, page_size)
 
     async def cancel_task(
         self,

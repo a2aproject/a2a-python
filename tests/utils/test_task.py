@@ -6,7 +6,12 @@ from unittest.mock import patch
 import pytest
 
 from a2a.types import Artifact, Message, Part, Role, TextPart
-from a2a.utils.task import completed_task, new_task
+from a2a.utils.task import (
+    completed_task,
+    decode_page_token,
+    encode_page_token,
+    new_task,
+)
 
 
 class TestTask(unittest.TestCase):
@@ -187,6 +192,23 @@ class TestTask(unittest.TestCase):
                 artifacts=['not an artifact'],
                 history=[],
             )
+
+    page_token = 'd47a95ba-0f39-4459-965b-3923cdd2ff58'
+    encoded_page_token = 'ZDQ3YTk1YmEtMGYzOS00NDU5LTk2NWItMzkyM2NkZDJmZjU4'  # base64 for 'd47a95ba-0f39-4459-965b-3923cdd2ff58'
+
+    def test_encode_page_token(self):
+        assert encode_page_token(self.page_token) == self.encoded_page_token
+
+    def test_decode_page_token_succeeds(self):
+        assert decode_page_token(self.encoded_page_token) == self.page_token
+
+    def test_decode_page_token_fails(self):
+        with pytest.raises(ValueError) as excinfo:
+            decode_page_token('invalid')
+
+        assert 'Token is not a valid base64-encoded cursor.' in str(
+            excinfo.value
+        )
 
 
 if __name__ == '__main__':
