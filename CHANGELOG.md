@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.19](https://github.com/a2aproject/a2a-python/compare/v0.3.18...v0.3.19) (2025-11-25)
+
+
+### Bug Fixes
+
+* **jsonrpc, rest:** `extensions` support in `get_card` methods in `json-rpc` and `rest` transports ([#564](https://github.com/a2aproject/a2a-python/issues/564)) ([847f18e](https://github.com/a2aproject/a2a-python/commit/847f18eff59985f447c39a8e5efde87818b68d15))
+
 ## [0.3.18](https://github.com/a2aproject/a2a-python/compare/v0.3.17...v0.3.18) (2025-11-24)
 
 
