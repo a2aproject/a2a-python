@@ -1,5 +1,7 @@
 """Custom exceptions for the A2A client."""
 
+from collections.abc import Mapping
+
 from a2a.types import JSONRPCErrorResponse
 
 
@@ -10,16 +12,27 @@ class A2AClientError(Exception):
 class A2AClientHTTPError(A2AClientError):
     """Client exception for HTTP errors received from the server."""
 
-    def __init__(self, status_code: int, message: str):
+    def __init__(
+        self,
+        status: int,
+        message: str,
+        body: str | None = None,
+        headers: Mapping[str, str] | None = None,
+    ):
         """Initializes the A2AClientHTTPError.
 
         Args:
-            status_code: The HTTP status code of the response.
+            status: The HTTP status code of the response.
             message: A descriptive error message.
+            body: The raw response body, if available.
+            headers: The HTTP response headers.
         """
-        self.status_code = status_code
+        self.status = status
+        self.status_code = status
         self.message = message
-        super().__init__(f'HTTP Error {status_code}: {message}')
+        self.body = body
+        self.headers = dict(headers or {})
+        super().__init__(f'HTTP {status} - {message}')
 
 
 class A2AClientJSONError(A2AClientError):

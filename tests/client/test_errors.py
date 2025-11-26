@@ -29,11 +29,13 @@ class TestA2AClientHTTPError:
         assert isinstance(error, A2AClientError)
         assert error.status_code == 404
         assert error.message == 'Not Found'
+        assert error.body is None
+        assert error.headers == {}
 
     def test_message_formatting(self) -> None:
         """Test that the error message is formatted correctly."""
         error = A2AClientHTTPError(500, 'Internal Server Error')
-        assert str(error) == 'HTTP Error 500: Internal Server Error'
+        assert str(error) == 'HTTP 500 - Internal Server Error'
 
     def test_inheritance(self) -> None:
         """Test that A2AClientHTTPError inherits from A2AClientError."""
@@ -45,7 +47,7 @@ class TestA2AClientHTTPError:
         error = A2AClientHTTPError(403, '')
         assert error.status_code == 403
         assert error.message == ''
-        assert str(error) == 'HTTP Error 403: '
+        assert str(error) == 'HTTP 403 - '
 
     def test_with_various_status_codes(self) -> None:
         """Test with different HTTP status codes."""
@@ -64,7 +66,7 @@ class TestA2AClientHTTPError:
             error = A2AClientHTTPError(status_code, message)
             assert error.status_code == status_code
             assert error.message == message
-            assert str(error) == f'HTTP Error {status_code}: {message}'
+            assert str(error) == f'HTTP {status_code} - {message}'
 
 
 class TestA2AClientJSONError:
@@ -150,7 +152,7 @@ class TestExceptionRaising:
         error = excinfo.value
         assert error.status_code == 429
         assert error.message == 'Too Many Requests'
-        assert str(error) == 'HTTP Error 429: Too Many Requests'
+        assert str(error) == 'HTTP 429 - Too Many Requests'
 
     def test_raising_json_error(self) -> NoReturn:
         """Test raising a JSON error and checking its properties."""
@@ -175,9 +177,9 @@ class TestExceptionRaising:
 @pytest.mark.parametrize(
     'status_code,message,expected',
     [
-        (400, 'Bad Request', 'HTTP Error 400: Bad Request'),
-        (404, 'Not Found', 'HTTP Error 404: Not Found'),
-        (500, 'Server Error', 'HTTP Error 500: Server Error'),
+        (400, 'Bad Request', 'HTTP 400 - Bad Request'),
+        (404, 'Not Found', 'HTTP 404 - Not Found'),
+        (500, 'Server Error', 'HTTP 500 - Server Error'),
     ],
 )
 def test_http_error_parametrized(
