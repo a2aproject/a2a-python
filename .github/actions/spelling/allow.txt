@@ -63,7 +63,6 @@ oauthoidc
 oidc
 opensource
 otherurl
-postgres
 POSTGRES
 postgresql
 protoc
