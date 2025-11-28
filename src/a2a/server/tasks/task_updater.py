@@ -3,6 +3,8 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from a2a.server.events import EventQueue
 from a2a.server.id_generator import (
     IDGenerator,
@@ -88,22 +90,27 @@ class TaskUpdater:
                 self._terminal_state_reached = True
                 final = True
 
-            current_timestamp = (
-                timestamp
-                if timestamp
-                else datetime.now(timezone.utc).isoformat()
-            )
+            # Create proto timestamp from datetime
+            ts = Timestamp()
+            if timestamp:
+                # If timestamp string provided, parse it
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                ts.FromDatetime(dt)
+            else:
+                ts.FromDatetime(datetime.now(timezone.utc))
+
+            status = TaskStatus(state=state)
+            if message:
+                status.message.CopyFrom(message)
+            status.timestamp.CopyFrom(ts)
+
             await self.event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=self.task_id,
                     context_id=self.context_id,
                     final=final,
                     metadata=metadata,
-                    status=TaskStatus(
-                        state=state,
-                        message=message,
-                        timestamp=current_timestamp,
-                    ),
+                    status=status,
                 )
             )
 
@@ -225,7 +232,7 @@ class TaskUpdater:
             A new `Message` object.
         """
         return Message(
-            role=Role.agent,
+            role=Role.ROLE_AGENT,
             task_id=self.task_id,
             context_id=self.context_id,
             message_id=self._message_id_generator.generate(

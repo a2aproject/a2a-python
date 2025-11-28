@@ -1,15 +1,17 @@
 import asyncio
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Path, Request
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
 from a2a.types.a2a_pb2 import Task
+from google.protobuf.json_format import ParseDict
 
 
 class Notification(BaseModel):
     """Encapsulates default push notification data."""
+    model_config = ConfigDict(arbitrary_types_allowed=True)
 
     task: Task
     token: str
@@ -33,8 +35,9 @@ def create_notifications_app() -> FastAPI:
                 detail='Missing "x-a2a-notification-token" header.',
             )
         try:
-            task = Task.model_validate(await request.json())
-        except ValidationError as e:
+            json_data = await request.json()
+            task = ParseDict(json_data, Task())
+        except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
         async with store_lock:

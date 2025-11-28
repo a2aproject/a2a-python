@@ -10,13 +10,12 @@ from uuid import uuid4
 
 from a2a.types.a2a_pb2 import (
     Artifact,
-    MessageSendParams,
     Part,
+    SendMessageRequest,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 from a2a.utils.errors import ServerError, UnsupportedOperationError
 from a2a.utils.telemetry import trace_function
@@ -26,26 +25,27 @@ logger = logging.getLogger(__name__)
 
 
 @trace_function()
-def create_task_obj(message_send_params: MessageSendParams) -> Task:
+def create_task_obj(message_send_params: SendMessageRequest) -> Task:
     """Create a new task object from message send params.
 
     Generates UUIDs for task and context IDs if they are not already present in the message.
 
     Args:
-        message_send_params: The `MessageSendParams` object containing the initial message.
+        message_send_params: The `SendMessageRequest` object containing the initial message.
 
     Returns:
         A new `Task` object initialized with 'submitted' status and the input message in history.
     """
-    if not message_send_params.message.context_id:
-        message_send_params.message.context_id = str(uuid4())
+    if not message_send_params.request.context_id:
+        message_send_params.request.context_id = str(uuid4())
 
-    return Task(
+    task = Task(
         id=str(uuid4()),
-        context_id=message_send_params.message.context_id,
+        context_id=message_send_params.request.context_id,
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
-        history=[message_send_params.message],
     )
+    task.history.append(message_send_params.request)
+    return task
 
 
 @trace_function()
@@ -59,9 +59,6 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
         task: The `Task` object to modify.
         event: The `TaskArtifactUpdateEvent` containing the artifact data.
     """
-    if not task.artifacts:
-        task.artifacts = []
-
     new_artifact_data: Artifact = event.artifact
     artifact_id: str = new_artifact_data.artifact_id
     append_parts: bool = event.append or False
@@ -83,7 +80,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             logger.debug(
                 'Replacing artifact at id %s for task %s', artifact_id, task.id
             )
-            task.artifacts[existing_artifact_list_index] = new_artifact_data
+            task.artifacts[existing_artifact_list_index].CopyFrom(new_artifact_data)
         else:
             # Append the new artifact since no artifact with this index exists yet
             logger.debug(
@@ -118,10 +115,9 @@ def build_text_artifact(text: str, artifact_id: str) -> Artifact:
         artifact_id: The ID for the artifact.
 
     Returns:
-        An `Artifact` object containing a single `TextPart`.
+        An `Artifact` object containing a single text Part.
     """
-    text_part = TextPart(text=text)
-    part = Part(root=text_part)
+    part = Part(text=text)
     return Artifact(parts=[part], artifact_id=artifact_id)
 
 

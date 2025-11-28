@@ -22,7 +22,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
@@ -186,15 +185,15 @@ async def test_send_message_success_message(
         msg=a2a_pb2.Message(
             message_id='test',
             role=a2a_pb2.Role.ROLE_AGENT,
-            content=[
+            parts=[
                 a2a_pb2.Part(text='response message'),
             ],
         ),
     )
     request_handler.on_message_send.return_value = Message(
         message_id='test',
-        role=Role.agent,
-        parts=[Part(TextPart(text='response message'))],
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='response message')],
     )
 
     request = a2a_pb2.SendMessageRequest(
@@ -223,10 +222,10 @@ async def test_send_message_success_task(
             context_id='test_context_id',
             status=a2a_pb2.TaskStatus(
                 state=a2a_pb2.TaskState.TASK_STATE_COMPLETED,
-                update=a2a_pb2.Message(
+                message=a2a_pb2.Message(
                     message_id='test',
-                    role=a2a_pb2.ROLE_AGENT,
-                    content=[
+                    role=a2a_pb2.Role.ROLE_AGENT,
+                    parts=[
                         a2a_pb2.Part(text='response task message'),
                     ],
                 ),
@@ -240,8 +239,8 @@ async def test_send_message_success_task(
             state=TaskState.TASK_STATE_COMPLETED,
             message=Message(
                 message_id='test',
-                role=Role.agent,
-                parts=[Part(TextPart(text='response task message'))],
+                role=Role.ROLE_AGENT,
+                parts=[Part(text='response task message')],
             ),
         ),
     )
@@ -278,13 +277,13 @@ async def test_streaming_message_request_body_consumption(
         """Mock streaming response generator."""
         yield Message(
             message_id='stream_msg_1',
-            role=Role.agent,
-            parts=[Part(TextPart(text='First streaming response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='First streaming response')],
         )
         yield Message(
             message_id='stream_msg_2',
-            role=Role.agent,
-            parts=[Part(TextPart(text='Second streaming response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='Second streaming response')],
         )
 
     request_handler.on_message_send_stream.return_value = mock_stream_response()
@@ -294,7 +293,7 @@ async def test_streaming_message_request_body_consumption(
         request=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
-            content=[a2a_pb2.Part(text='Test streaming message')],
+            parts=[a2a_pb2.Part(text='Test streaming message')],
         ),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
@@ -325,8 +324,8 @@ async def test_streaming_endpoint_with_invalid_content_type(
     async def mock_stream_response():
         yield Message(
             message_id='stream_msg_1',
-            role=Role.agent,
-            parts=[Part(TextPart(text='Response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='Response')],
         )
 
     request_handler.on_message_send_stream.return_value = mock_stream_response()
@@ -335,7 +334,7 @@ async def test_streaming_endpoint_with_invalid_content_type(
         request=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
-            content=[a2a_pb2.Part(text='Test message')],
+            parts=[a2a_pb2.Part(text='Test message')],
         ),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )

@@ -4,7 +4,7 @@ from unittest.mock import patch
 
 import pytest
 
-from a2a.types.a2a_pb2 import (
+from a2a.types import (
     InternalError,
     InvalidRequestError,
     MethodNotFoundError,

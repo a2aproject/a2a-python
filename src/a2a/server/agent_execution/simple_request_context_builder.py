@@ -3,7 +3,7 @@ import asyncio
 from a2a.server.agent_execution import RequestContext, RequestContextBuilder
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks import TaskStore
-from a2a.types.a2a_pb2 import MessageSendParams, Task
+from a2a.types.a2a_pb2 import SendMessageRequest, Task
 
 
 class SimpleRequestContextBuilder(RequestContextBuilder):
@@ -18,7 +18,7 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
         Args:
             should_populate_referred_tasks: If True, the builder will fetch tasks
-                referenced in `params.message.reference_task_ids` and populate the
+                referenced in `params.request.reference_task_ids` and populate the
                 `related_tasks` field in the RequestContext. Defaults to False.
             task_store: The TaskStore instance to use for fetching referred tasks.
                 Required if `should_populate_referred_tasks` is True.
@@ -28,7 +28,7 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
     async def build(
         self,
-        params: MessageSendParams | None = None,
+        params: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
@@ -57,12 +57,12 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
             self._task_store
             and self._should_populate_referred_tasks
             and params
-            and params.message.reference_task_ids
+            and params.request.reference_task_ids
         ):
             tasks = await asyncio.gather(
                 *[
                     self._task_store.get(task_id)
-                    for task_id in params.message.reference_task_ids
+                    for task_id in params.request.reference_task_ids
                 ]
             )
             related_tasks = [x for x in tasks if x is not None]

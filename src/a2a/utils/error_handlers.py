@@ -16,7 +16,7 @@ else:
 
 
 from a2a._base import A2ABaseModel
-from a2a.types.a2a_pb2 import (
+from a2a.types.extras import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,

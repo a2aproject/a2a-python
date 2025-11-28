@@ -11,8 +11,8 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
-    TransportProtocol,
 )
+from a2a.types.extras import TransportProtocol
 
 
 @pytest.fixture
@@ -35,7 +35,7 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
     """Verify that the factory selects the preferred transport by default."""
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
-        supported_transports=[
+        supported_protocol_bindings=[
             TransportProtocol.jsonrpc,
             TransportProtocol.http_json,
         ],
@@ -53,16 +53,16 @@ def test_client_factory_selects_secondary_transport_url(
     base_agent_card: AgentCard,
 ):
     """Verify that the factory selects the correct URL for a secondary transport."""
-    base_agent_card.additional_interfaces = [
+    base_agent_card.additional_interfaces.append(
         AgentInterface(
-            transport=TransportProtocol.http_json,
+            protocol_binding=TransportProtocol.http_json,
             url='http://secondary-url.com',
         )
-    ]
+    )
     # Client prefers REST, which is available as a secondary transport
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
-        supported_transports=[
+        supported_protocol_bindings=[
             TransportProtocol.http_json,
             TransportProtocol.jsonrpc,
         ],
@@ -80,15 +80,15 @@ def test_client_factory_selects_secondary_transport_url(
 def test_client_factory_server_preference(base_agent_card: AgentCard):
     """Verify that the factory respects server transport preference."""
     base_agent_card.preferred_transport = TransportProtocol.http_json
-    base_agent_card.additional_interfaces = [
+    base_agent_card.additional_interfaces.append(
         AgentInterface(
-            transport=TransportProtocol.jsonrpc, url='http://secondary-url.com'
+            protocol_binding=TransportProtocol.jsonrpc, url='http://secondary-url.com'
         )
-    ]
+    )
     # Client supports both, but server prefers REST
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
-        supported_transports=[
+        supported_protocol_bindings=[
             TransportProtocol.jsonrpc,
             TransportProtocol.http_json,
         ],
@@ -104,7 +104,7 @@ def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
     """Verify that the factory raises an error if no compatible transport is found."""
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
-        supported_transports=[TransportProtocol.grpc],
+        supported_protocol_bindings=[TransportProtocol.grpc],
     )
     factory = ClientFactory(config)
     with pytest.raises(ValueError, match='no compatible transports found'):
@@ -234,7 +234,7 @@ async def test_client_factory_connect_with_extra_transports(
     base_agent_card.preferred_transport = 'custom'
     base_agent_card.url = 'custom://foo'
 
-    config = ClientConfig(supported_transports=['custom'])
+    config = ClientConfig(supported_protocol_bindings=['custom'])
 
     client = await ClientFactory.connect(
         base_agent_card,

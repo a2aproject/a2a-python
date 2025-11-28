@@ -1,6 +1,7 @@
 """Custom exceptions for A2A server-side errors."""
 
-from a2a.types.a2a_pb2 import (
+from a2a.types.extras import (
+    A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -45,22 +46,7 @@ class ServerError(Exception):
 
     def __init__(
         self,
-        error: (
-            JSONRPCError
-            | JSONParseError
-            | InvalidRequestError
-            | MethodNotFoundError
-            | InvalidParamsError
-            | InternalError
-            | TaskNotFoundError
-            | TaskNotCancelableError
-            | PushNotificationNotSupportedError
-            | UnsupportedOperationError
-            | ContentTypeNotSupportedError
-            | InvalidAgentResponseError
-            | AuthenticatedExtendedCardNotConfiguredError
-            | None
-        ),
+        error: A2AError | None,
     ):
         """Initializes the ServerError.
 
@@ -70,7 +56,7 @@ class ServerError(Exception):
         self.error = error
 
     def __str__(self) -> str:
-        """Returns a readable representation of the internal Pydantic error."""
+        """Returns a readable representation of the internal error."""
         if self.error is None:
             return 'None'
         if self.error.message is None:
@@ -78,5 +64,5 @@ class ServerError(Exception):
         return self.error.message
 
     def __repr__(self) -> str:
-        """Returns an unambiguous representation for developers showing how the ServerError was constructed with the internal Pydantic error."""
+        """Returns an unambiguous representation for developers showing how the ServerError was constructed with the internal error."""
         return f'{self.__class__.__name__}({self.error!r})'

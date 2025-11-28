@@ -91,10 +91,12 @@ def apply_history_length(task: Task, history_length: int | None) -> Task:
     # Apply historyLength parameter if specified
     if history_length is not None and history_length > 0 and task.history:
         # Limit history to the most recent N messages
-        limited_history = task.history[-history_length:]
+        limited_history = list(task.history[-history_length:])
         # Create a new task instance with limited history
         task_copy = Task()
         task_copy.CopyFrom(task)
-        task_copy.history = limited_history
+        # Clear and re-add history items
+        del task_copy.history[:]
+        task_copy.history.extend(limited_history)
         return task_copy
     return task

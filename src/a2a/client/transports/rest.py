@@ -359,6 +359,9 @@ class RestTransport(ClientTransport):
             '/v1/card', {}, modified_kwargs
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
+        # Update the transport's agent_card and mark extended card as fetched
+        self.agent_card = response
+        self._needs_extended_card = False
         return response
 
     async def close(self) -> None:

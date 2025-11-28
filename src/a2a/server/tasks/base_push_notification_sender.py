@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 import httpx
+from google.protobuf.json_format import MessageToDict
 
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
@@ -57,7 +58,7 @@ class BasePushNotificationSender(PushNotificationSender):
                 headers = {'X-A2A-Notification-Token': push_info.token}
             response = await self._client.post(
                 url,
-                json=task.model_dump(mode='json', exclude_none=True),
+                json=MessageToDict(task),
                 headers=headers,
             )
             response.raise_for_status()

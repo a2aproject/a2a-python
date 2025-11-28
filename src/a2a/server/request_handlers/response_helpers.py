@@ -3,7 +3,19 @@
 # response types
 from typing import TypeVar
 
+from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import Message as ProtoMessage
+
 from a2a.types.a2a_pb2 import (
+    Message,
+    SendMessageResponse as SendMessageResponseProto,
+    StreamResponse,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskPushNotificationConfig,
+    TaskStatusUpdateEvent,
+)
+from a2a.types.extras import (
     A2AError,
     CancelTaskResponse,
     CancelTaskSuccessResponse,
@@ -18,17 +30,12 @@ from a2a.types.a2a_pb2 import (
     JSONRPCErrorResponse,
     ListTaskPushNotificationConfigResponse,
     ListTaskPushNotificationConfigSuccessResponse,
-    Message,
     SendMessageResponse,
     SendMessageSuccessResponse,
     SendStreamingMessageResponse,
     SendStreamingMessageSuccessResponse,
     SetTaskPushNotificationConfigResponse,
     SetTaskPushNotificationConfigSuccessResponse,
-    Task,
-    TaskArtifactUpdateEvent,
-    TaskPushNotificationConfig,
-    TaskStatusUpdateEvent,
 )
 
 
@@ -66,6 +73,8 @@ EventTypes = (
     | TaskArtifactUpdateEvent
     | TaskStatusUpdateEvent
     | TaskPushNotificationConfig
+    | StreamResponse
+    | SendMessageResponseProto
     | A2AError
     | JSONRPCError
     | list[TaskPushNotificationConfig]
@@ -90,10 +99,11 @@ def build_error_response(
         A Pydantic model representing the JSON-RPC error response,
         wrapped in the specified response type.
     """
+    # A2AError is now a Union type alias, not a RootModel, so no .root attribute
     return response_wrapper_type(
         JSONRPCErrorResponse(
             id=request_id,
-            error=error.root if isinstance(error, A2AError) else error,
+            error=error,
         )
     )
 
@@ -114,7 +124,7 @@ def prepare_response_object(
     Args:
         request_id: The ID of the request.
         response: The object received from the request handler.
-        success_response_types: A tuple of expected Pydantic model types for a successful result.
+        success_response_types: A tuple of expected types for a successful result.
         success_payload_type: The Pydantic model type for the success payload
                                 (e.g., `SendMessageSuccessResponse`).
         response_type: The Pydantic RootModel type that wraps the final response
@@ -124,8 +134,12 @@ def prepare_response_object(
         A Pydantic model representing the final JSON-RPC response (success or error).
     """
     if isinstance(response, success_response_types):
+        # Convert proto message to dict for JSON serialization
+        result = response
+        if isinstance(response, ProtoMessage):
+            result = MessageToDict(response, preserving_proto_field_name=False)
         return response_type(
-            root=success_payload_type(id=request_id, result=response)  # type:ignore
+            root=success_payload_type(id=request_id, result=result)  # type:ignore
         )
 
     if isinstance(response, A2AError | JSONRPCError):
@@ -133,10 +147,8 @@ def prepare_response_object(
 
     # If consumer_data is not an expected success type and not an error,
     # it's an invalid type of response from the agent for this specific method.
-    response = A2AError(
-        root=InvalidAgentResponseError(
-            message='Agent returned invalid type response for this method'
-        )
+    error = InvalidAgentResponseError(
+        message='Agent returned invalid type response for this method'
     )
 
-    return build_error_response(request_id, response, response_type)
+    return build_error_response(request_id, error, response_type)

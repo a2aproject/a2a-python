@@ -7,12 +7,28 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     APIKeySecurityScheme,
     HTTPAuthSecurityScheme,
-    In,
     OAuth2SecurityScheme,
     OpenIdConnectSecurityScheme,
+    SecurityScheme,
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _get_security_scheme_value(scheme: SecurityScheme):
+    """Extract the actual security scheme from the oneof union."""
+    which = scheme.WhichOneof('scheme')
+    if which == 'api_key_security_scheme':
+        return scheme.api_key_security_scheme
+    elif which == 'http_auth_security_scheme':
+        return scheme.http_auth_security_scheme
+    elif which == 'oauth2_security_scheme':
+        return scheme.oauth2_security_scheme
+    elif which == 'open_id_connect_security_scheme':
+        return scheme.open_id_connect_security_scheme
+    elif which == 'mtls_security_scheme':
+        return scheme.mtls_security_scheme
+    return None
 
 
 class AuthInterceptor(ClientCallInterceptor):
@@ -35,13 +51,13 @@ class AuthInterceptor(ClientCallInterceptor):
         """Applies authentication headers to the request if credentials are available."""
         if (
             agent_card is None
-            or agent_card.security is None
-            or agent_card.security_schemes is None
+            or not agent_card.security
+            or not agent_card.security_schemes
         ):
             return request_payload, http_kwargs
 
         for requirement in agent_card.security:
-            for scheme_name in requirement:
+            for scheme_name in requirement.schemes:
                 credential = await self._credential_service.get_credentials(
                     scheme_name, context
                 )
@@ -51,7 +67,9 @@ class AuthInterceptor(ClientCallInterceptor):
                     )
                     if not scheme_def_union:
                         continue
-                    scheme_def = scheme_def_union.root
+                    scheme_def = _get_security_scheme_value(scheme_def_union)
+                    if not scheme_def:
+                        continue
 
                     headers = http_kwargs.get('headers', {})
 
@@ -62,9 +80,8 @@ class AuthInterceptor(ClientCallInterceptor):
                         ):
                             headers['Authorization'] = f'Bearer {credential}'
                             logger.debug(
-                                "Added Bearer token for scheme '%s' (type: %s).",
+                                "Added Bearer token for scheme '%s'.",
                                 scheme_name,
-                                scheme_def.type,
                             )
                             http_kwargs['headers'] = headers
                             return request_payload, http_kwargs
@@ -76,15 +93,14 @@ class AuthInterceptor(ClientCallInterceptor):
                         ):
                             headers['Authorization'] = f'Bearer {credential}'
                             logger.debug(
-                                "Added Bearer token for scheme '%s' (type: %s).",
+                                "Added Bearer token for scheme '%s'.",
                                 scheme_name,
-                                scheme_def.type,
                             )
                             http_kwargs['headers'] = headers
                             return request_payload, http_kwargs
 
                         # Case 2: API Key in Header
-                        case APIKeySecurityScheme(in_=In.header):
+                        case APIKeySecurityScheme() if scheme_def.location.lower() == 'header':
                             headers[scheme_def.name] = credential
                             logger.debug(
                                 "Added API Key Header for scheme '%s'.",

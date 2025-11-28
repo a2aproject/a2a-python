@@ -6,9 +6,9 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from agent_app import create_agent_app
-from notifications_app import Notification, create_notifications_app
-from utils import (
+from tests.e2e.push_notifications.agent_app import create_agent_app
+from tests.e2e.push_notifications.notifications_app import Notification, create_notifications_app
+from tests.e2e.push_notifications.utils import (
     create_app_process,
     find_free_port,
     wait_for_server_ready,
@@ -19,6 +19,7 @@ from a2a.client import (
     ClientFactory,
     minimal_agent_card,
 )
+from a2a.types import TransportProtocol
 from a2a.types.a2a_pb2 import (
     Message,
     Part,
@@ -27,8 +28,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
     TaskState,
-    TextPart,
-    TransportProtocol,
 )
 
 
@@ -123,7 +122,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
             Message(
                 message_id='hello-agent',
                 parts=[Part(root=TextPart(text='Hello Agent!'))],
-                role=Role.user,
+                role=Role.ROLE_USER,
             )
         )
     ]
@@ -164,7 +163,7 @@ async def test_notification_triggering_after_config_change_e2e(
             Message(
                 message_id='how-are-you',
                 parts=[Part(root=TextPart(text='How are you?'))],
-                role=Role.user,
+                role=Role.ROLE_USER,
             )
         )
     ]
@@ -202,7 +201,7 @@ async def test_notification_triggering_after_config_change_e2e(
                 task_id=task.id,
                 message_id='good',
                 parts=[Part(root=TextPart(text='Good'))],
-                role=Role.user,
+                role=Role.ROLE_USER,
             )
         )
     ]

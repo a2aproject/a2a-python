@@ -9,7 +9,8 @@ from httpx_sse import EventSource, ServerSentEvent
 from a2a.client import create_text_message_object
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types.a2a_pb2 import AgentCard, MessageSendParams, Role
+from a2a.types import MessageSendParams
+from a2a.types.a2a_pb2 import AgentCard, Role
 
 
 @pytest.fixture
@@ -48,7 +49,7 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
         )
         params = MessageSendParams(
-            message=create_text_message_object(content='Hello')
+            request=create_text_message_object(content='Hello')
         )
 
         # Mock the build_request method to capture its inputs
@@ -97,7 +98,7 @@ class TestRestTransportExtensions:
             extensions=extensions,
         )
         params = MessageSendParams(
-            message=create_text_message_object(content='Hello stream')
+            request=create_text_message_object(content='Hello stream')
         )
 
         mock_event_source = AsyncMock(spec=EventSource)

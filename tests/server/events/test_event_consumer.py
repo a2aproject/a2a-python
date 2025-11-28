@@ -5,39 +5,42 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pydantic import ValidationError
-
 from a2a.server.events.event_consumer import EventConsumer, QueueClosed
 from a2a.server.events.event_queue import EventQueue
-from a2a.types.a2a_pb2 import (
-    A2AError,
-    Artifact,
+from a2a.types import (
     InternalError,
     JSONRPCError,
+)
+from a2a.types.a2a_pb2 import (
+    Artifact,
     Message,
     Part,
+    Role,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 from a2a.utils.errors import ServerError
 
 
-MINIMAL_TASK: dict[str, Any] = {
-    'id': '123',
-    'context_id': 'session-xyz',
-    'status': {'state': 'submitted'},
-    'kind': 'task',
-}
+def create_sample_message(message_id: str = '111') -> Message:
+    """Create a sample Message proto object."""
+    return Message(
+        message_id=message_id,
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='test message')],
+    )
 
-MESSAGE_PAYLOAD: dict[str, Any] = {
-    'role': 'agent',
-    'parts': [{'text': 'test message'}],
-    'message_id': '111',
-}
+
+def create_sample_task(task_id: str = '123', context_id: str = 'session-xyz') -> Task:
+    """Create a sample Task proto object."""
+    return Task(
+        id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
 
 
 @pytest.fixture
@@ -63,7 +66,7 @@ async def test_consume_one_task_event(
     event_consumer: MagicMock,
     mock_event_queue: MagicMock,
 ):
-    task_event = Task(**MINIMAL_TASK)
+    task_event = create_sample_task()
     mock_event_queue.dequeue_event.return_value = task_event
     result = await event_consumer.consume_one()
     assert result == task_event
@@ -75,7 +78,7 @@ async def test_consume_one_message_event(
     event_consumer: MagicMock,
     mock_event_queue: MagicMock,
 ):
-    message_event = Message(**MESSAGE_PAYLOAD)
+    message_event = create_sample_message()
     mock_event_queue.dequeue_event.return_value = message_event
     result = await event_consumer.consume_one()
     assert result == message_event
@@ -87,7 +90,7 @@ async def test_consume_one_a2a_error_event(
     event_consumer: MagicMock,
     mock_event_queue: MagicMock,
 ):
-    error_event = A2AError(InternalError())
+    error_event = InternalError()
     mock_event_queue.dequeue_event.return_value = error_event
     result = await event_consumer.consume_one()
     assert result == error_event
@@ -126,12 +129,12 @@ async def test_consume_all_multiple_events(
     mock_event_queue: MagicMock,
 ):
     events: list[Any] = [
-        Task(**MINIMAL_TASK),
+        create_sample_task(),
         TaskArtifactUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
             artifact=Artifact(
-                artifact_id='11', parts=[Part(TextPart(text='text'))]
+                artifact_id='11', parts=[Part(text='text')]
             ),
         ),
         TaskStatusUpdateEvent(
@@ -168,15 +171,15 @@ async def test_consume_until_message(
     mock_event_queue: MagicMock,
 ):
     events: list[Any] = [
-        Task(**MINIMAL_TASK),
+        create_sample_task(),
         TaskArtifactUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
             artifact=Artifact(
-                artifact_id='11', parts=[Part(TextPart(text='text'))]
+                artifact_id='11', parts=[Part(text='text')]
             ),
         ),
-        Message(**MESSAGE_PAYLOAD),
+        create_sample_message(),
         TaskStatusUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
@@ -211,8 +214,8 @@ async def test_consume_message_events(
     mock_event_queue: MagicMock,
 ):
     events = [
-        Message(**MESSAGE_PAYLOAD),
-        Message(**MESSAGE_PAYLOAD, final=True),
+        create_sample_message(),
+        create_sample_message(message_id='222'),  # Another message (final doesn't exist in proto)
     ]
     cursor = 0
 
@@ -275,9 +278,7 @@ async def test_consume_all_continues_on_queue_empty_if_not_really_closed(
     event_consumer: EventConsumer, mock_event_queue: AsyncMock
 ):
     """Test that QueueClosed with is_closed=False allows loop to continue via timeout."""
-    payload = MESSAGE_PAYLOAD.copy()
-    payload['message_id'] = 'final_event_id'
-    final_event = Message(**payload)
+    final_event = create_sample_message(message_id='final_event_id')
 
     # Setup dequeue_event behavior:
     # 1. Raise QueueClosed (e.g., asyncio.QueueEmpty)
@@ -358,7 +359,7 @@ async def test_consume_all_continues_on_queue_empty_when_not_closed(
 ):
     """Ensure consume_all continues after asyncio.QueueEmpty when queue is open, yielding the next (final) event."""
     # First dequeue raises QueueEmpty (transient empty), then a final Message arrives
-    final = Message(role='agent', parts=[{'text': 'done'}], message_id='final')
+    final = create_sample_message(message_id='final')
     mock_event_queue.dequeue_event.side_effect = [
         asyncio.QueueEmpty('temporarily empty'),
         final,
@@ -430,6 +431,9 @@ def test_agent_task_callback_not_done_task(event_consumer: EventConsumer):
 
     assert event_consumer._exception is None  # Should remain None
     mock_task.exception.assert_not_called()
+
+
+from pydantic import ValidationError
 
 
 @pytest.mark.asyncio

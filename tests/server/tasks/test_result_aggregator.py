@@ -17,18 +17,17 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
 
 # Helper to create a simple message
 def create_sample_message(
-    content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.user
+    content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.ROLE_USER
 ) -> Message:
     return Message(
         message_id=msg_id,
         role=role,
-        parts=[Part(root=TextPart(text=content))],
+        parts=[Part(text=content)],
     )
 
 

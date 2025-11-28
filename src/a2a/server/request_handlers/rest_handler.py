@@ -20,11 +20,12 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    TaskIdParams,
-    TaskNotFoundError,
-    TaskQueryParams,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    SubscribeToTaskRequest,
 )
+from a2a.types.extras import TaskNotFoundError
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
@@ -83,9 +84,12 @@ class RESTHandler:
         task_or_message = await self.request_handler.on_message_send(
             a2a_request, context
         )
-        return MessageToDict(
-            proto_utils.ToProto.task_or_message(task_or_message)
-        )
+        # Wrap the result in a SendMessageResponse
+        if isinstance(task_or_message, a2a_pb2.Task):
+            response = a2a_pb2.SendMessageResponse(task=task_or_message)
+        else:
+            response = a2a_pb2.SendMessageResponse(msg=task_or_message)
+        return MessageToDict(response)
 
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
@@ -137,7 +141,7 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         task = await self.request_handler.on_cancel_task(
-            TaskIdParams(id=task_id), context
+            CancelTaskRequest(name=f'tasks/{task_id}'), context
         )
         if task:
             return MessageToDict(proto_utils.ToProto.task(task))
@@ -165,7 +169,7 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         async for event in self.request_handler.on_resubscribe_to_task(
-            TaskIdParams(id=task_id), context
+            SubscribeToTaskRequest(name=task_id), context
         ):
             yield MessageToJson(proto_utils.ToProto.stream_response(event))
 
@@ -185,8 +189,8 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         push_id = request.path_params['push_id']
-        params = GetTaskPushNotificationConfigParams(
-            id=task_id, push_notification_config_id=push_id
+        params = GetTaskPushNotificationConfigRequest(
+            name=f'tasks/{task_id}/pushNotificationConfigs/{push_id}'
         )
         config = (
             await self.request_handler.on_get_task_push_notification_config(
@@ -224,17 +228,13 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         body = await request.body()
-        params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
+        params = a2a_pb2.SetTaskPushNotificationConfigRequest()
         Parse(body, params)
-        a2a_request = (
-            proto_utils.FromProto.task_push_notification_config_request(
-                params,
-            )
-        )
-        a2a_request.task_id = task_id
+        # Set the parent to the task resource name format
+        params.parent = f'tasks/{task_id}'
         config = (
             await self.request_handler.on_set_task_push_notification_config(
-                a2a_request, context
+                params, context
             )
         )
         return MessageToDict(
@@ -258,7 +258,7 @@ class RESTHandler:
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
         history_length = int(history_length_str) if history_length_str else None
-        params = TaskQueryParams(id=task_id, history_length=history_length)
+        params = GetTaskRequest(name=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(proto_utils.ToProto.task(task))

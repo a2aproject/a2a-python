@@ -12,11 +12,11 @@ from a2a.server.tasks import (
     InMemoryTaskStore,
     TaskUpdater,
 )
+from a2a.types import InvalidParamsError
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentSkill,
-    InvalidParamsError,
     Message,
     Task,
 )

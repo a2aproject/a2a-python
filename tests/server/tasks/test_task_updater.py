@@ -15,7 +15,6 @@ from a2a.types.a2a_pb2 import (
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
 
@@ -39,18 +38,18 @@ def task_updater(event_queue: AsyncMock) -> TaskUpdater:
 def sample_message() -> Message:
     """Create a sample message for testing."""
     return Message(
-        role=Role.agent,
+        role=Role.ROLE_AGENT,
         task_id='test-task-id',
         context_id='test-context-id',
         message_id='test-message-id',
-        parts=[Part(root=TextPart(text='Test message'))],
+        parts=[Part(text='Test message')],
     )
 
 
 @pytest.fixture
 def sample_parts() -> list[Part]:
     """Create sample parts for testing."""
-    return [Part(root=TextPart(text='Test part'))]
+    return [Part(text='Test part')]
 
 
 def test_init(event_queue: AsyncMock) -> None:
@@ -81,7 +80,7 @@ async def test_update_status_without_message(
     assert event.context_id == 'test-context-id'
     assert event.final is False
     assert event.status.state == TaskState.TASK_STATE_WORKING
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -152,8 +151,8 @@ async def test_add_artifact_generates_id(
     assert isinstance(event, TaskArtifactUpdateEvent)
     assert event.artifact.artifact_id == str(known_uuid)
     assert event.artifact.parts == sample_parts
-    assert event.append is None
-    assert event.last_chunk is None
+    assert event.append is False
+    assert event.last_chunk is False
 
 
 @pytest.mark.asyncio
@@ -226,7 +225,7 @@ async def test_complete_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_COMPLETED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -258,7 +257,7 @@ async def test_submit_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_SUBMITTED
     assert event.final is False
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -290,7 +289,7 @@ async def test_start_work_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_WORKING
     assert event.final is False
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -319,12 +318,12 @@ def test_new_agent_message(
     ):
         message = task_updater.new_agent_message(parts=sample_parts)
 
-    assert message.role == Role.agent
+    assert message.role == Role.ROLE_AGENT
     assert message.task_id == 'test-task-id'
     assert message.context_id == 'test-context-id'
     assert message.message_id == '12345678-1234-5678-1234-567812345678'
     assert message.parts == sample_parts
-    assert message.metadata is None
+    assert not message.HasField('metadata')
 
 
 def test_new_agent_message_with_metadata(
@@ -341,7 +340,7 @@ def test_new_agent_message_with_metadata(
             parts=sample_parts, metadata=metadata
         )
 
-    assert message.role == Role.agent
+    assert message.role == Role.ROLE_AGENT
     assert message.task_id == 'test-task-id'
     assert message.context_id == 'test-context-id'
     assert message.message_id == '12345678-1234-5678-1234-567812345678'
@@ -380,7 +379,7 @@ async def test_failed_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_FAILED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -412,7 +411,7 @@ async def test_reject_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_REJECTED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -444,7 +443,7 @@ async def test_requires_input_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert event.final is False
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -476,7 +475,7 @@ async def test_requires_input_final_true(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -508,7 +507,7 @@ async def test_requires_auth_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
     assert event.final is False
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -540,7 +539,7 @@ async def test_requires_auth_final_true(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio
@@ -572,7 +571,7 @@ async def test_cancel_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_CANCELLED
     assert event.final is True
-    assert event.status.message is None
+    assert not event.status.HasField('message')
 
 
 @pytest.mark.asyncio

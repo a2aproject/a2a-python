@@ -25,16 +25,14 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
 )  # For mock spec
+from a2a.types.extras import (
+    JSONRPCErrorResponse,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     Message,
-    MessageSendParams,
     Part,
     Role,
-    SendMessageRequest,
-    SendMessageResponse,
-    SendMessageSuccessResponse,
-    TextPart,
 )
 
 
@@ -189,15 +187,11 @@ class TestJSONRPCExtensions:
     @pytest.fixture
     def mock_handler(self):
         handler = AsyncMock(spec=RequestHandler)
-        handler.on_message_send.return_value = SendMessageResponse(
-            root=SendMessageSuccessResponse(
-                id='1',
-                result=Message(
-                    message_id='test',
-                    role=Role.agent,
-                    parts=[Part(TextPart(text='response message'))],
-                ),
-            )
+        # Return a proto Message object directly - the handler wraps it in SendMessageResponse
+        handler.on_message_send.return_value = Message(
+            message_id='test',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='response message')],
         )
         return handler
 
@@ -206,6 +200,9 @@ class TestJSONRPCExtensions:
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://mockurl.com'
         mock_agent_card.supports_authenticated_extended_card = False
+        # Set up capabilities.streaming to avoid validation issues
+        mock_agent_card.capabilities = MagicMock()
+        mock_agent_card.capabilities.streaming = False
 
         return A2AStarletteApplication(
             agent_card=mock_agent_card, http_handler=mock_handler
@@ -215,21 +212,27 @@ class TestJSONRPCExtensions:
     def client(self, test_app):
         return TestClient(test_app.build())
 
+    def _make_send_message_request(self, text: str = 'hi') -> dict:
+        """Helper to create a JSON-RPC send message request."""
+        return {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'method': 'message/send',
+            'params': {
+                'message': {
+                    'messageId': '1',
+                    'role': 'ROLE_USER',
+                    'parts': [{'text': text}],
+                }
+            },
+        }
+
     def test_request_with_single_extension(self, client, mock_handler):
         headers = {HTTP_EXTENSION_HEADER: 'foo'}
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -245,16 +248,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -272,16 +266,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -292,16 +277,7 @@ class TestJSONRPCExtensions:
     def test_method_added_to_call_context_state(self, client, mock_handler):
         response = client.post(
             '/',
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -319,16 +295,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -340,31 +307,18 @@ class TestJSONRPCExtensions:
         def side_effect(request, context: ServerCallContext):
             context.activated_extensions.add('foo')
             context.activated_extensions.add('baz')
-            return SendMessageResponse(
-                root=SendMessageSuccessResponse(
-                    id='1',
-                    result=Message(
-                        message_id='test',
-                        role=Role.agent,
-                        parts=[Part(TextPart(text='response message'))],
-                    ),
-                )
+            # Return a proto Message object directly
+            return Message(
+                message_id='test',
+                role=Role.ROLE_AGENT,
+                parts=[Part(text='response message')],
             )
 
         mock_handler.on_message_send.side_effect = side_effect
 
         response = client.post(
             '/',
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=self._make_send_message_request(),
         )
         response.raise_for_status()
 

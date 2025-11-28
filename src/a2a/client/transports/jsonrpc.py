@@ -102,7 +102,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='message/send',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -115,7 +117,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: SendMessageResponse = json_format.ParseDict(
@@ -132,7 +134,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='message/stream',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -209,7 +213,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='tasks/get',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -222,7 +228,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
@@ -237,7 +243,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='tasks/cancel',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -250,7 +258,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
@@ -264,7 +272,11 @@ class JsonRpcTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        rpc_request = JSONRPC20Request(params=request, id=str(uuid4()))
+        rpc_request = JSONRPC20Request(
+            method='tasks/pushNotificationConfig/set',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
+        )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
@@ -276,7 +288,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
@@ -293,7 +305,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='tasks/pushNotificationConfig/get',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -306,7 +320,7 @@ class JsonRpcTransport(ClientTransport):
             context,
         )
         response_data = await self._send_request(payload, modified_kwargs)
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
@@ -323,7 +337,9 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='tasks/resubscribe',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -373,7 +389,9 @@ class JsonRpcTransport(ClientTransport):
         """Retrieves the agent's card."""
         request = GetExtendedAgentCardRequest()
         rpc_request = JSONRPC20Request(
-            params=json_format.MessageToDict(request), id=str(uuid4())
+            method='agent/authenticatedExtendedCard',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4())
         )
 
         modified_kwargs = update_extension_header(
@@ -390,7 +408,7 @@ class JsonRpcTransport(ClientTransport):
             payload,
             modified_kwargs,
         )
-        json_rpc_response = JSONRPC20Response.from_data(response_data)
+        json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
         response: AgentCard = json_format.ParseDict(

@@ -23,29 +23,31 @@ from a2a.server.apps import (
     A2AStarletteApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.types.a2a_pb2 import (
-    AgentCapabilities,
-    AgentCard,
-    Artifact,
-    DataPart,
+from a2a.types import (
     InternalError,
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
-    Message,
     MethodNotFoundError,
+    SendMessageSuccessResponse,
+    UnsupportedOperationError,
+)
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
+    AgentSkill,
+    Artifact,
+    DataPart,
+    Message,
     Part,
     PushNotificationConfig,
     Role,
     SendMessageResponse,
-    SendMessageSuccessResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
-    TextPart,
-    UnsupportedOperationError,
 )
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
@@ -57,73 +59,76 @@ from a2a.utils.errors import MethodNotImplementedError
 
 # === TEST SETUP ===
 
-MINIMAL_AGENT_SKILL: dict[str, Any] = {
-    'id': 'skill-123',
-    'name': 'Recipe Finder',
-    'description': 'Finds recipes',
-    'tags': ['cooking'],
-}
-
-MINIMAL_AGENT_AUTH: dict[str, Any] = {'schemes': ['Bearer']}
+MINIMAL_AGENT_SKILL = AgentSkill(
+    id='skill-123',
+    name='Recipe Finder',
+    description='Finds recipes',
+    tags=['cooking'],
+)
 
 AGENT_CAPS = AgentCapabilities(
     push_notifications=True, state_transition_history=False, streaming=True
 )
 
-MINIMAL_AGENT_CARD: dict[str, Any] = {
-    'authentication': MINIMAL_AGENT_AUTH,
-    'capabilities': AGENT_CAPS,  # AgentCapabilities is required but can be empty
-    'defaultInputModes': ['text/plain'],
-    'defaultOutputModes': ['application/json'],
-    'description': 'Test Agent',
-    'name': 'TestAgent',
-    'skills': [MINIMAL_AGENT_SKILL],
-    'url': 'http://example.com/agent',
-    'version': '1.0',
-}
+MINIMAL_AGENT_CARD_DATA = AgentCard(
+    capabilities=AGENT_CAPS,
+    default_input_modes=['text/plain'],
+    default_output_modes=['application/json'],
+    description='Test Agent',
+    name='TestAgent',
+    skills=[MINIMAL_AGENT_SKILL],
+    url='http://example.com/agent',
+    version='1.0',
+)
 
-EXTENDED_AGENT_CARD_DATA: dict[str, Any] = {
-    **MINIMAL_AGENT_CARD,
-    'name': 'TestAgent Extended',
-    'description': 'Test Agent with more details',
-    'skills': [
-        MINIMAL_AGENT_SKILL,
-        {
-            'id': 'skill-extended',
-            'name': 'Extended Skill',
-            'description': 'Does more things',
-            'tags': ['extended'],
-        },
-    ],
-}
-TEXT_PART_DATA: dict[str, Any] = {'kind': 'text', 'text': 'Hello'}
+EXTENDED_AGENT_SKILL = AgentSkill(
+    id='skill-extended',
+    name='Extended Skill',
+    description='Does more things',
+    tags=['extended'],
+)
 
-DATA_PART_DATA: dict[str, Any] = {'kind': 'data', 'data': {'key': 'value'}}
+EXTENDED_AGENT_CARD_DATA = AgentCard(
+    capabilities=AGENT_CAPS,
+    default_input_modes=['text/plain'],
+    default_output_modes=['application/json'],
+    description='Test Agent with more details',
+    name='TestAgent Extended',
+    skills=[MINIMAL_AGENT_SKILL, EXTENDED_AGENT_SKILL],
+    url='http://example.com/agent',
+    version='1.0',
+)
+from google.protobuf.struct_pb2 import Struct
 
-MINIMAL_MESSAGE_USER: dict[str, Any] = {
-    'role': 'user',
-    'parts': [TEXT_PART_DATA],
-    'message_id': 'msg-123',
-    'kind': 'message',
-}
+TEXT_PART_DATA = Part(text='Hello')
 
-MINIMAL_TASK_STATUS: dict[str, Any] = {'state': 'submitted'}
+# For proto, Part.data takes a DataPart, and DataPart.data takes a Struct
+_struct = Struct()
+_struct.update({'key': 'value'})
+DATA_PART = Part(data=DataPart(data=_struct))
 
-FULL_TASK_STATUS: dict[str, Any] = {
-    'state': 'working',
-    'message': MINIMAL_MESSAGE_USER,
-    'timestamp': '2023-10-27T10:00:00Z',
-}
+MINIMAL_MESSAGE_USER = Message(
+    role=Role.ROLE_USER,
+    parts=[TEXT_PART_DATA],
+    message_id='msg-123',
+)
+
+MINIMAL_TASK_STATUS = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
+
+FULL_TASK_STATUS = TaskStatus(
+    state=TaskState.TASK_STATE_WORKING,
+    message=MINIMAL_MESSAGE_USER,
+)
 
 
 @pytest.fixture
 def agent_card():
-    return AgentCard(**MINIMAL_AGENT_CARD)
+    return MINIMAL_AGENT_CARD_DATA
 
 
 @pytest.fixture
 def extended_agent_card_fixture():
-    return AgentCard(**EXTENDED_AGENT_CARD_DATA)
+    return EXTENDED_AGENT_CARD_DATA
 
 
 @pytest.fixture
@@ -290,7 +295,7 @@ def test_starlette_rpc_endpoint_custom_url(
 ):
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
-    task_status = TaskStatus(**MINIMAL_TASK_STATUS)
+    task_status = MINIMAL_TASK_STATUS
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
     client = TestClient(app.build(rpc_url='/api/rpc'))
@@ -300,7 +305,7 @@ def test_starlette_rpc_endpoint_custom_url(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -313,7 +318,7 @@ def test_fastapi_rpc_endpoint_custom_url(
 ):
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
-    task_status = TaskStatus(**MINIMAL_TASK_STATUS)
+    task_status = MINIMAL_TASK_STATUS
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
     client = TestClient(app.build(rpc_url='/api/rpc'))
@@ -323,7 +328,7 @@ def test_fastapi_rpc_endpoint_custom_url(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -414,7 +419,7 @@ def test_fastapi_build_custom_agent_card_path(
 def test_send_message(client: TestClient, handler: mock.AsyncMock):
     """Test sending a message."""
     # Prepare mock response
-    task_status = TaskStatus(**MINIMAL_TASK_STATUS)
+    task_status = MINIMAL_TASK_STATUS
     mock_task = Task(
         id='task1',
         context_id='session-xyz',
@@ -431,12 +436,11 @@ def test_send_message(client: TestClient, handler: mock.AsyncMock):
             'method': 'message/send',
             'params': {
                 'message': {
-                    'role': 'agent',
-                    'parts': [{'kind': 'text', 'text': 'Hello'}],
-                    'message_id': '111',
-                    'kind': 'message',
-                    'task_id': 'task1',
-                    'context_id': 'session-xyz',
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'Hello'}],
+                    'messageId': '111',
+                    'taskId': 'task1',
+                    'contextId': 'session-xyz',
                 }
             },
         },
@@ -446,8 +450,9 @@ def test_send_message(client: TestClient, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert 'result' in data
-    assert data['result']['id'] == 'task1'
-    assert data['result']['status']['state'] == 'submitted'
+    # Result is wrapped in SendMessageResponse with task field
+    assert data['result']['task']['id'] == 'task1'
+    assert data['result']['task']['status']['state'] == 'TASK_STATE_SUBMITTED'
 
     # Verify handler was called
     handler.on_message_send.assert_awaited_once()
@@ -456,7 +461,7 @@ def test_send_message(client: TestClient, handler: mock.AsyncMock):
 def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     """Test cancelling a task."""
     # Setup mock response
-    task_status = TaskStatus(**MINIMAL_TASK_STATUS)
+    task_status = MINIMAL_TASK_STATUS
     task_status.state = TaskState.TASK_STATE_CANCELLED  # 'cancelled' #
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_cancel_task.return_value = task
@@ -468,7 +473,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/cancel',
-            'params': {'id': 'task1'},
+            'params': {'name': 'tasks/task1'},
         },
     )
 
@@ -476,7 +481,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert data['result']['id'] == 'task1'
-    assert data['result']['status']['state'] == 'canceled'
+    assert data['result']['status']['state'] == 'TASK_STATE_CANCELLED'
 
     # Verify handler was called
     handler.on_cancel_task.assert_awaited_once()
@@ -485,7 +490,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
 def test_get_task(client: TestClient, handler: mock.AsyncMock):
     """Test getting a task."""
     # Setup mock response
-    task_status = TaskStatus(**MINIMAL_TASK_STATUS)
+    task_status = MINIMAL_TASK_STATUS
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task  # JSONRPCResponse(root=task)
 
@@ -496,7 +501,7 @@ def test_get_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'tasks/task1'},
         },
     )
 
@@ -515,7 +520,7 @@ def test_set_push_notification_config(
     """Test setting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
+        name='tasks/t2/pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
@@ -530,10 +535,12 @@ def test_set_push_notification_config(
             'id': '123',
             'method': 'tasks/pushNotificationConfig/set',
             'params': {
-                'task_id': 't2',
-                'pushNotificationConfig': {
-                    'url': 'https://example.com',
-                    'token': 'secret-token',
+                'parent': 'tasks/t2',
+                'config': {
+                    'pushNotificationConfig': {
+                        'url': 'https://example.com',
+                        'token': 'secret-token',
+                    },
                 },
             },
         },
@@ -554,7 +561,7 @@ def test_get_push_notification_config(
     """Test getting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        task_id='task1',
+        name='tasks/task1/pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
@@ -569,7 +576,7 @@ def test_get_push_notification_config(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/pushNotificationConfig/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'tasks/task1/pushNotificationConfig'},
         },
     )
 
@@ -604,9 +611,9 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
     handler.on_message_send.side_effect = lambda params, context: Message(
         context_id='session-xyz',
         message_id='112',
-        role=Role.agent,
+        role=Role.ROLE_AGENT,
         parts=[
-            Part(TextPart(text=context.user.user_name)),
+            Part(text=context.user.user_name),
         ],
     )
 
@@ -618,13 +625,12 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
             'id': '123',
             'method': 'message/send',
             'params': {
-                'message': {
-                    'role': 'agent',
-                    'parts': [{'kind': 'text', 'text': 'Hello'}],
-                    'message_id': '111',
-                    'kind': 'message',
-                    'task_id': 'task1',
-                    'context_id': 'session-xyz',
+                'request': {
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'Hello'}],
+                    'messageId': '111',
+                    'taskId': 'task1',
+                    'contextId': 'session-xyz',
                 }
             },
         },
@@ -632,12 +638,10 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
 
     # Verify response
     assert response.status_code == 200
-    result = SendMessageResponse.model_validate(response.json())
-    assert isinstance(result.root, SendMessageSuccessResponse)
-    assert isinstance(result.root.result, Message)
-    message = result.root.result
-    assert isinstance(message.parts[0].root, TextPart)
-    assert message.parts[0].root.text == 'test_user'
+    data = response.json()
+    assert 'result' in data
+    # Result is wrapped in SendMessageResponse with message field
+    assert data['result']['message']['parts'][0]['text'] == 'test_user'
 
     # Verify handler was called
     handler.on_message_send.assert_awaited_once()
@@ -655,25 +659,18 @@ async def test_message_send_stream(
     # Setup mock streaming response
     async def stream_generator():
         for i in range(3):
-            text_part = TextPart(**TEXT_PART_DATA)
-            data_part = DataPart(**DATA_PART_DATA)
             artifact = Artifact(
                 artifact_id=f'artifact-{i}',
                 name='result_data',
-                parts=[Part(root=text_part), Part(root=data_part)],
+                parts=[TEXT_PART_DATA, DATA_PART],
             )
             last = [False, False, True]
-            task_artifact_update_event_data: dict[str, Any] = {
-                'artifact': artifact,
-                'task_id': 'task_id',
-                'context_id': 'session-xyz',
-                'append': False,
-                'lastChunk': last[i],
-                'kind': 'artifact-update',
-            }
-
-            yield TaskArtifactUpdateEvent.model_validate(
-                task_artifact_update_event_data
+            yield TaskArtifactUpdateEvent(
+                artifact=artifact,
+                task_id='task_id',
+                context_id='session-xyz',
+                append=False,
+                last_chunk=last[i],
             )
 
     handler.on_message_send_stream.return_value = stream_generator()
@@ -691,13 +688,12 @@ async def test_message_send_stream(
                 'id': '123',
                 'method': 'message/stream',
                 'params': {
-                    'message': {
-                        'role': 'agent',
-                        'parts': [{'kind': 'text', 'text': 'Hello'}],
-                        'message_id': '111',
-                        'kind': 'message',
-                        'task_id': 'task_id',
-                        'context_id': 'session-xyz',
+                    'request': {
+                        'role': 'ROLE_AGENT',
+                        'parts': [{'text': 'Hello'}],
+                        'messageId': '111',
+                        'taskId': 'task_id',
+                        'contextId': 'session-xyz',
                     }
                 },
             },
@@ -745,24 +741,18 @@ async def test_task_resubscription(
     # Setup mock streaming response
     async def stream_generator():
         for i in range(3):
-            text_part = TextPart(**TEXT_PART_DATA)
-            data_part = DataPart(**DATA_PART_DATA)
             artifact = Artifact(
                 artifact_id=f'artifact-{i}',
                 name='result_data',
-                parts=[Part(root=text_part), Part(root=data_part)],
+                parts=[TEXT_PART_DATA, DATA_PART],
             )
             last = [False, False, True]
-            task_artifact_update_event_data: dict[str, Any] = {
-                'artifact': artifact,
-                'task_id': 'task_id',
-                'context_id': 'session-xyz',
-                'append': False,
-                'lastChunk': last[i],
-                'kind': 'artifact-update',
-            }
-            yield TaskArtifactUpdateEvent.model_validate(
-                task_artifact_update_event_data
+            yield TaskArtifactUpdateEvent(
+                artifact=artifact,
+                task_id='task_id',
+                context_id='session-xyz',
+                append=False,
+                last_chunk=last[i],
             )
 
     handler.on_resubscribe_to_task.return_value = stream_generator()
@@ -780,7 +770,7 @@ async def test_task_resubscription(
                 'jsonrpc': '2.0',
                 'id': '123',  # This ID is used in the success_event above
                 'method': 'tasks/resubscribe',
-                'params': {'id': 'task1'},
+                'params': {'name': 'tasks/task1'},
             },
         ) as response:
             # Verify response is a stream
@@ -859,7 +849,8 @@ def test_dynamic_agent_card_modifier(
     """Test that the card_modifier dynamically alters the public agent card."""
 
     def modifier(card: AgentCard) -> AgentCard:
-        modified_card = card.model_copy(deep=True)
+        modified_card = AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
@@ -886,7 +877,8 @@ def test_dynamic_extended_agent_card_modifier(
     agent_card.supports_authenticated_extended_card = True
 
     def modifier(card: AgentCard, context: ServerCallContext) -> AgentCard:
-        modified_card = card.model_copy(deep=True)
+        modified_card = AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.description = 'Dynamically Modified Extended Description'
         return modified_card
 
@@ -929,7 +921,8 @@ def test_fastapi_dynamic_agent_card_modifier(
     """Test that the card_modifier dynamically alters the public agent card for FastAPI."""
 
     def modifier(card: AgentCard) -> AgentCard:
-        modified_card = card.model_copy(deep=True)
+        modified_card = AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
@@ -954,7 +947,7 @@ def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'tasks/task1'},
         },
     )
     assert response.status_code == 200
@@ -991,7 +984,7 @@ def test_validation_error(client: TestClient):
             'id': '123',
             'method': 'message/send',
             'params': {
-                'message': {
+                'request': {
                     # Missing required fields
                     'text': 'Hello'
                 }
@@ -1014,7 +1007,7 @@ def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'tasks/get',
-            'params': {'id': 'task1'},
+            'params': {'name': 'tasks/task1'},
         },
     )
     assert response.status_code == 200

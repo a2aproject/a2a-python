@@ -7,6 +7,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
 
+from google.protobuf.json_format import MessageToDict, ParseDict
 from pydantic import ValidationError
 
 from a2a.auth.user import UnauthenticatedUser
@@ -19,14 +20,19 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
-    A2AError,
-    A2ARequest,
     AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
-    GetAuthenticatedExtendedCardRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    SendMessageRequest,
+    SetTaskPushNotificationConfigRequest,
+)
+from a2a.types.extras import (
+    A2AError,
+    A2ARequest,
     InternalError,
     InvalidParamsError,
     InvalidRequestError,
@@ -35,12 +41,9 @@ from a2a.types.a2a_pb2 import (
     JSONRPCErrorResponse,
     JSONRPCRequest,
     JSONRPCResponse,
-    ListTaskPushNotificationConfigRequest,
     MethodNotFoundError,
-    SendMessageRequest,
     SendStreamingMessageRequest,
     SendStreamingMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     TaskResubscriptionRequest,
     UnsupportedOperationError,
 )
@@ -154,22 +157,18 @@ class JSONRPCApplication(ABC):
     """
 
     # Method-to-model mapping for centralized routing
-    A2ARequestModel = (
-        SendMessageRequest
-        | SendStreamingMessageRequest
-        | GetTaskRequest
-        | CancelTaskRequest
-        | SetTaskPushNotificationConfigRequest
-        | GetTaskPushNotificationConfigRequest
-        | ListTaskPushNotificationConfigRequest
-        | DeleteTaskPushNotificationConfigRequest
-        | TaskResubscriptionRequest
-        | GetAuthenticatedExtendedCardRequest
-    )
-
-    METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
-        model.model_fields['method'].default: model
-        for model in A2ARequestModel.__args__
+    # Proto types don't have model_fields, so we define the mapping explicitly
+    METHOD_TO_MODEL: dict[str, type] = {
+        'message/send': SendMessageRequest,
+        'message/stream': SendStreamingMessageRequest,
+        'tasks/get': GetTaskRequest,
+        'tasks/cancel': CancelTaskRequest,
+        'tasks/pushNotificationConfig/set': SetTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/get': GetTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/list': ListTaskPushNotificationConfigRequest,
+        'tasks/pushNotificationConfig/delete': DeleteTaskPushNotificationConfigRequest,
+        'tasks/resubscribe': TaskResubscriptionRequest,
+        'agent/authenticatedExtendedCard': GetExtendedAgentCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
@@ -224,7 +223,7 @@ class JSONRPCApplication(ABC):
         self._max_content_length = max_content_length
 
     def _generate_error_response(
-        self, request_id: str | int | None, error: JSONRPCError | A2AError
+        self, request_id: str | int | None, error: A2AError
     ) -> JSONResponse:
         """Creates a Starlette JSONResponse for a JSON-RPC error.
 
@@ -232,20 +231,19 @@ class JSONRPCApplication(ABC):
 
         Args:
             request_id: The ID of the request that caused the error.
-            error: The `JSONRPCError` or `A2AError` object.
+            error: The error object (one of the A2AError union types).
 
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
         error_resp = JSONRPCErrorResponse(
             id=request_id,
-            error=error if isinstance(error, JSONRPCError) else error.root,
+            error=error,
         )
 
         log_level = (
             logging.ERROR
-            if not isinstance(error, A2AError)
-            or isinstance(error.root, InternalError)
+            if isinstance(error, InternalError)
             else logging.WARNING
         )
         logger.log(
@@ -313,9 +311,7 @@ class JSONRPCApplication(ABC):
             if not self._allowed_content_length(request):
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(message='Payload too large')
-                    ),
+                    InvalidRequestError(message='Payload too large'),
                 )
             logger.debug('Request body: %s', body)
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
@@ -325,91 +321,83 @@ class JSONRPCApplication(ABC):
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(data=json.loads(e.json()))
-                    ),
+                    InvalidRequestError(data=json.loads(e.json())),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
             method = base_request.method
+            request_id = base_request.id
 
             model_class = self.METHOD_TO_MODEL.get(method)
             if not model_class:
                 return self._generate_error_response(
-                    request_id, A2AError(root=MethodNotFoundError())
+                    request_id, MethodNotFoundError()
                 )
             try:
-                specific_request = model_class.model_validate(body)
-            except ValidationError as e:
-                logger.exception('Failed to validate base JSON-RPC request')
+                # Parse the params field into the proto message type
+                params = body.get('params', {})
+                specific_request = ParseDict(params, model_class())
+            except Exception as e:
+                logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidParamsError(data=json.loads(e.json()))
-                    ),
+                    InvalidParamsError(data=str(e)),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
             call_context.state['method'] = method
+            call_context.state['request_id'] = request_id
 
-            request_id = specific_request.id
-            a2a_request = A2ARequest(root=specific_request)
-            request_obj = a2a_request.root
-
-            if isinstance(
-                request_obj,
-                TaskResubscriptionRequest | SendStreamingMessageRequest,
-            ):
+            # Route streaming requests by method name, not by type
+            # (SendMessageRequest and SendStreamingMessageRequest are the same proto type)
+            if method in ('message/stream', 'tasks/resubscribe'):
                 return await self._process_streaming_request(
-                    request_id, a2a_request, call_context
+                    request_id, specific_request, call_context
                 )
 
             return await self._process_non_streaming_request(
-                request_id, a2a_request, call_context
+                request_id, specific_request, call_context
             )
         except MethodNotImplementedError:
             traceback.print_exc()
             return self._generate_error_response(
-                request_id, A2AError(root=UnsupportedOperationError())
+                request_id, UnsupportedOperationError()
             )
         except json.decoder.JSONDecodeError as e:
             traceback.print_exc()
             return self._generate_error_response(
-                None, A2AError(root=JSONParseError(message=str(e)))
+                None, JSONParseError(message=str(e))
             )
         except HTTPException as e:
             if e.status_code == HTTP_413_REQUEST_ENTITY_TOO_LARGE:
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(message='Payload too large')
-                    ),
+                    InvalidRequestError(message='Payload too large'),
                 )
             raise e
         except Exception as e:
             logger.exception('Unhandled exception')
             return self._generate_error_response(
-                request_id, A2AError(root=InternalError(message=str(e)))
+                request_id, InternalError(message=str(e))
             )
 
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
-        a2a_request: A2ARequest,
+        request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> Response:
         """Processes streaming requests (message/stream or tasks/resubscribe).
 
         Args:
             request_id: The ID of the request.
-            a2a_request: The validated A2ARequest object.
+            request_obj: The proto request message.
             context: The ServerCallContext for the request.
 
         Returns:
             An `EventSourceResponse` object to stream results to the client.
         """
-        request_obj = a2a_request.root
         handler_result: Any = None
         if isinstance(
             request_obj,
@@ -428,20 +416,19 @@ class JSONRPCApplication(ABC):
     async def _process_non_streaming_request(
         self,
         request_id: str | int | None,
-        a2a_request: A2ARequest,
+        request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> Response:
         """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
 
         Args:
             request_id: The ID of the request.
-            a2a_request: The validated A2ARequest object.
+            request_obj: The proto request message.
             context: The ServerCallContext for the request.
 
         Returns:
             A `JSONResponse` object containing the result or error.
         """
-        request_obj = a2a_request.root
         handler_result: Any = None
         match request_obj:
             case SendMessageRequest():
@@ -484,7 +471,7 @@ class JSONRPCApplication(ABC):
                         context,
                     )
                 )
-            case GetAuthenticatedExtendedCardRequest():
+            case GetExtendedAgentCardRequest():
                 handler_result = (
                     await self.handler.get_authenticated_extended_card(
                         request_obj,
@@ -579,9 +566,9 @@ class JSONRPCApplication(ABC):
             card_to_serve = self.card_modifier(card_to_serve)
 
         return JSONResponse(
-            card_to_serve.model_dump(
-                exclude_none=True,
-                by_alias=True,
+            MessageToDict(
+                card_to_serve,
+                preserving_proto_field_name=False,
             )
         )
 
@@ -609,9 +596,9 @@ class JSONRPCApplication(ABC):
 
         if card_to_serve:
             return JSONResponse(
-                card_to_serve.model_dump(
-                    exclude_none=True,
-                    by_alias=True,
+                MessageToDict(
+                    card_to_serve,
+                    preserving_proto_field_name=False,
                 )
             )
         # If supports_authenticated_extended_card is true, but no

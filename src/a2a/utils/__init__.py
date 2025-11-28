@@ -1,5 +1,6 @@
 """Utility functions for the A2A Python SDK."""
 
+from a2a.utils import proto_utils
 from a2a.utils.artifact import (
     get_artifact_text,
     new_artifact,

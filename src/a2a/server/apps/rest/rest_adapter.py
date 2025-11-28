@@ -4,6 +4,8 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
+from google.protobuf.json_format import MessageToDict
+
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -34,10 +36,8 @@ from a2a.server.apps.jsonrpc import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
-from a2a.types.a2a_pb2 import (
-    AgentCard,
-    AuthenticatedExtendedCardNotConfiguredError,
-)
+from a2a.types.a2a_pb2 import AgentCard
+from a2a.types.extras import AuthenticatedExtendedCardNotConfiguredError
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -155,7 +155,7 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
-        return card_to_serve.model_dump(mode='json', exclude_none=True)
+        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
 
     async def handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
@@ -189,7 +189,7 @@ class RESTAdapter:
         elif self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
-        return card_to_serve.model_dump(mode='json', exclude_none=True)
+        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
         """Constructs a dictionary of API routes and their corresponding handlers.

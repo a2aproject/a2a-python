@@ -4,7 +4,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types.a2a_pb2 import (
-    InvalidParamsError,
     Message,
     Task,
     TaskArtifactUpdateEvent,
@@ -12,6 +11,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.types.extras import InvalidParamsError
 from a2a.utils import append_artifact_to_task
 from a2a.utils.errors import ServerError
 
@@ -140,16 +140,11 @@ class TaskManager:
             logger.debug(
                 'Updating task %s status to: %s', task.id, event.status.state
             )
-            if task.status.message:
-                if not task.history:
-                    task.history = [task.status.message]
-                else:
-                    task.history.append(task.status.message)
+            if task.status.HasField('message'):
+                task.history.append(task.status.message)
             if event.metadata:
-                if not task.metadata:
-                    task.metadata = {}
                 task.metadata.update(event.metadata)
-            task.status = event.status
+            task.status.CopyFrom(event.status)
         else:
             logger.debug('Appending artifact to task %s', task.id)
             append_artifact_to_task(task, event)
@@ -257,15 +252,9 @@ class TaskManager:
         Returns:
             The updated `Task` object (updated in-place).
         """
-        if task.status.message:
-            if task.history:
-                task.history.append(task.status.message)
-            else:
-                task.history = [task.status.message]
-            task.status.message = None
-        if task.history:
-            task.history.append(message)
-        else:
-            task.history = [message]
+        if task.status.HasField('message'):
+            task.history.append(task.status.message)
+            task.status.ClearField('message')
+        task.history.append(message)
         self._current_task = task
         return task

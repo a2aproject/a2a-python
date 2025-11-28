@@ -7,43 +7,48 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import prepare_response_object
 from a2a.types.a2a_pb2 import (
     AgentCard,
-    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    Message,
+    SendMessageRequest,
+    SendMessageResponse as SendMessageResponseProto,
+    SetTaskPushNotificationConfigRequest,
+    StreamResponse,
+    Task,
+    TaskArtifactUpdateEvent,
+    TaskPushNotificationConfig,
+    TaskStatusUpdateEvent,
+)
+from a2a.utils import proto_utils
+from a2a.types.extras import (
+    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskResponse,
     CancelTaskSuccessResponse,
-    DeleteTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigResponse,
     DeleteTaskPushNotificationConfigSuccessResponse,
-    GetAuthenticatedExtendedCardRequest,
     GetAuthenticatedExtendedCardResponse,
     GetAuthenticatedExtendedCardSuccessResponse,
-    GetTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigResponse,
     GetTaskPushNotificationConfigSuccessResponse,
-    GetTaskRequest,
     GetTaskResponse,
     GetTaskSuccessResponse,
     InternalError,
     JSONRPCErrorResponse,
-    ListTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigResponse,
     ListTaskPushNotificationConfigSuccessResponse,
-    Message,
-    SendMessageRequest,
     SendMessageResponse,
     SendMessageSuccessResponse,
     SendStreamingMessageRequest,
     SendStreamingMessageResponse,
     SendStreamingMessageSuccessResponse,
-    SetTaskPushNotificationConfigRequest,
     SetTaskPushNotificationConfigResponse,
     SetTaskPushNotificationConfigSuccessResponse,
-    Task,
-    TaskArtifactUpdateEvent,
     TaskNotFoundError,
-    TaskPushNotificationConfig,
     TaskResubscriptionRequest,
-    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
@@ -86,6 +91,14 @@ class JSONRPCHandler:
         self.extended_card_modifier = extended_card_modifier
         self.card_modifier = card_modifier
 
+    def _get_request_id(
+        self, context: ServerCallContext | None
+    ) -> str | int | None:
+        """Get the JSON-RPC request ID from the context."""
+        if context is None:
+            return None
+        return context.state.get('request_id')
+
     async def on_message_send(
         self,
         request: SendMessageRequest,
@@ -94,29 +107,35 @@ class JSONRPCHandler:
         """Handles the 'message/send' JSON-RPC method.
 
         Args:
-            request: The incoming `SendMessageRequest` object.
+            request: The incoming `SendMessageRequest` proto message.
             context: Context provided by the server.
 
         Returns:
             A `SendMessageResponse` object containing the result (Task or Message)
             or a JSON-RPC error response if a `ServerError` is raised by the handler.
         """
+        request_id = self._get_request_id(context)
         # TODO: Wrap in error handler to return error states
         try:
             task_or_message = await self.request_handler.on_message_send(
-                request.params, context
+                request, context
             )
+            # Wrap the result in SendMessageResponseProto for consistent client parsing
+            if isinstance(task_or_message, Task):
+                response_proto = SendMessageResponseProto(task=task_or_message)
+            else:
+                response_proto = SendMessageResponseProto(msg=task_or_message)
             return prepare_response_object(
-                request.id,
-                task_or_message,
-                (Task, Message),
+                request_id,
+                response_proto,
+                (SendMessageResponseProto,),
                 SendMessageSuccessResponse,
                 SendMessageResponse,
             )
         except ServerError as e:
             return SendMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=request_id, error=e.error if e.error else InternalError()
                 )
             )
 
@@ -144,24 +163,21 @@ class JSONRPCHandler:
         """
         try:
             async for event in self.request_handler.on_message_send_stream(
-                request.params, context
+                request, context
             ):
+                # Wrap the event in StreamResponse for consistent client parsing
+                stream_response = proto_utils.ToProto.stream_response(event)
                 yield prepare_response_object(
-                    request.id,
-                    event,
-                    (
-                        Task,
-                        Message,
-                        TaskArtifactUpdateEvent,
-                        TaskStatusUpdateEvent,
-                    ),
+                    self._get_request_id(context),
+                    stream_response,
+                    (StreamResponse,),
                     SendStreamingMessageSuccessResponse,
                     SendStreamingMessageResponse,
                 )
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
@@ -181,18 +197,18 @@ class JSONRPCHandler:
         """
         try:
             task = await self.request_handler.on_cancel_task(
-                request.params, context
+                request, context
             )
         except ServerError as e:
             return CancelTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
         if task:
             return prepare_response_object(
-                request.id,
+                self._get_request_id(context),
                 task,
                 (Task,),
                 CancelTaskSuccessResponse,
@@ -200,7 +216,7 @@ class JSONRPCHandler:
             )
 
         return CancelTaskResponse(
-            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
+            root=JSONRPCErrorResponse(id=self._get_request_id(context), error=TaskNotFoundError())
         )
 
     async def on_resubscribe_to_task(
@@ -222,24 +238,21 @@ class JSONRPCHandler:
         """
         try:
             async for event in self.request_handler.on_resubscribe_to_task(
-                request.params, context
+                request, context
             ):
+                # Wrap the event in StreamResponse for consistent client parsing
+                stream_response = proto_utils.ToProto.stream_response(event)
                 yield prepare_response_object(
-                    request.id,
-                    event,
-                    (
-                        Task,
-                        Message,
-                        TaskArtifactUpdateEvent,
-                        TaskStatusUpdateEvent,
-                    ),
+                    self._get_request_id(context),
+                    stream_response,
+                    (StreamResponse,),
                     SendStreamingMessageSuccessResponse,
                     SendStreamingMessageResponse,
                 )
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
@@ -260,11 +273,11 @@ class JSONRPCHandler:
         try:
             config = (
                 await self.request_handler.on_get_task_push_notification_config(
-                    request.params, context
+                    request, context
                 )
             )
             return prepare_response_object(
-                request.id,
+                self._get_request_id(context),
                 config,
                 (TaskPushNotificationConfig,),
                 GetTaskPushNotificationConfigSuccessResponse,
@@ -273,7 +286,7 @@ class JSONRPCHandler:
         except ServerError as e:
             return GetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
@@ -302,14 +315,19 @@ class JSONRPCHandler:
                 (due to the `@validate` decorator).
         """
         try:
-            config = (
+            # Extract TaskPushNotificationConfig from the request
+            # and set the name from parent if not set
+            config = request.config
+            if not config.name and request.parent:
+                config.name = f'{request.parent}/pushNotificationConfigs/{request.config_id or "default"}'
+            result = (
                 await self.request_handler.on_set_task_push_notification_config(
-                    request.params, context
+                    config, context
                 )
             )
             return prepare_response_object(
-                request.id,
-                config,
+                self._get_request_id(context),
+                result,
                 (TaskPushNotificationConfig,),
                 SetTaskPushNotificationConfigSuccessResponse,
                 SetTaskPushNotificationConfigResponse,
@@ -317,7 +335,7 @@ class JSONRPCHandler:
         except ServerError as e:
             return SetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
@@ -337,18 +355,18 @@ class JSONRPCHandler:
         """
         try:
             task = await self.request_handler.on_get_task(
-                request.params, context
+                request, context
             )
         except ServerError as e:
             return GetTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
         if task:
             return prepare_response_object(
-                request.id,
+                self._get_request_id(context),
                 task,
                 (Task,),
                 GetTaskSuccessResponse,
@@ -356,7 +374,7 @@ class JSONRPCHandler:
             )
 
         return GetTaskResponse(
-            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
+            root=JSONRPCErrorResponse(id=self._get_request_id(context), error=TaskNotFoundError())
         )
 
     async def list_push_notification_config(
@@ -375,10 +393,10 @@ class JSONRPCHandler:
         """
         try:
             config = await self.request_handler.on_list_task_push_notification_config(
-                request.params, context
+                request, context
             )
             return prepare_response_object(
-                request.id,
+                self._get_request_id(context),
                 config,
                 (list,),
                 ListTaskPushNotificationConfigSuccessResponse,
@@ -387,7 +405,7 @@ class JSONRPCHandler:
         except ServerError as e:
             return ListTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
@@ -408,30 +426,30 @@ class JSONRPCHandler:
         try:
             (
                 await self.request_handler.on_delete_task_push_notification_config(
-                    request.params, context
+                    request, context
                 )
             )
             return DeleteTaskPushNotificationConfigResponse(
                 root=DeleteTaskPushNotificationConfigSuccessResponse(
-                    id=request.id, result=None
+                    id=self._get_request_id(context), result=None
                 )
             )
         except ServerError as e:
             return DeleteTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
                 )
             )
 
     async def get_authenticated_extended_card(
         self,
-        request: GetAuthenticatedExtendedCardRequest,
+        request: GetExtendedAgentCardRequest,
         context: ServerCallContext | None = None,
     ) -> GetAuthenticatedExtendedCardResponse:
         """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method.
 
         Args:
-            request: The incoming `GetAuthenticatedExtendedCardRequest` object.
+            request: The incoming `GetExtendedAgentCardRequest` object.
             context: Context provided by the server.
 
         Returns:
@@ -456,6 +474,6 @@ class JSONRPCHandler:
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(
-                id=request.id, result=card_to_serve
+                id=self._get_request_id(context), result=card_to_serve
             )
         )

@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+from google.protobuf.json_format import MessageToDict
 
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
@@ -63,7 +64,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         # assert httpx_client post method got invoked with right parameters
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
-            json=task_data.model_dump(mode='json', exclude_none=True),
+            json=MessageToDict(task_data),
             headers=None,
         )
         mock_response.raise_for_status.assert_called_once()
@@ -87,7 +88,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         # assert httpx_client post method got invoked with right parameters
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
-            json=task_data.model_dump(mode='json', exclude_none=True),
+            json=MessageToDict(task_data),
             headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
@@ -124,7 +125,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_config_store.get_info.assert_awaited_once_with(task_id)
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
-            json=task_data.model_dump(mode='json', exclude_none=True),
+            json=MessageToDict(task_data),
             headers=None,
         )
         mock_logger.exception.assert_called_once()
@@ -152,13 +153,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         # Check calls for config1
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
-            json=task_data.model_dump(mode='json', exclude_none=True),
+            json=MessageToDict(task_data),
             headers=None,
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
-            json=task_data.model_dump(mode='json', exclude_none=True),
+            json=MessageToDict(task_data),
             headers=None,
         )
         mock_response.raise_for_status.call_count = 2

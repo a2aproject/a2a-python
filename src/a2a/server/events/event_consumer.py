@@ -8,12 +8,12 @@ from pydantic import ValidationError
 
 from a2a.server.events.event_queue import Event, EventQueue
 from a2a.types.a2a_pb2 import (
-    InternalError,
     Message,
     Task,
     TaskState,
     TaskStatusUpdateEvent,
 )
+from a2a.types.extras import InternalError
 from a2a.utils.errors import ServerError
 from a2a.utils.telemetry import SpanKind, trace_class
 

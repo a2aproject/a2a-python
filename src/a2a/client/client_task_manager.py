@@ -84,7 +84,7 @@ class ClientTaskManager:
             ClientError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
-        if event.HasField('message'):
+        if event.HasField('msg'):
             # Messages are not processed here.
             return None
 
@@ -112,14 +112,14 @@ class ClientTaskManager:
                 status_update.task_id,
                 status_update.status.state,
             )
-            if status_update.status.message:
+            if status_update.status.HasField('message'):
                 # "Repeated" fields are merged by appending.
-                task.history.MergeFrom([status_update.status.message])
+                task.history.append(status_update.status.message)
 
             if status_update.metadata:
                 task.metadata.MergeFrom(status_update.metadata)
 
-            task.status = status_update.status
+            task.status.CopyFrom(status_update.status)
             await self._save_task(task)
 
         if event.HasField('artifact_update'):
@@ -163,10 +163,10 @@ class ClientTaskManager:
         Returns:
             The updated `Task` object (updated in-place).
         """
-        if task.status.message:
-            task.history.MergeFrom([task.status.message])
+        if task.status.HasField('message'):
+            task.history.append(task.status.message)
             task.status.ClearField('message')
 
-        task.history.MergeFrom([message])
+        task.history.append(message)
         self._current_task = task
         return task

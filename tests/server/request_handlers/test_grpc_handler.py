@@ -188,29 +188,31 @@ async def test_send_streaming_message(
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card(
+async def test_get_extended_agent_card(
     grpc_handler: GrpcHandler,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call."""
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler.GetAgentCard(request_proto, mock_grpc_context)
+    """Test GetExtendedAgentCard call."""
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler.GetExtendedAgentCard(request_proto, mock_grpc_context)
 
     assert response.name == sample_agent_card.name
     assert response.version == sample_agent_card.version
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card_with_modifier(
+async def test_get_extended_agent_card_with_modifier(
     mock_request_handler: AsyncMock,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call with a card_modifier."""
+    """Test GetExtendedAgentCard call with a card_modifier."""
 
     def modifier(card: types.AgentCard) -> types.AgentCard:
-        modified_card = card.model_copy(deep=True)
+        # For proto, we need to create a new message with modified fields
+        modified_card = types.AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
@@ -220,8 +222,8 @@ async def test_get_agent_card_with_modifier(
         card_modifier=modifier,
     )
 
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler_modified.GetAgentCard(
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
 
@@ -367,8 +369,8 @@ class TestGrpcExtensions:
         )
         mock_request_handler.on_message_send.return_value = types.Message(
             message_id='1',
-            role=types.Role.agent,
-            parts=[types.Part(root=types.TextPart(text='test'))],
+            role=types.Role.ROLE_AGENT,
+            parts=[types.Part(text='test')],
         )
 
         await grpc_handler.SendMessage(

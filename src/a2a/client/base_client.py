@@ -93,11 +93,11 @@ class BaseClient(Client):
             stream_response = StreamResponse()
             client_event: ClientEvent
             if response.HasField("task"):
-                stream_response.task = response.task
+                stream_response.task.CopyFrom(response.task)
                 client_event = (stream_response, response.task)
 
-            elif response.HasField("message"):
-                stream_response.msg = response.msg
+            elif response.HasField("msg"):
+                stream_response.msg.CopyFrom(response.msg)
                 client_event = (stream_response, None)
 
             await self.consume(client_event, self._card)
@@ -116,7 +116,7 @@ class BaseClient(Client):
             client_event: ClientEvent
             # When we get a message in the stream then we don't expect any
             # further messages so yield and return
-            if stream_response.HasField("message"):
+            if stream_response.HasField("msg"):
                 client_event = (stream_response, None)
                 await self.consume(client_event, self._card)
                 yield client_event

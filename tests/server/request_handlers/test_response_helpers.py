@@ -2,20 +2,23 @@ import unittest
 
 from unittest.mock import patch
 
+from google.protobuf.json_format import MessageToDict
+
 from a2a.server.request_handlers.response_helpers import (
     build_error_response,
     prepare_response_object,
 )
-from a2a.types.a2a_pb2 import (
-    A2AError,
+from a2a.types import (
     GetTaskResponse,
     GetTaskSuccessResponse,
     InvalidAgentResponseError,
     InvalidParamsError,
     JSONRPCError,
     JSONRPCErrorResponse,
-    Task,
     TaskNotFoundError,
+)
+from a2a.types.a2a_pb2 import (
+    Task,
     TaskState,
     TaskStatus,
 )
@@ -25,40 +28,33 @@ class TestResponseHelpers(unittest.TestCase):
     def test_build_error_response_with_a2a_error(self) -> None:
         request_id = 'req1'
         specific_error = TaskNotFoundError()
-        a2a_error = A2AError(root=specific_error)  # Correctly wrap
+        # A2AError is now a Union type - TaskNotFoundError is directly an A2AError
         response_wrapper = build_error_response(
-            request_id, a2a_error, GetTaskResponse
+            request_id, specific_error, GetTaskResponse
         )
         self.assertIsInstance(response_wrapper, GetTaskResponse)
         self.assertIsInstance(response_wrapper.root, JSONRPCErrorResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
-        self.assertEqual(
-            response_wrapper.root.error, specific_error
-        )  # build_error_response unwraps A2AError
+        self.assertEqual(response_wrapper.root.error, specific_error)
 
     def test_build_error_response_with_jsonrpc_error(self) -> None:
         request_id = 123
         json_rpc_error = InvalidParamsError(
             message='Custom invalid params'
-        )  # This is a specific error, not A2AError wrapped
+        )
         response_wrapper = build_error_response(
             request_id, json_rpc_error, GetTaskResponse
         )
         self.assertIsInstance(response_wrapper, GetTaskResponse)
         self.assertIsInstance(response_wrapper.root, JSONRPCErrorResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
-        self.assertEqual(
-            response_wrapper.root.error, json_rpc_error
-        )  # No .root access for json_rpc_error
+        self.assertEqual(response_wrapper.root.error, json_rpc_error)
 
-    def test_build_error_response_with_a2a_wrapping_jsonrpc_error(self) -> None:
+    def test_build_error_response_with_invalid_params_error(self) -> None:
         request_id = 'req_wrap'
         specific_jsonrpc_error = InvalidParamsError(message='Detail error')
-        a2a_error_wrapping = A2AError(
-            root=specific_jsonrpc_error
-        )  # Correctly wrap
         response_wrapper = build_error_response(
-            request_id, a2a_error_wrapping, GetTaskResponse
+            request_id, specific_jsonrpc_error, GetTaskResponse
         )
         self.assertIsInstance(response_wrapper, GetTaskResponse)
         self.assertIsInstance(response_wrapper.root, JSONRPCErrorResponse)
@@ -67,8 +63,7 @@ class TestResponseHelpers(unittest.TestCase):
 
     def test_build_error_response_with_request_id_string(self) -> None:
         request_id = 'string_id_test'
-        # Pass an A2AError-wrapped specific error for consistency with how build_error_response handles A2AError
-        error = A2AError(root=TaskNotFoundError())
+        error = TaskNotFoundError()
         response_wrapper = build_error_response(
             request_id, error, GetTaskResponse
         )
@@ -77,7 +72,7 @@ class TestResponseHelpers(unittest.TestCase):
 
     def test_build_error_response_with_request_id_int(self) -> None:
         request_id = 456
-        error = A2AError(root=TaskNotFoundError())
+        error = TaskNotFoundError()
         response_wrapper = build_error_response(
             request_id, error, GetTaskResponse
         )
@@ -86,7 +81,7 @@ class TestResponseHelpers(unittest.TestCase):
 
     def test_build_error_response_with_request_id_none(self) -> None:
         request_id = None
-        error = A2AError(root=TaskNotFoundError())
+        error = TaskNotFoundError()
         response_wrapper = build_error_response(
             request_id, error, GetTaskResponse
         )
@@ -116,7 +111,9 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertIsInstance(response_wrapper, GetTaskResponse)
         self.assertIsInstance(response_wrapper.root, GetTaskSuccessResponse)
         self.assertEqual(response_wrapper.root.id, request_id)
-        self.assertEqual(response_wrapper.root.result, task_result)
+        # prepare_response_object converts proto messages to dict for JSON serialization
+        expected_result = MessageToDict(task_result, preserving_proto_field_name=False)
+        self.assertEqual(response_wrapper.root.result, expected_result)
 
     @patch('a2a.server.request_handlers.response_helpers.build_error_response')
     def test_prepare_response_object_with_a2a_error_instance(
@@ -124,9 +121,7 @@ class TestResponseHelpers(unittest.TestCase):
     ) -> None:
         request_id = 'req_a2a_err'
         specific_error = TaskNotFoundError()
-        a2a_error_instance = A2AError(
-            root=specific_error
-        )  # Correctly wrapped A2AError
+        # A2AError is now a Union type - TaskNotFoundError is directly an A2AError
 
         # This is what build_error_response (when called by prepare_response_object) will return
         mock_wrapped_error_response = GetTaskResponse(
@@ -138,14 +133,14 @@ class TestResponseHelpers(unittest.TestCase):
 
         response_wrapper = prepare_response_object(
             request_id=request_id,
-            response=a2a_error_instance,  # Pass the A2AError instance
+            response=specific_error,  # Pass the error directly
             success_response_types=(Task,),
             success_payload_type=GetTaskSuccessResponse,
             response_type=GetTaskResponse,
         )
-        # prepare_response_object should identify A2AError and call build_error_response
+        # prepare_response_object should identify the error and call build_error_response
         mock_build_error.assert_called_once_with(
-            request_id, a2a_error_instance, GetTaskResponse
+            request_id, specific_error, GetTaskResponse
         )
         self.assertEqual(response_wrapper, mock_wrapped_error_response)
 
@@ -184,29 +179,27 @@ class TestResponseHelpers(unittest.TestCase):
         self, mock_build_error
     ) -> None:
         request_id = 'req_specific_unexpected'
-        # Pass a specific error model (like TaskNotFoundError) directly, NOT wrapped in A2AError
-        # This should be treated as an "unexpected" type by prepare_response_object's current logic
-        specific_error_direct = TaskNotFoundError()
+        # Pass an object that is NOT a success type and NOT an A2AError or JSONRPCError
+        # This should trigger the "invalid type" path in prepare_response_object
+        invalid_response = object()  # Not a Task, not an error
 
         # This is the InvalidAgentResponseError that prepare_response_object will generate
-        generated_error_wrapper = A2AError(
-            root=InvalidAgentResponseError(
-                message='Agent returned invalid type response for this method'
-            )
+        generated_error = InvalidAgentResponseError(
+            message='Agent returned invalid type response for this method'
         )
 
         # This is what build_error_response will be called with (the generated error)
         # And this is what it will return (the generated error, wrapped in GetTaskResponse)
         mock_final_wrapped_response = GetTaskResponse(
             root=JSONRPCErrorResponse(
-                id=request_id, error=generated_error_wrapper.root, jsonrpc='2.0'
+                id=request_id, error=generated_error, jsonrpc='2.0'
             )
         )
         mock_build_error.return_value = mock_final_wrapped_response
 
         response_wrapper = prepare_response_object(
             request_id=request_id,
-            response=specific_error_direct,  # Pass TaskNotFoundError() directly
+            response=invalid_response,  # Pass an invalid type
             success_response_types=(Task,),
             success_payload_type=GetTaskSuccessResponse,
             response_type=GetTaskResponse,
@@ -215,9 +208,8 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(mock_build_error.call_count, 1)
         args, _ = mock_build_error.call_args
         self.assertEqual(args[0], request_id)
-        # Check that the error passed to build_error_response is the generated A2AError(InvalidAgentResponseError)
-        self.assertIsInstance(args[1], A2AError)
-        self.assertIsInstance(args[1].root, InvalidAgentResponseError)
+        # Check that the error passed to build_error_response is an InvalidAgentResponseError
+        self.assertIsInstance(args[1], InvalidAgentResponseError)
         self.assertEqual(args[2], GetTaskResponse)
         self.assertEqual(response_wrapper, mock_final_wrapped_response)
 

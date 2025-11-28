@@ -31,7 +31,8 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
-from a2a.types.a2a_pb2 import AgentCard, TaskNotFoundError
+from a2a.types.a2a_pb2 import AgentCard
+from a2a.types.extras import TaskNotFoundError
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate, validate_async_generator
@@ -134,7 +135,12 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 a2a_request, server_context
             )
             self._set_extension_metadata(context, server_context)
-            return proto_utils.ToProto.task_or_message(task_or_message)
+            result = proto_utils.ToProto.task_or_message(task_or_message)
+            # Wrap in SendMessageResponse based on type
+            if isinstance(result, a2a_pb2.Task):
+                return a2a_pb2.SendMessageResponse(task=result)
+            else:
+                return a2a_pb2.SendMessageResponse(msg=result)
         except ServerError as e:
             await self.abort_context(e, context)
         return a2a_pb2.SendMessageResponse()
@@ -210,18 +216,18 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
-    async def TaskSubscription(
+    async def SubscribeToTask(
         self,
-        request: a2a_pb2.TaskSubscriptionRequest,
+        request: a2a_pb2.SubscribeToTaskRequest,
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
-        """Handles the 'TaskSubscription' gRPC method.
+        """Handles the 'SubscribeToTask' gRPC method.
 
         Yields response objects as they are produced by the underlying handler's
         stream.
 
         Args:
-            request: The incoming `TaskSubscriptionRequest` object.
+            request: The incoming `SubscribeToTaskRequest` object.
             context: Context provided by the server.
 
         Yields:
@@ -268,17 +274,17 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
     )
-    async def CreateTaskPushNotificationConfig(
+    async def SetTaskPushNotificationConfig(
         self,
-        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
+        request: a2a_pb2.SetTaskPushNotificationConfigRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.TaskPushNotificationConfig:
-        """Handles the 'CreateTaskPushNotificationConfig' gRPC method.
+        """Handles the 'SetTaskPushNotificationConfig' gRPC method.
 
         Requires the agent to support push notifications.
 
         Args:
-            request: The incoming `CreateTaskPushNotificationConfigRequest` object.
+            request: The incoming `SetTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:
@@ -320,7 +326,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         try:
             server_context = self.context_builder.build(context)
             task = await self.request_handler.on_get_task(
-                proto_utils.FromProto.task_query_params(request), server_context
+                proto_utils.FromProto.task_id_params(request), server_context
             )
             if task:
                 return proto_utils.ToProto.task(task)
@@ -331,16 +337,16 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             await self.abort_context(e, context)
         return a2a_pb2.Task()
 
-    async def GetAgentCard(
+    async def GetExtendedAgentCard(
         self,
-        request: a2a_pb2.GetAgentCardRequest,
+        request: a2a_pb2.GetExtendedAgentCardRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.AgentCard:
-        """Get the agent card for the agent served."""
+        """Get the extended agent card for the agent served."""
         card_to_serve = self.agent_card
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
-        return proto_utils.ToProto.agent_card(card_to_serve)
+        return card_to_serve
 
     async def abort_context(
         self, error: ServerError, context: grpc.aio.ServicerContext
