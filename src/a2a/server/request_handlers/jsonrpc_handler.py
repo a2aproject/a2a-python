@@ -315,14 +315,10 @@ class JSONRPCHandler:
                 (due to the `@validate` decorator).
         """
         try:
-            # Extract TaskPushNotificationConfig from the request
-            # and set the name from parent if not set
-            config = request.config
-            if not config.name and request.parent:
-                config.name = f'{request.parent}/pushNotificationConfigs/{request.config_id or "default"}'
+            # Pass the full request to the handler
             result = (
                 await self.request_handler.on_set_task_push_notification_config(
-                    config, context
+                    request, context
                 )
             )
             return prepare_response_object(

@@ -25,6 +25,9 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.inspection import inspect
 
+from google.protobuf.json_format import MessageToJson
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from a2a.server.models import (
     Base,
     PushNotificationConfigModel,
@@ -79,18 +82,23 @@ else:
     )
 
 
+# Create a proper Timestamp for TaskStatus
+def _create_timestamp() -> Timestamp:
+    """Create a Timestamp from ISO format string."""
+    ts = Timestamp()
+    ts.FromJsonString('2023-01-01T00:00:00Z')
+    return ts
+
+
 # Minimal Task object for testing - remains the same
 task_status_submitted = TaskStatus(
-    state=TaskState.TASK_STATE_SUBMITTED, timestamp='2023-01-01T00:00:00Z'
+    state=TaskState.TASK_STATE_SUBMITTED, timestamp=_create_timestamp()
 )
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
     context_id='session-xyz',
     status=task_status_submitted,
-    kind='task',
     metadata={'test_key': 'test_value'},
-    artifacts=[],
-    history=[],
 )
 
 
@@ -303,7 +311,7 @@ async def test_data_is_encrypted_in_db(
     config = PushNotificationConfig(
         id='config-1', url='http://secret.url', token='secret-token'
     )
-    plain_json = config.model_dump_json()
+    plain_json = MessageToJson(config)
 
     await db_store_parameterized.set_info(task_id, config)
 
@@ -481,7 +489,7 @@ async def test_data_is_not_encrypted_in_db_if_no_key_is_set(
 
     task_id = 'task-1'
     config = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    plain_json = config.model_dump_json()
+    plain_json = MessageToJson(config)
 
     await store.set_info(task_id, config)
 

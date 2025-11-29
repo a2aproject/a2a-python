@@ -60,7 +60,7 @@ class TestAgent:
         if (
             not msg.parts
             or len(msg.parts) != 1
-            or msg.parts[0].root.kind != 'text'
+            or not msg.parts[0].HasField('text')
         ):
             await updater.failed(
                 new_agent_text_message(
@@ -68,7 +68,7 @@ class TestAgent:
                 )
             )
             return
-        text_message = msg.parts[0].root.text
+        text_message = msg.parts[0].text
 
         # Simple request-response flow.
         if text_message == 'Hello Agent!':

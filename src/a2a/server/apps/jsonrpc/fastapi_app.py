@@ -46,15 +46,10 @@ class A2AFastAPI(FastAPI):
         """Generates the OpenAPI schema for the application."""
         openapi_schema = super().openapi()
         if not self._a2a_components_added:
-            a2a_request_schema = A2ARequest.model_json_schema(
-                ref_template='#/components/schemas/{model}'
-            )
-            defs = a2a_request_schema.pop('$defs', {})
-            component_schemas = openapi_schema.setdefault(
-                'components', {}
-            ).setdefault('schemas', {})
-            component_schemas.update(defs)
-            component_schemas['A2ARequest'] = a2a_request_schema
+            # A2ARequest is now a Union type of proto messages, so we can't use
+            # model_json_schema. Instead, we just mark it as added without
+            # adding the schema since proto types don't have Pydantic schemas.
+            # The OpenAPI schema will still be functional for the endpoints.
             self._a2a_components_added = True
         return openapi_schema
 

@@ -11,6 +11,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigRequest,
     Message,
     SendMessageRequest,
+    SetTaskPushNotificationConfigRequest,
     Task,
     TaskPushNotificationConfig,
 )
@@ -107,7 +108,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_set_task_push_notification_config(
         self,
-        params: TaskPushNotificationConfig,
+        params: SetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/set' method.

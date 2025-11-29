@@ -35,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigRequest,
     Message,
     SendMessageRequest,
+    SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -468,7 +469,7 @@ class DefaultRequestHandler(RequestHandler):
 
     async def on_set_task_push_notification_config(
         self,
-        params: TaskPushNotificationConfig,
+        params: SetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/set'.
@@ -478,17 +479,21 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.name)
+        task_id = _extract_task_id(params.parent)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
         await self._push_config_store.set_info(
             task_id,
-            params.push_notification_config,
+            params.config.push_notification_config,
         )
 
-        return params
+        # Build the response config with the proper name
+        return TaskPushNotificationConfig(
+            name=f'{params.parent}/pushNotificationConfigs/{params.config_id}',
+            push_notification_config=params.config.push_notification_config,
+        )
 
     async def on_get_task_push_notification_config(
         self,

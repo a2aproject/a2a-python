@@ -6,14 +6,13 @@ from fastapi import FastAPI, HTTPException, Path, Request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
 from a2a.types.a2a_pb2 import Task
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import ParseDict, MessageToDict
 
 
 class Notification(BaseModel):
     """Encapsulates default push notification data."""
-    model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    task: Task
+    task: dict[str, Any]
     token: str
 
 
@@ -45,7 +44,7 @@ def create_notifications_app() -> FastAPI:
                 store[task.id] = []
             store[task.id].append(
                 Notification(
-                    task=task,
+                    task=MessageToDict(task, preserving_proto_field_name=True),
                     token=token,
                 )
             )
