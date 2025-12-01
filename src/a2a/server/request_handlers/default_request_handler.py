@@ -50,6 +50,7 @@ from a2a.types.extras import (
 )
 from a2a.utils.errors import ServerError
 from a2a.utils.task import apply_history_length
+from a2a.utils.telemetry import SpanKind, trace_class
 
 
 def _extract_task_id(resource_name: str) -> str:
@@ -63,11 +64,12 @@ def _extract_task_id(resource_name: str) -> str:
 
 def _extract_config_id(resource_name: str) -> str | None:
     """Extract push notification config ID from resource name like 'tasks/{task_id}/pushNotificationConfigs/{config_id}'."""
-    match = re.match(r'^tasks/[^/]+/pushNotificationConfigs/([^/]+)$', resource_name)
+    match = re.match(
+        r'^tasks/[^/]+/pushNotificationConfigs/([^/]+)$', resource_name
+    )
     if match:
         return match.group(1)
     return None
-from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
@@ -145,7 +147,9 @@ class DefaultRequestHandler(RequestHandler):
         return apply_history_length(task, params.history_length)
 
     async def on_cancel_task(
-        self, params: CancelTaskRequest, context: ServerCallContext | None = None
+        self,
+        params: CancelTaskRequest,
+        context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/cancel'.
 

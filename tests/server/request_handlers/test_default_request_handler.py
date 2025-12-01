@@ -33,7 +33,6 @@ from a2a.server.tasks import (
 from a2a.types import (
     InternalError,
     InvalidParamsError,
-    MessageSendParams,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -406,7 +405,7 @@ async def test_on_message_send_with_push_notification():
         push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
@@ -427,13 +426,13 @@ async def test_on_message_send_with_push_notification():
         False,
     )
 
-    # Mock the current_result property to return the final task result
-    async def get_current_result():
+    # Mock the current_result async property to return the final task result
+    # current_result is an async property, so accessing it returns a coroutine
+    async def mock_current_result():
         return final_task_result
 
-    # Configure the 'current_result' property on the type of the mock instance
-    type(mock_result_aggregator_instance).current_result = PropertyMock(
-        return_value=get_current_result()
+    type(mock_result_aggregator_instance).current_result = property(
+        lambda self: mock_current_result()
     )
 
     with (
@@ -506,7 +505,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         accepted_output_modes=['text/plain'],
         blocking=False,  # Non-blocking request
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_non_blocking',
@@ -526,12 +525,13 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         True,  # interrupted = True for non-blocking
     )
 
-    # Mock the current_result property to return the final task
-    async def get_current_result():
+    # Mock the current_result async property to return the final task
+    # current_result is an async property, so accessing it returns a coroutine
+    async def mock_current_result():
         return final_task
 
-    type(mock_result_aggregator_instance).current_result = PropertyMock(
-        return_value=get_current_result()
+    type(mock_result_aggregator_instance).current_result = property(
+        lambda self: mock_current_result()
     )
 
     # Track if the event_callback was passed to consume_and_break_on_interrupt
@@ -622,7 +622,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(role=Role.ROLE_USER, message_id='msg_push', parts=[]),
         configuration=message_config,
     )
@@ -637,13 +637,13 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         False,
     )
 
-    # Mock the current_result property to return the final task result
-    async def get_current_result():
+    # Mock the current_result async property to return the final task result
+    # current_result is an async property, so accessing it returns a coroutine
+    async def mock_current_result():
         return final_task_result
 
-    # Configure the 'current_result' property on the type of the mock instance
-    type(mock_result_aggregator_instance).current_result = PropertyMock(
-        return_value=get_current_result()
+    type(mock_result_aggregator_instance).current_result = property(
+        lambda self: mock_current_result()
     )
 
     with (
@@ -685,7 +685,7 @@ async def test_on_message_send_no_result_from_aggregator():
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(role=Role.ROLE_USER, message_id='msg_no_res', parts=[])
     )
 
@@ -735,7 +735,7 @@ async def test_on_message_send_task_id_mismatch():
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(role=Role.ROLE_USER, message_id='msg_id_mismatch', parts=[])
     )
 
@@ -808,7 +808,7 @@ async def test_on_message_send_non_blocking():
         task_store=task_store,
         push_config_store=push_store,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
@@ -855,7 +855,7 @@ async def test_on_message_send_limit_history():
         task_store=task_store,
         push_config_store=push_store,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
@@ -894,7 +894,7 @@ async def test_on_get_task_limit_history():
         task_store=task_store,
         push_config_store=push_store,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
@@ -943,7 +943,7 @@ async def test_on_message_send_interrupted_flow():
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(role=Role.ROLE_USER, message_id='msg_interrupt', parts=[])
     )
 
@@ -956,9 +956,16 @@ async def test_on_message_send_interrupted_flow():
         True,
     )  # Interrupted = True
 
+    # Collect coroutines passed to create_task so we can close them
+    created_coroutines = []
+
+    def capture_create_task(coro):
+        created_coroutines.append(coro)
+        return MagicMock()
+
     # Patch asyncio.create_task to verify _cleanup_producer is scheduled
     with (
-        patch('asyncio.create_task') as mock_asyncio_create_task,
+        patch('asyncio.create_task', side_effect=capture_create_task) as mock_asyncio_create_task,
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
             return_value=mock_result_aggregator_instance,
@@ -979,17 +986,17 @@ async def test_on_message_send_interrupted_flow():
 
     # Check that the second call to create_task was for _cleanup_producer
     found_cleanup_call = False
-    for call_args_tuple in mock_asyncio_create_task.call_args_list:
-        created_coro = call_args_tuple[0][0]
-        if (
-            hasattr(created_coro, '__name__')
-            and created_coro.__name__ == '_cleanup_producer'
-        ):
+    for coro in created_coroutines:
+        if hasattr(coro, '__name__') and coro.__name__ == '_cleanup_producer':
             found_cleanup_call = True
             break
     assert found_cleanup_call, (
         '_cleanup_producer was not scheduled with asyncio.create_task'
     )
+
+    # Close coroutines to avoid RuntimeWarning about unawaited coroutines
+    for coro in created_coroutines:
+        coro.close()
 
 
 @pytest.mark.asyncio
@@ -1034,7 +1041,7 @@ async def test_on_message_send_stream_with_push_notification():
         push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_stream_push',
@@ -1305,7 +1312,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
         queue_manager=queue_manager,
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_reconn',
@@ -1374,6 +1381,10 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
     task_id = 'disc_task_1'
     context_id = 'disc_ctx_1'
 
+    # Return an existing task from the store to avoid "task not found" error
+    existing_task = create_sample_task(task_id=task_id, context_id=context_id)
+    mock_task_store.get.return_value = existing_task
+
     # RequestContext with IDs
     mock_request_context = MagicMock(spec=RequestContext)
     mock_request_context.task_id = task_id
@@ -1391,7 +1402,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
         request_context_builder=mock_request_context_builder,
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='mid',
@@ -1532,7 +1543,7 @@ async def test_disconnect_persists_final_task_to_store():
         agent_executor=agent, task_store=task_store, queue_manager=queue_manager
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_persist',
@@ -1598,6 +1609,10 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
     task_id = 'track_task_1'
     context_id = 'track_ctx_1'
 
+    # Return an existing task from the store to avoid "task not found" error
+    existing_task = create_sample_task(task_id=task_id, context_id=context_id)
+    mock_task_store.get.return_value = existing_task
+
     # RequestContext with IDs
     mock_request_context = MagicMock(spec=RequestContext)
     mock_request_context.task_id = task_id
@@ -1614,7 +1629,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
         request_context_builder=mock_request_context_builder,
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='mid_track',
@@ -1721,7 +1736,7 @@ async def test_on_message_send_stream_task_id_mismatch():
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
     )
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER, message_id='msg_stream_mismatch', parts=[]
         )
@@ -2090,7 +2105,7 @@ async def test_on_message_send_stream():
     request_handler = DefaultRequestHandler(
         DummyAgentExecutor(), InMemoryTaskStore()
     )
-    message_params = MessageSendParams(
+    message_params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg-123',
@@ -2482,7 +2497,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal',
@@ -2527,7 +2542,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal_stream',
@@ -2602,7 +2617,7 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_nonexistent',
@@ -2642,7 +2657,7 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
 
-    params = MessageSendParams(
+    params = SendMessageRequest(
         request=Message(
             role=Role.ROLE_USER,
             message_id='msg_nonexistent_stream',

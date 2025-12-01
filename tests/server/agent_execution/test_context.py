@@ -7,7 +7,6 @@ import pytest
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
-from a2a.types import MessageSendParams
 from a2a.types.a2a_pb2 import (
     Message,
     SendMessageRequest,
@@ -26,8 +25,8 @@ class TestRequestContext:
 
     @pytest.fixture
     def mock_params(self, mock_message: Mock) -> Mock:
-        """Fixture for a mock MessageSendParams."""
-        return Mock(spec=MessageSendParams, request=mock_message)
+        """Fixture for a mock SendMessageRequest."""
+        return Mock(spec=SendMessageRequest, request=mock_message)
 
     @pytest.fixture
     def mock_task(self) -> Mock:

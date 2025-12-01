@@ -8,7 +8,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
-from pydantic import ValidationError
+from pydantic import RootModel, ValidationError
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
@@ -37,12 +37,9 @@ from a2a.types.extras import (
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
-    JSONRPCError,
     JSONRPCErrorResponse,
     JSONRPCRequest,
-    JSONRPCResponse,
     MethodNotFoundError,
-    SendStreamingMessageRequest,
     SendStreamingMessageResponse,
     TaskResubscriptionRequest,
     UnsupportedOperationError,
@@ -160,7 +157,7 @@ class JSONRPCApplication(ABC):
     # Proto types don't have model_fields, so we define the mapping explicitly
     METHOD_TO_MODEL: dict[str, type] = {
         'message/send': SendMessageRequest,
-        'message/stream': SendStreamingMessageRequest,
+        'message/stream': SendMessageRequest,  # Same proto type as message/send
         'tasks/get': GetTaskRequest,
         'tasks/cancel': CancelTaskRequest,
         'tasks/pushNotificationConfig/set': SetTaskPushNotificationConfigRequest,
@@ -349,8 +346,8 @@ class JSONRPCApplication(ABC):
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
 
-            # Route streaming requests by method name, not by type
-            # (SendMessageRequest and SendStreamingMessageRequest are the same proto type)
+            # Route streaming requests by method name
+            # (message/send and message/stream both use SendMessageRequest)
             if method in ('message/stream', 'tasks/resubscribe'):
                 return await self._process_streaming_request(
                     request_id, specific_request, call_context
@@ -399,9 +396,10 @@ class JSONRPCApplication(ABC):
             An `EventSourceResponse` object to stream results to the client.
         """
         handler_result: Any = None
+        # Check for streaming message request (same type as send, but handled differently)
         if isinstance(
             request_obj,
-            SendStreamingMessageRequest,
+            SendMessageRequest,
         ):
             handler_result = self.handler.on_message_send_stream(
                 request_obj, context
@@ -497,7 +495,7 @@ class JSONRPCApplication(ABC):
         handler_result: (
             AsyncGenerator[SendStreamingMessageResponse]
             | JSONRPCErrorResponse
-            | JSONRPCResponse
+            | RootModel[Any]
         ),
     ) -> Response:
         """Creates a Starlette Response based on the result from the request handler.

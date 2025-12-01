@@ -11,7 +11,6 @@ from a2a.server.agent_execution.simple_request_context_builder import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import MessageSendParams
 from a2a.types.a2a_pb2 import (
     Message,
     Part,
@@ -84,7 +83,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task_store=self.mock_task_store,
         )
 
-        params = MessageSendParams(request=create_sample_message())
+        params = SendMessageRequest(request=create_sample_message())
         task_id = 'test_task_id_1'
         context_id = 'test_context_id_1'
         current_task = create_sample_task(
@@ -141,7 +140,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
 
         self.mock_task_store.get = AsyncMock(side_effect=get_side_effect)
 
-        params = MessageSendParams(
+        params = SendMessageRequest(
             request=create_sample_message(
                 reference_task_ids=[ref_task_id1, ref_task_id2, ref_task_id3]
             )
@@ -192,7 +191,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         server_call_context = ServerCallContext(user=UnauthenticatedUser())
 
         # Test with empty list
-        params_empty_refs = MessageSendParams(
+        params_empty_refs = SendMessageRequest(
             request=create_sample_message(reference_task_ids=[])
         )
         request_context_empty = await builder.build(
@@ -216,7 +215,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         msg_with_no_refs = Message(
             message_id='m2', role=Role.ROLE_USER, parts=[], reference_task_ids=None
         )
-        params_none_refs = MessageSendParams(request=msg_with_no_refs)
+        params_none_refs = SendMessageRequest(request=msg_with_no_refs)
         request_context_none = await builder.build(
             params=params_none_refs,
             task_id='t2',
@@ -236,7 +235,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             should_populate_referred_tasks=True,
             task_store=None,  # Explicitly None
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             request=create_sample_message(reference_task_ids=['ref1'])
         )
         server_call_context = ServerCallContext(user=UnauthenticatedUser())
@@ -257,7 +256,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             should_populate_referred_tasks=False,
             task_store=self.mock_task_store,
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             request=create_sample_message(
                 reference_task_ids=['ref_task_should_not_be_fetched']
             )

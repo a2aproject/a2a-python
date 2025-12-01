@@ -1,5 +1,7 @@
 import logging
 
+from typing import Any
+
 
 try:
     from sqlalchemy import Table, delete, select
@@ -113,23 +115,29 @@ class DatabaseTaskStore(TaskStore):
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
         # The ORM columns return proto objects for status, artifacts, history
         # We need to convert them back to dicts for ParseDict
-        task_data_from_db = {
+        task_data_from_db: dict[str, Any] = {
             'id': task_model.id,
             'context_id': task_model.context_id,
         }
         # Add status if present (already a proto object from PydanticType)
         if task_model.status is not None:
-            task_data_from_db['status'] = MessageToDict(task_model.status, preserving_proto_field_name=True)
+            task_data_from_db['status'] = MessageToDict(
+                task_model.status, preserving_proto_field_name=True
+            )
         # Add artifacts if present (list of proto objects)
         if task_model.artifacts:
             task_data_from_db['artifacts'] = [
-                MessageToDict(a, preserving_proto_field_name=True) if hasattr(a, 'DESCRIPTOR') else a
+                MessageToDict(a, preserving_proto_field_name=True)
+                if hasattr(a, 'DESCRIPTOR')
+                else a
                 for a in task_model.artifacts
             ]
         # Add history if present (list of proto objects)
         if task_model.history:
             task_data_from_db['history'] = [
-                MessageToDict(m, preserving_proto_field_name=True) if hasattr(m, 'DESCRIPTOR') else m
+                MessageToDict(m, preserving_proto_field_name=True)
+                if hasattr(m, 'DESCRIPTOR')
+                else m
                 for m in task_model.history
             ]
         # Add metadata if present
@@ -176,7 +184,7 @@ class DatabaseTaskStore(TaskStore):
             result = await session.execute(stmt)
             # Commit is automatic when using session.begin()
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info('Task %s deleted successfully.', task_id)
             else:
                 logger.warning(

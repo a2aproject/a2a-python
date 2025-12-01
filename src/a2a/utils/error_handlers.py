@@ -15,7 +15,6 @@ else:
         Response = Any
 
 
-from a2a._base import A2ABaseModel
 from a2a.types.extras import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
@@ -24,6 +23,7 @@ from a2a.types.extras import (
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
+    JSONRPCError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
@@ -35,7 +35,24 @@ from a2a.utils.errors import ServerError
 
 logger = logging.getLogger(__name__)
 
-A2AErrorToHttpStatus: dict[type[A2ABaseModel], int] = {
+_A2AErrorType = (
+    type[JSONRPCError]
+    | type[JSONParseError]
+    | type[InvalidRequestError]
+    | type[MethodNotFoundError]
+    | type[InvalidParamsError]
+    | type[InternalError]
+    | type[TaskNotFoundError]
+    | type[TaskNotCancelableError]
+    | type[PushNotificationNotSupportedError]
+    | type[UnsupportedOperationError]
+    | type[ContentTypeNotSupportedError]
+    | type[InvalidAgentResponseError]
+    | type[AuthenticatedExtendedCardNotConfiguredError]
+)
+
+A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
+    JSONRPCError: 500,
     JSONParseError: 400,
     InvalidRequestError: 400,
     MethodNotFoundError: 404,

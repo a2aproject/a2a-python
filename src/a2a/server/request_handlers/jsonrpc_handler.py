@@ -13,17 +13,15 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
-    Message,
     SendMessageRequest,
-    SendMessageResponse as SendMessageResponseProto,
     SetTaskPushNotificationConfigRequest,
     StreamResponse,
     Task,
-    TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
-    TaskStatusUpdateEvent,
 )
-from a2a.utils import proto_utils
+from a2a.types.a2a_pb2 import (
+    SendMessageResponse as SendMessageResponseProto,
+)
 from a2a.types.extras import (
     AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskResponse,
@@ -42,7 +40,6 @@ from a2a.types.extras import (
     ListTaskPushNotificationConfigSuccessResponse,
     SendMessageResponse,
     SendMessageSuccessResponse,
-    SendStreamingMessageRequest,
     SendStreamingMessageResponse,
     SendStreamingMessageSuccessResponse,
     SetTaskPushNotificationConfigResponse,
@@ -50,6 +47,7 @@ from a2a.types.extras import (
     TaskNotFoundError,
     TaskResubscriptionRequest,
 )
+from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -145,7 +143,7 @@ class JSONRPCHandler:
     )
     async def on_message_send_stream(
         self,
-        request: SendStreamingMessageRequest,
+        request: SendMessageRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncIterable[SendStreamingMessageResponse]:
         """Handles the 'message/stream' JSON-RPC method.
@@ -153,7 +151,7 @@ class JSONRPCHandler:
         Yields response objects as they are produced by the underlying handler's stream.
 
         Args:
-            request: The incoming `SendStreamingMessageRequest` object.
+            request: The incoming `SendMessageRequest` object (for streaming).
             context: Context provided by the server.
 
         Yields:
@@ -166,7 +164,7 @@ class JSONRPCHandler:
                 request, context
             ):
                 # Wrap the event in StreamResponse for consistent client parsing
-                stream_response = proto_utils.ToProto.stream_response(event)
+                stream_response = proto_utils.to_stream_response(event)
                 yield prepare_response_object(
                     self._get_request_id(context),
                     stream_response,
@@ -177,7 +175,8 @@ class JSONRPCHandler:
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -196,13 +195,12 @@ class JSONRPCHandler:
             A `CancelTaskResponse` object containing the updated Task or a JSON-RPC error.
         """
         try:
-            task = await self.request_handler.on_cancel_task(
-                request, context
-            )
+            task = await self.request_handler.on_cancel_task(request, context)
         except ServerError as e:
             return CancelTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -216,7 +214,9 @@ class JSONRPCHandler:
             )
 
         return CancelTaskResponse(
-            root=JSONRPCErrorResponse(id=self._get_request_id(context), error=TaskNotFoundError())
+            root=JSONRPCErrorResponse(
+                id=self._get_request_id(context), error=TaskNotFoundError()
+            )
         )
 
     async def on_resubscribe_to_task(
@@ -241,7 +241,7 @@ class JSONRPCHandler:
                 request, context
             ):
                 # Wrap the event in StreamResponse for consistent client parsing
-                stream_response = proto_utils.ToProto.stream_response(event)
+                stream_response = proto_utils.to_stream_response(event)
                 yield prepare_response_object(
                     self._get_request_id(context),
                     stream_response,
@@ -252,7 +252,8 @@ class JSONRPCHandler:
         except ServerError as e:
             yield SendStreamingMessageResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -286,7 +287,8 @@ class JSONRPCHandler:
         except ServerError as e:
             return GetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -331,7 +333,8 @@ class JSONRPCHandler:
         except ServerError as e:
             return SetTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -350,13 +353,12 @@ class JSONRPCHandler:
             A `GetTaskResponse` object containing the Task or a JSON-RPC error.
         """
         try:
-            task = await self.request_handler.on_get_task(
-                request, context
-            )
+            task = await self.request_handler.on_get_task(request, context)
         except ServerError as e:
             return GetTaskResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -370,7 +372,9 @@ class JSONRPCHandler:
             )
 
         return GetTaskResponse(
-            root=JSONRPCErrorResponse(id=self._get_request_id(context), error=TaskNotFoundError())
+            root=JSONRPCErrorResponse(
+                id=self._get_request_id(context), error=TaskNotFoundError()
+            )
         )
 
     async def list_push_notification_config(
@@ -401,7 +405,8 @@ class JSONRPCHandler:
         except ServerError as e:
             return ListTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 
@@ -433,7 +438,8 @@ class JSONRPCHandler:
         except ServerError as e:
             return DeleteTaskPushNotificationConfigResponse(
                 root=JSONRPCErrorResponse(
-                    id=self._get_request_id(context), error=e.error if e.error else InternalError()
+                    id=self._get_request_id(context),
+                    error=e.error if e.error else InternalError(),
                 )
             )
 

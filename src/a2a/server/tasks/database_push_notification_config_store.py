@@ -194,13 +194,17 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                         model_instance.task_id,
                         model_instance.config_id,
                     )
-                    raise ValueError(
+                    raise ValueError(  # noqa: TRY004
                         'Failed to parse decrypted push notification config data'
                     ) from e
 
         # Try to parse as plain JSON.
         try:
-            payload_str = payload.decode('utf-8') if isinstance(payload, bytes) else payload
+            payload_str = (
+                payload.decode('utf-8')
+                if isinstance(payload, bytes)
+                else payload
+            )
             return Parse(payload_str, PushNotificationConfig())
         except Exception as e:
             if self._fernet:
@@ -285,10 +289,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             result = await session.execute(stmt)
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info(
                     'Deleted %s push notification config(s) for task %s.',
-                    result.rowcount,
+                    result.rowcount,  # type: ignore[attr-defined]
                     task_id,
                 )
             else:

@@ -33,7 +33,7 @@ from a2a.utils.errors import ServerError
 @pytest.fixture
 def mock_grpc_stub() -> AsyncMock:
     """Provides a mock gRPC stub with methods mocked."""
-    stub = AsyncMock(spec=a2a_pb2_grpc.A2AServiceStub)
+    stub = MagicMock()  # Use MagicMock without spec to avoid auto-spec warnings
     stub.SendMessage = AsyncMock()
     stub.SendStreamingMessage = MagicMock()
     stub.GetTask = AsyncMock()
@@ -63,7 +63,7 @@ def grpc_transport(
     mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
 ) -> GrpcTransport:
     """Provides a GrpcTransport instance."""
-    channel = AsyncMock()
+    channel = MagicMock()  # Use MagicMock instead of AsyncMock
     transport = GrpcTransport(
         channel=channel,
         agent_card=sample_agent_card,

@@ -5,9 +5,9 @@ from typing import Any
 
 import httpx
 
+from google.protobuf.json_format import ParseDict
 from pydantic import ValidationError
 
-from google.protobuf.json_format import ParseDict
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,

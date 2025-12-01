@@ -127,20 +127,14 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         try:
             # Construct the server context object
             server_context = self.context_builder.build(context)
-            # Transform the proto object to the python internal objects
-            a2a_request = proto_utils.FromProto.message_send_params(
-                request,
-            )
             task_or_message = await self.request_handler.on_message_send(
-                a2a_request, server_context
+                request, server_context
             )
             self._set_extension_metadata(context, server_context)
-            result = proto_utils.ToProto.task_or_message(task_or_message)
             # Wrap in SendMessageResponse based on type
-            if isinstance(result, a2a_pb2.Task):
-                return a2a_pb2.SendMessageResponse(task=result)
-            else:
-                return a2a_pb2.SendMessageResponse(msg=result)
+            if isinstance(task_or_message, a2a_pb2.Task):
+                return a2a_pb2.SendMessageResponse(task=task_or_message)
+            return a2a_pb2.SendMessageResponse(msg=task_or_message)
         except ServerError as e:
             await self.abort_context(e, context)
         return a2a_pb2.SendMessageResponse()
@@ -169,15 +163,11 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             or gRPC error responses if a `ServerError` is raised.
         """
         server_context = self.context_builder.build(context)
-        # Transform the proto object to the python internal objects
-        a2a_request = proto_utils.FromProto.message_send_params(
-            request,
-        )
         try:
             async for event in self.request_handler.on_message_send_stream(
-                a2a_request, server_context
+                request, server_context
             ):
-                yield proto_utils.ToProto.stream_response(event)
+                yield proto_utils.to_stream_response(event)
             self._set_extension_metadata(context, server_context)
         except ServerError as e:
             await self.abort_context(e, context)
@@ -199,12 +189,11 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            task_id_params = proto_utils.FromProto.task_id_params(request)
             task = await self.request_handler.on_cancel_task(
-                task_id_params, server_context
+                request, server_context
             )
             if task:
-                return proto_utils.ToProto.task(task)
+                return task
             await self.abort_context(
                 ServerError(error=TaskNotFoundError()), context
             )
@@ -236,10 +225,10 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         try:
             server_context = self.context_builder.build(context)
             async for event in self.request_handler.on_resubscribe_to_task(
-                proto_utils.FromProto.task_id_params(request),
+                request,
                 server_context,
             ):
-                yield proto_utils.ToProto.stream_response(event)
+                yield proto_utils.to_stream_response(event)
         except ServerError as e:
             await self.abort_context(e, context)
 
@@ -259,13 +248,12 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            config = (
+            return (
                 await self.request_handler.on_get_task_push_notification_config(
-                    proto_utils.FromProto.task_id_params(request),
+                    request,
                     server_context,
                 )
             )
-            return proto_utils.ToProto.task_push_notification_config(config)
         except ServerError as e:
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
@@ -296,15 +284,12 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            config = (
+            return (
                 await self.request_handler.on_set_task_push_notification_config(
-                    proto_utils.FromProto.task_push_notification_config_request(
-                        request,
-                    ),
+                    request,
                     server_context,
                 )
             )
-            return proto_utils.ToProto.task_push_notification_config(config)
         except ServerError as e:
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
@@ -326,10 +311,10 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         try:
             server_context = self.context_builder.build(context)
             task = await self.request_handler.on_get_task(
-                proto_utils.FromProto.task_id_params(request), server_context
+                request, server_context
             )
             if task:
-                return proto_utils.ToProto.task(task)
+                return task
             await self.abort_context(
                 ServerError(error=TaskNotFoundError()), context
             )

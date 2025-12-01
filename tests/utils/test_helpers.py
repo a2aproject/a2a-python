@@ -5,7 +5,6 @@ from unittest.mock import patch
 
 import pytest
 
-from a2a.types import MessageSendParams
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
@@ -55,7 +54,7 @@ def create_test_task(
 def test_create_task_obj():
     message = create_test_message()
     message.context_id = 'test-context'  # Set context_id to test it's preserved
-    send_params = MessageSendParams(request=message)
+    send_params = SendMessageRequest(request=message)
 
     task = create_task_obj(send_params)
     assert task.id is not None
@@ -74,7 +73,7 @@ def test_create_task_obj_generates_context_id():
         message_id='msg-no-ctx',
         task_id='task-from-msg',  # Provide a task_id to differentiate from generated task.id
     )
-    send_params = MessageSendParams(request=message_no_context_id)
+    send_params = SendMessageRequest(request=message_no_context_id)
 
     # Ensure message.context_id is empty initially (proto default is empty string)
     assert send_params.request.context_id == ''

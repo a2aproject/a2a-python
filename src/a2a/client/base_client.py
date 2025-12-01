@@ -1,33 +1,29 @@
-from collections.abc import AsyncIterator, AsyncGenerator
+from collections.abc import AsyncGenerator, AsyncIterator
 from typing import Any
 
 from a2a.client.client import (
     Client,
     ClientCallContext,
     ClientConfig,
-    Consumer,
     ClientEvent,
+    Consumer,
 )
 from a2a.client.client_task_manager import ClientTaskManager
-from a2a.client.errors import A2AClientInvalidStateError
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
     Message,
     SendMessageConfiguration,
     SendMessageRequest,
-    Task,
-    TaskArtifactUpdateEvent,
-    SubscribeToTaskRequest,
-    CancelTaskRequest,
-    TaskPushNotificationConfig,
-    GetTaskRequest,
-    TaskStatusUpdateEvent,
-    StreamResponse,
     SetTaskPushNotificationConfigRequest,
-    GetExtendedAgentCardRequest,
-    GetTaskPushNotificationConfigRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
+    Task,
+    TaskPushNotificationConfig,
 )
 
 
@@ -79,44 +75,48 @@ class BaseClient(Client):
                 else None
             ),
         )
-        sendMessageRequest = SendMessageRequest(
+        send_message_request = SendMessageRequest(
             request=request, configuration=config, metadata=request_metadata
         )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
-                sendMessageRequest, context=context, extensions=extensions
+                send_message_request, context=context, extensions=extensions
             )
 
             # In non-streaming case we convert to a StreamResponse so that the
             # client always sees the same iterator.
             stream_response = StreamResponse()
             client_event: ClientEvent
-            if response.HasField("task"):
+            if response.HasField('task'):
                 stream_response.task.CopyFrom(response.task)
                 client_event = (stream_response, response.task)
-
-            elif response.HasField("msg"):
+            elif response.HasField('msg'):
                 stream_response.msg.CopyFrom(response.msg)
                 client_event = (stream_response, None)
+            else:
+                # Response must have either task or msg
+                raise ValueError('Response has neither task nor msg')
 
             await self.consume(client_event, self._card)
             yield client_event
             return
 
         stream = self._transport.send_message_streaming(
-            sendMessageRequest, context=context, extensions=extensions
+            send_message_request, context=context, extensions=extensions
         )
         async for client_event in self._process_stream(stream):
             yield client_event
 
-    async def _process_stream(self, stream: AsyncIterator[StreamResponse]) -> AsyncGenerator[ClientEvent]:
+    async def _process_stream(
+        self, stream: AsyncIterator[StreamResponse]
+    ) -> AsyncGenerator[ClientEvent]:
         tracker = ClientTaskManager()
         async for stream_response in stream:
             client_event: ClientEvent
             # When we get a message in the stream then we don't expect any
             # further messages so yield and return
-            if stream_response.HasField("msg"):
+            if stream_response.HasField('msg'):
                 client_event = (stream_response, None)
                 await self.consume(client_event, self._card)
                 yield client_event
@@ -240,7 +240,6 @@ class BaseClient(Client):
                 'client and/or server do not support resubscription.'
             )
 
-        tracker = ClientTaskManager()
         # Note: resubscribe can only be called on an existing task. As such,
         # we should never see Message updates, despite the typing of the service
         # definition indicating it may be possible.

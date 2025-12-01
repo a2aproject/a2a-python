@@ -168,7 +168,9 @@ class TaskUpdater:
 
     async def failed(self, message: Message | None = None) -> None:
         """Marks the task as failed and publishes a final status update."""
-        await self.update_status(TaskState.TASK_STATE_FAILED, message=message, final=True)
+        await self.update_status(
+            TaskState.TASK_STATE_FAILED, message=message, final=True
+        )
 
     async def reject(self, message: Message | None = None) -> None:
         """Marks the task as rejected and publishes a final status update."""

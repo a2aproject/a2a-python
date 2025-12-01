@@ -77,12 +77,8 @@ class RESTHandler:
         body = await request.body()
         params = a2a_pb2.SendMessageRequest()
         Parse(body, params)
-        # Transform the proto object to the python internal objects
-        a2a_request = proto_utils.FromProto.message_send_params(
-            params,
-        )
         task_or_message = await self.request_handler.on_message_send(
-            a2a_request, context
+            params, context
         )
         # Wrap the result in a SendMessageResponse
         if isinstance(task_or_message, a2a_pb2.Task):
@@ -115,14 +111,10 @@ class RESTHandler:
         body = await request.body()
         params = a2a_pb2.SendMessageRequest()
         Parse(body, params)
-        # Transform the proto object to the python internal objects
-        a2a_request = proto_utils.FromProto.message_send_params(
-            params,
-        )
         async for event in self.request_handler.on_message_send_stream(
-            a2a_request, context
+            params, context
         ):
-            response = proto_utils.ToProto.stream_response(event)
+            response = proto_utils.to_stream_response(event)
             yield MessageToJson(response)
 
     async def on_cancel_task(
@@ -144,7 +136,7 @@ class RESTHandler:
             CancelTaskRequest(name=f'tasks/{task_id}'), context
         )
         if task:
-            return MessageToDict(proto_utils.ToProto.task(task))
+            return MessageToDict(task)
         raise ServerError(error=TaskNotFoundError())
 
     @validate(
@@ -171,7 +163,7 @@ class RESTHandler:
         async for event in self.request_handler.on_resubscribe_to_task(
             SubscribeToTaskRequest(name=task_id), context
         ):
-            yield MessageToJson(proto_utils.ToProto.stream_response(event))
+            yield MessageToJson(proto_utils.to_stream_response(event))
 
     async def get_push_notification(
         self,
@@ -197,9 +189,7 @@ class RESTHandler:
                 params, context
             )
         )
-        return MessageToDict(
-            proto_utils.ToProto.task_push_notification_config(config)
-        )
+        return MessageToDict(config)
 
     @validate(
         lambda self: self.agent_card.capabilities.push_notifications,
@@ -237,9 +227,7 @@ class RESTHandler:
                 params, context
             )
         )
-        return MessageToDict(
-            proto_utils.ToProto.task_push_notification_config(config)
-        )
+        return MessageToDict(config)
 
     async def on_get_task(
         self,
@@ -261,7 +249,7 @@ class RESTHandler:
         params = GetTaskRequest(name=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
         if task:
-            return MessageToDict(proto_utils.ToProto.task(task))
+            return MessageToDict(task)
         raise ServerError(error=TaskNotFoundError())
 
     async def list_push_notifications(

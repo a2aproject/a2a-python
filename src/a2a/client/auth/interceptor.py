@@ -7,6 +7,7 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     APIKeySecurityScheme,
     HTTPAuthSecurityScheme,
+    MutualTlsSecurityScheme,
     OAuth2SecurityScheme,
     OpenIdConnectSecurityScheme,
     SecurityScheme,
@@ -14,19 +15,28 @@ from a2a.types.a2a_pb2 import (
 
 logger = logging.getLogger(__name__)
 
+_SecuritySchemeValue = (
+    APIKeySecurityScheme
+    | HTTPAuthSecurityScheme
+    | OAuth2SecurityScheme
+    | OpenIdConnectSecurityScheme
+    | MutualTlsSecurityScheme
+    | None
+)
 
-def _get_security_scheme_value(scheme: SecurityScheme):
+
+def _get_security_scheme_value(scheme: SecurityScheme) -> _SecuritySchemeValue:
     """Extract the actual security scheme from the oneof union."""
     which = scheme.WhichOneof('scheme')
     if which == 'api_key_security_scheme':
         return scheme.api_key_security_scheme
-    elif which == 'http_auth_security_scheme':
+    if which == 'http_auth_security_scheme':
         return scheme.http_auth_security_scheme
-    elif which == 'oauth2_security_scheme':
+    if which == 'oauth2_security_scheme':
         return scheme.oauth2_security_scheme
-    elif which == 'open_id_connect_security_scheme':
+    if which == 'open_id_connect_security_scheme':
         return scheme.open_id_connect_security_scheme
-    elif which == 'mtls_security_scheme':
+    if which == 'mtls_security_scheme':
         return scheme.mtls_security_scheme
     return None
 
@@ -100,7 +110,9 @@ class AuthInterceptor(ClientCallInterceptor):
                             return request_payload, http_kwargs
 
                         # Case 2: API Key in Header
-                        case APIKeySecurityScheme() if scheme_def.location.lower() == 'header':
+                        case APIKeySecurityScheme() if (
+                            scheme_def.location.lower() == 'header'
+                        ):
                             headers[scheme_def.name] = credential
                             logger.debug(
                                 "Added API Key Header for scheme '%s'.",

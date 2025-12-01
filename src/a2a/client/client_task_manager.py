@@ -4,15 +4,12 @@ from a2a.client.errors import (
     A2AClientInvalidArgsError,
     A2AClientInvalidStateError,
 )
-from a2a.server.events.event_queue import Event
 from a2a.types.a2a_pb2 import (
     Message,
+    StreamResponse,
     Task,
-    TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
-    TaskStatusUpdateEvent,
-    StreamResponse,
 )
 from a2a.utils import append_artifact_to_task
 
@@ -68,7 +65,8 @@ class ClientTaskManager:
         return task
 
     async def process(
-        self, event: StreamResponse,
+        self,
+        event: StreamResponse,
     ) -> Task | None:
         """Processes a task-related event (Task, Status, Artifact) and saves the updated task state.
 

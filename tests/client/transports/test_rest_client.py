@@ -9,7 +9,7 @@ from httpx_sse import EventSource, ServerSentEvent
 from a2a.client import create_text_message_object
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import MessageSendParams
+from a2a.types import SendMessageRequest
 from a2a.types.a2a_pb2 import AgentCard, Role
 
 
@@ -48,7 +48,7 @@ class TestRestTransportExtensions:
             extensions=extensions,
             agent_card=mock_agent_card,
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             request=create_text_message_object(content='Hello')
         )
 
@@ -97,7 +97,7 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
             extensions=extensions,
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             request=create_text_message_object(content='Hello stream')
         )
 

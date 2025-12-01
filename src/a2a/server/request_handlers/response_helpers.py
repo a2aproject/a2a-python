@@ -1,19 +1,21 @@
 """Helper functions for building A2A JSON-RPC responses."""
 
 # response types
-from typing import TypeVar
+from typing import Any, TypeVar, get_args
 
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message as ProtoMessage
 
 from a2a.types.a2a_pb2 import (
     Message,
-    SendMessageResponse as SendMessageResponseProto,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
     TaskStatusUpdateEvent,
+)
+from a2a.types.a2a_pb2 import (
+    SendMessageResponse as SendMessageResponseProto,
 )
 from a2a.types.extras import (
     A2AError,
@@ -37,6 +39,10 @@ from a2a.types.extras import (
     SetTaskPushNotificationConfigResponse,
     SetTaskPushNotificationConfigSuccessResponse,
 )
+
+
+# Tuple of all A2AError types for isinstance checks
+_A2A_ERROR_TYPES: tuple[type, ...] = get_args(A2AError)
 
 
 RT = TypeVar(
@@ -135,15 +141,15 @@ def prepare_response_object(
     """
     if isinstance(response, success_response_types):
         # Convert proto message to dict for JSON serialization
-        result = response
+        result: Any = response
         if isinstance(response, ProtoMessage):
             result = MessageToDict(response, preserving_proto_field_name=False)
         return response_type(
             root=success_payload_type(id=request_id, result=result)  # type:ignore
         )
 
-    if isinstance(response, A2AError | JSONRPCError):
-        return build_error_response(request_id, response, response_type)
+    if isinstance(response, _A2A_ERROR_TYPES):
+        return build_error_response(request_id, response, response_type)  # type:ignore[arg-type]
 
     # If consumer_data is not an expected success type and not an error,
     # it's an invalid type of response from the agent for this specific method.

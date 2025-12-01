@@ -18,7 +18,7 @@ from a2a.client.transports.grpc import GrpcTransport
 from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.types import MessageSendParams, TransportProtocol
+from a2a.types import TransportProtocol
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -228,10 +228,13 @@ async def test_http_transport_sends_message_streaming(
         message_id='msg-integration-test',
         parts=[Part(text='Hello, integration test!')],
     )
-    params = MessageSendParams(request=message_to_send)
+    params = SendMessageRequest(request=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
-    first_event = await anext(stream)
+    events = [event async for event in stream]
+
+    assert len(events) == 1
+    first_event = events[0]
 
     # StreamResponse wraps the Task in its 'task' field
     assert first_event.task.id == TASK_FROM_STREAM.id
@@ -239,7 +242,7 @@ async def test_http_transport_sends_message_streaming(
 
     handler.on_message_send_stream.assert_called_once()
     call_args, _ = handler.on_message_send_stream.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
@@ -247,8 +250,7 @@ async def test_http_transport_sends_message_streaming(
         == message_to_send.parts[0].text
     )
 
-    if hasattr(transport, 'close'):
-        await transport.close()
+    await transport.close()
 
 
 @pytest.mark.asyncio
@@ -273,7 +275,7 @@ async def test_grpc_transport_sends_message_streaming(
         message_id='msg-grpc-integration-test',
         parts=[Part(text='Hello, gRPC integration test!')],
     )
-    params = MessageSendParams(request=message_to_send)
+    params = SendMessageRequest(request=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
     first_event = await anext(stream)
@@ -284,7 +286,7 @@ async def test_grpc_transport_sends_message_streaming(
 
     handler.on_message_send_stream.assert_called_once()
     call_args, _ = handler.on_message_send_stream.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
@@ -320,7 +322,7 @@ async def test_http_transport_sends_message_blocking(
         message_id='msg-integration-test-blocking',
         parts=[Part(text='Hello, blocking test!')],
     )
-    params = MessageSendParams(request=message_to_send)
+    params = SendMessageRequest(request=message_to_send)
 
     result = await transport.send_message(request=params)
 
@@ -330,7 +332,7 @@ async def test_http_transport_sends_message_blocking(
 
     handler.on_message_send.assert_awaited_once()
     call_args, _ = handler.on_message_send.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
@@ -364,7 +366,7 @@ async def test_grpc_transport_sends_message_blocking(
         message_id='msg-grpc-integration-test-blocking',
         parts=[Part(text='Hello, gRPC blocking test!')],
     )
-    params = MessageSendParams(request=message_to_send)
+    params = SendMessageRequest(request=message_to_send)
 
     result = await transport.send_message(request=params)
 
@@ -374,7 +376,7 @@ async def test_grpc_transport_sends_message_blocking(
 
     handler.on_message_send.assert_awaited_once()
     call_args, _ = handler.on_message_send.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (

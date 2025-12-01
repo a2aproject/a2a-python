@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from a2a.types.extras import JSONRPCErrorResponse
+from a2a.types.extras import A2AError, JSONRPCErrorResponse
 
 
 class A2AClientError(Exception):
@@ -78,6 +78,8 @@ class A2AClientInvalidStateError(A2AClientError):
 
 class A2AClientJSONRPCError(A2AClientError):
     """Client exception for JSON-RPC errors returned by the server."""
+
+    error: dict[str, Any] | A2AError
 
     def __init__(self, error: JSONRPCErrorResponse | dict[str, Any]):
         """Initializes the A2AClientJsonRPCError.

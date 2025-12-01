@@ -75,10 +75,12 @@ class PydanticType(TypeDecorator[T], Generic[T]):
         if value is None:
             return None
         # Check if it's a protobuf message class
-        if isinstance(self.pydantic_type, type) and issubclass(self.pydantic_type, ProtoMessage):
+        if isinstance(self.pydantic_type, type) and issubclass(
+            self.pydantic_type, ProtoMessage
+        ):
             return ParseDict(value, self.pydantic_type())  # type: ignore[return-value]
         # Assume it's a Pydantic model
-        return self.pydantic_type.model_validate(value)  # type: ignore[union-attr]
+        return self.pydantic_type.model_validate(value)  # type: ignore[attr-defined]
 
 
 class PydanticListType(TypeDecorator, Generic[T]):
@@ -103,14 +105,16 @@ class PydanticListType(TypeDecorator, Generic[T]):
         """Convert a list of Pydantic models or Protobuf messages to a JSON-serializable list for the DB."""
         if value is None:
             return None
-        result = []
+        result: list[dict[str, Any]] = []
         for item in value:
             if isinstance(item, ProtoMessage):
-                result.append(MessageToDict(item, preserving_proto_field_name=False))
+                result.append(
+                    MessageToDict(item, preserving_proto_field_name=False)
+                )
             elif isinstance(item, BaseModel):
                 result.append(item.model_dump(mode='json'))
             else:
-                result.append(item)
+                result.append(item)  # type: ignore[arg-type]
         return result
 
     def process_result_value(
@@ -120,10 +124,12 @@ class PydanticListType(TypeDecorator, Generic[T]):
         if value is None:
             return None
         # Check if it's a protobuf message class
-        if isinstance(self.pydantic_type, type) and issubclass(self.pydantic_type, ProtoMessage):
+        if isinstance(self.pydantic_type, type) and issubclass(
+            self.pydantic_type, ProtoMessage
+        ):
             return [ParseDict(item, self.pydantic_type()) for item in value]  # type: ignore[misc]
         # Assume it's a Pydantic model
-        return [self.pydantic_type.model_validate(item) for item in value]  # type: ignore[union-attr]
+        return [self.pydantic_type.model_validate(item) for item in value]  # type: ignore[attr-defined]
 
 
 # Base class for all database models

@@ -29,6 +29,7 @@ from a2a.utils.parts import (
     get_file_parts,
     get_text_parts,
 )
+from a2a.utils.proto_utils import to_stream_response
 from a2a.utils.task import (
     completed_task,
     new_task,
@@ -56,4 +57,6 @@ __all__ = [
     'new_data_artifact',
     'new_task',
     'new_text_artifact',
+    'proto_utils',
+    'to_stream_response',
 ]

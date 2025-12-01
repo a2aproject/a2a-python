@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
 )
 
+
 TRANSPORT_PROTOCOLS_JSONRPC = 'JSONRPC'
 TRANSPORT_PROTOCOLS_GRPC = 'GRPC'
 TRANSPORT_PROTOCOLS_HTTP_JSON = 'HTTP+JSON'
@@ -71,9 +72,7 @@ class ClientFactory:
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
-    def _register_defaults(
-        self, supported: list[str]
-    ) -> None:
+    def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
         if TRANSPORT_PROTOCOLS_JSONRPC in supported or not supported:
             self.register(
@@ -203,7 +202,9 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_preferred = card.preferred_transport or TRANSPORT_PROTOCOLS_JSONRPC
+        server_preferred = (
+            card.preferred_transport or TRANSPORT_PROTOCOLS_JSONRPC
+        )
         server_set = {server_preferred: card.url}
         if card.additional_interfaces:
             server_set.update(

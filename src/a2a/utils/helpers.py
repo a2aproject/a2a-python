@@ -80,7 +80,9 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             logger.debug(
                 'Replacing artifact at id %s for task %s', artifact_id, task.id
             )
-            task.artifacts[existing_artifact_list_index].CopyFrom(new_artifact_data)
+            task.artifacts[existing_artifact_list_index].CopyFrom(
+                new_artifact_data
+            )
         else:
             # Append the new artifact since no artifact with this index exists yet
             logger.debug(

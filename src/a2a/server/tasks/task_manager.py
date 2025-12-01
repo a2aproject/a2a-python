@@ -143,7 +143,7 @@ class TaskManager:
             if task.status.HasField('message'):
                 task.history.append(task.status.message)
             if event.metadata:
-                task.metadata.update(event.metadata)
+                task.metadata.update(dict(event.metadata))  # type: ignore[arg-type]
             task.status.CopyFrom(event.status)
         else:
             logger.debug('Appending artifact to task %s', task.id)

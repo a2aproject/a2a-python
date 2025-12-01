@@ -18,6 +18,28 @@ from a2a.types.extras import (
 )
 
 
+# Re-export error types for backward compatibility
+__all__ = [
+    'A2AError',
+    'A2AServerError',
+    'AuthenticatedExtendedCardNotConfiguredError',
+    'ContentTypeNotSupportedError',
+    'InternalError',
+    'InvalidAgentResponseError',
+    'InvalidParamsError',
+    'InvalidRequestError',
+    'JSONParseError',
+    'JSONRPCError',
+    'MethodNotFoundError',
+    'MethodNotImplementedError',
+    'PushNotificationNotSupportedError',
+    'ServerError',
+    'TaskNotCancelableError',
+    'TaskNotFoundError',
+    'UnsupportedOperationError',
+]
+
+
 class A2AServerError(Exception):
     """Base exception for A2A Server errors."""
 

@@ -2,7 +2,7 @@
 version: v2
 inputs:
   - git_repo: https://github.com/a2aproject/A2A.git
-    ref: transports
+    ref: main
     subdir: specification/grpc
 managed:
   enabled: true

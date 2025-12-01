@@ -149,7 +149,9 @@ class RequestContext:
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        return self._params.metadata or {} if self._params else {}
+        if self._params and self._params.metadata:
+            return dict(self._params.metadata)
+        return {}
 
     def add_activated_extension(self, uri: str) -> None:
         """Add an extension to the set of activated extensions for this request.

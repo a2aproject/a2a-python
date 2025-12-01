@@ -11,19 +11,16 @@ from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
     Message,
     PushNotificationConfig,
-    Task,
-    TaskArtifactUpdateEvent,
-    TaskPushNotificationConfig,
-    TaskStatusUpdateEvent,
-    StreamResponse,
-    SendMessageRequest,
-    GetTaskRequest,
-    CancelTaskRequest,
     SetTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigRequest,
+    StreamResponse,
     SubscribeToTaskRequest,
+    Task,
+    TaskPushNotificationConfig,
 )
 
 

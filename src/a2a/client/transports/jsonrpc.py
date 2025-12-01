@@ -2,7 +2,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -104,7 +104,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='message/send',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -112,7 +112,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'message/send',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -136,7 +136,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='message/stream',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -144,7 +144,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'message/stream',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -215,7 +215,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='tasks/get',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -223,7 +223,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/get',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -245,7 +245,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='tasks/cancel',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -253,7 +253,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/cancel',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -275,7 +275,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='tasks/pushNotificationConfig/set',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -283,7 +283,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/set',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -307,7 +307,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='tasks/pushNotificationConfig/get',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -315,7 +315,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/pushNotificationConfig/get',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -339,7 +339,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='tasks/resubscribe',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
@@ -347,7 +347,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'tasks/resubscribe',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )
@@ -391,7 +391,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request = JSONRPC20Request(
             method='agent/authenticatedExtendedCard',
             params=json_format.MessageToDict(request),
-            _id=str(uuid4())
+            _id=str(uuid4()),
         )
 
         modified_kwargs = update_extension_header(
@@ -400,7 +400,7 @@ class JsonRpcTransport(ClientTransport):
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'GetExtendedAgentCard',
-            rpc_request.data,
+            cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
         )

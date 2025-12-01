@@ -12,6 +12,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
+    SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
 )
@@ -144,7 +145,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_resubscribe_to_task(
         self,
-        params: CancelTaskRequest,
+        params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
         """Handles the 'tasks/resubscribe' method.

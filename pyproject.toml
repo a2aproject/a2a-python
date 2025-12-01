@@ -75,6 +75,16 @@ addopts = "-ra --strict-markers"
 markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
 ]
+filterwarnings = [
+  # SQLAlchemy warning about duplicate class registration - this is a known limitation
+  # of the dynamic model creation pattern used in models.py for custom table names
+  "ignore:This declarative base already contains a class with the same class name:sqlalchemy.exc.SAWarning",
+  # ResourceWarnings from asyncio event loop/socket cleanup during garbage collection
+  # These appear intermittently between tests due to pytest-asyncio and sse-starlette timing
+  "ignore:unclosed event loop:ResourceWarning",
+  "ignore:unclosed transport:ResourceWarning", 
+  "ignore:unclosed <socket.socket:ResourceWarning",
+]
 
 [tool.pytest-asyncio]
 mode = "strict"
