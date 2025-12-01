@@ -17,7 +17,7 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.types import TransportProtocol
+from a2a.utils.constants import TransportProtocol
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -122,7 +122,7 @@ async def test_auth_interceptor_skips_when_no_agent_card(
     auth_interceptor = AuthInterceptor(credential_service=store)
 
     new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='message/send',
+        method_name='SendMessage',
         request_payload=request_payload,
         http_kwargs=http_kwargs,
         agent_card=None,
@@ -365,7 +365,7 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     )
 
     new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='message/send',
+        method_name='SendMessage',
         request_payload=request_payload,
         http_kwargs=http_kwargs,
         agent_card=agent_card,

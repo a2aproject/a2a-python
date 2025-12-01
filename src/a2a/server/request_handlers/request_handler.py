@@ -9,6 +9,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     Message,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
@@ -127,7 +128,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_get_task_push_notification_config(
         self,
-        params: CancelTaskRequest | GetTaskPushNotificationConfigRequest,
+        params: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/get' method.
@@ -143,14 +144,14 @@ class RequestHandler(ABC):
         """
 
     @abstractmethod
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
-        """Handles the 'tasks/resubscribe' method.
+        """Handles the 'SubscribeToTask' method.
 
-        Allows a client to re-subscribe to a running streaming task's event stream.
+        Allows a client to subscribe to a running streaming task's event stream.
 
         Args:
             params: Parameters including the task ID.
@@ -170,8 +171,8 @@ class RequestHandler(ABC):
         self,
         params: ListTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Handles the 'tasks/pushNotificationConfig/list' method.
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Handles the 'ListTaskPushNotificationConfig' method.
 
         Retrieves the current push notification configurations for a task.
 

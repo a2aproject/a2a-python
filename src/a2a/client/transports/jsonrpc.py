@@ -102,7 +102,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
         rpc_request = JSONRPC20Request(
-            method='message/send',
+            method='SendMessage',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -111,7 +111,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'message/send',
+            'SendMessage',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -134,7 +134,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         rpc_request = JSONRPC20Request(
-            method='message/stream',
+            method='SendStreamingMessage',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -143,7 +143,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'message/stream',
+            'SendStreamingMessage',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -213,7 +213,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         rpc_request = JSONRPC20Request(
-            method='tasks/get',
+            method='GetTask',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -222,7 +222,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'tasks/get',
+            'GetTask',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -243,7 +243,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         rpc_request = JSONRPC20Request(
-            method='tasks/cancel',
+            method='CancelTask',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -252,7 +252,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'tasks/cancel',
+            'CancelTask',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -273,7 +273,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
-            method='tasks/pushNotificationConfig/set',
+            method='SetTaskPushNotificationConfig',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -282,7 +282,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'tasks/pushNotificationConfig/set',
+            'SetTaskPushNotificationConfig',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -305,7 +305,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
-            method='tasks/pushNotificationConfig/get',
+            method='GetTaskPushNotificationConfig',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -314,7 +314,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'tasks/pushNotificationConfig/get',
+            'GetTaskPushNotificationConfig',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -337,7 +337,7 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         rpc_request = JSONRPC20Request(
-            method='tasks/resubscribe',
+            method='SubscribeToTask',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -346,7 +346,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'tasks/resubscribe',
+            'SubscribeToTask',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,

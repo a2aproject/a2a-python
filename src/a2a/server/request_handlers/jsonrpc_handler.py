@@ -21,13 +21,13 @@ from a2a.types.a2a_pb2 import (
     Message,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
+    SubscribeToTaskRequest,
     Task,
 )
 from a2a.types.extras import (
     AuthenticatedExtendedCardNotConfiguredError,
     InternalError,
     TaskNotFoundError,
-    TaskResubscriptionRequest,
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
@@ -202,24 +202,24 @@ class JSONRPCHandler:
 
         return _build_error_response(request_id, TaskNotFoundError())
 
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
-        request: TaskResubscriptionRequest,
+        request: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncIterable[dict[str, Any]]:
-        """Handles the 'tasks/resubscribe' JSON-RPC method.
+        """Handles the 'SubscribeToTask' JSON-RPC method.
 
         Yields response objects as they are produced by the underlying handler's stream.
 
         Args:
-            request: The incoming `TaskResubscriptionRequest` object.
+            request: The incoming `SubscribeToTaskRequest` object.
             context: Context provided by the server.
 
         Yields:
             Dict representations of JSON-RPC responses containing streaming events.
         """
         try:
-            async for event in self.request_handler.on_resubscribe_to_task(
+            async for event in self.request_handler.on_subscribe_to_task(
                 request, context
             ):
                 # Wrap the event in StreamResponse for consistent client parsing
@@ -338,7 +338,7 @@ class JSONRPCHandler:
         request: ListTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> dict[str, Any]:
-        """Handles the 'tasks/pushNotificationConfig/list' JSON-RPC method.
+        """Handles the 'ListTaskPushNotificationConfig' JSON-RPC method.
 
         Args:
             request: The incoming `ListTaskPushNotificationConfigRequest` object.
@@ -349,14 +349,11 @@ class JSONRPCHandler:
         """
         request_id = self._get_request_id(context)
         try:
-            configs = await self.request_handler.on_list_task_push_notification_config(
+            response = await self.request_handler.on_list_task_push_notification_config(
                 request, context
             )
-            # configs is a list of TaskPushNotificationConfig protos
-            result = [
-                MessageToDict(c, preserving_proto_field_name=False)
-                for c in configs
-            ]
+            # response is a ListTaskPushNotificationConfigResponse proto
+            result = MessageToDict(response, preserving_proto_field_name=False)
             return _build_success_response(request_id, result)
         except ServerError as e:
             return _build_error_response(

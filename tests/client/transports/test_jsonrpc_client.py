@@ -173,7 +173,7 @@ class TestSendMessage:
         call_args = mock_httpx_client.post.call_args
         assert call_args[0][0] == 'http://test-agent.example.com'
         payload = call_args[1]['json']
-        assert payload['method'] == 'message/send'
+        assert payload['method'] == 'SendMessage'
 
     @pytest.mark.asyncio
     async def test_send_message_jsonrpc_error(
@@ -265,7 +265,7 @@ class TestGetTask:
         mock_httpx_client.post.assert_called_once()
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']
-        assert payload['method'] == 'tasks/get'
+        assert payload['method'] == 'GetTask'
 
     @pytest.mark.asyncio
     async def test_get_task_with_history(self, transport, mock_httpx_client):
@@ -320,7 +320,7 @@ class TestCancelTask:
         assert response.status.state == TaskState.TASK_STATE_CANCELLED
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']
-        assert payload['method'] == 'tasks/cancel'
+        assert payload['method'] == 'CancelTask'
 
 
 class TestTaskCallback:
@@ -351,7 +351,7 @@ class TestTaskCallback:
         assert isinstance(response, TaskPushNotificationConfig)
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']
-        assert payload['method'] == 'tasks/pushNotificationConfig/get'
+        assert payload['method'] == 'GetTaskPushNotificationConfig'
 
 
 class TestClose:
@@ -403,7 +403,7 @@ class TestInterceptors:
 
         interceptor.intercept.assert_called_once()
         call_args = interceptor.intercept.call_args
-        assert call_args[0][0] == 'message/send'
+        assert call_args[0][0] == 'SendMessage'
 
 
 class TestExtensions:

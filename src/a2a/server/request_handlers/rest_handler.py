@@ -143,12 +143,12 @@ class RESTHandler:
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
         request: Request,
         context: ServerCallContext,
     ) -> AsyncIterable[str]:
-        """Handles the 'tasks/resubscribe' REST method.
+        """Handles the 'SubscribeToTask' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
 
@@ -160,7 +160,7 @@ class RESTHandler:
             JSON serialized objects containing streaming events
         """
         task_id = request.path_params['id']
-        async for event in self.request_handler.on_resubscribe_to_task(
+        async for event in self.request_handler.on_subscribe_to_task(
             SubscribeToTaskRequest(name=task_id), context
         ):
             yield MessageToJson(proto_utils.to_stream_response(event))

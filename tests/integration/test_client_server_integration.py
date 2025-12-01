@@ -18,7 +18,7 @@ from a2a.client.transports.grpc import GrpcTransport
 from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.types import TransportProtocol
+from a2a.utils.constants import TransportProtocol
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -107,7 +107,7 @@ def mock_request_handler() -> AsyncMock:
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT
 
-    handler.on_resubscribe_to_task.side_effect = resubscribe_side_effect
+    handler.on_subscribe_to_task.side_effect = resubscribe_side_effect
 
     return handler
 
@@ -657,7 +657,7 @@ async def test_http_transport_resubscribe(
 
     # StreamResponse wraps the status update in its 'status_update' field
     assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
-    handler.on_resubscribe_to_task.assert_called_once()
+    handler.on_subscribe_to_task.assert_called_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -684,7 +684,7 @@ async def test_grpc_transport_resubscribe(
 
     # StreamResponse wraps the status update in its 'status_update' field
     assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
-    handler.on_resubscribe_to_task.assert_called_once()
+    handler.on_subscribe_to_task.assert_called_once()
 
     await transport.close()
 

@@ -206,7 +206,7 @@ def test_handle_unicode_characters(minimal_agent_card: AgentCard):
 
     unicode_payload = {
         'jsonrpc': '2.0',
-        'method': 'message/send',
+        'method': 'SendMessage',
         'id': 'unicode_test',
         'params': {
             'message': {

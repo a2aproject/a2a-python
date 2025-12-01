@@ -12,7 +12,7 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
-from a2a.types.extras import TransportProtocol
+from a2a.utils.constants import TransportProtocol
 
 
 @pytest.fixture

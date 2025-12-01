@@ -1390,8 +1390,9 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     await asyncio.wait_for(agen.aclose(), timeout=0.1)
 
     # Resubscribe and start consuming future events
-    resub_gen = request_handler.on_resubscribe_to_task(
-        CancelTaskRequest(name=f'tasks/{task_id}'), create_server_call_context()
+    resub_gen = request_handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(name=f'tasks/{task_id}'),
+        create_server_call_context(),
     )
 
     # Allow producer to emit the next event
@@ -2086,22 +2087,22 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
 
 
 @pytest.mark.asyncio
-async def test_on_resubscribe_to_task_task_not_found():
-    """Test on_resubscribe_to_task when the task is not found."""
+async def test_on_subscribe_to_task_task_not_found():
+    """Test on_subscribe_to_task when the task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
 
     request_handler = DefaultRequestHandler(
         agent_executor=DummyAgentExecutor(), task_store=mock_task_store
     )
-    params = CancelTaskRequest(name='tasks/resub_task_not_found')
+    params = SubscribeToTaskRequest(name='tasks/resub_task_not_found')
 
     from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         # Need to consume the async generator to trigger the error
-        async for _ in request_handler.on_resubscribe_to_task(params, context):
+        async for _ in request_handler.on_subscribe_to_task(params, context):
             pass
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
@@ -2111,8 +2112,8 @@ async def test_on_resubscribe_to_task_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_resubscribe_to_task_queue_not_found():
-    """Test on_resubscribe_to_task when the queue is not found by queue_manager.tap."""
+async def test_on_subscribe_to_task_queue_not_found():
+    """Test on_subscribe_to_task when the queue is not found by queue_manager.tap."""
     mock_task_store = AsyncMock(spec=TaskStore)
     sample_task = create_sample_task(task_id='resub_queue_not_found')
     mock_task_store.get.return_value = sample_task
@@ -2125,13 +2126,13 @@ async def test_on_resubscribe_to_task_queue_not_found():
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
     )
-    params = CancelTaskRequest(name='tasks/resub_queue_not_found')
+    params = SubscribeToTaskRequest(name='tasks/resub_queue_not_found')
 
     from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        async for _ in request_handler.on_resubscribe_to_task(params, context):
+        async for _ in request_handler.on_subscribe_to_task(params, context):
             pass
 
     assert isinstance(
@@ -2248,7 +2249,7 @@ async def test_list_no_task_push_notification_config_info():
     result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
     )
-    assert result == []
+    assert result.configs == []
 
 
 @pytest.mark.asyncio
@@ -2277,17 +2278,15 @@ async def test_list_task_push_notification_config_info_with_config():
     )
     params = ListTaskPushNotificationConfigRequest(parent='tasks/task_1')
 
-    result: list[
-        TaskPushNotificationConfig
-    ] = await request_handler.on_list_task_push_notification_config(
+    result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
     )
 
-    assert len(result) == 2
-    assert 'task_1' in result[0].name
-    assert result[0].push_notification_config == push_config1
-    assert 'task_1' in result[1].name
-    assert result[1].push_notification_config == push_config2
+    assert len(result.configs) == 2
+    assert 'task_1' in result.configs[0].name
+    assert result.configs[0].push_notification_config == push_config1
+    assert 'task_1' in result.configs[1].name
+    assert result.configs[1].push_notification_config == push_config2
 
 
 @pytest.mark.asyncio
@@ -2333,19 +2332,17 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
     params = ListTaskPushNotificationConfigRequest(parent='tasks/task_1')
 
-    result: list[
-        TaskPushNotificationConfig
-    ] = await request_handler.on_list_task_push_notification_config(
+    result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
     )
 
-    assert len(result) == 1
-    assert 'task_1' in result[0].name
+    assert len(result.configs) == 1
+    assert 'task_1' in result.configs[0].name
     assert (
-        result[0].push_notification_config.url
+        result.configs[0].push_notification_config.url
         == set_config_params2.config.push_notification_config.url
     )
-    assert result[0].push_notification_config.id == 'task_1'
+    assert result.configs[0].push_notification_config.id == 'task_1'
 
 
 @pytest.mark.asyncio
@@ -2474,9 +2471,9 @@ async def test_delete_task_push_notification_config_info_with_config():
         create_server_call_context(),
     )
 
-    assert len(result2) == 1
-    assert 'task_1' in result2[0].name
-    assert result2[0].push_notification_config == push_config2
+    assert len(result2.configs) == 1
+    assert 'task_1' in result2.configs[0].name
+    assert result2.configs[0].push_notification_config == push_config2
 
 
 @pytest.mark.asyncio
@@ -2514,7 +2511,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         create_server_call_context(),
     )
 
-    assert len(result2) == 0
+    assert len(result2.configs) == 0
 
 
 TERMINAL_TASK_STATES = {
@@ -2620,8 +2617,8 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_resubscribe_to_task_in_terminal_state(terminal_state):
-    """Test on_resubscribe_to_task when task is in a terminal state."""
+async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
+    """Test on_subscribe_to_task when task is in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'resub_terminal_task_{state_name}'
     terminal_task = create_sample_task(
@@ -2636,13 +2633,13 @@ async def test_on_resubscribe_to_task_in_terminal_state(terminal_state):
         task_store=mock_task_store,
         queue_manager=AsyncMock(spec=QueueManager),
     )
-    params = CancelTaskRequest(name=f'tasks/{task_id}')
+    params = SubscribeToTaskRequest(name=f'tasks/{task_id}')
 
     from a2a.utils.errors import ServerError
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        async for _ in request_handler.on_resubscribe_to_task(params, context):
+        async for _ in request_handler.on_subscribe_to_task(params, context):
             pass  # pragma: no cover
 
     assert isinstance(exc_info.value.error, InvalidParamsError)

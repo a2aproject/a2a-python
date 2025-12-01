@@ -36,21 +36,6 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-# TaskResubscriptionRequest is an alias for SubscribeToTaskRequest
-# (backwards compatibility)
-TaskResubscriptionRequest = SubscribeToTaskRequest
-
-
-# Transport protocol constants
-# These match the protocol binding values used in AgentCard
-class TransportProtocol:
-    """Transport protocol string constants."""
-
-    jsonrpc = 'JSONRPC'
-    http_json = 'HTTP+JSON'
-    grpc = 'GRPC'
-
-
 class A2ABaseModel(BaseModel):
     """Base model for all A2A SDK types."""
 
@@ -215,7 +200,5 @@ __all__ = [
     'PushNotificationNotSupportedError',
     'TaskNotCancelableError',
     'TaskNotFoundError',
-    'TaskResubscriptionRequest',
-    'TransportProtocol',
     'UnsupportedOperationError',
 ]

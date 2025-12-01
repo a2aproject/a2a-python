@@ -224,7 +224,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            async for event in self.request_handler.on_resubscribe_to_task(
+            async for event in self.request_handler.on_subscribe_to_task(
                 request,
                 server_context,
             ):

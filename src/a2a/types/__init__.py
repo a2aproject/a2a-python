@@ -70,8 +70,6 @@ from a2a.types.extras import (
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
-    TaskResubscriptionRequest,
-    TransportProtocol,
     UnsupportedOperationError,
 )
 
@@ -140,10 +138,8 @@ __all__ = [
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'TaskPushNotificationConfig',
-    'TaskResubscriptionRequest',
     'TaskState',
     'TaskStatus',
     'TaskStatusUpdateEvent',
-    'TransportProtocol',
     'UnsupportedOperationError',
 ]

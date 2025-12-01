@@ -139,7 +139,7 @@ def handler():
     handler.set_push_notification = mock.AsyncMock()
     handler.get_push_notification = mock.AsyncMock()
     handler.on_message_send_stream = mock.Mock()
-    handler.on_resubscribe_to_task = mock.Mock()
+    handler.on_subscribe_to_task = mock.Mock()
     return handler
 
 
@@ -303,7 +303,7 @@ def test_starlette_rpc_endpoint_custom_url(
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/get',
+            'method': 'GetTask',
             'params': {'name': 'task1'},
         },
     )
@@ -326,7 +326,7 @@ def test_fastapi_rpc_endpoint_custom_url(
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/get',
+            'method': 'GetTask',
             'params': {'name': 'task1'},
         },
     )
@@ -432,7 +432,7 @@ def test_send_message(client: TestClient, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'message/send',
+            'method': 'SendMessage',
             'params': {
                 'message': {
                     'role': 'ROLE_AGENT',
@@ -471,7 +471,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/cancel',
+            'method': 'CancelTask',
             'params': {'name': 'tasks/task1'},
         },
     )
@@ -499,7 +499,7 @@ def test_get_task(client: TestClient, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/get',
+            'method': 'GetTask',
             'params': {'name': 'tasks/task1'},
         },
     )
@@ -532,7 +532,7 @@ def test_set_push_notification_config(
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/pushNotificationConfig/set',
+            'method': 'SetTaskPushNotificationConfig',
             'params': {
                 'parent': 'tasks/t2',
                 'config': {
@@ -574,7 +574,7 @@ def test_get_push_notification_config(
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/pushNotificationConfig/get',
+            'method': 'GetTaskPushNotificationConfig',
             'params': {'name': 'tasks/task1/pushNotificationConfig'},
         },
     )
@@ -622,7 +622,7 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'message/send',
+            'method': 'SendMessage',
             'params': {
                 'request': {
                     'role': 'ROLE_AGENT',
@@ -685,7 +685,7 @@ async def test_message_send_stream(
             json={
                 'jsonrpc': '2.0',
                 'id': '123',
-                'method': 'message/stream',
+                'method': 'SendStreamingMessage',
                 'params': {
                     'request': {
                         'role': 'ROLE_AGENT',
@@ -748,7 +748,7 @@ async def test_task_resubscription(
                 last_chunk=last[i],
             )
 
-    handler.on_resubscribe_to_task.return_value = stream_generator()
+    handler.on_subscribe_to_task.return_value = stream_generator()
 
     # Create client
     client = TestClient(app.build(), raise_server_exceptions=False)
@@ -762,7 +762,7 @@ async def test_task_resubscription(
             json={
                 'jsonrpc': '2.0',
                 'id': '123',  # This ID is used in the success_event above
-                'method': 'tasks/resubscribe',
+                'method': 'SubscribeToTask',
                 'params': {'name': 'tasks/task1'},
             },
         ) as response:
@@ -934,7 +934,7 @@ def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/get',
+            'method': 'GetTask',
             'params': {'name': 'tasks/task1'},
         },
     )
@@ -970,7 +970,7 @@ def test_validation_error(client: TestClient):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'message/send',
+            'method': 'SendMessage',
             'params': {
                 'request': {
                     # Missing required fields
@@ -994,7 +994,7 @@ def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'tasks/get',
+            'method': 'GetTask',
             'params': {'name': 'tasks/task1'},
         },
     )

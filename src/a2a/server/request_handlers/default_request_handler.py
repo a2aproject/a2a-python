@@ -33,6 +33,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     Message,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
@@ -501,7 +502,7 @@ class DefaultRequestHandler(RequestHandler):
 
     async def on_get_task_push_notification_config(
         self,
-        params: CancelTaskRequest | GetTaskPushNotificationConfigRequest,
+        params: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'.
@@ -531,12 +532,12 @@ class DefaultRequestHandler(RequestHandler):
             push_notification_config=push_notification_config[0],
         )
 
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
-        """Default handler for 'tasks/resubscribe'.
+        """Default handler for 'SubscribeToTask'.
 
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
@@ -575,8 +576,8 @@ class DefaultRequestHandler(RequestHandler):
         self,
         params: ListTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Default handler for 'tasks/pushNotificationConfig/list'.
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Default handler for 'ListTaskPushNotificationConfig'.
 
         Requires a `PushConfigStore` to be configured.
         """
@@ -592,13 +593,15 @@ class DefaultRequestHandler(RequestHandler):
             task_id
         )
 
-        return [
-            TaskPushNotificationConfig(
-                name=f'tasks/{task_id}/pushNotificationConfigs/{config.id}',
-                push_notification_config=config,
-            )
-            for config in push_notification_config_list
-        ]
+        return ListTaskPushNotificationConfigResponse(
+            configs=[
+                TaskPushNotificationConfig(
+                    name=f'tasks/{task_id}/pushNotificationConfigs/{config.id}',
+                    push_notification_config=config,
+                )
+                for config in push_notification_config_list
+            ]
+        )
 
     async def on_delete_task_push_notification_config(
         self,

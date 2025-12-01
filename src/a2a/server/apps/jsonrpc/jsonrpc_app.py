@@ -31,6 +31,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigRequest,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
+    SubscribeToTaskRequest,
 )
 from a2a.types.extras import (
     A2AError,
@@ -40,7 +41,6 @@ from a2a.types.extras import (
     InvalidRequestError,
     JSONParseError,
     MethodNotFoundError,
-    TaskResubscriptionRequest,
     UnsupportedOperationError,
 )
 from a2a.utils.constants import (
@@ -154,17 +154,18 @@ class JSONRPCApplication(ABC):
 
     # Method-to-model mapping for centralized routing
     # Proto types don't have model_fields, so we define the mapping explicitly
+    # Method names match gRPC service method names
     METHOD_TO_MODEL: dict[str, type] = {
-        'message/send': SendMessageRequest,
-        'message/stream': SendMessageRequest,  # Same proto type as message/send
-        'tasks/get': GetTaskRequest,
-        'tasks/cancel': CancelTaskRequest,
-        'tasks/pushNotificationConfig/set': SetTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/get': GetTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/list': ListTaskPushNotificationConfigRequest,
-        'tasks/pushNotificationConfig/delete': DeleteTaskPushNotificationConfigRequest,
-        'tasks/resubscribe': TaskResubscriptionRequest,
-        'agent/authenticatedExtendedCard': GetExtendedAgentCardRequest,
+        'SendMessage': SendMessageRequest,
+        'SendStreamingMessage': SendMessageRequest,  # Same proto type as SendMessage
+        'GetTask': GetTaskRequest,
+        'CancelTask': CancelTaskRequest,
+        'SetTaskPushNotificationConfig': SetTaskPushNotificationConfigRequest,
+        'GetTaskPushNotificationConfig': GetTaskPushNotificationConfigRequest,
+        'ListTaskPushNotificationConfig': ListTaskPushNotificationConfigRequest,
+        'DeleteTaskPushNotificationConfig': DeleteTaskPushNotificationConfigRequest,
+        'SubscribeToTask': SubscribeToTaskRequest,
+        'GetExtendedAgentCard': GetExtendedAgentCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
@@ -358,8 +359,7 @@ class JSONRPCApplication(ABC):
             call_context.state['request_id'] = request_id
 
             # Route streaming requests by method name
-            # (message/send and message/stream both use SendMessageRequest)
-            if method in ('message/stream', 'tasks/resubscribe'):
+            if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 return await self._process_streaming_request(
                     request_id, specific_request, call_context
                 )
@@ -396,7 +396,7 @@ class JSONRPCApplication(ABC):
         request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> Response:
-        """Processes streaming requests (message/stream or tasks/resubscribe).
+        """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
 
         Args:
             request_id: The ID of the request.
@@ -407,7 +407,7 @@ class JSONRPCApplication(ABC):
             An `EventSourceResponse` object to stream results to the client.
         """
         handler_result: Any = None
-        # Check for streaming message request (same type as send, but handled differently)
+        # Check for streaming message request (same type as SendMessage, but handled differently)
         if isinstance(
             request_obj,
             SendMessageRequest,
@@ -415,8 +415,8 @@ class JSONRPCApplication(ABC):
             handler_result = self.handler.on_message_send_stream(
                 request_obj, context
             )
-        elif isinstance(request_obj, TaskResubscriptionRequest):
-            handler_result = self.handler.on_resubscribe_to_task(
+        elif isinstance(request_obj, SubscribeToTaskRequest):
+            handler_result = self.handler.on_subscribe_to_task(
                 request_obj, context
             )
 

@@ -39,6 +39,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     Message,
     Part,
     PushNotificationConfig,
@@ -650,7 +651,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_task_store.get.return_value = mock_task
             mock_queue_manager.tap.return_value = EventQueue()
             request = SubscribeToTaskRequest(name=f'tasks/{mock_task.id}')
-            response = handler.on_resubscribe_to_task(request)
+            response = handler.on_subscribe_to_task(request)
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
             async for event in response:
@@ -658,7 +659,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert len(collected_events) == len(events)
             assert mock_task.history is not None and len(mock_task.history) == 0
 
-    async def test_on_resubscribe_no_existing_task_error(self) -> None:
+    async def test_on_subscribe_no_existing_task_error(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
         request_handler = DefaultRequestHandler(
@@ -667,7 +668,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
         request = SubscribeToTaskRequest(name='tasks/nonexistent_id')
-        response = handler.on_resubscribe_to_task(request)
+        response = handler.on_subscribe_to_task(request)
         assert isinstance(response, AsyncGenerator)
         collected_events: list[Any] = []
         async for event in response:
@@ -1057,9 +1058,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 url='http://example.com'
             ),
         )
-        request_handler.on_list_task_push_notification_config.return_value = [
-            task_push_config
-        ]
+        request_handler.on_list_task_push_notification_config.return_value = (
+            ListTaskPushNotificationConfigResponse(configs=[task_push_config])
+        )
 
         self.mock_agent_card.capabilities = AgentCapabilities(
             push_notifications=True
@@ -1072,8 +1073,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
-        # Result contains list of configs
-        self.assertIsInstance(response['result'], list)
+        # Result contains the response dict with configs field
+        self.assertIsInstance(response['result'], dict)
 
     async def test_on_list_push_notification_error(self) -> None:
         """Test list_push_notification_config handling"""

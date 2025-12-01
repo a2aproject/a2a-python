@@ -19,7 +19,7 @@ from a2a.client import (
     ClientFactory,
     minimal_agent_card,
 )
-from a2a.types import TransportProtocol
+from a2a.utils.constants import TransportProtocol
 from a2a.types.a2a_pb2 import (
     Message,
     Part,

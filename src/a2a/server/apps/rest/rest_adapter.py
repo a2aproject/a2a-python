@@ -215,7 +215,7 @@ class RESTAdapter:
             ),
             ('/v1/tasks/{id}:subscribe', 'GET'): functools.partial(
                 self._handle_streaming_request,
-                self.handler.on_resubscribe_to_task,
+                self.handler.on_subscribe_to_task,
             ),
             ('/v1/tasks/{id}', 'GET'): functools.partial(
                 self._handle_request, self.handler.on_get_task

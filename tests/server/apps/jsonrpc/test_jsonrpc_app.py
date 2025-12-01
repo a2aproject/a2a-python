@@ -214,7 +214,7 @@ class TestJSONRPCExtensions:
         return {
             'jsonrpc': '2.0',
             'id': '1',
-            'method': 'message/send',
+            'method': 'SendMessage',
             'params': {
                 'message': {
                     'messageId': '1',
@@ -280,7 +280,7 @@ class TestJSONRPCExtensions:
 
         mock_handler.on_message_send.assert_called_once()
         call_context = mock_handler.on_message_send.call_args[0][1]
-        assert call_context.state['method'] == 'message/send'
+        assert call_context.state['method'] == 'SendMessage'
 
     def test_request_with_multiple_extension_headers(
         self, client, mock_handler
