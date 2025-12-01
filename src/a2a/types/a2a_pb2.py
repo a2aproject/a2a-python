@@ -9,6 +9,14 @@ from google.protobuf import runtime_version as _runtime_version
 from google.protobuf import symbol_database as _symbol_database
 from google.protobuf.internal import builder as _builder
 
+# Import proto dependencies to ensure they are registered in the descriptor pool
+# before building our proto descriptor
+from google.api import annotations_pb2 as _annotations_pb2  # noqa: F401
+from google.api import client_pb2 as _client_pb2  # noqa: F401
+from google.api import field_behavior_pb2 as _field_behavior_pb2  # noqa: F401
+from google.protobuf import empty_pb2 as _empty_pb2  # noqa: F401
+from google.protobuf import struct_pb2 as _struct_pb2  # noqa: F401
+from google.protobuf import timestamp_pb2 as _timestamp_pb2  # noqa: F401
 
 _runtime_version.ValidateProtobufRuntimeVersion(
     _runtime_version.Domain.PUBLIC,

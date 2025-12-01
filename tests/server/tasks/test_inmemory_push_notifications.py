@@ -24,7 +24,8 @@ from a2a.types.a2a_pb2 import (
 
 
 def create_sample_task(
-    task_id: str = 'task123', status_state: TaskState = TaskState.TASK_STATE_COMPLETED
+    task_id: str = 'task123',
+    status_state: TaskState = TaskState.TASK_STATE_COMPLETED,
 ) -> Task:
     return Task(
         id=task_id,
@@ -263,7 +264,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self, mock_logger: MagicMock
     ) -> None:
         """Test that auth field is not used by current implementation.
-        
+
         The current BasePushNotificationSender only supports token-based auth,
         not the authentication field. This test verifies that the notification
         still works even if the config has an authentication field set.

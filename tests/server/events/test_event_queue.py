@@ -37,7 +37,9 @@ def create_sample_message(message_id: str = '111') -> Message:
     )
 
 
-def create_sample_task(task_id: str = '123', context_id: str = 'session-xyz') -> Task:
+def create_sample_task(
+    task_id: str = '123', context_id: str = 'session-xyz'
+) -> Task:
     """Create a sample Task proto object."""
     return Task(
         id=task_id,
@@ -123,9 +125,7 @@ async def test_task_done(event_queue: EventQueue) -> None:
     event = TaskArtifactUpdateEvent(
         task_id='task_123',
         context_id='session-xyz',
-        artifact=Artifact(
-            artifact_id='11', parts=[Part(text='text')]
-        ),
+        artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
     )
     await event_queue.enqueue_event(event)
     _ = await event_queue.dequeue_event()

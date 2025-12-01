@@ -92,17 +92,19 @@ async def test_process_with_status_update(
     # First set the task
     task_event = StreamResponse(task=sample_task)
     await task_manager.process(task_event)
-    
+
     # Now process a status update
     status_update = TaskStatusUpdateEvent(
         task_id=sample_task.id,
         context_id=sample_task.context_id,
-        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED, message=sample_message),
+        status=TaskStatus(
+            state=TaskState.TASK_STATE_COMPLETED, message=sample_message
+        ),
         final=True,
     )
     status_event = StreamResponse(status_update=status_update)
     updated_task = await task_manager.process(status_event)
-    
+
     assert updated_task.status.state == TaskState.TASK_STATE_COMPLETED
     assert len(updated_task.history) == 1
     assert updated_task.history[0].message_id == sample_message.message_id
@@ -116,7 +118,7 @@ async def test_process_with_artifact_update(
     # First set the task
     task_event = StreamResponse(task=sample_task)
     await task_manager.process(task_event)
-    
+
     artifact = Artifact(
         artifact_id='art1', parts=[Part(text='artifact content')]
     )
@@ -147,7 +149,7 @@ async def test_process_creates_task_if_not_exists_on_status_update(
     )
     status_event = StreamResponse(status_update=status_update)
     updated_task = await task_manager.process(status_event)
-    
+
     assert updated_task is not None
     assert updated_task.id == 'new_task'
     assert updated_task.status.state == TaskState.TASK_STATE_WORKING
@@ -182,9 +184,9 @@ def test_update_with_message_moves_status_message(
         parts=[Part(text='Status')],
     )
     sample_task.status.message.CopyFrom(status_message)
-    
+
     updated_task = task_manager.update_with_message(sample_message, sample_task)
-    
+
     # History should contain both status_message and sample_message
     assert len(updated_task.history) == 2
     assert updated_task.history[0].message_id == status_message.message_id

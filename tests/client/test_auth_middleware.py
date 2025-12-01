@@ -17,7 +17,7 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.types import TransportProtocol, SendMessageSuccessResponse
+from a2a.types import TransportProtocol
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -63,6 +63,7 @@ from google.protobuf import json_format
 def build_success_response(request: httpx.Request) -> httpx.Response:
     """Creates a valid JSON-RPC success response based on the request."""
     from a2a.types.a2a_pb2 import SendMessageResponse
+
     request_payload = json.loads(request.content)
     message = Message(
         message_id='message-id',
@@ -209,7 +210,7 @@ def wrap_security_scheme(scheme: Any) -> SecurityScheme:
     elif isinstance(scheme, OpenIdConnectSecurityScheme):
         return SecurityScheme(open_id_connect_security_scheme=scheme)
     else:
-        raise ValueError(f"Unknown security scheme type: {type(scheme)}")
+        raise ValueError(f'Unknown security scheme type: {type(scheme)}')
 
 
 @dataclass
@@ -315,7 +316,9 @@ async def test_auth_interceptor_variants(
         capabilities=AgentCapabilities(),
         security=[Security(schemes={test_case.scheme_name: StringList()})],
         security_schemes={
-            test_case.scheme_name: wrap_security_scheme(test_case.security_scheme)
+            test_case.scheme_name: wrap_security_scheme(
+                test_case.security_scheme
+            )
         },
         preferred_transport=TransportProtocol.jsonrpc,
     )

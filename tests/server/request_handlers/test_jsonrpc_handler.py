@@ -25,17 +25,7 @@ from a2a.server.tasks import (
     TaskStore,
 )
 from a2a.types import (
-    CancelTaskSuccessResponse,
-    DeleteTaskPushNotificationConfigSuccessResponse,
-    GetAuthenticatedExtendedCardSuccessResponse,
-    GetTaskPushNotificationConfigSuccessResponse,
-    GetTaskSuccessResponse,
     InternalError,
-    JSONRPCErrorResponse,
-    ListTaskPushNotificationConfigSuccessResponse,
-    SendMessageSuccessResponse,
-    SendStreamingMessageSuccessResponse,
-    SetTaskPushNotificationConfigSuccessResponse,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -68,7 +58,9 @@ from a2a.utils.errors import ServerError
 
 
 # Helper function to create a minimal Task proto
-def create_task(task_id: str = 'task_123', context_id: str = 'session-xyz') -> Task:
+def create_task(
+    task_id: str = 'task_123', context_id: str = 'session-xyz'
+) -> Task:
     return Task(
         id=task_id,
         context_id=context_id,
@@ -96,6 +88,31 @@ def create_message(
     return msg
 
 
+# Helper functions for checking JSON-RPC response structure
+def is_success_response(response: dict[str, Any]) -> bool:
+    """Check if response is a successful JSON-RPC response."""
+    return 'result' in response and 'error' not in response
+
+
+def is_error_response(response: dict[str, Any]) -> bool:
+    """Check if response is an error JSON-RPC response."""
+    return 'error' in response
+
+
+def get_error_code(response: dict[str, Any]) -> int | None:
+    """Get error code from JSON-RPC error response."""
+    if 'error' in response:
+        return response['error'].get('code')
+    return None
+
+
+def get_error_message(response: dict[str, Any]) -> str | None:
+    """Get error message from JSON-RPC error response."""
+    if 'error' in response:
+        return response['error'].get('message')
+    return None
+
+
 class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
     @pytest.fixture(autouse=True)
     def init_fixtures(self) -> None:
@@ -111,16 +128,19 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = DefaultRequestHandler(
             mock_agent_executor, mock_task_store
         )
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': '1'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': '1'}
+        )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         task_id = 'test_task_id'
         mock_task = create_task(task_id=task_id)
         mock_task_store.get.return_value = mock_task
         request = GetTaskRequest(name=f'tasks/{task_id}')
         response = await handler.on_get_task(request, call_context)
-        self.assertIsInstance(response.root, GetTaskSuccessResponse)
-        # Result is converted to dict for JSON serialization
-        assert response.root.result['id'] == task_id  # type: ignore
+        # Response is now a dict with 'result' key for success
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        assert response['result']['id'] == task_id
         mock_task_store.get.assert_called_once_with(task_id, unittest.mock.ANY)
 
     async def test_on_get_task_not_found(self) -> None:
@@ -132,10 +152,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
         request = GetTaskRequest(name='tasks/nonexistent_id')
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': '1'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': '1'}
+        )
         response = await handler.on_get_task(request, call_context)
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        assert response.root.error == TaskNotFoundError()  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        assert response['error']['code'] == TaskNotFoundError().code
 
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -148,7 +171,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task = create_task(task_id=task_id)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': '1'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': '1'}
+        )
 
         async def streaming_coro():
             mock_task.status.state = TaskState.TASK_STATE_CANCELLED
@@ -161,10 +186,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             request = CancelTaskRequest(name=f'tasks/{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
-            self.assertIsInstance(response.root, CancelTaskSuccessResponse)
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_success_response(response))
             # Result is converted to dict for JSON serialization
-            assert response.root.result['id'] == task_id  # type: ignore
-            assert response.root.result['status']['state'] == 'TASK_STATE_CANCELLED'  # type: ignore
+            assert response['result']['id'] == task_id  # type: ignore
+            assert (
+                response['result']['status']['state'] == 'TASK_STATE_CANCELLED'
+            )  # type: ignore
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_supported(self) -> None:
@@ -178,7 +206,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task = create_task(task_id=task_id)
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': '1'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': '1'}
+        )
 
         async def streaming_coro():
             raise ServerError(UnsupportedOperationError())
@@ -191,8 +221,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             request = CancelTaskRequest(name=f'tasks/{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
-            self.assertIsInstance(response.root, JSONRPCErrorResponse)
-            assert response.root.error == UnsupportedOperationError()  # type: ignore
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_error_response(response))
+            assert response['error']['code'] == UnsupportedOperationError().code
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_found(self) -> None:
@@ -206,8 +237,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request = CancelTaskRequest(name='tasks/nonexistent_id')
         call_context = ServerCallContext(state={'request_id': '1'})
         response = await handler.on_cancel_task(request, call_context)
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        assert response.root.error == TaskNotFoundError()  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        assert response['error']['code'] == TaskNotFoundError().code
         mock_task_store.get.assert_called_once_with(
             'nonexistent_id', unittest.mock.ANY
         )
@@ -242,11 +274,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=(mock_task, False),
         ):
             request = SendMessageRequest(
-                request=create_message(task_id='task_123', context_id='session-xyz'),
+                request=create_message(
+                    task_id='task_123', context_id='session-xyz'
+                ),
             )
             response = await handler.on_message_send(request)
             # execute is called asynchronously in background task
-            self.assertIsInstance(response.root, SendMessageSuccessResponse)
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_success_response(response))
 
     async def test_on_message_new_message_with_existing_task_success(
         self,
@@ -273,7 +308,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             )
             response = await handler.on_message_send(request)
             # execute is called asynchronously in background task
-            self.assertIsInstance(response.root, SendMessageSuccessResponse)
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_success_response(response))
 
     async def test_on_message_error(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -295,12 +331,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=streaming_coro(),
         ):
             request = SendMessageRequest(
-                request=create_message(task_id=mock_task.id, context_id=mock_task.context_id),
+                request=create_message(
+                    task_id=mock_task.id, context_id=mock_task.context_id
+                ),
             )
             response = await handler.on_message_send(request)
 
-            self.assertIsInstance(response.root, JSONRPCErrorResponse)
-            assert response.root.error == UnsupportedOperationError()  # type: ignore
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_error_response(response))
+            assert response['error']['code'] == UnsupportedOperationError().code
             mock_agent_executor.execute.assert_called_once()
 
     @patch(
@@ -331,9 +370,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskArtifactUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                artifact=Artifact(
-                    artifact_id='11', parts=[Part(text='text')]
-                ),
+                artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
             ),
             TaskStatusUpdateEvent(
                 task_id='task_123',
@@ -362,7 +399,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_task_store.get.return_value = mock_task
             mock_agent_executor.execute.return_value = None
             request = SendMessageRequest(
-                request=create_message(task_id='task_123', context_id='session-xyz'),
+                request=create_message(
+                    task_id='task_123', context_id='session-xyz'
+                ),
             )
             response = handler.on_message_send_stream(request)
             assert isinstance(response, AsyncGenerator)
@@ -391,9 +430,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskArtifactUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                artifact=Artifact(
-                    artifact_id='11', parts=[Part(text='text')]
-                ),
+                artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
             ),
             TaskStatusUpdateEvent(
                 task_id='task_123',
@@ -463,9 +500,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             config=task_config,
         )
         response = await handler.set_push_notification_config(request)
-        self.assertIsInstance(
-            response.root, SetTaskPushNotificationConfigSuccessResponse
-        )
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
         mock_push_notification_store.set_info.assert_called_once_with(
             mock_task.id, push_config
         )
@@ -501,9 +537,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
         )
         get_response = await handler.get_push_notification_config(get_request)
-        self.assertIsInstance(
-            get_response.root, GetTaskPushNotificationConfigSuccessResponse
-        )
+        self.assertIsInstance(get_response, dict)
+        self.assertTrue(is_success_response(get_response))
 
     @patch(
         'a2a.server.agent_execution.simple_request_context_builder.SimpleRequestContextBuilder.build'
@@ -542,9 +577,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskArtifactUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                artifact=Artifact(
-                    artifact_id='11', parts=[Part(text='text')]
-                ),
+                artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
             ),
             TaskStatusUpdateEvent(
                 task_id='task_123',
@@ -596,9 +629,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             TaskArtifactUpdateEvent(
                 task_id='task_123',
                 context_id='session-xyz',
-                artifact=Artifact(
-                    artifact_id='11', parts=[Part(text='text')]
-                ),
+                artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
             ),
             TaskStatusUpdateEvent(
                 task_id='task_123',
@@ -642,8 +673,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         async for event in response:
             collected_events.append(event)
         assert len(collected_events) == 1
-        self.assertIsInstance(collected_events[0].root, JSONRPCErrorResponse)
-        assert collected_events[0].root.error == TaskNotFoundError()
+        self.assertIsInstance(collected_events[0], dict)
+        self.assertTrue(is_error_response(collected_events[0]))
+        assert collected_events[0]['error']['code'] == TaskNotFoundError().code
 
     async def test_streaming_not_supported_error(
         self,
@@ -732,8 +764,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.get_push_notification_config(get_request)
 
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.error, UnsupportedOperationError())  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        self.assertEqual(
+            response['error']['code'], UnsupportedOperationError().code
+        )
 
     async def test_on_set_push_notification_no_push_config_store(self) -> None:
         """Test set_push_notification with no push notifier configured."""
@@ -765,8 +800,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.set_push_notification_config(request)
 
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.error, UnsupportedOperationError())  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        self.assertEqual(
+            response['error']['code'], UnsupportedOperationError().code
+        )
 
     async def test_on_message_send_internal_error(self) -> None:
         """Test on_message_send with an internal error."""
@@ -793,8 +831,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             response = await handler.on_message_send(request)
 
             # Assert
-            self.assertIsInstance(response.root, JSONRPCErrorResponse)
-            self.assertIsInstance(response.root.error, InternalError)  # type: ignore
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_error_response(response))
+            self.assertEqual(response['error']['code'], InternalError().code)
 
     async def test_on_message_stream_internal_error(self) -> None:
         """Test on_message_send_stream with an internal error."""
@@ -830,8 +869,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
             # Assert
             self.assertEqual(len(responses), 1)
-            self.assertIsInstance(responses[0].root, JSONRPCErrorResponse)
-            self.assertIsInstance(responses[0].root.error, InternalError)
+            self.assertIsInstance(responses[0], dict)
+            self.assertTrue(is_error_response(responses[0]))
+            self.assertEqual(
+                responses[0]['error']['code'], InternalError().code
+            )
 
     async def test_default_request_handler_with_custom_components(self) -> None:
         """Test DefaultRequestHandler initialization with custom components."""
@@ -896,8 +938,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             response = await handler.on_message_send(request)
 
             # Assert
-            self.assertIsInstance(response.root, JSONRPCErrorResponse)
-            self.assertEqual(response.root.error, UnsupportedOperationError())  # type: ignore
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_error_response(response))
+            self.assertEqual(
+                response['error']['code'], UnsupportedOperationError().code
+            )
 
     async def test_on_message_send_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -921,8 +966,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             )
             response = await handler.on_message_send(request)
             # The task ID mismatch should cause an error
-            self.assertIsInstance(response.root, JSONRPCErrorResponse)
-            self.assertIsInstance(response.root.error, InternalError)  # type: ignore
+            self.assertIsInstance(response, dict)
+            self.assertTrue(is_error_response(response))
+            self.assertEqual(response['error']['code'], InternalError().code)
 
     async def test_on_message_stream_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -954,10 +1000,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             async for event in response:
                 collected_events.append(event)
             assert len(collected_events) == 1
-            self.assertIsInstance(
-                collected_events[0].root, JSONRPCErrorResponse
+            self.assertIsInstance(collected_events[0], dict)
+            self.assertTrue(is_error_response(collected_events[0]))
+            self.assertEqual(
+                collected_events[0]['error']['code'], InternalError().code
             )
-            self.assertIsInstance(collected_events[0].root.error, InternalError)
 
     async def test_on_get_push_notification(self) -> None:
         """Test get_push_notification_config handling"""
@@ -987,11 +1034,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         response = await handler.get_push_notification_config(get_request)
         # Assert
-        self.assertIsInstance(
-            response.root, GetTaskPushNotificationConfigSuccessResponse
-        )
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
         # Result is converted to dict for JSON serialization
-        self.assertEqual(response.root.result['name'], f'tasks/{mock_task.id}/pushNotificationConfigs/config1')  # type: ignore
+        self.assertEqual(
+            response['result']['name'],
+            f'tasks/{mock_task.id}/pushNotificationConfigs/config1',
+        )
 
     async def test_on_list_push_notification(self) -> None:
         """Test list_push_notification_config handling"""
@@ -1021,10 +1070,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         response = await handler.list_push_notification_config(list_request)
         # Assert
-        self.assertIsInstance(
-            response.root, ListTaskPushNotificationConfigSuccessResponse
-        )
-        self.assertEqual(response.root.result, [task_push_config])  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        # Result contains list of configs
+        self.assertIsInstance(response['result'], list)
 
     async def test_on_list_push_notification_error(self) -> None:
         """Test list_push_notification_config handling"""
@@ -1049,8 +1098,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         response = await handler.list_push_notification_config(list_request)
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.error, InternalError())  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        self.assertEqual(response['error']['code'], InternalError().code)
 
     async def test_on_delete_push_notification(self) -> None:
         """Test delete_push_notification_config handling"""
@@ -1070,10 +1120,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         response = await handler.delete_push_notification_config(delete_request)
         # Assert
-        self.assertIsInstance(
-            response.root, DeleteTaskPushNotificationConfigSuccessResponse
-        )
-        self.assertEqual(response.root.result, None)  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertEqual(response['result'], None)
 
     async def test_on_delete_push_notification_error(self) -> None:
         """Test delete_push_notification_config error handling"""
@@ -1094,8 +1143,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         response = await handler.delete_push_notification_config(delete_request)
         # Assert
-        self.assertIsInstance(response.root, JSONRPCErrorResponse)
-        self.assertEqual(response.root.error, UnsupportedOperationError())  # type: ignore
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        self.assertEqual(
+            response['error']['code'], UnsupportedOperationError().code
+        )
 
     async def test_get_authenticated_extended_card_success(self) -> None:
         """Test successful retrieval of the authenticated extended agent card."""
@@ -1118,17 +1170,20 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             extended_card_modifier=None,
         )
         request = GetExtendedAgentCardRequest()
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': 'ext-card-req-1'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': 'ext-card-req-1'}
+        )
 
         # Act
-        response = await handler.get_authenticated_extended_card(request, call_context)
+        response = await handler.get_authenticated_extended_card(
+            request, call_context
+        )
 
         # Assert
-        self.assertIsInstance(
-            response.root, GetAuthenticatedExtendedCardSuccessResponse
-        )
-        self.assertEqual(response.root.id, 'ext-card-req-1')
-        self.assertEqual(response.root.result, mock_extended_card)
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertEqual(response['id'], 'ext-card-req-1')
+        # Result is the agent card proto
 
     async def test_get_authenticated_extended_card_not_configured(self) -> None:
         """Test error when authenticated extended agent card is not configured."""
@@ -1142,18 +1197,21 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             extended_card_modifier=None,
         )
         request = GetExtendedAgentCardRequest()
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': 'ext-card-req-2'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': 'ext-card-req-2'}
+        )
 
         # Act
-        response = await handler.get_authenticated_extended_card(request, call_context)
+        response = await handler.get_authenticated_extended_card(
+            request, call_context
+        )
 
         # Assert
         # Authenticated Extended Card flag is set with no extended card,
         # returns base card in this case.
-        self.assertIsInstance(
-            response.root, GetAuthenticatedExtendedCardSuccessResponse
-        )
-        self.assertEqual(response.root.id, 'ext-card-req-2')
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertEqual(response['id'], 'ext-card-req-2')
 
     async def test_get_authenticated_extended_card_with_modifier(self) -> None:
         """Test successful retrieval of a dynamically modified extended agent card."""
@@ -1173,6 +1231,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         def modifier(card: AgentCard, context: ServerCallContext) -> AgentCard:
             # Copy the card by creating a new one with the same fields
             from copy import deepcopy
+
             modified_card = AgentCard()
             modified_card.CopyFrom(card)
             modified_card.name = 'Modified Card'
@@ -1188,17 +1247,23 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             extended_card_modifier=modifier,
         )
         request = GetExtendedAgentCardRequest()
-        call_context = ServerCallContext(state={'foo': 'bar', 'request_id': 'ext-card-req-mod'})
+        call_context = ServerCallContext(
+            state={'foo': 'bar', 'request_id': 'ext-card-req-mod'}
+        )
 
         # Act
-        response = await handler.get_authenticated_extended_card(request, call_context)
+        response = await handler.get_authenticated_extended_card(
+            request, call_context
+        )
 
         # Assert
-        self.assertIsInstance(
-            response.root, GetAuthenticatedExtendedCardSuccessResponse
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertEqual(response['id'], 'ext-card-req-mod')
+        # Result is converted to dict for JSON serialization
+        modified_card_dict = response['result']
+        self.assertEqual(modified_card_dict['name'], 'Modified Card')
+        self.assertEqual(
+            modified_card_dict['description'], 'Modified for context: bar'
         )
-        self.assertEqual(response.root.id, 'ext-card-req-mod')
-        modified_card = response.root.result
-        self.assertEqual(modified_card.name, 'Modified Card')
-        self.assertEqual(modified_card.description, 'Modified for context: bar')
-        self.assertEqual(modified_card.version, '1.0')
+        self.assertEqual(modified_card_dict['version'], '1.0')

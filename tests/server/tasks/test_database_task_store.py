@@ -73,9 +73,7 @@ else:
 
 
 # Minimal Task object for testing - remains the same
-task_status_submitted = TaskStatus(
-    state=TaskState.TASK_STATE_SUBMITTED
-)
+task_status_submitted = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
     context_id='session-xyz',
@@ -243,7 +241,10 @@ async def test_save_and_get_detailed_task(
     assert retrieved_task.context_id == test_task.context_id
     assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
     # Compare timestamps - proto Timestamp has ToDatetime() method
-    assert retrieved_task.status.timestamp.ToDatetime() == test_timestamp.replace(tzinfo=None)
+    assert (
+        retrieved_task.status.timestamp.ToDatetime()
+        == test_timestamp.replace(tzinfo=None)
+    )
     assert dict(retrieved_task.metadata) == {'key1': 'value1', 'key2': 123}
 
     # Use MessageToDict for proto serialization comparisons
@@ -279,8 +280,12 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
 
     retrieved_before_update = await db_store_parameterized.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
-    assert len(retrieved_before_update.metadata) == 0  # Proto map is empty, not None
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
+    assert (
+        len(retrieved_before_update.metadata) == 0
+    )  # Proto map is empty, not None
 
     updated_timestamp = datetime(2023, 1, 2, 11, 0, 0, tzinfo=timezone.utc)
     updated_task = Task()
@@ -294,7 +299,9 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
     retrieved_after_update = await db_store_parameterized.get(task_id)
     assert retrieved_after_update is not None
     assert retrieved_after_update.status.state == TaskState.TASK_STATE_COMPLETED
-    assert dict(retrieved_after_update.metadata) == {'update_key': 'update_value'}
+    assert dict(retrieved_after_update.metadata) == {
+        'update_key': 'update_value'
+    }
 
     await db_store_parameterized.delete(task_id)
 

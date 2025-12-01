@@ -1,7 +1,5 @@
 import logging
 
-from typing import Any
-
 
 try:
     from sqlalchemy import Table, delete, select
@@ -21,7 +19,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import MessageToDict
 
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
@@ -99,52 +97,37 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
-        # Convert proto to dict for storing in JSON columns
-        task_dict = MessageToDict(task, preserving_proto_field_name=True)
+        # Pass proto objects directly - PydanticType/PydanticListType
+        # handle serialization via process_bind_param
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
             kind='task',  # Default kind for tasks
-            status=task_dict.get('status'),
-            artifacts=task_dict.get('artifacts', []),
-            history=task_dict.get('history', []),
-            task_metadata=task_dict.get('metadata'),
+            status=task.status if task.HasField('status') else None,
+            artifacts=list(task.artifacts) if task.artifacts else [],
+            history=list(task.history) if task.history else [],
+            task_metadata=(
+                MessageToDict(task.metadata) if task.metadata.fields else None
+            ),
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        # The ORM columns return proto objects for status, artifacts, history
-        # We need to convert them back to dicts for ParseDict
-        task_data_from_db: dict[str, Any] = {
-            'id': task_model.id,
-            'context_id': task_model.context_id,
-        }
-        # Add status if present (already a proto object from PydanticType)
-        if task_model.status is not None:
-            task_data_from_db['status'] = MessageToDict(
-                task_model.status, preserving_proto_field_name=True
-            )
-        # Add artifacts if present (list of proto objects)
+        # PydanticType/PydanticListType already deserialize to proto objects
+        # via process_result_value, so we can construct the Task directly
+        task = Task(
+            id=task_model.id,
+            context_id=task_model.context_id,
+        )
+        if task_model.status:
+            task.status.CopyFrom(task_model.status)
         if task_model.artifacts:
-            task_data_from_db['artifacts'] = [
-                MessageToDict(a, preserving_proto_field_name=True)
-                if hasattr(a, 'DESCRIPTOR')
-                else a
-                for a in task_model.artifacts
-            ]
-        # Add history if present (list of proto objects)
+            task.artifacts.extend(task_model.artifacts)
         if task_model.history:
-            task_data_from_db['history'] = [
-                MessageToDict(m, preserving_proto_field_name=True)
-                if hasattr(m, 'DESCRIPTOR')
-                else m
-                for m in task_model.history
-            ]
-        # Add metadata if present
-        if task_model.task_metadata is not None:
-            task_data_from_db['metadata'] = task_model.task_metadata
-        # Use ParseDict to create proto from dict
-        return ParseDict(task_data_from_db, Task())
+            task.history.extend(task_model.history)
+        if task_model.task_metadata:
+            task.metadata.update(task_model.task_metadata)
+        return task
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None

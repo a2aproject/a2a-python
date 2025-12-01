@@ -88,7 +88,9 @@ async def test_update_status_with_message(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
 ) -> None:
     """Test updating status with a message."""
-    await task_updater.update_status(TaskState.TASK_STATE_WORKING, message=sample_message)
+    await task_updater.update_status(
+        TaskState.TASK_STATE_WORKING, message=sample_message
+    )
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
@@ -651,4 +653,7 @@ async def test_reject_concurrently_with_complete(
     event = event_queue.enqueue_event.call_args[0][0]
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.final is True
-    assert event.status.state in [TaskState.TASK_STATE_REJECTED, TaskState.TASK_STATE_COMPLETED]
+    assert event.status.state in [
+        TaskState.TASK_STATE_REJECTED,
+        TaskState.TASK_STATE_COMPLETED,
+    ]

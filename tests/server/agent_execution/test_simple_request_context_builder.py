@@ -213,7 +213,10 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         # To explicitly test None in Message, we'd have to bypass Pydantic default or modify helper.
         # For now, this covers the "no IDs to process" case.
         msg_with_no_refs = Message(
-            message_id='m2', role=Role.ROLE_USER, parts=[], reference_task_ids=None
+            message_id='m2',
+            role=Role.ROLE_USER,
+            parts=[],
+            reference_task_ids=None,
         )
         params_none_refs = SendMessageRequest(request=msg_with_no_refs)
         request_context_none = await builder.build(

@@ -195,7 +195,9 @@ async def test_get_extended_agent_card(
 ) -> None:
     """Test GetExtendedAgentCard call."""
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
-    response = await grpc_handler.GetExtendedAgentCard(request_proto, mock_grpc_context)
+    response = await grpc_handler.GetExtendedAgentCard(
+        request_proto, mock_grpc_context
+    )
 
     assert response.name == sample_agent_card.name
     assert response.version == sample_agent_card.version
@@ -334,7 +336,9 @@ class TestGrpcExtensions:
             return types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_COMPLETED
+                ),
             )
 
         mock_request_handler.on_message_send.side_effect = side_effect
@@ -399,7 +403,9 @@ class TestGrpcExtensions:
             yield types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_WORKING
+                ),
             )
 
         mock_request_handler.on_message_send_stream.side_effect = side_effect

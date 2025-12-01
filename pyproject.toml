@@ -14,6 +14,7 @@ dependencies = [
   "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
   "json-rpc>=1.15.0",
+  "googleapis-common-protos>=1.70.0",
 ]
 
 classifiers = [

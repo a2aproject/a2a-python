@@ -1,34 +1,6 @@
-# Copyright 2025 Google LLC
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""A2A Types Package - Protocol Buffer and SDK-specific types."""
 
-"""A2A types module.
-
-This module provides the protobuf-generated types for the A2A protocol.
-The Google API proto dependencies must be imported before the a2a_pb2 module.
-"""
-
-# Pre-load Google API proto dependencies required by a2a_pb2.py
-# These must be imported before a2a_pb2 to ensure the descriptor pool
-# has the required proto definitions.
-from google.api import annotations_pb2 as _annotations_pb2
-from google.api import client_pb2 as _client_pb2
-from google.api import field_behavior_pb2 as _field_behavior_pb2
-from google.protobuf import empty_pb2 as _empty_pb2
-from google.protobuf import struct_pb2 as _struct_pb2
-from google.protobuf import timestamp_pb2 as _timestamp_pb2
-
-# Now import and re-export all types from a2a_pb2
+# Import all proto-generated types from a2a_pb2
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -83,47 +55,21 @@ from a2a.types.a2a_pb2 import (
 
 # Import SDK-specific types from extras
 from a2a.types.extras import (
+    A2ABaseModel,
     A2AError,
-    # Request union type
     A2ARequest,
     AuthenticatedExtendedCardNotConfiguredError,
-    CancelTaskResponse,
-    CancelTaskSuccessResponse,
     ContentTypeNotSupportedError,
-    # Note: ListTaskPushNotificationConfigResponse is already imported from a2a_pb2
-    DeleteTaskPushNotificationConfigResponse,
-    DeleteTaskPushNotificationConfigSuccessResponse,
-    GetAuthenticatedExtendedCardResponse,
-    GetAuthenticatedExtendedCardSuccessResponse,
-    GetTaskPushNotificationConfigResponse,
-    GetTaskPushNotificationConfigSuccessResponse,
-    # Response wrapper types (RootModels)
-    GetTaskResponse,
-    # Success response types
-    GetTaskSuccessResponse,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
-    # Error types
     JSONRPCError,
-    JSONRPCErrorResponse,
-    # JSON-RPC types
-    JSONRPCRequest,
-    JSONRPCResponse,
-    ListTaskPushNotificationConfigSuccessResponse,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
-    SendMessageSuccessResponse,
-    # Note: SendMessageResponse is already imported from a2a_pb2
-    SendStreamingMessageResponse,
-    SendStreamingMessageSuccessResponse,
-    SetTaskPushNotificationConfigResponse,
-    SetTaskPushNotificationConfigSuccessResponse,
     TaskNotCancelableError,
     TaskNotFoundError,
-    # Aliases for backward compatibility
     TaskResubscriptionRequest,
     TransportProtocol,
     UnsupportedOperationError,
@@ -131,10 +77,12 @@ from a2a.types.extras import (
 
 
 __all__ = [
+    # SDK-specific types from extras
+    'A2ABaseModel',
     'A2AError',
     'A2ARequest',
-    'APIKeySecurityScheme',
     # Proto types
+    'APIKeySecurityScheme',
     'AgentCapabilities',
     'AgentCard',
     'AgentCardSignature',
@@ -147,24 +95,14 @@ __all__ = [
     'AuthenticationInfo',
     'AuthorizationCodeOAuthFlow',
     'CancelTaskRequest',
-    'CancelTaskResponse',
-    'CancelTaskSuccessResponse',
     'ClientCredentialsOAuthFlow',
     'ContentTypeNotSupportedError',
     'DataPart',
     'DeleteTaskPushNotificationConfigRequest',
-    'DeleteTaskPushNotificationConfigResponse',
-    'DeleteTaskPushNotificationConfigSuccessResponse',
     'FilePart',
-    'GetAuthenticatedExtendedCardResponse',
-    'GetAuthenticatedExtendedCardSuccessResponse',
     'GetExtendedAgentCardRequest',
     'GetTaskPushNotificationConfigRequest',
-    'GetTaskPushNotificationConfigResponse',
-    'GetTaskPushNotificationConfigSuccessResponse',
     'GetTaskRequest',
-    'GetTaskResponse',
-    'GetTaskSuccessResponse',
     'HTTPAuthSecurityScheme',
     'ImplicitOAuthFlow',
     'InternalError',
@@ -173,12 +111,8 @@ __all__ = [
     'InvalidRequestError',
     'JSONParseError',
     'JSONRPCError',
-    'JSONRPCErrorResponse',
-    'JSONRPCRequest',
-    'JSONRPCResponse',
     'ListTaskPushNotificationConfigRequest',
     'ListTaskPushNotificationConfigResponse',
-    'ListTaskPushNotificationConfigSuccessResponse',
     'ListTasksRequest',
     'ListTasksResponse',
     'Message',
@@ -197,12 +131,7 @@ __all__ = [
     'SendMessageConfiguration',
     'SendMessageRequest',
     'SendMessageResponse',
-    'SendMessageSuccessResponse',
-    'SendStreamingMessageResponse',
-    'SendStreamingMessageSuccessResponse',
     'SetTaskPushNotificationConfigRequest',
-    'SetTaskPushNotificationConfigResponse',
-    'SetTaskPushNotificationConfigSuccessResponse',
     'StreamResponse',
     'StringList',
     'SubscribeToTaskRequest',
@@ -211,7 +140,6 @@ __all__ = [
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'TaskPushNotificationConfig',
-    # SDK-specific types from extras
     'TaskResubscriptionRequest',
     'TaskState',
     'TaskStatus',

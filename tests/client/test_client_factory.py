@@ -82,7 +82,8 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     base_agent_card.preferred_transport = TransportProtocol.http_json
     base_agent_card.additional_interfaces.append(
         AgentInterface(
-            protocol_binding=TransportProtocol.jsonrpc, url='http://secondary-url.com'
+            protocol_binding=TransportProtocol.jsonrpc,
+            url='http://secondary-url.com',
         )
     )
     # Client supports both, but server prefers REST

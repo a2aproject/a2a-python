@@ -3,6 +3,7 @@
 This module tests the proto-generated types from a2a_pb2, using protobuf
 patterns like ParseDict, proto constructors, and MessageToDict.
 """
+
 from typing import Any
 
 import pytest
@@ -194,13 +195,13 @@ def test_data_part():
 def test_message():
     """Test Message proto construction."""
     part = Part(text='Hello')
-    
+
     msg = Message(
         role=Role.ROLE_USER,
         message_id='msg-123',
     )
     msg.parts.append(part)
-    
+
     assert msg.role == Role.ROLE_USER
     assert msg.message_id == 'msg-123'
     assert len(msg.parts) == 1
@@ -214,7 +215,7 @@ def test_message_with_metadata():
         message_id='msg-456',
     )
     msg.metadata.update({'timestamp': 'now'})
-    
+
     assert msg.role == Role.ROLE_AGENT
     assert dict(msg.metadata) == {'timestamp': 'now'}
 
@@ -229,6 +230,7 @@ def test_task_status():
 
     # TaskStatus with timestamp
     from google.protobuf.timestamp_pb2 import Timestamp
+
     ts = Timestamp()
     ts.FromJsonString('2023-10-27T10:00:00Z')
     status_working = TaskStatus(
@@ -247,7 +249,7 @@ def test_task():
         context_id='session-xyz',
         status=status,
     )
-    
+
     assert task.id == 'task-abc'
     assert task.context_id == 'session-xyz'
     assert task.status.state == TaskState.TASK_STATE_SUBMITTED
@@ -263,12 +265,12 @@ def test_task_with_history():
         context_id='session-xyz',
         status=status,
     )
-    
+
     # Add message to history
     msg = Message(role=Role.ROLE_USER, message_id='msg-1')
     msg.parts.append(Part(text='Hello'))
     task.history.append(msg)
-    
+
     assert len(task.history) == 1
     assert task.history[0].role == Role.ROLE_USER
 
@@ -281,14 +283,14 @@ def test_task_with_artifacts():
         context_id='session-xyz',
         status=status,
     )
-    
+
     # Add artifact
     artifact = Artifact(artifact_id='artifact-123', name='result')
     data_part = DataPart()
     data_part.data.update({'result': 42})
     artifact.parts.append(Part(data=data_part))
     task.artifacts.append(artifact)
-    
+
     assert len(task.artifacts) == 1
     assert task.artifacts[0].artifact_id == 'artifact-123'
     assert task.artifacts[0].name == 'result'
@@ -301,7 +303,7 @@ def test_send_message_request():
     """Test SendMessageRequest proto construction."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     msg.parts.append(Part(text='Hello'))
-    
+
     request = SendMessageRequest(request=msg)
     assert request.request.role == Role.ROLE_USER
     assert request.request.parts[0].text == 'Hello'
@@ -338,7 +340,10 @@ def test_set_task_push_notification_config_request():
         config=config,
     )
     assert request.parent == 'tasks/task-123'
-    assert request.config.push_notification_config.url == 'https://example.com/webhook'
+    assert (
+        request.config.push_notification_config.url
+        == 'https://example.com/webhook'
+    )
 
 
 def test_get_task_push_notification_config_request():
@@ -378,7 +383,7 @@ def test_parse_dict_agent_card():
     card = ParseDict(MINIMAL_AGENT_CARD, AgentCard())
     assert card.name == 'TestAgent'
     assert card.url == 'http://example.com/agent'
-    
+
     # Round-trip through MessageToDict
     card_dict = MessageToDict(card)
     assert card_dict['name'] == 'TestAgent'
@@ -413,7 +418,7 @@ def test_message_to_dict_preserves_structure():
     """Test that MessageToDict produces correct structure."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     msg.parts.append(Part(text='Hello'))
-    
+
     msg_dict = MessageToDict(msg)
     assert msg_dict['role'] == 'ROLE_USER'
     assert msg_dict['messageId'] == 'msg-123'
@@ -431,15 +436,15 @@ def test_proto_copy():
         context_id='ctx-456',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    
+
     # Copy using CopyFrom
     copy = Task()
     copy.CopyFrom(original)
-    
+
     assert copy.id == 'task-123'
     assert copy.context_id == 'ctx-456'
     assert copy.status.state == TaskState.TASK_STATE_SUBMITTED
-    
+
     # Modifying copy doesn't affect original
     copy.id = 'task-999'
     assert original.id == 'task-123'
@@ -457,9 +462,9 @@ def test_proto_equality():
         context_id='ctx-456',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    
+
     assert task1 == task2
-    
+
     task2.id = 'task-999'
     assert task1 != task2
 
@@ -471,7 +476,7 @@ def test_has_field_optional():
     """Test HasField for checking optional field presence."""
     status = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
     assert not status.HasField('message')
-    
+
     # Add message
     msg = Message(role=Role.ROLE_USER, message_id='msg-1')
     status.message.CopyFrom(msg)
@@ -484,7 +489,7 @@ def test_has_field_oneof():
     assert part.HasField('text')
     assert not part.HasField('file')
     assert not part.HasField('data')
-    
+
     # WhichOneof for checking which oneof is set
     assert part.WhichOneof('part') == 'text'
 
@@ -499,18 +504,18 @@ def test_repeated_field_operations():
         context_id='ctx-456',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    
+
     # append
     msg1 = Message(role=Role.ROLE_USER, message_id='msg-1')
     task.history.append(msg1)
     assert len(task.history) == 1
-    
+
     # extend
     msg2 = Message(role=Role.ROLE_AGENT, message_id='msg-2')
     msg3 = Message(role=Role.ROLE_USER, message_id='msg-3')
     task.history.extend([msg2, msg3])
     assert len(task.history) == 3
-    
+
     # iteration
     roles = [m.role for m in task.history]
     assert roles == [Role.ROLE_USER, Role.ROLE_AGENT, Role.ROLE_USER]
@@ -519,14 +524,14 @@ def test_repeated_field_operations():
 def test_map_field_operations():
     """Test operations on map fields."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-1')
-    
+
     # Update map
     msg.metadata.update({'key1': 'value1', 'key2': 'value2'})
     assert dict(msg.metadata) == {'key1': 'value1', 'key2': 'value2'}
-    
+
     # Access individual keys
     assert msg.metadata['key1'] == 'value1'
-    
+
     # Check containment
     assert 'key1' in msg.metadata
     assert 'key3' not in msg.metadata
@@ -539,12 +544,12 @@ def test_serialize_to_bytes():
     """Test serializing proto to bytes."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     msg.parts.append(Part(text='Hello'))
-    
+
     # Serialize
     data = msg.SerializeToString()
     assert isinstance(data, bytes)
     assert len(data) > 0
-    
+
     # Deserialize
     msg2 = Message()
     msg2.ParseFromString(data)
@@ -557,11 +562,12 @@ def test_serialize_to_json():
     """Test serializing proto to JSON via MessageToDict."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     msg.parts.append(Part(text='Hello'))
-    
+
     # MessageToDict for JSON-serializable dict
     msg_dict = MessageToDict(msg)
-    
+
     import json
+
     json_str = json.dumps(msg_dict)
     assert 'ROLE_USER' in json_str
     assert 'msg-123' in json_str
@@ -577,7 +583,7 @@ def test_default_values():
     assert msg.role == Role.ROLE_UNSPECIFIED  # Enum default is 0
     assert msg.message_id == ''  # String default is empty
     assert len(msg.parts) == 0  # Repeated field default is empty
-    
+
     # Task status defaults
     status = TaskStatus()
     assert status.state == TaskState.TASK_STATE_UNSPECIFIED
@@ -588,14 +594,14 @@ def test_clear_field():
     """Test clearing fields."""
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     assert msg.message_id == 'msg-123'
-    
+
     msg.ClearField('message_id')
     assert msg.message_id == ''  # Back to default
-    
+
     # Clear nested message
     status = TaskStatus(state=TaskState.TASK_STATE_WORKING)
     status.message.CopyFrom(Message(role=Role.ROLE_USER))
     assert status.HasField('message')
-    
+
     status.ClearField('message')
     assert not status.HasField('message')

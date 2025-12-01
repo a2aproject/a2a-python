@@ -17,7 +17,8 @@ from a2a.types.a2a_pb2 import (
 
 
 def create_sample_task(
-    task_id: str = 'task123', status_state: TaskState = TaskState.TASK_STATE_COMPLETED
+    task_id: str = 'task123',
+    status_state: TaskState = TaskState.TASK_STATE_COMPLETED,
 ) -> Task:
     return Task(
         id=task_id,

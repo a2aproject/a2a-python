@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from a2a.types.extras import A2AError, JSONRPCErrorResponse
+from a2a.types.extras import A2AError
 
 
 class A2AClientError(Exception):
@@ -81,16 +81,11 @@ class A2AClientJSONRPCError(A2AClientError):
 
     error: dict[str, Any] | A2AError
 
-    def __init__(self, error: JSONRPCErrorResponse | dict[str, Any]):
+    def __init__(self, error: dict[str, Any] | A2AError):
         """Initializes the A2AClientJsonRPCError.
 
         Args:
-            error: The JSON-RPC error object or dict from the jsonrpc library.
+            error: The JSON-RPC error dict from the jsonrpc library, or A2AError object.
         """
-        if isinstance(error, dict):
-            # Raw dict from jsonrpc library: {'code': ..., 'message': ...}
-            self.error = error
-        else:
-            # JSONRPCErrorResponse object
-            self.error = error.error
+        self.error = error
         super().__init__(f'JSON-RPC Error {self.error}')

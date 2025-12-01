@@ -4,7 +4,9 @@ from a2a.server.tasks import InMemoryTaskStore
 from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus
 
 
-def create_minimal_task(task_id: str = 'task-abc', context_id: str = 'session-xyz') -> Task:
+def create_minimal_task(
+    task_id: str = 'task-abc', context_id: str = 'session-xyz'
+) -> Task:
     """Create a minimal task for testing."""
     return Task(
         id=task_id,

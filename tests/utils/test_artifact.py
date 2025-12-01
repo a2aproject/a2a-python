@@ -78,7 +78,10 @@ class TestArtifact(unittest.TestCase):
         self.assertTrue(artifact.parts[0].HasField('data'))
         # Compare via MessageToDict for proto Struct
         from google.protobuf.json_format import MessageToDict
-        self.assertEqual(MessageToDict(artifact.parts[0].data.data), sample_data)
+
+        self.assertEqual(
+            MessageToDict(artifact.parts[0].data.data), sample_data
+        )
 
     def test_new_data_artifact_assigns_name_description(self):
         sample_data = {'info': 'some details'}

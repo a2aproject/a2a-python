@@ -254,8 +254,12 @@ async def test_send_message_streaming(  # noqa: PLR0913
         side_effect=[
             a2a_pb2.StreamResponse(msg=sample_message),
             a2a_pb2.StreamResponse(task=sample_task),
-            a2a_pb2.StreamResponse(status_update=sample_task_status_update_event),
-            a2a_pb2.StreamResponse(artifact_update=sample_task_artifact_update_event),
+            a2a_pb2.StreamResponse(
+                status_update=sample_task_status_update_event
+            ),
+            a2a_pb2.StreamResponse(
+                artifact_update=sample_task_artifact_update_event
+            ),
             grpc.aio.EOF,
         ]
     )
@@ -282,9 +286,15 @@ async def test_send_message_streaming(  # noqa: PLR0913
     assert responses[1].HasField('task')
     assert responses[1].task.id == sample_task.id
     assert responses[2].HasField('status_update')
-    assert responses[2].status_update.task_id == sample_task_status_update_event.task_id
+    assert (
+        responses[2].status_update.task_id
+        == sample_task_status_update_event.task_id
+    )
     assert responses[3].HasField('artifact_update')
-    assert responses[3].artifact_update.task_id == sample_task_artifact_update_event.task_id
+    assert (
+        responses[3].artifact_update.task_id
+        == sample_task_artifact_update_event.task_id
+    )
 
 
 @pytest.mark.asyncio
@@ -318,7 +328,9 @@ async def test_get_task_with_history(
     """Test retrieving a task with history."""
     mock_grpc_stub.GetTask.return_value = sample_task
     history_len = 10
-    params = GetTaskRequest(name=f'tasks/{sample_task.id}', history_length=history_len)
+    params = GetTaskRequest(
+        name=f'tasks/{sample_task.id}', history_length=history_len
+    )
 
     await grpc_transport.get_task(params)
 
@@ -411,11 +423,14 @@ async def test_set_task_callback_with_invalid_task(
             push_notification_config=sample_push_notification_config,
         ),
     )
-    
+
     # Note: The transport doesn't validate the response name format
     # It just returns the response from the stub
     response = await grpc_transport.set_task_callback(request)
-    assert response.name == 'invalid-path-to-tasks/task-1/pushNotificationConfigs/config-1'
+    assert (
+        response.name
+        == 'invalid-path-to-tasks/task-1/pushNotificationConfigs/config-1'
+    )
 
 
 @pytest.mark.asyncio
@@ -468,7 +483,10 @@ async def test_get_task_callback_with_invalid_task(
         )
     )
     # The transport doesn't validate the response name format
-    assert response.name == 'invalid-path-to-tasks/task-1/pushNotificationConfigs/config-1'
+    assert (
+        response.name
+        == 'invalid-path-to-tasks/task-1/pushNotificationConfigs/config-1'
+    )
 
 
 @pytest.mark.parametrize(

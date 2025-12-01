@@ -14,13 +14,16 @@
 
 """SDK-specific types that are not part of the A2A proto definition.
 
-These types are used for JSON-RPC handling, error responses, and other
-SDK-specific functionality that extends beyond the core A2A protocol types.
+These types are used for JSON-RPC error handling and other SDK-specific
+functionality that extends beyond the core A2A protocol types.
+
+For JSON-RPC request/response handling, use the `jsonrpc` library:
+    from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 """
 
 from typing import Any, Literal
 
-from pydantic import BaseModel, RootModel
+from pydantic import BaseModel
 
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -33,15 +36,15 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-# Alias for backward compatibility - SubscribeToTaskRequest was previously named
-# TaskResubscriptionRequest in the Pydantic types
+# TaskResubscriptionRequest is an alias for SubscribeToTaskRequest
+# (backwards compatibility)
 TaskResubscriptionRequest = SubscribeToTaskRequest
 
 
-# Transport protocol constants for backward compatibility
-# These were an enum in the old Pydantic types, now they're just strings
+# Transport protocol constants
+# These match the protocol binding values used in AgentCard
 class TransportProtocol:
-    """Transport protocol string constants for backward compatibility."""
+    """Transport protocol string constants."""
 
     jsonrpc = 'JSONRPC'
     http_json = 'HTTP+JSON'
@@ -58,7 +61,7 @@ class A2ABaseModel(BaseModel):
     }
 
 
-# JSON-RPC Error types
+# JSON-RPC Error types - A2A specific error codes
 class JSONRPCError(A2ABaseModel):
     """Represents a JSON-RPC 2.0 Error object."""
 
@@ -184,33 +187,7 @@ A2AError = (
 )
 
 
-class JSONRPCRequest(A2ABaseModel):
-    """Represents a JSON-RPC 2.0 Request object."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    method: str
-    params: Any | None = None
-    id: str | int | None = None
-
-
-class JSONRPCResponse(A2ABaseModel):
-    """Represents a JSON-RPC 2.0 Success Response object."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    result: Any
-    id: str | int | None = None
-
-
-class JSONRPCErrorResponse(A2ABaseModel):
-    """Represents a JSON-RPC 2.0 Error Response object."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    error: A2AError
-    id: str | int | None = None
-
-
 # Type alias for A2A requests (union of all request types)
-# This maps to the various request message types in the proto
 A2ARequest = (
     SendMessageRequest
     | GetTaskRequest
@@ -222,143 +199,20 @@ A2ARequest = (
 )
 
 
-# JSON-RPC Success Response types
-# These wrap the result of successful RPC calls
-# Note: result is typed as Any to allow both proto messages and dicts
-class GetTaskSuccessResponse(A2ABaseModel):
-    """Success response for GetTask RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class CancelTaskSuccessResponse(A2ABaseModel):
-    """Success response for CancelTask RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class SendMessageSuccessResponse(A2ABaseModel):
-    """Success response for SendMessage RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class SendStreamingMessageSuccessResponse(A2ABaseModel):
-    """Success response for streaming message RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any  # Streaming events
-
-
-class SetTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
-    """Success response for SetTaskPushNotificationConfig RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class GetTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
-    """Success response for GetTaskPushNotificationConfig RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class ListTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
-    """Success response for ListTaskPushNotificationConfig RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any
-
-
-class DeleteTaskPushNotificationConfigSuccessResponse(A2ABaseModel):
-    """Success response for DeleteTaskPushNotificationConfig RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: None = None
-
-
-class GetAuthenticatedExtendedCardSuccessResponse(A2ABaseModel):
-    """Success response for GetAuthenticatedExtendedCard RPC."""
-
-    jsonrpc: Literal['2.0'] = '2.0'
-    id: str | int | None = None
-    result: Any  # AgentCard
-
-
-# JSON-RPC Response RootModel types
-# These are union types that can be either success or error
-GetTaskResponse = RootModel[GetTaskSuccessResponse | JSONRPCErrorResponse]
-CancelTaskResponse = RootModel[CancelTaskSuccessResponse | JSONRPCErrorResponse]
-SendMessageResponse = RootModel[
-    SendMessageSuccessResponse | JSONRPCErrorResponse
-]
-SendStreamingMessageResponse = RootModel[
-    SendStreamingMessageSuccessResponse | JSONRPCErrorResponse
-]
-SetTaskPushNotificationConfigResponse = RootModel[
-    SetTaskPushNotificationConfigSuccessResponse | JSONRPCErrorResponse
-]
-GetTaskPushNotificationConfigResponse = RootModel[
-    GetTaskPushNotificationConfigSuccessResponse | JSONRPCErrorResponse
-]
-ListTaskPushNotificationConfigResponse = RootModel[
-    ListTaskPushNotificationConfigSuccessResponse | JSONRPCErrorResponse
-]
-DeleteTaskPushNotificationConfigResponse = RootModel[
-    DeleteTaskPushNotificationConfigSuccessResponse | JSONRPCErrorResponse
-]
-GetAuthenticatedExtendedCardResponse = RootModel[
-    GetAuthenticatedExtendedCardSuccessResponse | JSONRPCErrorResponse
-]
-
-
 __all__ = [
+    'A2ABaseModel',
     'A2AError',
     'A2ARequest',
     'AuthenticatedExtendedCardNotConfiguredError',
-    'CancelTaskResponse',
-    'CancelTaskSuccessResponse',
     'ContentTypeNotSupportedError',
-    'DeleteTaskPushNotificationConfigResponse',
-    'DeleteTaskPushNotificationConfigSuccessResponse',
-    'GetAuthenticatedExtendedCardResponse',
-    'GetAuthenticatedExtendedCardSuccessResponse',
-    'GetTaskPushNotificationConfigResponse',
-    'GetTaskPushNotificationConfigSuccessResponse',
-    'GetTaskResponse',
-    'GetTaskSuccessResponse',
     'InternalError',
     'InvalidAgentResponseError',
     'InvalidParamsError',
     'InvalidRequestError',
     'JSONParseError',
     'JSONRPCError',
-    'JSONRPCErrorResponse',
-    'JSONRPCRequest',
-    'JSONRPCResponse',
-    'ListTaskPushNotificationConfigResponse',
-    'ListTaskPushNotificationConfigSuccessResponse',
     'MethodNotFoundError',
     'PushNotificationNotSupportedError',
-    'SendMessageRequest',
-    'SendMessageResponse',
-    'SendMessageSuccessResponse',
-    'SendStreamingMessageResponse',
-    'SendStreamingMessageSuccessResponse',
-    'SetTaskPushNotificationConfigResponse',
-    'SetTaskPushNotificationConfigSuccessResponse',
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'TaskResubscriptionRequest',

@@ -11,6 +11,7 @@ name = "a2a-sdk"
 source = { editable = "." }
 dependencies = [
     { name = "google-api-core" },
+    { name = "googleapis-common-protos" },
     { name = "httpx" },
     { name = "httpx-sse" },
     { name = "json-rpc" },
@@ -92,6 +93,7 @@ requires-dist = [
     { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
     { name = "fastapi", marker = "extra == 'http-server'", specifier = ">=0.115.2" },
     { name = "google-api-core", specifier = ">=1.26.0" },
+    { name = "googleapis-common-protos", specifier = ">=1.70.0" },
     { name = "grpcio", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-reflection", marker = "extra == 'all'", specifier = ">=1.7.0" },

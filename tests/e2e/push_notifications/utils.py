@@ -38,7 +38,7 @@ def wait_for_server_ready(url: str, timeout: int = 10) -> None:
 
 def create_app_process(app, host, port) -> multiprocessing.Process:
     """Creates a separate process for a given application.
-    
+
     Uses 'fork' context on non-Windows platforms to avoid pickle issues
     with FastAPI apps (which have closures that can't be pickled).
     """
@@ -47,7 +47,7 @@ def create_app_process(app, host, port) -> multiprocessing.Process:
         ctx = multiprocessing.get_context('fork')
     else:
         ctx = multiprocessing.get_context('spawn')
-    
+
     return ctx.Process(
         target=run_server,
         args=(app, host, port),

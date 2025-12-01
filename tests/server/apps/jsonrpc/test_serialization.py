@@ -1,4 +1,5 @@
 """Tests for JSON-RPC serialization behavior."""
+
 from unittest import mock
 
 import pytest
@@ -65,7 +66,7 @@ def agent_card_with_api_key():
     )
     # Add security scheme to the map
     card.security_schemes['api_key_auth'].CopyFrom(security_scheme)
-    
+
     return card
 
 
@@ -226,7 +227,10 @@ def test_handle_unicode_characters(minimal_agent_card: AgentCard):
         # Response should contain the unicode text
         result = data['result']
         if 'message' in result:
-            assert result['message']['parts'][0]['text'] == f'Received: {unicode_text}'
+            assert (
+                result['message']['parts'][0]['text']
+                == f'Received: {unicode_text}'
+            )
         elif 'parts' in result:
             assert result['parts'][0]['text'] == f'Received: {unicode_text}'
 

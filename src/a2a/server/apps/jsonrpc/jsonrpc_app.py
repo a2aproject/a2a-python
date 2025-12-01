@@ -1,3 +1,5 @@
+"""JSON-RPC application for A2A server."""
+
 import contextlib
 import json
 import logging
@@ -8,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
-from pydantic import RootModel, ValidationError
+from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
@@ -37,10 +39,7 @@ from a2a.types.extras import (
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
-    JSONRPCErrorResponse,
-    JSONRPCRequest,
     MethodNotFoundError,
-    SendStreamingMessageResponse,
     TaskResubscriptionRequest,
     UnsupportedOperationError,
 )
@@ -233,10 +232,8 @@ class JSONRPCApplication(ABC):
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
-        error_resp = JSONRPCErrorResponse(
-            id=request_id,
-            error=error,
-        )
+        error_dict = error.model_dump(exclude_none=True)
+        error_resp = JSONRPC20Response(error=error_dict, _id=request_id)
 
         log_level = (
             logging.ERROR
@@ -247,14 +244,14 @@ class JSONRPCApplication(ABC):
             log_level,
             "Request Error (ID: %s): Code=%s, Message='%s'%s",
             request_id,
-            error_resp.error.code,
-            error_resp.error.message,
-            ', Data=' + str(error_resp.error.data)
-            if error_resp.error.data
+            error_dict.get('code'),
+            error_dict.get('message'),
+            ', Data=' + str(error_dict.get('data'))
+            if error_dict.get('data')
             else '',
         )
         return JSONResponse(
-            error_resp.model_dump(mode='json', exclude_none=True),
+            error_resp.data,
             status_code=200,
         )
 
@@ -274,7 +271,7 @@ class JSONRPCApplication(ABC):
                     return False
         return True
 
-    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911
+    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
         """Handles incoming POST requests to the main A2A endpoint.
 
         Parses the request body as JSON, validates it against A2A request types,
@@ -313,17 +310,31 @@ class JSONRPCApplication(ABC):
             logger.debug('Request body: %s', body)
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
             try:
-                base_request = JSONRPCRequest.model_validate(body)
-            except ValidationError as e:
+                base_request = JSONRPC20Request.from_data(body)
+                if not isinstance(base_request, JSONRPC20Request):
+                    # Batch requests are not supported
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message='Batch requests are not supported'
+                        ),
+                    )
+            except Exception as e:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    InvalidRequestError(data=json.loads(e.json())),
+                    InvalidRequestError(data=str(e)),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
-            method = base_request.method
-            request_id = base_request.id
+            method: str | None = base_request.method
+            request_id = base_request._id  # noqa: SLF001
+
+            if not method:
+                return self._generate_error_response(
+                    request_id,
+                    InvalidRequestError(message='Method is required'),
+                )
 
             model_class = self.METHOD_TO_MODEL.get(method)
             if not model_class:
@@ -483,33 +494,25 @@ class JSONRPCApplication(ABC):
                 error = UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
                 )
-                handler_result = JSONRPCErrorResponse(
-                    id=request_id, error=error
-                )
+                return self._generate_error_response(request_id, error)
 
         return self._create_response(context, handler_result)
 
     def _create_response(
         self,
         context: ServerCallContext,
-        handler_result: (
-            AsyncGenerator[SendStreamingMessageResponse]
-            | JSONRPCErrorResponse
-            | RootModel[Any]
-        ),
+        handler_result: AsyncGenerator[dict[str, Any]] | dict[str, Any],
     ) -> Response:
         """Creates a Starlette Response based on the result from the request handler.
 
         Handles:
         - AsyncGenerator for Server-Sent Events (SSE).
-        - JSONRPCErrorResponse for explicit errors returned by handlers.
-        - Pydantic RootModels (like GetTaskResponse) containing success or error
-        payloads.
+        - Dict responses from handlers.
 
         Args:
             context: The ServerCallContext provided to the request handler.
             handler_result: The result from a request handler method. Can be an
-                async generator for streaming or a Pydantic model for non-streaming.
+                async generator for streaming or a dict for non-streaming.
 
         Returns:
             A Starlette JSONResponse or EventSourceResponse.
@@ -518,29 +521,19 @@ class JSONRPCApplication(ABC):
         if exts := context.activated_extensions:
             headers[HTTP_EXTENSION_HEADER] = ', '.join(sorted(exts))
         if isinstance(handler_result, AsyncGenerator):
-            # Result is a stream of SendStreamingMessageResponse objects
+            # Result is a stream of dict objects
             async def event_generator(
-                stream: AsyncGenerator[SendStreamingMessageResponse],
+                stream: AsyncGenerator[dict[str, Any]],
             ) -> AsyncGenerator[dict[str, str]]:
                 async for item in stream:
-                    yield {'data': item.root.model_dump_json(exclude_none=True)}
+                    yield {'data': json.dumps(item)}
 
             return EventSourceResponse(
                 event_generator(handler_result), headers=headers
             )
-        if isinstance(handler_result, JSONRPCErrorResponse):
-            return JSONResponse(
-                handler_result.model_dump(
-                    mode='json',
-                    exclude_none=True,
-                ),
-                headers=headers,
-            )
 
-        return JSONResponse(
-            handler_result.root.model_dump(mode='json', exclude_none=True),
-            headers=headers,
-        )
+        # handler_result is a dict (JSON-RPC response)
+        return JSONResponse(handler_result, headers=headers)
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.

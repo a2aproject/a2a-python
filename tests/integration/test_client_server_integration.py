@@ -130,9 +130,7 @@ def agent_card() -> AgentCard:
             AgentInterface(
                 protocol_binding='http_json', url='http://testserver'
             ),
-            AgentInterface(
-                protocol_binding='grpc', url='localhost:50051'
-            ),
+            AgentInterface(protocol_binding='grpc', url='localhost:50051'),
         ],
     )
 
@@ -246,8 +244,7 @@ async def test_http_transport_sends_message_streaming(
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text
-        == message_to_send.parts[0].text
+        received_params.request.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -290,8 +287,7 @@ async def test_grpc_transport_sends_message_streaming(
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text
-        == message_to_send.parts[0].text
+        received_params.request.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -336,8 +332,7 @@ async def test_http_transport_sends_message_blocking(
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text
-        == message_to_send.parts[0].text
+        received_params.request.parts[0].text == message_to_send.parts[0].text
     )
 
     if hasattr(transport, 'close'):
@@ -380,8 +375,7 @@ async def test_grpc_transport_sends_message_blocking(
 
     assert received_params.request.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text
-        == message_to_send.parts[0].text
+        received_params.request.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()

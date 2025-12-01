@@ -22,7 +22,9 @@ from a2a.types.a2a_pb2 import (
 
 # Helper to create a simple message
 def create_sample_message(
-    content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.ROLE_USER
+    content: str = 'test message',
+    msg_id: str = 'msg1',
+    role: Role = Role.ROLE_USER,
 ) -> Message:
     return Message(
         message_id=msg_id,
@@ -145,10 +147,12 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     async def test_consume_all_other_event_types(self) -> None:
         task_event = create_sample_task(task_id='task_other_event')
         status_update_event = create_sample_status_update(
-            task_id='task_other_event', status_state=TaskState.TASK_STATE_COMPLETED
+            task_id='task_other_event',
+            status_state=TaskState.TASK_STATE_COMPLETED,
         )
         final_task_state = create_sample_task(
-            task_id='task_other_event', status_state=TaskState.TASK_STATE_COMPLETED
+            task_id='task_other_event',
+            status_state=TaskState.TASK_STATE_COMPLETED,
         )
 
         async def mock_consume_generator():
@@ -294,10 +298,12 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self, mock_create_task: MagicMock
     ) -> None:
         auth_status_update = create_sample_status_update(
-            task_id='auth_status_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
+            task_id='auth_status_task',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
         current_task_state_after_update = create_sample_task(
-            task_id='auth_status_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
+            task_id='auth_status_task',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
 
         async def mock_consume_generator():
@@ -436,7 +442,8 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         # the events *after* the interrupting one are processed by _continue_consuming.
 
         auth_event = create_sample_task(
-            'task_auth_for_continue', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
+            'task_auth_for_continue',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
         event_after_auth1 = create_sample_message(
             'after auth 1', msg_id='cont1'

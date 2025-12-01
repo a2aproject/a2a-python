@@ -34,7 +34,9 @@ def create_sample_message(message_id: str = '111') -> Message:
     )
 
 
-def create_sample_task(task_id: str = '123', context_id: str = 'session-xyz') -> Task:
+def create_sample_task(
+    task_id: str = '123', context_id: str = 'session-xyz'
+) -> Task:
     """Create a sample Task proto object."""
     return Task(
         id=task_id,
@@ -133,9 +135,7 @@ async def test_consume_all_multiple_events(
         TaskArtifactUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
-            artifact=Artifact(
-                artifact_id='11', parts=[Part(text='text')]
-            ),
+            artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
         ),
         TaskStatusUpdateEvent(
             task_id='task_123',
@@ -175,9 +175,7 @@ async def test_consume_until_message(
         TaskArtifactUpdateEvent(
             task_id='task_123',
             context_id='session-xyz',
-            artifact=Artifact(
-                artifact_id='11', parts=[Part(text='text')]
-            ),
+            artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
         ),
         create_sample_message(),
         TaskStatusUpdateEvent(
@@ -215,7 +213,9 @@ async def test_consume_message_events(
 ):
     events = [
         create_sample_message(),
-        create_sample_message(message_id='222'),  # Another message (final doesn't exist in proto)
+        create_sample_message(
+            message_id='222'
+        ),  # Another message (final doesn't exist in proto)
     ]
     cursor = 0
 

@@ -1,4 +1,5 @@
 """Tests for the JSON-RPC client transport."""
+
 import json
 from unittest import mock
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -116,7 +117,9 @@ class TestJsonRpcTransportInit:
 
     def test_init_requires_url_or_agent_card(self, mock_httpx_client):
         """Test that initialization requires either URL or agent card."""
-        with pytest.raises(ValueError, match='Must provide either agent_card or url'):
+        with pytest.raises(
+            ValueError, match='Must provide either agent_card or url'
+        ):
             JsonRpcTransport(httpx_client=mock_httpx_client)
 
     def test_init_with_interceptors(self, mock_httpx_client, agent_card):
@@ -173,7 +176,9 @@ class TestSendMessage:
         assert payload['method'] == 'message/send'
 
     @pytest.mark.asyncio
-    async def test_send_message_jsonrpc_error(self, transport, mock_httpx_client):
+    async def test_send_message_jsonrpc_error(
+        self, transport, mock_httpx_client
+    ):
         """Test handling of JSON-RPC error response."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -216,7 +221,9 @@ class TestSendMessage:
             await transport.send_message(request)
 
     @pytest.mark.asyncio
-    async def test_send_message_json_decode_error(self, transport, mock_httpx_client):
+    async def test_send_message_json_decode_error(
+        self, transport, mock_httpx_client
+    ):
         """Test handling of invalid JSON response."""
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
@@ -320,7 +327,9 @@ class TestTaskCallback:
     """Tests for the task callback methods."""
 
     @pytest.mark.asyncio
-    async def test_get_task_callback_success(self, transport, mock_httpx_client):
+    async def test_get_task_callback_success(
+        self, transport, mock_httpx_client
+    ):
         """Test successful task callback retrieval."""
         task_id = str(uuid4())
         mock_response = MagicMock()
@@ -334,7 +343,9 @@ class TestTaskCallback:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = GetTaskPushNotificationConfigRequest(name=f'tasks/{task_id}/pushNotificationConfig')
+        request = GetTaskPushNotificationConfigRequest(
+            name=f'tasks/{task_id}/pushNotificationConfig'
+        )
         response = await transport.get_task_callback(request)
 
         assert isinstance(response, TaskPushNotificationConfig)
@@ -360,7 +371,10 @@ class TestInterceptors:
     async def test_interceptor_called(self, mock_httpx_client, agent_card):
         """Test that interceptors are called during requests."""
         interceptor = AsyncMock()
-        interceptor.intercept.return_value = ({'modified': 'payload'}, {'headers': {'X-Custom': 'value'}})
+        interceptor.intercept.return_value = (
+            {'modified': 'payload'},
+            {'headers': {'X-Custom': 'value'}},
+        )
 
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
@@ -396,7 +410,9 @@ class TestExtensions:
     """Tests for extension header functionality."""
 
     @pytest.mark.asyncio
-    async def test_extensions_added_to_request(self, mock_httpx_client, agent_card):
+    async def test_extensions_added_to_request(
+        self, mock_httpx_client, agent_card
+    ):
         """Test that extensions are added to request headers."""
         extensions = ['https://example.com/ext1']
         transport = JsonRpcTransport(
@@ -428,4 +444,7 @@ class TestExtensions:
         mock_httpx_client.post.assert_called_once()
         call_args = mock_httpx_client.post.call_args
         # Extensions should be in the kwargs
-        assert call_args[1].get('headers', {}).get('X-A2A-Extensions') == 'https://example.com/ext1'
+        assert (
+            call_args[1].get('headers', {}).get('X-A2A-Extensions')
+            == 'https://example.com/ext1'
+        )
