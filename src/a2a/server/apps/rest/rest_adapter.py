@@ -37,12 +37,15 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.types.extras import AuthenticatedExtendedCardNotConfiguredError
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import InvalidRequestError, ServerError
+from a2a.utils.errors import (
+    AuthenticatedExtendedCardNotConfiguredError,
+    InvalidRequestError,
+    ServerError,
+)
 
 
 logger = logging.getLogger(__name__)

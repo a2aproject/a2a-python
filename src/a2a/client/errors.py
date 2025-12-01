@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from a2a.types.extras import A2AError
+from a2a.utils.errors import A2AError
 
 
 class A2AClientError(Exception):

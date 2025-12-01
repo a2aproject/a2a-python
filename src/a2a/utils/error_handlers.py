@@ -15,7 +15,7 @@ else:
         Response = Any
 
 
-from a2a.types.extras import (
+from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -26,11 +26,11 @@ from a2a.types.extras import (
     JSONRPCError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
+    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)

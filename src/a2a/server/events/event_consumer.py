@@ -13,8 +13,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatusUpdateEvent,
 )
-from a2a.types.extras import InternalError
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InternalError, ServerError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 

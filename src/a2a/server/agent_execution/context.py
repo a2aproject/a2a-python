@@ -9,11 +9,11 @@ from a2a.server.id_generator import (
 from a2a.types.a2a_pb2 import (
     Message,
     SendMessageConfiguration,
+    SendMessageRequest,
     Task,
 )
-from a2a.types.extras import InvalidParamsError, SendMessageRequest
 from a2a.utils import get_message_text
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError, ServerError
 
 
 class RequestContext:

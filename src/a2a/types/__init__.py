@@ -53,11 +53,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 
-# Import SDK-specific types from extras
-from a2a.types.extras import (
+# Import SDK-specific error types from utils.errors
+from a2a.utils.errors import (
     A2ABaseModel,
     A2AError,
-    A2ARequest,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -71,6 +70,18 @@ from a2a.types.extras import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+)
+
+
+# Type alias for A2A requests (union of all request types)
+A2ARequest = (
+    SendMessageRequest
+    | GetTaskRequest
+    | CancelTaskRequest
+    | SetTaskPushNotificationConfigRequest
+    | GetTaskPushNotificationConfigRequest
+    | SubscribeToTaskRequest
+    | GetExtendedAgentCardRequest
 )
 
 

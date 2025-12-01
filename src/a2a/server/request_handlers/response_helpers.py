@@ -17,7 +17,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.types.a2a_pb2 import (
     SendMessageResponse as SendMessageResponseProto,
 )
-from a2a.types.extras import (
+from a2a.utils.errors import (
     A2AError,
     InvalidAgentResponseError,
     JSONRPCError,

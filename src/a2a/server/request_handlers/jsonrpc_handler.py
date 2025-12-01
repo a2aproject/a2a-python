@@ -24,13 +24,13 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
 )
-from a2a.types.extras import (
+from a2a.utils import proto_utils
+from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     InternalError,
+    ServerError,
     TaskNotFoundError,
 )
-from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 

@@ -11,9 +11,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.types.extras import InvalidParamsError
 from a2a.utils import append_artifact_to_task
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError, ServerError
 
 
 logger = logging.getLogger(__name__)

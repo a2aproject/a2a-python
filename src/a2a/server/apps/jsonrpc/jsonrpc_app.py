@@ -21,6 +21,7 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -33,23 +34,22 @@ from a2a.types.a2a_pb2 import (
     SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
 )
-from a2a.types.extras import (
-    A2AError,
-    A2ARequest,
-    InternalError,
-    InvalidParamsError,
-    InvalidRequestError,
-    JSONParseError,
-    MethodNotFoundError,
-    UnsupportedOperationError,
-)
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
-from a2a.utils.errors import MethodNotImplementedError
+from a2a.utils.errors import (
+    A2AError,
+    InternalError,
+    InvalidParamsError,
+    InvalidRequestError,
+    JSONParseError,
+    MethodNotFoundError,
+    MethodNotImplementedError,
+    UnsupportedOperationError,
+)
 
 
 logger = logging.getLogger(__name__)

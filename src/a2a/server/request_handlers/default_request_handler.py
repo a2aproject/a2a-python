@@ -42,14 +42,14 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
 )
-from a2a.types.extras import (
+from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
+    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 

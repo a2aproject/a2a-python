@@ -25,9 +25,8 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     SubscribeToTaskRequest,
 )
-from a2a.types.extras import TaskNotFoundError
 from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import ServerError, TaskNotFoundError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 

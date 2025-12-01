@@ -32,9 +32,8 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.types.extras import TaskNotFoundError
 from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import ServerError, TaskNotFoundError
 from a2a.utils.helpers import validate, validate_async_generator
 
 

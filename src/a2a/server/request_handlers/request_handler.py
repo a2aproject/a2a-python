@@ -17,8 +17,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.types.extras import UnsupportedOperationError
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import ServerError, UnsupportedOperationError
 
 
 class RequestHandler(ABC):
