@@ -1,5 +1,41 @@
 # Changelog
 
+## [0.3.19](https://github.com/a2aproject/a2a-python/compare/v0.3.18...v0.3.19) (2025-11-25)
+
+
+### Bug Fixes
+
+* **jsonrpc, rest:** `extensions` support in `get_card` methods in `json-rpc` and `rest` transports ([#564](https://github.com/a2aproject/a2a-python/issues/564)) ([847f18e](https://github.com/a2aproject/a2a-python/commit/847f18eff59985f447c39a8e5efde87818b68d15))
+
+## [0.3.18](https://github.com/a2aproject/a2a-python/compare/v0.3.17...v0.3.18) (2025-11-24)
+
+
+### Bug Fixes
+
+* return updated `agent_card` in `JsonRpcTransport.get_card()` ([#552](https://github.com/a2aproject/a2a-python/issues/552)) ([0ce239e](https://github.com/a2aproject/a2a-python/commit/0ce239e98f67ccbf154f2edcdbcee43f3b080ead))
+
+## [0.3.17](https://github.com/a2aproject/a2a-python/compare/v0.3.16...v0.3.17) (2025-11-24)
+
+
+### Features
+
+* **client:** allow specifying `history_length` via call-site `MessageSendConfiguration` in `BaseClient.send_message` ([53bbf7a](https://github.com/a2aproject/a2a-python/commit/53bbf7ae3ad58fb0c10b14da05cf07c0a7bd9651))
+
+## [0.3.16](https://github.com/a2aproject/a2a-python/compare/v0.3.15...v0.3.16) (2025-11-21)
+
+
+### Bug Fixes
+
+* Ensure metadata propagation for `Task` `ToProto` and `FromProto` conversion ([#557](https://github.com/a2aproject/a2a-python/issues/557)) ([fc31d03](https://github.com/a2aproject/a2a-python/commit/fc31d03e8c6acb68660f6d1924262e16933c5d50))
+
+## [0.3.15](https://github.com/a2aproject/a2a-python/compare/v0.3.14...v0.3.15) (2025-11-19)
+
+
+### Features
+
+* Add client-side extension support ([#525](https://github.com/a2aproject/a2a-python/issues/525)) ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
+* **rest, jsonrpc:** Add client-side extension support ([9a92bd2](https://github.com/a2aproject/a2a-python/commit/9a92bd238e7560b195165ac5f78742981760525e))
+
 ## [0.3.14](https://github.com/a2aproject/a2a-python/compare/v0.3.13...v0.3.14) (2025-11-17)
 
 
