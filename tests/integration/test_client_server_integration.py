@@ -1,4 +1,5 @@
 import asyncio
+
 from collections.abc import AsyncGenerator
 from typing import NamedTuple
 from unittest.mock import ANY, AsyncMock, patch
@@ -7,6 +8,7 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
+
 from grpc.aio import Channel
 
 from a2a.client import ClientConfig
@@ -37,6 +39,7 @@ from a2a.types import (
     TextPart,
     TransportProtocol,
 )
+
 
 # --- Test Constants ---
 
@@ -819,9 +822,9 @@ async def test_base_client_sends_message_with_extensions(
         call_args, _ = mock_send_request.call_args
         kwargs = call_args[1]
         headers = kwargs.get('headers', {})
-        assert 'X-A2A-Extensions' in headers
+        assert 'A2A-Extensions' in headers
         assert (
-            headers['X-A2A-Extensions']
+            headers['A2A-Extensions']
             == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
         )
 

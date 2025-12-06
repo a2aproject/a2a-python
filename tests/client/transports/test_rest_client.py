@@ -96,7 +96,7 @@ class TestRestTransportExtensions:
         mock_httpx_client: AsyncMock,
         mock_agent_card: MagicMock,
     ):
-        """Test X-A2A-Extensions header in send_message_streaming."""
+        """Test A2A-Extensions header in send_message_streaming."""
         new_extensions = ['https://example.com/test-ext/v2']
         extensions = ['https://example.com/test-ext/v1']
         client = RestTransport(
