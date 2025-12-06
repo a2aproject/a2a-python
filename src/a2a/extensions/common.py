@@ -3,7 +3,8 @@ from typing import Any
 from a2a.types import AgentCard, AgentExtension
 
 
-HTTP_EXTENSION_HEADER = 'X-A2A-Extensions'
+HTTP_EXTENSION_HEADER = 'A2A-Extensions'
+HTTP_EXTENSION_HEADER_DEPRECATED = 'X-A2A-Extensions'
 
 
 def get_requested_extensions(values: list[str]) -> set[str]:
@@ -33,7 +34,7 @@ def update_extension_header(
     http_kwargs: dict[str, Any] | None,
     extensions: list[str] | None,
 ) -> dict[str, Any]:
-    """Update the X-A2A-Extensions header with active extensions."""
+    """Update the A2A-Extensions header with active extensions."""
     http_kwargs = http_kwargs or {}
     if extensions is not None:
         headers = http_kwargs.setdefault('headers', {})
