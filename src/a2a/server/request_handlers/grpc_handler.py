@@ -73,7 +73,9 @@ class DefaultCallContextBuilder(CallContextBuilder):
         state = {}
         with contextlib.suppress(Exception):
             state['grpc_context'] = context
-        extension_values = _get_metadata_value(context, HTTP_EXTENSION_HEADER) or _get_metadata_value(context, HTTP_EXTENSION_HEADER_DEPRECATED)
+        extension_values = _get_metadata_value(
+            context, HTTP_EXTENSION_HEADER
+        ) or _get_metadata_value(context, HTTP_EXTENSION_HEADER_DEPRECATED)
         return ServerCallContext(
             user=user,
             state=state,

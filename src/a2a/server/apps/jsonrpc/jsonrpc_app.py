@@ -137,7 +137,9 @@ class DefaultCallContextBuilder(CallContextBuilder):
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
-        extension_values = request.headers.getlist(HTTP_EXTENSION_HEADER) or request.headers.getlist(HTTP_EXTENSION_HEADER_DEPRECATED)
+        extension_values = request.headers.getlist(
+            HTTP_EXTENSION_HEADER
+        ) or request.headers.getlist(HTTP_EXTENSION_HEADER_DEPRECATED)
         return ServerCallContext(
             user=user,
             state=state,
