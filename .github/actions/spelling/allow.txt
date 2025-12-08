@@ -47,9 +47,14 @@ initdb
 inmemory
 INR
 isready
+jku
 JPY
 JSONRPCt
+jwk
+jwks
 JWS
+jws
+kid
 kwarg
 langgraph
 lifecycles
