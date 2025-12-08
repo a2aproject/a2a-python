@@ -1041,9 +1041,8 @@ async def test_rest_transport_get_signed_card(
     )
 
     # Get the card, this will trigger verification in get_card
-    signature_verifier = (
-        create_key_provider(public_key),
-        ['HS384', 'ES256', 'RS256'],
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
     )
     result = await transport.get_card(signature_verifier=signature_verifier)
     assert result.name == extended_agent_card.name
