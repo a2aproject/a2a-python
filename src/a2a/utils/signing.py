@@ -138,6 +138,7 @@ def create_signature_verifier(
                 protected_header = json.loads(protected_header_json)
                 kid = protected_header.get('kid')
                 jku = protected_header.get('jku')
+                alg = protected_header.get('alg')
                 verification_key = key_provider(kid, jku)
 
                 canonical_payload = canonicalize_agent_card(agent_card)
@@ -149,7 +150,7 @@ def create_signature_verifier(
                 jws.verify(
                     token=token,
                     key=verification_key,
-                    algorithms=None,
+                    algorithms=[alg] if alg else None,
                 )
                 # Found a valid signature, exit the loop and function
                 break
