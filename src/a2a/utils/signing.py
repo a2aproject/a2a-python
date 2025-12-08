@@ -11,7 +11,7 @@ try:
     from jose.utils import base64url_decode, base64url_encode
 except ImportError as e:
     raise ImportError(
-        'A2AUtilsSigning requires python-jose to be installed. '
+        'A2A Signing requires python-jose to be installed. '
         'Install with: '
         "'pip install a2a-sdk[signing]'"
     ) from e
@@ -70,7 +70,7 @@ def create_agent_card_signer(
         signing_key: The private key for signing.
         kid: Key ID for the signing key.
         alg: The algorithm to use (e.g., "ES256", "RS256").
-        jku: Optional URL to the JWKS.
+        jku: Optional URL to the JSON Web Keys.
 
     Returns:
         A callable that takes an AgentCard and returns the modified AgentCard with a signature.
@@ -111,11 +111,13 @@ def create_signature_verifier(
     key_provider: Callable[
         [str | None, str | None], str | bytes | dict[str, Any] | Key
     ],
+    algorithms: list[str],
 ) -> Callable[[AgentCard], None]:
     """Creates a function that verifies AgentCard signatures.
 
     Args:
-        key_provider: A callable that takes key-id (kid) and JSON web key url (jku) and returns the verification key.
+        key_provider: A callable that takes key-id and JSON web key url and returns the verification key.
+        algorithms: List of acceptable algorithms for verification used to prevent algorithm confusion attacks.
 
     Returns:
         A callable that takes an AgentCard, and raises an error if none of the signatures are valid.
@@ -138,7 +140,6 @@ def create_signature_verifier(
                 protected_header = json.loads(protected_header_json)
                 kid = protected_header.get('kid')
                 jku = protected_header.get('jku')
-                alg = protected_header.get('alg')
                 verification_key = key_provider(kid, jku)
 
                 canonical_payload = canonicalize_agent_card(agent_card)
@@ -150,7 +151,7 @@ def create_signature_verifier(
                 jws.verify(
                     token=token,
                     key=verification_key,
-                    algorithms=[alg] if alg else None,
+                    algorithms=algorithms,
                 )
                 # Found a valid signature, exit the loop and function
                 break

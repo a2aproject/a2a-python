@@ -878,7 +878,9 @@ async def test_json_transport_get_signed_base_card_no_initial(
     )
 
     # Get the card, this will trigger verification in get_card
-    signature_verifier = create_signature_verifier(create_key_provider(key))
+    signature_verifier = create_signature_verifier(
+        create_key_provider(key), ['HS384']
+    )
     result = await transport.get_card(signature_verifier=signature_verifier)
     assert result.name == agent_card.name
     assert result.signatures is not None
@@ -929,7 +931,7 @@ async def test_json_transport_get_signed_extended_card(
 
     # Get the card, this will trigger verification in get_card
     signature_verifier = create_signature_verifier(
-        create_key_provider(public_key)
+        create_key_provider(public_key), ['HS384', 'ES256']
     )
     result = await transport.get_card(signature_verifier=signature_verifier)
     assert result.name == extended_agent_card.name
@@ -985,7 +987,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
 
     # Get the card, this will trigger verification in get_card
     signature_verifier = create_signature_verifier(
-        create_key_provider(public_key)
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
     )
     result = await transport.get_card(signature_verifier=signature_verifier)
     assert result.name == extended_agent_card.name
@@ -1039,8 +1041,9 @@ async def test_rest_transport_get_signed_card(
     )
 
     # Get the card, this will trigger verification in get_card
-    signature_verifier = create_signature_verifier(
-        create_key_provider(public_key)
+    signature_verifier = (
+        create_key_provider(public_key),
+        ['HS384', 'ES256', 'RS256'],
     )
     result = await transport.get_card(signature_verifier=signature_verifier)
     assert result.name == extended_agent_card.name
@@ -1093,7 +1096,7 @@ async def test_grpc_transport_get_signed_card(
 
         # Get the card, this will trigger verification in get_card
         signature_verifier = create_signature_verifier(
-            create_key_provider(public_key)
+            create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
         )
         result = await transport.get_card(signature_verifier=signature_verifier)
         assert result.signatures is not None

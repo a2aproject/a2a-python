@@ -74,7 +74,9 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     assert signature.signature is not None
 
     # Verify the signature
-    verifier = create_signature_verifier(create_key_provider(key))
+    verifier = create_signature_verifier(
+        create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
+    )
     try:
         verifier(signed_card)
     except JOSEError:
@@ -82,7 +84,7 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
 
     # Verify with wrong key
     verifier_wrong_key = create_signature_verifier(
-        create_key_provider(wrong_key)
+        create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
     with pytest.raises(JOSEError):
         verifier_wrong_key(signed_card)
@@ -114,7 +116,9 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     assert signature.signature is not None
 
     # Verify the signature
-    verifier = create_signature_verifier(create_key_provider(key))
+    verifier = create_signature_verifier(
+        create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
+    )
     try:
         verifier(signed_card)
     except JOSEError:
@@ -122,7 +126,7 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
 
     # Verify with wrong key
     verifier_wrong_key = create_signature_verifier(
-        create_key_provider(wrong_key)
+        create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
     with pytest.raises(JOSEError):
         verifier_wrong_key(signed_card)
@@ -150,7 +154,9 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     assert signature.protected is not None
     assert signature.signature is not None
 
-    verifier = create_signature_verifier(create_key_provider(public_key))
+    verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS256', 'HS384', 'ES256', 'RS256']
+    )
     try:
         verifier(signed_card)
     except JOSEError:
@@ -158,7 +164,8 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
 
     # Verify with wrong key
     verifier_wrong_key = create_signature_verifier(
-        create_key_provider(public_key_error)
+        create_key_provider(public_key_error),
+        ['HS256', 'HS384', 'ES256', 'RS256'],
     )
     with pytest.raises(JOSEError):
         verifier_wrong_key(signed_card)
@@ -173,9 +180,11 @@ def test_canonicalize_agent_card(
     - protocolVersion is included because it's always added by canonicalize_agent_card.
     - signatures should be omitted.
     """
-    sample_agent_card.signatures = (
-        [{'protected': 'protected_header', 'signature': 'test_signature'}],
-    )
+    sample_agent_card.signatures = [
+        AgentCardSignature(
+            protected='protected_header', signature='test_signature'
+        )
+    ]
     expected_jcs = (
         '{"capabilities":{"pushNotifications":true},'
         '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
