@@ -7,6 +7,7 @@ from a2a.types import (
     AgentCard,
     AgentCapabilities,
     AgentSkill,
+    AgentCardSignature,
 )
 from a2a.utils.signing import (
     canonicalize_agent_card,
@@ -16,6 +17,7 @@ from a2a.utils.signing import (
 from typing import Any
 from jose.backends.base import Key
 from jose.exceptions import JOSEError
+from jose.utils import base64url_encode
 
 import pytest
 from cryptography.hazmat.primitives import asymmetric
@@ -68,6 +70,46 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     assert signed_card.signatures is not None
     assert len(signed_card.signatures) == 1
     signature = signed_card.signatures[0]
+    assert signature.protected is not None
+    assert signature.signature is not None
+
+    # Verify the signature
+    verifier = create_signature_verifier(create_key_provider(key))
+    try:
+        verifier(signed_card)
+    except JOSEError:
+        pytest.fail('Signature verification failed with correct key')
+
+    # Verify with wrong key
+    verifier_wrong_key = create_signature_verifier(
+        create_key_provider(wrong_key)
+    )
+    with pytest.raises(JOSEError):
+        verifier_wrong_key(signed_card)
+
+
+def test_signer_and_verifier_symmetric_multiple_signatures(
+    sample_agent_card: AgentCard,
+):
+    """Test the agent card signing and verification process with symmetric key encryption.
+    This test adds a signatures to the AgentCard before signing."""
+    encoded_header = base64url_encode(
+        b'{"alg": "HS256", "kid": "old_key"}'
+    ).decode('utf-8')
+    sample_agent_card.signatures = [
+        AgentCardSignature(protected=encoded_header, signature='old_signature')
+    ]
+    key = 'key12345'  # Using a simple symmetric key for HS256
+    wrong_key = 'wrongkey'
+
+    agent_card_signer = create_agent_card_signer(
+        signing_key=key, alg='HS384', kid='key1'
+    )
+    signed_card = agent_card_signer(sample_agent_card)
+
+    assert signed_card.signatures is not None
+    assert len(signed_card.signatures) == 2
+    signature = signed_card.signatures[1]
     assert signature.protected is not None
     assert signature.signature is not None
 

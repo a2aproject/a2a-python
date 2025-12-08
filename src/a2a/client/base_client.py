@@ -271,8 +271,7 @@ class BaseClient(Client):
         Args:
             context: The client call context.
             extensions: List of extensions to be activated.
-            key_provider: A callable that takes key-id (kid) and JSON web key url (jku)
-            and returns the verification key for signature verification.
+            signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             The `AgentCard` for the agent.
