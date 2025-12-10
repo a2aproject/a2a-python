@@ -8,8 +8,8 @@ import httpx
 import pytest
 import pytest_asyncio
 from grpc.aio import Channel
-from jose.backends.base import Key
 
+from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
@@ -89,7 +89,7 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
 )
 
 
-def create_key_provider(verification_key: str | bytes | dict[str, Any] | Key):
+def create_key_provider(verification_key: PyJWK | str | bytes):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):
@@ -754,6 +754,7 @@ async def test_http_transport_get_authenticated_card(
     transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
     result = await transport.get_card()
     assert result.name == extended_agent_card.name
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -776,6 +777,7 @@ async def test_grpc_transport_get_card(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # The transport starts with a minimal card, get_card() fetches the full one
+    assert transport.agent_card is not None
     transport.agent_card.supports_authenticated_extended_card = True
     result = await transport.get_card()
 
@@ -845,7 +847,7 @@ async def test_json_transport_base_client_send_message_with_extensions(
 
 
 @pytest.mark.asyncio
-async def test_json_transport_get_signed_base_card_no_initial(
+async def test_json_transport_get_signed_base_card(
     jsonrpc_setup: TransportSetup, agent_card: AgentCard
 ) -> None:
     """Tests fetching and verifying a symmetrically signed AgentCard via JSON-RPC.
@@ -860,7 +862,13 @@ async def test_json_transport_get_signed_base_card_no_initial(
     # Setup signing on the server side
     key = 'key12345'
     signer = create_agent_card_signer(
-        signing_key=key, alg='HS384', kid='testkey'
+        signing_key=key,
+        protected_header={
+            'alg': 'HS384',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
 
     app_builder = A2AFastAPIApplication(
@@ -885,6 +893,7 @@ async def test_json_transport_get_signed_base_card_no_initial(
     assert result.name == agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
+    assert transport.agent_card is not None
     assert transport.agent_card.name == agent_card.name
     assert transport._needs_extended_card is False
 
@@ -911,7 +920,13 @@ async def test_json_transport_get_signed_extended_card(
     private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key, alg='ES256', kid='testkey'
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
 
     app_builder = A2AFastAPIApplication(
@@ -937,6 +952,7 @@ async def test_json_transport_get_signed_extended_card(
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -964,7 +980,13 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key, alg='ES256', kid='testkey'
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
 
     app_builder = A2AFastAPIApplication(
@@ -993,6 +1015,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -1019,7 +1042,13 @@ async def test_rest_transport_get_signed_card(
     private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key, alg='ES256', kid='testkey'
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
 
     app_builder = A2ARESTFastAPIApplication(
@@ -1048,6 +1077,7 @@ async def test_rest_transport_get_signed_card(
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -1066,7 +1096,13 @@ async def test_grpc_transport_get_signed_card(
     private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key, alg='ES256', kid='testkey'
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
 
     server = grpc.aio.server()

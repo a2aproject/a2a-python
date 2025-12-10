@@ -36,7 +36,7 @@ telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
-signing = ["python-jose>=3.0.0"]
+signing = ["PyJWT>=2.0.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 

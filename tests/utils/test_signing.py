@@ -13,17 +13,16 @@ from a2a.utils.signing import (
     canonicalize_agent_card,
     create_agent_card_signer,
     create_signature_verifier,
+    InvalidSignaturesError,
 )
 from typing import Any
-from jose.backends.base import Key
-from jose.exceptions import JOSEError
-from jose.utils import base64url_encode
+from jwt.utils import base64url_encode
 
 import pytest
 from cryptography.hazmat.primitives import asymmetric
 
 
-def create_key_provider(verification_key: str | bytes | dict[str, Any] | Key):
+def create_key_provider(verification_key: str | bytes | dict[str, Any]):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):
@@ -46,6 +45,8 @@ def sample_agent_card() -> AgentCard:
         ),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
+        documentation_url=None,
+        icon_url='',
         skills=[
             AgentSkill(
                 id='skill1',
@@ -63,7 +64,13 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     wrong_key = 'wrongkey'
 
     agent_card_signer = create_agent_card_signer(
-        signing_key=key, alg='HS384', kid='key1'
+        signing_key=key,
+        protected_header={
+            'alg': 'HS384',
+            'kid': 'key1',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
     signed_card = agent_card_signer(sample_agent_card)
 
@@ -79,14 +86,14 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     )
     try:
         verifier(signed_card)
-    except JOSEError:
+    except InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
     verifier_wrong_key = create_signature_verifier(
         create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
-    with pytest.raises(JOSEError):
+    with pytest.raises(InvalidSignaturesError):
         verifier_wrong_key(signed_card)
 
 
@@ -105,7 +112,13 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     wrong_key = 'wrongkey'
 
     agent_card_signer = create_agent_card_signer(
-        signing_key=key, alg='HS384', kid='key1'
+        signing_key=key,
+        protected_header={
+            'alg': 'HS384',
+            'kid': 'key1',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
     signed_card = agent_card_signer(sample_agent_card)
 
@@ -121,14 +134,14 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     )
     try:
         verifier(signed_card)
-    except JOSEError:
+    except InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
     verifier_wrong_key = create_signature_verifier(
         create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
-    with pytest.raises(JOSEError):
+    with pytest.raises(InvalidSignaturesError):
         verifier_wrong_key(signed_card)
 
 
@@ -144,7 +157,13 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     public_key_error = private_key_error.public_key()
 
     agent_card_signer = create_agent_card_signer(
-        signing_key=private_key, alg='ES256', kid='key1'
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'key2',
+            'jku': None,
+            'typ': 'JOSE',
+        },
     )
     signed_card = agent_card_signer(sample_agent_card)
 
@@ -159,7 +178,7 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     )
     try:
         verifier(signed_card)
-    except JOSEError:
+    except InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
@@ -167,7 +186,7 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
         create_key_provider(public_key_error),
         ['HS256', 'HS384', 'ES256', 'RS256'],
     )
-    with pytest.raises(JOSEError):
+    with pytest.raises(InvalidSignaturesError):
         verifier_wrong_key(signed_card)
 
 
@@ -188,7 +207,7 @@ def test_canonicalize_agent_card(
     expected_jcs = (
         '{"capabilities":{"pushNotifications":true},'
         '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
-        '"description":"A test agent","name":"Test Agent","protocolVersion":"0.3.0",'
+        '"description":"A test agent","name":"Test Agent",'
         '"skills":[{"description":"A test skill","id":"skill1","name":"Test Skill","tags":["test"]}],'
         '"url":"http://localhost","version":"1.0.0"}'
     )
