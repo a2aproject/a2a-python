@@ -152,10 +152,13 @@ class RestTransport(ClientTransport):
             **modified_kwargs,
         ) as event_source:
             try:
+                event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
                     event = a2a_pb2.StreamResponse()
                     Parse(sse.data, event)
                     yield proto_utils.FromProto.stream_response(event)
+            except httpx.HTTPStatusError as e:
+                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'

@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.20](https://github.com/a2aproject/a2a-python/compare/v0.3.19...v0.3.20) (2025-12-03)
+
+
+### Bug Fixes
+
+* Improve streaming errors handling ([#576](https://github.com/a2aproject/a2a-python/issues/576)) ([7ea7475](https://github.com/a2aproject/a2a-python/commit/7ea7475091df2ee40d3035ef1bc34ee2f86524ee))
+
 ## [0.3.19](https://github.com/a2aproject/a2a-python/compare/v0.3.18...v0.3.19) (2025-11-25)
 
 
