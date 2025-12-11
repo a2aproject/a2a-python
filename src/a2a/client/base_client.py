@@ -1,4 +1,5 @@
 from collections.abc import AsyncIterator
+from typing import Any
 
 from a2a.client.client import (
     Client,
@@ -46,7 +47,10 @@ class BaseClient(Client):
         self,
         request: Message,
         *,
+        configuration: MessageSendConfiguration | None = None,
         context: ClientCallContext | None = None,
+        request_metadata: dict[str, Any] | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent | Message]:
         """Sends a message to the agent.
 
@@ -56,12 +60,15 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
+            configuration: Optional per-call overrides for message sending behavior.
             context: The client call context.
+            request_metadata: Extensions Metadata attached to the request.
+            extensions: List of extensions to be activated.
 
         Yields:
             An async iterator of `ClientEvent` or a final `Message` response.
         """
-        config = MessageSendConfiguration(
+        base_config = MessageSendConfiguration(
             accepted_output_modes=self._config.accepted_output_modes,
             blocking=not self._config.polling,
             push_notification_config=(
@@ -70,11 +77,22 @@ class BaseClient(Client):
                 else None
             ),
         )
-        params = MessageSendParams(message=request, configuration=config)
+        if configuration is not None:
+            update_data = configuration.model_dump(
+                exclude_unset=True,
+                by_alias=False,
+            )
+            config = base_config.model_copy(update=update_data)
+        else:
+            config = base_config
+
+        params = MessageSendParams(
+            message=request, configuration=config, metadata=request_metadata
+        )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
-                params, context=context
+                params, context=context, extensions=extensions
             )
             result = (
                 (response, None) if isinstance(response, Task) else response
@@ -84,7 +102,9 @@ class BaseClient(Client):
             return
 
         tracker = ClientTaskManager()
-        stream = self._transport.send_message_streaming(params, context=context)
+        stream = self._transport.send_message_streaming(
+            params, context=context, extensions=extensions
+        )
 
         first_event = await anext(stream)
         # The response from a server may be either exactly one Message or a
@@ -121,74 +141,91 @@ class BaseClient(Client):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task.
 
         Args:
             request: The `TaskQueryParams` object specifying the task ID.
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Returns:
             A `Task` object representing the current state of the task.
         """
-        return await self._transport.get_task(request, context=context)
+        return await self._transport.get_task(
+            request, context=context, extensions=extensions
+        )
 
     async def cancel_task(
         self,
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task.
 
         Args:
             request: The `TaskIdParams` object specifying the task ID.
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Returns:
             A `Task` object containing the updated task status.
         """
-        return await self._transport.cancel_task(request, context=context)
+        return await self._transport.cancel_task(
+            request, context=context, extensions=extensions
+        )
 
     async def set_task_callback(
         self,
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task.
 
         Args:
             request: The `TaskPushNotificationConfig` object with the new configuration.
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Returns:
             The created or updated `TaskPushNotificationConfig` object.
         """
-        return await self._transport.set_task_callback(request, context=context)
+        return await self._transport.set_task_callback(
+            request, context=context, extensions=extensions
+        )
 
     async def get_task_callback(
         self,
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task.
 
         Args:
             request: The `GetTaskPushNotificationConfigParams` object specifying the task.
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Returns:
             A `TaskPushNotificationConfig` object containing the configuration.
         """
-        return await self._transport.get_task_callback(request, context=context)
+        return await self._transport.get_task_callback(
+            request, context=context, extensions=extensions
+        )
 
     async def resubscribe(
         self,
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream.
 
@@ -197,6 +234,7 @@ class BaseClient(Client):
         Args:
             request: Parameters to identify the task to resubscribe to.
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Yields:
             An async iterator of `ClientEvent` objects.
@@ -214,12 +252,15 @@ class BaseClient(Client):
         # we should never see Message updates, despite the typing of the service
         # definition indicating it may be possible.
         async for event in self._transport.resubscribe(
-            request, context=context
+            request, context=context, extensions=extensions
         ):
             yield await self._process_response(tracker, event)
 
     async def get_card(
-        self, *, context: ClientCallContext | None = None
+        self,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.
 
@@ -228,11 +269,14 @@ class BaseClient(Client):
 
         Args:
             context: The client call context.
+            extensions: List of extensions to be activated.
 
         Returns:
             The `AgentCard` for the agent.
         """
-        card = await self._transport.get_card(context=context)
+        card = await self._transport.get_card(
+            context=context, extensions=extensions
+        )
         self._card = card
         return card
 
