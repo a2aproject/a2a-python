@@ -101,7 +101,7 @@
 ### Bug Fixes
 
 * apply `history_length` for `message/send` requests ([#498](https://github.com/a2aproject/a2a-python/issues/498)) ([a49f94e](https://github.com/a2aproject/a2a-python/commit/a49f94ef23d81b8375e409b1c1e51afaf1da1956))
-* **client:** `A2ACardResolver.get_agent_card` will auto-populate with `agent_card_path` when `relative_card_path` is empty ([#508](https://github.com/a2aproject/a2a-python/issues/508)) ([ba24ead](https://github.com/a2aproject/a2a-python/commit/ba24eadb5b6fcd056a008e4cbcef03b3f72a37c3))
+* **client:** `A2ACardResolver.get_agent_card` will autopopulate with `agent_card_path` when `relative_card_path` is empty ([#508](https://github.com/a2aproject/a2a-python/issues/508)) ([ba24ead](https://github.com/a2aproject/a2a-python/commit/ba24eadb5b6fcd056a008e4cbcef03b3f72a37c3))
 
 
 ### Documentation
@@ -438,8 +438,8 @@
 * Event consumer should stop on input_required ([#167](https://github.com/a2aproject/a2a-python/issues/167)) ([51c2d8a](https://github.com/a2aproject/a2a-python/commit/51c2d8addf9e89a86a6834e16deb9f4ac0e05cc3))
 * Fix Release Version ([#161](https://github.com/a2aproject/a2a-python/issues/161)) ([011d632](https://github.com/a2aproject/a2a-python/commit/011d632b27b201193813ce24cf25e28d1335d18e))
 * generate StrEnum types for enums ([#134](https://github.com/a2aproject/a2a-python/issues/134)) ([0c49dab](https://github.com/a2aproject/a2a-python/commit/0c49dabcdb9d62de49fda53d7ce5c691b8c1591c))
-* library should released as 0.2.6 ([d8187e8](https://github.com/a2aproject/a2a-python/commit/d8187e812d6ac01caedf61d4edaca522e583d7da))
-* remove error types from enqueable events ([#138](https://github.com/a2aproject/a2a-python/issues/138)) ([511992f](https://github.com/a2aproject/a2a-python/commit/511992fe585bd15e956921daeab4046dc4a50a0a))
+* library should be released as 0.2.6 ([d8187e8](https://github.com/a2aproject/a2a-python/commit/d8187e812d6ac01caedf61d4edaca522e583d7da))
+* remove error types from enqueueable events ([#138](https://github.com/a2aproject/a2a-python/issues/138)) ([511992f](https://github.com/a2aproject/a2a-python/commit/511992fe585bd15e956921daeab4046dc4a50a0a))
 * **stream:** don't block event loop in EventQueue ([#151](https://github.com/a2aproject/a2a-python/issues/151)) ([efd9080](https://github.com/a2aproject/a2a-python/commit/efd9080b917c51d6e945572fd123b07f20974a64))
 * **task_updater:** fix potential duplicate artifact_id from default v… ([#156](https://github.com/a2aproject/a2a-python/issues/156)) ([1f0a769](https://github.com/a2aproject/a2a-python/commit/1f0a769c1027797b2f252e4c894352f9f78257ca))
 
