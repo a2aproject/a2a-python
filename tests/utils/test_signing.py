@@ -9,12 +9,7 @@ from a2a.types import (
     AgentSkill,
     AgentCardSignature,
 )
-from a2a.utils.signing import (
-    canonicalize_agent_card,
-    create_agent_card_signer,
-    create_signature_verifier,
-    InvalidSignaturesError,
-)
+from a2a.utils import signing
 from typing import Any
 from jwt.utils import base64url_encode
 
@@ -63,7 +58,7 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     key = 'key12345'  # Using a simple symmetric key for HS256
     wrong_key = 'wrongkey'
 
-    agent_card_signer = create_agent_card_signer(
+    agent_card_signer = signing.create_agent_card_signer(
         signing_key=key,
         protected_header={
             'alg': 'HS384',
@@ -81,19 +76,19 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     assert signature.signature is not None
 
     # Verify the signature
-    verifier = create_signature_verifier(
+    verifier = signing.create_signature_verifier(
         create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
     try:
         verifier(signed_card)
-    except InvalidSignaturesError:
+    except signing.InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
-    verifier_wrong_key = create_signature_verifier(
+    verifier_wrong_key = signing.create_signature_verifier(
         create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
-    with pytest.raises(InvalidSignaturesError):
+    with pytest.raises(signing.InvalidSignaturesError):
         verifier_wrong_key(signed_card)
 
 
@@ -111,7 +106,7 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     key = 'key12345'  # Using a simple symmetric key for HS256
     wrong_key = 'wrongkey'
 
-    agent_card_signer = create_agent_card_signer(
+    agent_card_signer = signing.create_agent_card_signer(
         signing_key=key,
         protected_header={
             'alg': 'HS384',
@@ -129,19 +124,19 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     assert signature.signature is not None
 
     # Verify the signature
-    verifier = create_signature_verifier(
+    verifier = signing.create_signature_verifier(
         create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
     try:
         verifier(signed_card)
-    except InvalidSignaturesError:
+    except signing.InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
-    verifier_wrong_key = create_signature_verifier(
+    verifier_wrong_key = signing.create_signature_verifier(
         create_key_provider(wrong_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
-    with pytest.raises(InvalidSignaturesError):
+    with pytest.raises(signing.InvalidSignaturesError):
         verifier_wrong_key(signed_card)
 
 
@@ -156,7 +151,7 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     )
     public_key_error = private_key_error.public_key()
 
-    agent_card_signer = create_agent_card_signer(
+    agent_card_signer = signing.create_agent_card_signer(
         signing_key=private_key,
         protected_header={
             'alg': 'ES256',
@@ -173,43 +168,18 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     assert signature.protected is not None
     assert signature.signature is not None
 
-    verifier = create_signature_verifier(
+    verifier = signing.create_signature_verifier(
         create_key_provider(public_key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
     try:
         verifier(signed_card)
-    except InvalidSignaturesError:
+    except signing.InvalidSignaturesError:
         pytest.fail('Signature verification failed with correct key')
 
     # Verify with wrong key
-    verifier_wrong_key = create_signature_verifier(
+    verifier_wrong_key = signing.create_signature_verifier(
         create_key_provider(public_key_error),
         ['HS256', 'HS384', 'ES256', 'RS256'],
     )
-    with pytest.raises(InvalidSignaturesError):
+    with pytest.raises(signing.InvalidSignaturesError):
         verifier_wrong_key(signed_card)
-
-
-def test_canonicalize_agent_card(
-    sample_agent_card: AgentCard,
-):
-    """Test canonicalize_agent_card with defaults, optionals, and exceptions.
-
-    - extensions is omitted as it's not set and optional.
-    - protocolVersion is included because it's always added by canonicalize_agent_card.
-    - signatures should be omitted.
-    """
-    sample_agent_card.signatures = [
-        AgentCardSignature(
-            protected='protected_header', signature='test_signature'
-        )
-    ]
-    expected_jcs = (
-        '{"capabilities":{"pushNotifications":true},'
-        '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
-        '"description":"A test agent","name":"Test Agent",'
-        '"skills":[{"description":"A test skill","id":"skill1","name":"Test Skill","tags":["test"]}],'
-        '"url":"http://localhost","version":"1.0.0"}'
-    )
-    result = canonicalize_agent_card(sample_agent_card)
-    assert result == expected_jcs

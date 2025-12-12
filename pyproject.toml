@@ -35,8 +35,8 @@ grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
-sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
+sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -88,6 +88,7 @@ style = "pep440"
 dev = [
   "datamodel-code-generator>=0.30.0",
   "mypy>=1.15.0",
+  "PyJWT>=2.0.0"
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
