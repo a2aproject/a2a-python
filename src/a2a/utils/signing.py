@@ -99,23 +99,23 @@ def create_signature_verifier(
     key_provider: Callable[[str | None, str | None], PyJWK | str | bytes],
     algorithms: list[str],
 ) -> Callable[[AgentCard], None]:
-    """Creates a function that verifies AgentCard signatures.
+    """Creates a function that verifies the signatures on an AgentCard.
+
+    The verifier succeeds if at least one signature is valid. Otherwise, it raises an error.
 
     Args:
-        key_provider: A callable that takes key-id and JSON web key url and returns the verification key.
-        algorithms: List of acceptable algorithms for verification used to prevent algorithm confusion attacks.
+        key_provider: A callable that accepts a key ID (kid) and a JWK Set URL (jku) and returns the verification key.
+                      This function is responsible for fetching the correct key for a given signature.
+        algorithms: A list of acceptable algorithms (e.g., ['ES256', 'RS256']) for verification used to prevent algorithm confusion attacks.
 
     Returns:
-        A callable that takes an AgentCard, and raises an error if none of the signatures are valid.
+        A function that takes an AgentCard as input, and raises an error if none of the signatures are valid.
     """
 
     def signature_verifier(
         agent_card: AgentCard,
     ) -> None:
-        """Verifies agent card signatures.
-
-        Checks if at least one signature matches the key, otherwise raises an error.
-        """
+        """Verifies agent card signatures."""
         if not agent_card.signatures:
             raise NoSignatureError('AgentCard has no signatures to verify.')
 
