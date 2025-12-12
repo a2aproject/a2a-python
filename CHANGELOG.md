@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.21](https://github.com/a2aproject/a2a-python/compare/v0.3.20...v0.3.21) (2025-12-12)
+
+
+### Documentation
+
+* Fixing typos ([#586](https://github.com/a2aproject/a2a-python/issues/586)) ([5fea21f](https://github.com/a2aproject/a2a-python/commit/5fea21fb34ecea55e588eb10139b5d47020a76cb))
+
 ## [0.3.20](https://github.com/a2aproject/a2a-python/compare/v0.3.19...v0.3.20) (2025-12-03)
 
 
