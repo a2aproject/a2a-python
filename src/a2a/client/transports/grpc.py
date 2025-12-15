@@ -237,7 +237,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
         card = proto_utils.FromProto.agent_card(card_pb)
-        if signature_verifier is not None:
+        if signature_verifier:
             signature_verifier(card)
 
         self.agent_card = card

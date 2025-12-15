@@ -116,6 +116,7 @@ class ClientFactory:
         resolver_http_kwargs: dict[str, Any] | None = None,
         extra_transports: dict[str, TransportProducer] | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> Client:
         """Convenience method for constructing a client.
 
@@ -146,6 +147,7 @@ class ClientFactory:
           extra_transports: Additional transport protocols to enable when
             constructing the client.
           extensions: List of extensions to be activated.
+          signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
           A `Client` object.
@@ -158,12 +160,14 @@ class ClientFactory:
                     card = await resolver.get_agent_card(
                         relative_card_path=relative_card_path,
                         http_kwargs=resolver_http_kwargs,
+                        signature_verifier=signature_verifier,
                     )
             else:
                 resolver = A2ACardResolver(client_config.httpx_client, agent)
                 card = await resolver.get_agent_card(
                     relative_card_path=relative_card_path,
                     http_kwargs=resolver_http_kwargs,
+                    signature_verifier=signature_verifier,
                 )
         else:
             card = agent
