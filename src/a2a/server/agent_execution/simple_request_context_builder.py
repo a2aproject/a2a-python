@@ -2,6 +2,7 @@ import asyncio
 
 from a2a.server.agent_execution import RequestContext, RequestContextBuilder
 from a2a.server.context import ServerCallContext
+from a2a.server.id_generator import IdGenerator
 from a2a.server.tasks import TaskStore
 from a2a.types import MessageSendParams, Task
 
@@ -13,6 +14,8 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
         self,
         should_populate_referred_tasks: bool = False,
         task_store: TaskStore | None = None,
+        task_id_generator: IdGenerator | None = None,
+        context_id_generator: IdGenerator | None = None,
     ) -> None:
         """Initializes the SimpleRequestContextBuilder.
 
@@ -22,9 +25,13 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
                 `related_tasks` field in the RequestContext. Defaults to False.
             task_store: The TaskStore instance to use for fetching referred tasks.
                 Required if `should_populate_referred_tasks` is True.
+            task_id_generator: ID generator for new task IDs. Defaults to None.
+            context_id_generator: ID generator for new context IDs. Defaults to None.
         """
         self._task_store = task_store
         self._should_populate_referred_tasks = should_populate_referred_tasks
+        self._task_id_generator = task_id_generator
+        self._context_id_generator = context_id_generator
 
     async def build(
         self,
@@ -74,4 +81,6 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
             task=task,
             related_tasks=related_tasks,
             call_context=context,
+            task_id_generator=self._task_id_generator,
+            context_id_generator=self._context_id_generator,
         )
