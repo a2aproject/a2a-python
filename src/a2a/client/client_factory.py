@@ -256,7 +256,7 @@ def minimal_agent_card(
     """Generates a minimal card to simplify bootstrapping client creation.
 
     This minimal card is not viable itself to interact with the remote agent.
-    Instead this is a short hand way to take a known url and transport option
+    Instead this is a shorthand way to take a known url and transport option
     and interact with the get card endpoint of the agent server to get the
     correct agent card. This pattern is necessary for gRPC based card access
     as typically these servers won't expose a well known path card.

@@ -1,7 +1,7 @@
 import json
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 import httpx
@@ -371,6 +371,7 @@ class RestTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         modified_kwargs = update_extension_header(
@@ -378,9 +379,12 @@ class RestTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         card = self.agent_card
+
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
             card = await resolver.get_agent_card(http_kwargs=modified_kwargs)
+            if signature_verifier is not None:
+                signature_verifier(card)
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
             )
@@ -398,6 +402,9 @@ class RestTransport(ClientTransport):
             '/v1/card', {}, modified_kwargs
         )
         card = AgentCard.model_validate(response_data)
+        if signature_verifier is not None:
+            signature_verifier(card)
+
         self.agent_card = card
         self._needs_extended_card = False
         return card
