@@ -2,7 +2,7 @@ import asyncio
 
 from a2a.server.agent_execution import RequestContext, RequestContextBuilder
 from a2a.server.context import ServerCallContext
-from a2a.server.id_generator import IdGenerator
+from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskStore
 from a2a.types import MessageSendParams, Task
 
@@ -14,8 +14,8 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
         self,
         should_populate_referred_tasks: bool = False,
         task_store: TaskStore | None = None,
-        task_id_generator: IdGenerator | None = None,
-        context_id_generator: IdGenerator | None = None,
+        task_id_generator: IDGenerator | None = None,
+        context_id_generator: IDGenerator | None = None,
     ) -> None:
         """Initializes the SimpleRequestContextBuilder.
 
