@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.4.0](https://github.com/a2aproject/a2a-python/compare/v0.3.21...v0.4.0) (2025-12-16)
+
+
+### Features
+
+* Add custom ID generators to SimpleRequestContextBuilder ([#594](https://github.com/a2aproject/a2a-python/issues/594)) ([04bcafc](https://github.com/a2aproject/a2a-python/commit/04bcafc737cf426d9975c76e346335ff992363e2))
+
 ## [0.3.21](https://github.com/a2aproject/a2a-python/compare/v0.3.20...v0.3.21) (2025-12-12)
 
 
