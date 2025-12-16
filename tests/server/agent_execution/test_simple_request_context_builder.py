@@ -280,6 +280,8 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
     async def test_build_with_custom_id_generators(self) -> None:
         mock_task_id_generator = AsyncMock(spec=IDGenerator)
         mock_context_id_generator = AsyncMock(spec=IDGenerator)
+        mock_task_id_generator.generate.return_value = 'custom_task_id'
+        mock_context_id_generator.generate.return_value = 'custom_context_id'
 
         builder = SimpleRequestContextBuilder(
             should_populate_referred_tasks=False,
@@ -300,6 +302,8 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
     
         mock_task_id_generator.generate.assert_called_once()
         mock_context_id_generator.generate.assert_called_once()
+        self.assertEqual(request_context.task_id, 'custom_task_id')
+        self.assertEqual(request_context.context_id, 'custom_context_id')
 
     async def test_build_with_provided_ids_and_custom_id_generators(self) -> None:
         mock_task_id_generator = AsyncMock(spec=IDGenerator)
