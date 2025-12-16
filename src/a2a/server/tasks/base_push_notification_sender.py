@@ -55,14 +55,19 @@ class BasePushNotificationSender(PushNotificationSender):
             headers = {}
             if push_info.token:
                 headers['X-A2A-Notification-Token'] = push_info.token
-            
+
             # Add authentication header if configured
             if push_info.authentication and push_info.authentication.schemes:
                 for scheme in push_info.authentication.schemes:
-                    if scheme.lower() == 'bearer' and push_info.authentication.credentials:
-                        headers['Authorization'] = f'Bearer {push_info.authentication.credentials}'
+                    if (
+                        scheme.lower() == 'bearer'
+                        and push_info.authentication.credentials
+                    ):
+                        headers['Authorization'] = (
+                            f'Bearer {push_info.authentication.credentials}'
+                        )
                         break
-            
+
             response = await self._client.post(
                 url,
                 json=task.model_dump(mode='json', exclude_none=True),
