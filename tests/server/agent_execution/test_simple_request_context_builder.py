@@ -276,7 +276,6 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.related_tasks, [])
         self.mock_task_store.get.assert_not_called()
 
-
     async def test_build_with_custom_id_generators(self) -> None:
         mock_task_id_generator = AsyncMock(spec=IDGenerator)
         mock_context_id_generator = AsyncMock(spec=IDGenerator)
@@ -299,7 +298,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task=None,
             context=server_call_context,
         )
-    
+
         mock_task_id_generator.generate.assert_called_once()
         mock_context_id_generator.generate.assert_called_once()
         self.assertEqual(request_context.task_id, 'custom_task_id')
@@ -328,7 +327,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task=None,
             context=server_call_context,
         )
-    
+
         mock_task_id_generator.generate.assert_not_called()
         mock_context_id_generator.generate.assert_not_called()
         self.assertEqual(request_context.task_id, provided_task_id)
