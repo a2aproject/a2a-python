@@ -304,7 +304,9 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.task_id, 'custom_task_id')
         self.assertEqual(request_context.context_id, 'custom_context_id')
 
-    async def test_build_with_provided_ids_and_custom_id_generators(self) -> None:
+    async def test_build_with_provided_ids_and_custom_id_generators(
+        self,
+    ) -> None:
         mock_task_id_generator = AsyncMock(spec=IDGenerator)
         mock_context_id_generator = AsyncMock(spec=IDGenerator)
 
@@ -332,6 +334,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         mock_context_id_generator.generate.assert_not_called()
         self.assertEqual(request_context.task_id, provided_task_id)
         self.assertEqual(request_context.context_id, provided_context_id)
+
 
 if __name__ == '__main__':
     unittest.main()
