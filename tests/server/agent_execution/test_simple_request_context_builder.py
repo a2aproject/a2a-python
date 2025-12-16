@@ -10,6 +10,7 @@ from a2a.server.agent_execution.simple_request_context_builder import (
     SimpleRequestContextBuilder,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
     Message,
@@ -275,6 +276,59 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(request_context.related_tasks, [])
         self.mock_task_store.get.assert_not_called()
 
+
+    async def test_build_with_custom_id_generators(self) -> None:
+        mock_task_id_generator = AsyncMock(spec=IDGenerator)
+        mock_context_id_generator = AsyncMock(spec=IDGenerator)
+
+        builder = SimpleRequestContextBuilder(
+            should_populate_referred_tasks=False,
+            task_store=self.mock_task_store,
+            task_id_generator=mock_task_id_generator,
+            context_id_generator=mock_context_id_generator,
+        )
+        params = MessageSendParams(message=create_sample_message())
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+
+        request_context = await builder.build(
+            params=params,
+            task_id=None,
+            context_id=None,
+            task=None,
+            context=server_call_context,
+        )
+    
+        mock_task_id_generator.generate.assert_called_once()
+        mock_context_id_generator.generate.assert_called_once()
+
+    async def test_build_with_provided_ids_and_custom_id_generators(self) -> None:
+        mock_task_id_generator = AsyncMock(spec=IDGenerator)
+        mock_context_id_generator = AsyncMock(spec=IDGenerator)
+
+        builder = SimpleRequestContextBuilder(
+            should_populate_referred_tasks=False,
+            task_store=self.mock_task_store,
+            task_id_generator=mock_task_id_generator,
+            context_id_generator=mock_context_id_generator,
+        )
+        params = MessageSendParams(message=create_sample_message())
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+
+        provided_task_id = 'provided_task_id'
+        provided_context_id = 'provided_context_id'
+
+        request_context = await builder.build(
+            params=params,
+            task_id=provided_task_id,
+            context_id=provided_context_id,
+            task=None,
+            context=server_call_context,
+        )
+    
+        mock_task_id_generator.generate.assert_not_called()
+        mock_context_id_generator.generate.assert_not_called()
+        self.assertEqual(request_context.task_id, provided_task_id)
+        self.assertEqual(request_context.context_id, provided_context_id)
 
 if __name__ == '__main__':
     unittest.main()
