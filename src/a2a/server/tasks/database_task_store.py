@@ -197,9 +197,9 @@ class DatabaseTaskStore(TaskStore):
             dialect_name = getattr(getattr(bind, 'dialect', None), 'name', '')
             dialect_name = dialect_name.lower() if dialect_name else ''
             if dialect_name in ('mysql', 'mariadb'):
-                # Put non-NULL timestamps first (is_(None()) yields 0 for non-null, 1 for null)
+                # Put non-NULL timestamps first (is_(None) yields True for NULL rows)
                 stmt = base_stmt.order_by(
-                    timestamp_col.is_(None()),
+                    timestamp_col.is_(None),
                     timestamp_col.desc(),
                     self.task_model.id.desc(),
                 )
