@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types import (
@@ -114,6 +114,7 @@ class ClientTransport(ABC):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the AgentCard."""
 
