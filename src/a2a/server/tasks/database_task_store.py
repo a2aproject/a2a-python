@@ -189,10 +189,25 @@ class DatabaseTaskStore(TaskStore):
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            stmt = base_stmt.order_by(
-                timestamp_col.desc().nulls_last(),
-                self.task_model.id.desc(),
-            )
+            # Get paginated results
+            # Some dialects (e.g. MySQL/MariaDB) do not support the SQL 'NULLS LAST' syntax.
+            # Emulate NULLS LAST for descending timestamp order when needed by ordering
+            # on the NULL-ness first, then the value descending.
+            bind = session.get_bind()
+            dialect_name = getattr(getattr(bind, 'dialect', None), 'name', '')
+            dialect_name = dialect_name.lower() if dialect_name else ''
+            if dialect_name in ('mysql', 'mariadb'):
+                # Put non-NULL timestamps first (is_(None()) yields 0 for non-null, 1 for null)
+                stmt = base_stmt.order_by(
+                    timestamp_col.is_(None()),
+                    timestamp_col.desc(),
+                    self.task_model.id.desc(),
+                )
+            else:
+                stmt = base_stmt.order_by(
+                    timestamp_col.desc().nulls_last(),
+                    self.task_model.id.desc(),
+                )
 
             # Get paginated results
             if params.page_token:
