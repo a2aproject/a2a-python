@@ -71,6 +71,7 @@ otherurl
 postgres
 POSTGRES
 postgresql
+mariadb
 protoc
 pyi
 pypistats

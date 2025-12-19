@@ -32,6 +32,8 @@ from a2a.types import (
     InternalError,
     InvalidParamsError,
     ListTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -43,6 +45,7 @@ from a2a.types import (
     TaskState,
     UnsupportedOperationError,
 )
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import ServerError
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -120,6 +123,32 @@ class DefaultRequestHandler(RequestHandler):
 
         # Apply historyLength parameter if specified
         return apply_history_length(task, params.history_length)
+
+    async def on_list_tasks(
+        self,
+        params: ListTasksParams,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResult:
+        """Default handler for 'tasks/list'."""
+        page = await self.task_store.list(params, context)
+        processed_tasks = []
+        for task in page.tasks:
+            processed_task = task
+            if params.include_artifacts is not True:
+                processed_task = processed_task.model_copy(
+                    update={'artifacts': None}
+                )
+            if params.history_length is not None:
+                processed_task = apply_history_length(
+                    processed_task, params.history_length
+                )
+            processed_tasks.append(processed_task)
+        return ListTasksResult(
+            next_page_token=page.next_page_token or '',
+            page_size=params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE,
+            tasks=processed_tasks,
+            total_size=page.total_size,
+        )
 
     async def on_cancel_task(
         self, params: TaskIdParams, context: ServerCallContext | None = None

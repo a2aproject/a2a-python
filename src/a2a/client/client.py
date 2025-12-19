@@ -12,6 +12,8 @@ from a2a.client.optionals import Channel
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     PushNotificationConfig,
     Task,
@@ -136,6 +138,15 @@ class Client(ABC):
         extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
+
+    @abstractmethod
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
 
     @abstractmethod
     async def cancel_task(

@@ -7,6 +7,8 @@ from a2a.types import (
     DeleteTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigParams,
     ListTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -41,6 +43,23 @@ class RequestHandler(ABC):
 
         Returns:
             The `Task` object if found, otherwise `None`.
+        """
+
+    @abstractmethod
+    async def on_list_tasks(
+        self, params: ListTasksParams, context: ServerCallContext | None = None
+    ) -> ListTasksResult:
+        """Handles the tasks/list method.
+
+        Retrieves all task for an agent. Supports filtering, pagination,
+        ordering, limiting the history length, excluding artifacts, etc.
+
+        Args:
+            params: Parameters with filtering criteria.
+            context: Context provided by the server.
+
+        Returns:
+            The `ListTasksResult` containing the tasks.
         """
 
     @abstractmethod
