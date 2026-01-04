@@ -424,7 +424,7 @@ class JsonRpcTransport(ClientTransport):
 
         self.agent_card = card
         self._needs_extended_card = False
-        return card
+        return self.agent_card
 
     async def close(self) -> None:
         """Closes the httpx client."""
