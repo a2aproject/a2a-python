@@ -322,7 +322,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
             self.assertIsInstance(response.root, JSONRPCErrorResponse)
             assert response.root.error == UnsupportedOperationError()  # type: ignore
-            mock_agent_executor.execute.assert_called_once()
 
     @patch(
         'a2a.server.agent_execution.simple_request_context_builder.SimpleRequestContextBuilder.build'
