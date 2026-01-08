@@ -18,6 +18,16 @@ Features:
 - Automatic recording of exceptions and setting of span status.
 - Selective method tracing in classes using include/exclude lists.
 
+Configuration:
+- Environment Variable Control: OpenTelemetry instrumentation can be
+  disabled using the `OTEL_A2A_SDK_INSTRUMENTATION_ENABLED` environment
+  variable.
+
+  - Default: `true` (tracing enabled when OpenTelemetry is installed)
+  - To disable: Set `OTEL_A2A_SDK_INSTRUMENTATION_ENABLED=false`
+  - Case insensitive: 'true', 'True', 'TRUE' all enable tracing
+  - Any other value disables tracing and logs a debug message
+
 Usage:
     For a single function:
     ```python
@@ -57,6 +67,7 @@ import asyncio
 import functools
 import inspect
 import logging
+import os
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -74,11 +85,33 @@ try:
     from opentelemetry.trace import SpanKind as _SpanKind
     from opentelemetry.trace import StatusCode
 
+    otel_installed = True
+
 except ImportError:
     logger.debug(
         'OpenTelemetry not found. Tracing will be disabled. '
         'Install with: \'pip install "a2a-sdk[telemetry]"\''
     )
+    otel_installed = False
+
+ENABLED_ENV_VAR = 'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED'
+INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
+INSTRUMENTING_MODULE_VERSION = '1.0.0'
+
+# Check if tracing is enabled via environment variable
+env_value = os.getenv(ENABLED_ENV_VAR, 'true')
+otel_enabled = env_value.lower() == 'true'
+
+# Log when tracing is explicitly disabled via environment variable
+if otel_installed and not otel_enabled:
+    logger.debug(
+        'A2A OTEL instrumentation disabled via environment variable '
+        '%s=%r. Tracing will be disabled.',
+        ENABLED_ENV_VAR,
+        env_value,
+    )
+
+if not otel_installed or not otel_enabled:
 
     class _NoOp:
         """A no-op object that absorbs all tracing calls when OpenTelemetry is not installed."""
@@ -99,11 +132,8 @@ except ImportError:
     _SpanKind = _NoOp()  # type: ignore
     StatusCode = _NoOp()  # type: ignore
 
-SpanKind = _SpanKind
+SpanKind = _SpanKind  # type: ignore
 __all__ = ['SpanKind']
-
-INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
-INSTRUMENTING_MODULE_VERSION = '1.0.0'
 
 
 def trace_function(  # noqa: PLR0915

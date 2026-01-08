@@ -1,6 +1,8 @@
 import asyncio
+import importlib
+import sys
 
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from typing import Any, NoReturn
 from unittest import mock
 
@@ -28,6 +30,35 @@ def patch_trace_get_tracer(
 ) -> Generator[None, Any, None]:
     with mock.patch('opentelemetry.trace.get_tracer', return_value=mock_tracer):
         yield
+
+
+@pytest.fixture
+def reload_telemetry_module(
+    monkeypatch: pytest.MonkeyPatch,
+) -> Generator[Callable[[str | None], Any], None, None]:
+    """Fixture to handle telemetry module reloading with env var control."""
+
+    def _reload(env_value: str | None = None) -> Any:
+        if env_value is None:
+            monkeypatch.delenv(
+                'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED', raising=False
+            )
+        else:
+            monkeypatch.setenv(
+                'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED', env_value
+            )
+
+        # Remove from sys.modules to force fresh top-level execution
+        sys.modules.pop('a2a.utils.telemetry', None)
+
+        # importlib.import_module is often cleaner than 'import' in dynamic contexts
+        module = importlib.import_module('a2a.utils.telemetry')
+        return module
+
+    yield _reload
+
+    # Cleanup to ensure other tests aren't affected by a "poisoned" sys.modules
+    sys.modules.pop('a2a.utils.telemetry', None)
 
 
 def test_trace_function_sync_success(mock_span: mock.MagicMock) -> None:
@@ -198,3 +229,43 @@ def test_trace_class_dunder_not_traced(mock_span: mock.MagicMock) -> None:
     assert obj.foo() == 'foo'
     assert hasattr(obj.foo, '__wrapped__')
     assert hasattr(obj, 'x')
+
+
+@pytest.mark.xdist_group(name='telemetry_isolation')
+@pytest.mark.parametrize(
+    'env_value,expected_tracing',
+    [
+        (None, True),  # Default: env var not set, tracing enabled
+        ('true', True),  # Explicitly enabled
+        ('True', True),  # Case insensitive
+        ('false', False),  # Disabled
+        ('', False),  # Empty string = false
+    ],
+)
+def test_env_var_controls_instrumentation(
+    reload_telemetry_module: Callable[[str | None], Any],
+    env_value: str | None,
+    expected_tracing: bool,
+) -> None:
+    """Test OTEL_A2A_SDK_INSTRUMENTATION_ENABLED controls span creation."""
+    telemetry_module = reload_telemetry_module(env_value)
+
+    is_noop = type(telemetry_module.trace).__name__ == '_NoOp'
+
+    assert is_noop != expected_tracing
+
+
+@pytest.mark.xdist_group(name='telemetry_isolation')
+def test_env_var_disabled_logs_message(
+    reload_telemetry_module: Callable[[str | None], Any],
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Test that disabling via env var logs appropriate debug message."""
+    with caplog.at_level('DEBUG', logger='a2a.utils.telemetry'):
+        reload_telemetry_module('false')
+
+    assert (
+        'A2A OTEL instrumentation disabled via environment variable'
+        in caplog.text
+    )
+    assert 'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED' in caplog.text
