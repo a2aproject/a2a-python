@@ -48,10 +48,7 @@ def reload_telemetry_module(
                 'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED', env_value
             )
 
-        # Remove from sys.modules to force fresh top-level execution
         sys.modules.pop('a2a.utils.telemetry', None)
-
-        # importlib.import_module is often cleaner than 'import' in dynamic contexts
         module = importlib.import_module('a2a.utils.telemetry')
         return module
 
