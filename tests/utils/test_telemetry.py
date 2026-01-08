@@ -41,11 +41,11 @@ def reload_telemetry_module(
     def _reload(env_value: str | None = None) -> Any:
         if env_value is None:
             monkeypatch.delenv(
-                'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED', raising=False
+                'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED', raising=False
             )
         else:
             monkeypatch.setenv(
-                'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED', env_value
+                'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED', env_value
             )
 
         sys.modules.pop('a2a.utils.telemetry', None)
@@ -244,7 +244,7 @@ def test_env_var_controls_instrumentation(
     env_value: str | None,
     expected_tracing: bool,
 ) -> None:
-    """Test OTEL_A2A_SDK_INSTRUMENTATION_ENABLED controls span creation."""
+    """Test OTEL_INSTRUMENTATION_A2A_SDK_ENABLED controls span creation."""
     telemetry_module = reload_telemetry_module(env_value)
 
     is_noop = type(telemetry_module.trace).__name__ == '_NoOp'
@@ -265,4 +265,4 @@ def test_env_var_disabled_logs_message(
         'A2A OTEL instrumentation disabled via environment variable'
         in caplog.text
     )
-    assert 'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED' in caplog.text
+    assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
