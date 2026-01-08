@@ -20,11 +20,11 @@ Features:
 
 Configuration:
 - Environment Variable Control: OpenTelemetry instrumentation can be
-  disabled using the `OTEL_A2A_SDK_INSTRUMENTATION_ENABLED` environment
+  disabled using the `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED` environment
   variable.
 
   - Default: `true` (tracing enabled when OpenTelemetry is installed)
-  - To disable: Set `OTEL_A2A_SDK_INSTRUMENTATION_ENABLED=false`
+  - To disable: Set `OTEL_INSTRUMENTATION_A2A_SDK_ENABLED=false`
   - Case insensitive: 'true', 'True', 'TRUE' all enable tracing
   - Any other value disables tracing and logs a debug message
 
@@ -94,7 +94,7 @@ except ImportError:
     )
     otel_installed = False
 
-ENABLED_ENV_VAR = 'OTEL_A2A_SDK_INSTRUMENTATION_ENABLED'
+ENABLED_ENV_VAR = 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED'
 INSTRUMENTING_MODULE_NAME = 'a2a-python-sdk'
 INSTRUMENTING_MODULE_VERSION = '1.0.0'
 
