@@ -450,12 +450,8 @@ class DefaultRequestHandler(RequestHandler):
         try:
             await producer_task
         except asyncio.CancelledError:
-            # The producer task was cancelled, which is an expected outcome in some scenarios.
-            # We don't want to stop cleanup in this case.
             logger.debug('Producer task %s was cancelled during cleanup', task_id)
         except Exception:
-            # Log other exceptions from the producer task to avoid losing error information,
-            # but continue with the cleanup process.
             logger.exception('Producer task %s failed during cleanup', task_id)
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
