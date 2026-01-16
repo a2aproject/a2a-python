@@ -65,13 +65,13 @@ class RequestContext:
         # match the request. Otherwise, create them
         if self._params:
             if task_id:
-                self._params.request.task_id = task_id
+                self._params.message.task_id = task_id
                 if task and task.id != task_id:
                     raise ServerError(InvalidParamsError(message='bad task id'))
             else:
                 self._check_or_generate_task_id()
             if context_id:
-                self._params.request.context_id = context_id
+                self._params.message.context_id = context_id
                 if task and task.context_id != context_id:
                     raise ServerError(
                         InvalidParamsError(message='bad context id')
@@ -93,7 +93,7 @@ class RequestContext:
         if not self._params:
             return ''
 
-        return get_message_text(self._params.request, delimiter)
+        return get_message_text(self._params.message, delimiter)
 
     def attach_related_task(self, task: Task) -> None:
         """Attaches a related task to the context.
@@ -109,7 +109,7 @@ class RequestContext:
     @property
     def message(self) -> Message | None:
         """The incoming `Message` object from the request, if available."""
-        return self._params.request if self._params else None
+        return self._params.message if self._params else None
 
     @property
     def related_tasks(self) -> list[Task]:
@@ -176,23 +176,23 @@ class RequestContext:
         if not self._params:
             return
 
-        if not self._task_id and not self._params.request.task_id:
-            self._params.request.task_id = self._task_id_generator.generate(
+        if not self._task_id and not self._params.message.task_id:
+            self._params.message.task_id = self._task_id_generator.generate(
                 IDGeneratorContext(context_id=self._context_id)
             )
-        if self._params.request.task_id:
-            self._task_id = self._params.request.task_id
+        if self._params.message.task_id:
+            self._task_id = self._params.message.task_id
 
     def _check_or_generate_context_id(self) -> None:
         """Ensures a context ID is present, generating one if necessary."""
         if not self._params:
             return
 
-        if not self._context_id and not self._params.request.context_id:
-            self._params.request.context_id = (
+        if not self._context_id and not self._params.message.context_id:
+            self._params.message.context_id = (
                 self._context_id_generator.generate(
                     IDGeneratorContext(task_id=self._task_id)
                 )
             )
-        if self._params.request.context_id:
-            self._context_id = self._params.request.context_id
+        if self._params.message.context_id:
+            self._context_id = self._params.message.context_id

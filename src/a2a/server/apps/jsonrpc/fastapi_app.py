@@ -149,7 +149,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
                 self._handle_get_agent_card
             )
 
-        if self.agent_card.supports_authenticated_extended_card:
+        if self.agent_card.capabilities.extended_agent_card:
             app.get(extended_agent_card_url)(
                 self._handle_get_authenticated_extended_agent_card
             )

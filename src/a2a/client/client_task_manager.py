@@ -82,7 +82,7 @@ class ClientTaskManager:
             ClientError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
-        if event.HasField('msg'):
+        if event.HasField('message'):
             # Messages are not processed here.
             return None
 

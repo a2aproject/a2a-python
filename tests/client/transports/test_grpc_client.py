@@ -8,6 +8,7 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2, a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     Artifact,
     AuthenticationInfo,
@@ -49,7 +50,11 @@ def sample_agent_card() -> AgentCard:
     return AgentCard(
         name='gRPC Test Agent',
         description='Agent for testing gRPC client',
-        url='grpc://localhost:50051',
+        supported_interfaces=[
+            AgentInterface(
+                url='grpc://localhost:50051', protocol_binding='GRPC'
+            )
+        ],
         version='1.0',
         capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         default_input_modes=['text/plain'],
@@ -80,7 +85,7 @@ def grpc_transport(
 def sample_message_send_params() -> SendMessageRequest:
     """Provides a sample SendMessageRequest object."""
     return SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg-1',
             parts=[Part(text='Hello')],
@@ -218,7 +223,7 @@ async def test_send_message_message_response(
 ) -> None:
     """Test send_message that returns a Message."""
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
-        msg=sample_message
+        message=sample_message
     )
 
     response = await grpc_transport.send_message(sample_message_send_params)
@@ -231,9 +236,9 @@ async def test_send_message_message_response(
             'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
         )
     ]
-    assert response.HasField('msg')
-    assert response.msg.message_id == sample_message.message_id
-    assert get_text_parts(response.msg.parts) == get_text_parts(
+    assert response.HasField('message')
+    assert response.message.message_id == sample_message.message_id
+    assert get_text_parts(response.message.parts) == get_text_parts(
         sample_message.parts
     )
 
@@ -252,7 +257,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
     stream = MagicMock()
     stream.read = AsyncMock(
         side_effect=[
-            a2a_pb2.StreamResponse(msg=sample_message),
+            a2a_pb2.StreamResponse(message=sample_message),
             a2a_pb2.StreamResponse(task=sample_task),
             a2a_pb2.StreamResponse(
                 status_update=sample_task_status_update_event
@@ -281,8 +286,8 @@ async def test_send_message_streaming(  # noqa: PLR0913
         )
     ]
     # Responses are StreamResponse proto objects
-    assert responses[0].HasField('msg')
-    assert responses[0].msg.message_id == sample_message.message_id
+    assert responses[0].HasField('message')
+    assert responses[0].message.message_id == sample_message.message_id
     assert responses[1].HasField('task')
     assert responses[1].task.id == sample_task.id
     assert responses[2].HasField('status_update')

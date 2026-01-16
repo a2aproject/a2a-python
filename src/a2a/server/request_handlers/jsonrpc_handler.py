@@ -400,7 +400,7 @@ class JSONRPCHandler:
             A dict representing the JSON-RPC response.
         """
         request_id = self._get_request_id(context)
-        if not self.agent_card.supports_authenticated_extended_card:
+        if not self.agent_card.capabilities.extended_agent_card:
             raise ServerError(
                 error=AuthenticatedExtendedCardNotConfiguredError(
                     message='Authenticated card not supported'

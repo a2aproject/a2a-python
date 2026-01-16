@@ -175,7 +175,7 @@ class RESTAdapter:
         Returns:
             A JSONResponse containing the authenticated card.
         """
-        if not self.agent_card.supports_authenticated_extended_card:
+        if not self.agent_card.capabilities.extended_agent_card:
             raise ServerError(
                 error=AuthenticatedExtendedCardNotConfiguredError(
                     message='Authenticated card not supported'
@@ -245,7 +245,7 @@ class RESTAdapter:
                 self._handle_request, self.handler.list_tasks
             ),
         }
-        if self.agent_card.supports_authenticated_extended_card:
+        if self.agent_card.capabilities.extended_agent_card:
             routes[('/v1/card', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )

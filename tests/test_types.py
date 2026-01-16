@@ -11,6 +11,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     AgentProvider,
     AgentSkill,
@@ -62,7 +63,9 @@ MINIMAL_AGENT_CARD: dict[str, Any] = {
     'description': 'Test Agent',
     'name': 'TestAgent',
     'skills': [MINIMAL_AGENT_SKILL],
-    'url': 'http://example.com/agent',
+    'supportedInterfaces': [
+        {'url': 'http://example.com/agent', 'protocolBinding': 'HTTP+JSON'}
+    ],
     'version': '1.0',
 }
 
@@ -91,7 +94,10 @@ def test_agent_capabilities():
 
 def test_agent_provider():
     """Test AgentProvider proto construction."""
-    provider = AgentProvider(organization='Test Org', url='http://test.org')
+    provider = AgentProvider(
+        organization='Test Org',
+        url='http://test.org',
+    )
     assert provider.organization == 'Test Org'
     assert provider.url == 'http://test.org'
 
@@ -304,9 +310,9 @@ def test_send_message_request():
     msg = Message(role=Role.ROLE_USER, message_id='msg-123')
     msg.parts.append(Part(text='Hello'))
 
-    request = SendMessageRequest(request=msg)
-    assert request.request.role == Role.ROLE_USER
-    assert request.request.parts[0].text == 'Hello'
+    request = SendMessageRequest(message=msg)
+    assert request.message.role == Role.ROLE_USER
+    assert request.message.parts[0].text == 'Hello'
 
 
 def test_get_task_request():
@@ -382,12 +388,14 @@ def test_parse_dict_agent_card():
     """Test ParseDict for AgentCard."""
     card = ParseDict(MINIMAL_AGENT_CARD, AgentCard())
     assert card.name == 'TestAgent'
-    assert card.url == 'http://example.com/agent'
+    assert card.supported_interfaces[0].url == 'http://example.com/agent'
 
     # Round-trip through MessageToDict
     card_dict = MessageToDict(card)
     assert card_dict['name'] == 'TestAgent'
-    assert card_dict['url'] == 'http://example.com/agent'
+    assert (
+        card_dict['supportedInterfaces'][0]['url'] == 'http://example.com/agent'
+    )
 
 
 def test_parse_dict_task():

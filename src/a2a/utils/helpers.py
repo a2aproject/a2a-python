@@ -36,15 +36,15 @@ def create_task_obj(message_send_params: SendMessageRequest) -> Task:
     Returns:
         A new `Task` object initialized with 'submitted' status and the input message in history.
     """
-    if not message_send_params.request.context_id:
-        message_send_params.request.context_id = str(uuid4())
+    if not message_send_params.message.context_id:
+        message_send_params.message.context_id = str(uuid4())
 
     task = Task(
         id=str(uuid4()),
-        context_id=message_send_params.request.context_id,
+        context_id=message_send_params.message.context_id,
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    task.history.append(message_send_params.request)
+    task.history.append(message_send_params.message)
     return task
 
 

@@ -160,7 +160,7 @@ async def test_process_with_message_returns_none(
     task_manager: ClientTaskManager, sample_message: Message
 ) -> None:
     """Test that processing a message event returns None."""
-    event = StreamResponse(msg=sample_message)
+    event = StreamResponse(message=sample_message)
     result = await task_manager.process(event)
     assert result is None
 

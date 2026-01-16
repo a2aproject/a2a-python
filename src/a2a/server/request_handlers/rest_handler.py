@@ -83,7 +83,7 @@ class RESTHandler:
         if isinstance(task_or_message, a2a_pb2.Task):
             response = a2a_pb2.SendMessageResponse(task=task_or_message)
         else:
-            response = a2a_pb2.SendMessageResponse(msg=task_or_message)
+            response = a2a_pb2.SendMessageResponse(message=task_or_message)
         return MessageToDict(response)
 
     @validate(

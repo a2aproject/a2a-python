@@ -12,6 +12,7 @@ from a2a.types import (
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     AgentSkill,
     APIKeySecurityScheme,
@@ -29,7 +30,11 @@ def minimal_agent_card():
     return AgentCard(
         name='TestAgent',
         description='A test agent.',
-        url='http://example.com/agent',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://example.com/agent', protocol_binding='HTTP+JSON'
+            )
+        ],
         version='1.0.0',
         capabilities=AgentCapabilities(),
         default_input_modes=['text/plain'],
@@ -58,7 +63,12 @@ def agent_card_with_api_key():
     card = AgentCard(
         name='APIKeyAgent',
         description='An agent that uses API Key auth.',
-        url='http://example.com/apikey-agent',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://example.com/apikey-agent',
+                protocol_binding='HTTP+JSON',
+            )
+        ],
         version='1.0.0',
         capabilities=AgentCapabilities(),
         default_input_modes=['text/plain'],
@@ -82,7 +92,10 @@ def test_starlette_agent_card_serialization(minimal_agent_card: AgentCard):
 
     assert response_data['name'] == 'TestAgent'
     assert response_data['description'] == 'A test agent.'
-    assert response_data['url'] == 'http://example.com/agent'
+    assert (
+        response_data['supportedInterfaces'][0]['url']
+        == 'http://example.com/agent'
+    )
     assert response_data['version'] == '1.0.0'
 
 

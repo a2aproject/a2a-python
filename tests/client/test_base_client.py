@@ -6,7 +6,7 @@ from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
-    AgentCapabilities,
+    AgentCapabilities, AgentInterface,
     AgentCard,
     Message,
     Part,
@@ -29,7 +29,7 @@ def sample_agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for testing',
-        url='http://test.com',
+        supported_interfaces=[AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')],
         version='1.0',
         capabilities=AgentCapabilities(streaming=True),
         default_input_modes=['text/plain'],

@@ -1,6 +1,6 @@
 """Helper functions for building A2A JSON-RPC responses."""
 
-from typing import Any, cast, get_args
+from typing import Any, get_args
 
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message as ProtoMessage
@@ -87,7 +87,7 @@ def prepare_response_object(
         return JSONRPC20Response(result=result, _id=request_id).data
 
     if isinstance(response, _A2A_ERROR_TYPES):
-        return build_error_response(request_id, cast('A2AError', response))
+        return build_error_response(request_id, response)
 
     # If response is not an expected success type and not an error,
     # it's an invalid type of response from the agent for this method.

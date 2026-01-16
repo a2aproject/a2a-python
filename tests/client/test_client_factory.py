@@ -21,13 +21,18 @@ def base_agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for testing.',
-        url='http://primary-url.com',
+        supported_interfaces=[
+            AgentInterface(
+                protocol_binding=TransportProtocol.jsonrpc,
+                url='http://primary-url.com',
+            )
+        ],
         version='1.0.0',
         capabilities=AgentCapabilities(),
         skills=[],
         default_input_modes=[],
         default_output_modes=[],
-        preferred_transport=TransportProtocol.jsonrpc,
+        protocol_versions=['v1'],
     )
 
 
@@ -53,7 +58,7 @@ def test_client_factory_selects_secondary_transport_url(
     base_agent_card: AgentCard,
 ):
     """Verify that the factory selects the correct URL for a secondary transport."""
-    base_agent_card.additional_interfaces.append(
+    base_agent_card.supported_interfaces.append(
         AgentInterface(
             protocol_binding=TransportProtocol.http_json,
             url='http://secondary-url.com',
@@ -79,8 +84,15 @@ def test_client_factory_selects_secondary_transport_url(
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):
     """Verify that the factory respects server transport preference."""
-    base_agent_card.preferred_transport = TransportProtocol.http_json
-    base_agent_card.additional_interfaces.append(
+    # Server lists REST first, which implies preference
+    base_agent_card.supported_interfaces.insert(
+        0,
+        AgentInterface(
+            protocol_binding=TransportProtocol.http_json,
+            url='http://primary-url.com',
+        ),
+    )
+    base_agent_card.supported_interfaces.append(
         AgentInterface(
             protocol_binding=TransportProtocol.jsonrpc,
             url='http://secondary-url.com',
@@ -105,7 +117,7 @@ def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
     """Verify that the factory raises an error if no compatible transport is found."""
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
-        supported_protocol_bindings=[TransportProtocol.grpc],
+        supported_protocol_bindings=['UNKNOWN_PROTOCOL'],
     )
     factory = ClientFactory(config)
     with pytest.raises(ValueError, match='no compatible transports found'):
@@ -232,8 +244,10 @@ async def test_client_factory_connect_with_extra_transports(
     def custom_transport_producer(*args, **kwargs):
         return CustomTransport()
 
-    base_agent_card.preferred_transport = 'custom'
-    base_agent_card.url = 'custom://foo'
+    base_agent_card.supported_interfaces.insert(
+        0,
+        AgentInterface(protocol_binding='custom', url='custom://foo'),
+    )
 
     config = ClientConfig(supported_protocol_bindings=['custom'])
 

@@ -83,7 +83,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task_store=self.mock_task_store,
         )
 
-        params = SendMessageRequest(request=create_sample_message())
+        params = SendMessageRequest(message=create_sample_message())
         task_id = 'test_task_id_1'
         context_id = 'test_context_id_1'
         current_task = create_sample_task(
@@ -104,7 +104,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
 
         self.assertIsInstance(request_context, RequestContext)
         # Access params via its properties message and configuration
-        self.assertEqual(request_context.message, params.request)
+        self.assertEqual(request_context.message, params.message)
         self.assertEqual(request_context.configuration, params.configuration)
         self.assertEqual(request_context.task_id, task_id)
         self.assertEqual(request_context.context_id, context_id)
@@ -141,7 +141,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         self.mock_task_store.get = AsyncMock(side_effect=get_side_effect)
 
         params = SendMessageRequest(
-            request=create_sample_message(
+            message=create_sample_message(
                 reference_task_ids=[ref_task_id1, ref_task_id2, ref_task_id3]
             )
         )
@@ -192,7 +192,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
 
         # Test with empty list
         params_empty_refs = SendMessageRequest(
-            request=create_sample_message(reference_task_ids=[])
+            message=create_sample_message(reference_task_ids=[])
         )
         request_context_empty = await builder.build(
             params=params_empty_refs,
@@ -218,7 +218,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             parts=[],
             reference_task_ids=None,
         )
-        params_none_refs = SendMessageRequest(request=msg_with_no_refs)
+        params_none_refs = SendMessageRequest(message=msg_with_no_refs)
         request_context_none = await builder.build(
             params=params_none_refs,
             task_id='t2',
@@ -239,7 +239,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task_store=None,  # Explicitly None
         )
         params = SendMessageRequest(
-            request=create_sample_message(reference_task_ids=['ref1'])
+            message=create_sample_message(reference_task_ids=['ref1'])
         )
         server_call_context = ServerCallContext(user=UnauthenticatedUser())
 
@@ -260,7 +260,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task_store=self.mock_task_store,
         )
         params = SendMessageRequest(
-            request=create_sample_message(
+            message=create_sample_message(
                 reference_task_ids=['ref_task_should_not_be_fetched']
             )
         )

@@ -237,13 +237,13 @@ class DefaultRequestHandler(RequestHandler):
         """
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
-        task_id = params.request.task_id or None
-        context_id = params.request.context_id or None
+        task_id = params.message.task_id or None
+        context_id = params.message.context_id or None
         task_manager = TaskManager(
             task_id=task_id,
             context_id=context_id,
             task_store=self.task_store,
-            initial_message=params.request,
+            initial_message=params.message,
             context=context,
         )
         task: Task | None = await task_manager.get_task()
@@ -256,11 +256,11 @@ class DefaultRequestHandler(RequestHandler):
                     )
                 )
 
-            task = task_manager.update_with_message(params.request, task)
-        elif params.request.task_id:
+            task = task_manager.update_with_message(params.message, task)
+        elif params.message.task_id:
             raise ServerError(
                 error=TaskNotFoundError(
-                    message=f'Task {params.request.task_id} was specified but does not exist'
+                    message=f'Task {params.message.task_id} was specified but does not exist'
                 )
             )
 
@@ -268,7 +268,7 @@ class DefaultRequestHandler(RequestHandler):
         request_context = await self._request_context_builder.build(
             params=params,
             task_id=task.id if task else None,
-            context_id=params.request.context_id,
+            context_id=params.message.context_id,
             task=task,
             context=context,
         )

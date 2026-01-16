@@ -26,6 +26,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.constants import TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -48,7 +49,18 @@ class RestTransport(ClientTransport):
         if url:
             self.url = url
         elif agent_card:
-            self.url = agent_card.url
+            for interface in agent_card.supported_interfaces:
+                if interface.protocol_binding in (
+                    TRANSPORT_HTTP_JSON,
+                    TRANSPORT_JSONRPC,
+                ):
+                    self.url = interface.url
+                    break
+            else:
+                raise ValueError(
+                    f'AgentCard does not support {TRANSPORT_HTTP_JSON} '
+                    f'or {TRANSPORT_JSONRPC}'
+                )
         else:
             raise ValueError('Must provide either agent_card or url')
         if self.url.endswith('/'):
@@ -57,9 +69,7 @@ class RestTransport(ClientTransport):
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self._needs_extended_card = (
-            agent_card.supports_authenticated_extended_card
-            if agent_card
-            else True
+            agent_card.capabilities.extended_agent_card if agent_card else True
         )
         self.extensions = extensions
 

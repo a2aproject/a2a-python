@@ -118,17 +118,15 @@ def agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for integration testing.',
-        url='http://testserver',
         version='1.0.0',
         capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
-        preferred_transport='jsonrpc',
-        supports_authenticated_extended_card=False,
-        additional_interfaces=[
+        supported_interfaces=[
             AgentInterface(
-                protocol_binding='http_json', url='http://testserver'
+                protocol_binding=TransportProtocol.http_json,
+                url='http://testserver',
             ),
             AgentInterface(protocol_binding='grpc', url='localhost:50051'),
         ],
@@ -226,7 +224,7 @@ async def test_http_transport_sends_message_streaming(
         message_id='msg-integration-test',
         parts=[Part(text='Hello, integration test!')],
     )
-    params = SendMessageRequest(request=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
     events = [event async for event in stream]
@@ -242,9 +240,9 @@ async def test_http_transport_sends_message_streaming(
     call_args, _ = handler.on_message_send_stream.call_args
     received_params: SendMessageRequest = call_args[0]
 
-    assert received_params.request.message_id == message_to_send.message_id
+    assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text == message_to_send.parts[0].text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -259,7 +257,6 @@ async def test_grpc_transport_sends_message_streaming(
     Integration test specifically for the gRPC transport streaming.
     """
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -272,7 +269,7 @@ async def test_grpc_transport_sends_message_streaming(
         message_id='msg-grpc-integration-test',
         parts=[Part(text='Hello, gRPC integration test!')],
     )
-    params = SendMessageRequest(request=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
     first_event = await anext(stream)
@@ -285,9 +282,9 @@ async def test_grpc_transport_sends_message_streaming(
     call_args, _ = handler.on_message_send_stream.call_args
     received_params: SendMessageRequest = call_args[0]
 
-    assert received_params.request.message_id == message_to_send.message_id
+    assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text == message_to_send.parts[0].text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -318,7 +315,7 @@ async def test_http_transport_sends_message_blocking(
         message_id='msg-integration-test-blocking',
         parts=[Part(text='Hello, blocking test!')],
     )
-    params = SendMessageRequest(request=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     result = await transport.send_message(request=params)
 
@@ -330,9 +327,9 @@ async def test_http_transport_sends_message_blocking(
     call_args, _ = handler.on_message_send.call_args
     received_params: SendMessageRequest = call_args[0]
 
-    assert received_params.request.message_id == message_to_send.message_id
+    assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text == message_to_send.parts[0].text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     if hasattr(transport, 'close'):
@@ -348,7 +345,6 @@ async def test_grpc_transport_sends_message_blocking(
     Integration test specifically for the gRPC transport blocking.
     """
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -361,7 +357,7 @@ async def test_grpc_transport_sends_message_blocking(
         message_id='msg-grpc-integration-test-blocking',
         parts=[Part(text='Hello, gRPC blocking test!')],
     )
-    params = SendMessageRequest(request=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     result = await transport.send_message(request=params)
 
@@ -373,9 +369,9 @@ async def test_grpc_transport_sends_message_blocking(
     call_args, _ = handler.on_message_send.call_args
     received_params: SendMessageRequest = call_args[0]
 
-    assert received_params.request.message_id == message_to_send.message_id
+    assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.request.parts[0].text == message_to_send.parts[0].text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -415,7 +411,6 @@ async def test_grpc_transport_get_task(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -467,7 +462,6 @@ async def test_grpc_transport_cancel_task(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -532,7 +526,6 @@ async def test_grpc_transport_set_task_callback(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -606,7 +599,6 @@ async def test_grpc_transport_get_task_callback(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -669,7 +661,6 @@ async def test_grpc_transport_resubscribe(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -722,7 +713,7 @@ async def test_http_transport_get_authenticated_card(
     agent_card: AgentCard,
     mock_request_handler: AsyncMock,
 ) -> None:
-    agent_card.supports_authenticated_extended_card = True
+    agent_card.capabilities.extended_agent_card = True
     # Create a copy of the agent card for the extended card
     extended_agent_card = AgentCard()
     extended_agent_card.CopyFrom(agent_card)
@@ -752,7 +743,6 @@ async def test_grpc_transport_get_card(
     agent_card: AgentCard,
 ) -> None:
     server_address, _ = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -761,7 +751,7 @@ async def test_grpc_transport_get_card(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # The transport starts with a minimal card - access agent_card property directly
-    transport.agent_card.supports_authenticated_extended_card = True
+    transport.agent_card.capabilities.extended_agent_card = True
     result = transport.agent_card
 
     assert result.name == agent_card.name

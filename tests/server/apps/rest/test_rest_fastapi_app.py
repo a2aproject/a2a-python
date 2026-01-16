@@ -182,7 +182,7 @@ async def test_send_message_success_message(
     client: AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_pb2.SendMessageResponse(
-        msg=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test',
             role=a2a_pb2.Role.ROLE_AGENT,
             parts=[
@@ -197,7 +197,7 @@ async def test_send_message_success_message(
     )
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(),
+        message=a2a_pb2.Message(),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
@@ -246,7 +246,7 @@ async def test_send_message_success_task(
     )
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(),
+        message=a2a_pb2.Message(),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
@@ -290,7 +290,7 @@ async def test_streaming_message_request_body_consumption(
 
     # Create a valid streaming request
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
             parts=[a2a_pb2.Part(text='Test streaming message')],
@@ -331,7 +331,7 @@ async def test_streaming_endpoint_with_invalid_content_type(
     request_handler.on_message_send_stream.return_value = mock_stream_response()
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
             parts=[a2a_pb2.Part(text='Test message')],

@@ -54,7 +54,7 @@ def create_test_task(
 def test_create_task_obj():
     message = create_test_message()
     message.context_id = 'test-context'  # Set context_id to test it's preserved
-    send_params = SendMessageRequest(request=message)
+    send_params = SendMessageRequest(message=message)
 
     task = create_task_obj(send_params)
     assert task.id is not None
@@ -73,10 +73,10 @@ def test_create_task_obj_generates_context_id():
         message_id='msg-no-ctx',
         task_id='task-from-msg',  # Provide a task_id to differentiate from generated task.id
     )
-    send_params = SendMessageRequest(request=message_no_context_id)
+    send_params = SendMessageRequest(message=message_no_context_id)
 
     # Ensure message.context_id is empty initially (proto default is empty string)
-    assert send_params.request.context_id == ''
+    assert send_params.message.context_id == ''
 
     known_task_uuid = uuid.UUID('11111111-1111-1111-1111-111111111111')
     known_context_uuid = uuid.UUID('22222222-2222-2222-2222-222222222222')
@@ -93,7 +93,7 @@ def test_create_task_obj_generates_context_id():
     assert mock_uuid4.call_count == 2
 
     # Assert that message.context_id was set to the first generated UUID
-    assert send_params.request.context_id == str(known_context_uuid)
+    assert send_params.message.context_id == str(known_context_uuid)
 
     # Assert that task.context_id is the same generated UUID
     assert task.context_id == str(known_context_uuid)

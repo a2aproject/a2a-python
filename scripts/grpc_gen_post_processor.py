@@ -11,7 +11,7 @@ import sys
 from pathlib import Path
 
 
-def process_generated_code(src_folder: str = 'src/a2a/grpc') -> None:
+def process_generated_code(src_folder: str = 'src/a2a/types') -> None:
     """Post processor for the generated code."""
     dir_path = Path(src_folder)
     print(dir_path)

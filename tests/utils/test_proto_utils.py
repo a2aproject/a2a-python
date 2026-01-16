@@ -46,8 +46,8 @@ class TestToStreamResponse:
         result = proto_utils.to_stream_response(message)
 
         assert isinstance(result, StreamResponse)
-        assert result.HasField('msg')
-        assert result.msg.message_id == 'msg-1'
+        assert result.HasField('message')
+        assert result.message.message_id == 'msg-1'
 
     def test_stream_response_with_status_update(self):
         """Test to_stream_response with a TaskStatusUpdateEvent."""

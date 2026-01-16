@@ -17,6 +17,7 @@ from a2a.client.errors import (
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     CancelTaskRequest,
     GetTaskPushNotificationConfigRequest,
@@ -49,7 +50,12 @@ def agent_card():
     return AgentCard(
         name='Test Agent',
         description='A test agent',
-        url='http://test-agent.example.com',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://test-agent.example.com',
+                protocol_binding='HTTP+JSON',
+            )
+        ],
         version='1.0.0',
         capabilities=AgentCapabilities(),
     )
@@ -76,7 +82,7 @@ def transport_with_url(mock_httpx_client):
 def create_send_message_request(text='Hello'):
     """Helper to create a SendMessageRequest with proper proto structure."""
     return SendMessageRequest(
-        request=Message(
+        message=Message(
             role='ROLE_USER',
             parts=[Part(text=text)],
             message_id='msg-123',

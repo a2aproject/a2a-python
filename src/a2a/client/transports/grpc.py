@@ -53,9 +53,7 @@ class GrpcTransport(ClientTransport):
         self.channel = channel
         self.stub = a2a_pb2_grpc.A2AServiceStub(channel)
         self._needs_extended_card = (
-            agent_card.supports_authenticated_extended_card
-            if agent_card
-            else True
+            agent_card.capabilities.extended_agent_card if agent_card else True
         )
         self.extensions = extensions
 

@@ -33,7 +33,11 @@ def sample_agent_card() -> types.AgentCard:
     return types.AgentCard(
         name='Test Agent',
         description='A test agent',
-        url='http://localhost',
+        supported_interfaces=[
+            types.AgentInterface(
+                protocol_binding='GRPC', url='http://localhost'
+            )
+        ],
         version='1.0.0',
         capabilities=types.AgentCapabilities(
             streaming=True, push_notifications=True
@@ -64,7 +68,7 @@ async def test_send_message_success(
 ) -> None:
     """Test successful SendMessage call."""
     request_proto = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(message_id='msg-1')
+        message=a2a_pb2.Message(message_id='msg-1')
     )
     response_model = types.Task(
         id='task-1',

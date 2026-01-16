@@ -43,7 +43,7 @@ def to_stream_response(event: Event) -> StreamResponse:
     if isinstance(event, Task):
         response.task.CopyFrom(event)
     elif isinstance(event, Message):
-        response.msg.CopyFrom(event)
+        response.message.CopyFrom(event)
     elif isinstance(event, TaskStatusUpdateEvent):
         response.status_update.CopyFrom(event)
     elif isinstance(event, TaskArtifactUpdateEvent):

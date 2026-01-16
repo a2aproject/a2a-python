@@ -571,7 +571,7 @@ class JSONRPCApplication(ABC):
             'HTTP GET for authenticated extended card has been called by a client. '
             'This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.'
         )
-        if not self.agent_card.supports_authenticated_extended_card:
+        if not self.agent_card.capabilities.extended_agent_card:
             return JSONResponse(
                 {'error': 'Extended agent card not supported or not enabled.'},
                 status_code=404,
@@ -592,7 +592,7 @@ class JSONRPCApplication(ABC):
                     preserving_proto_field_name=False,
                 )
             )
-        # If supports_authenticated_extended_card is true, but no
+        # If capabilities.extended_agent_card is true, but no
         # extended_agent_card was provided, and no modifier produced a card,
         # return a 404.
         return JSONResponse(

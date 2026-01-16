@@ -56,7 +56,12 @@ class JsonRpcTransport(ClientTransport):
         if url:
             self.url = url
         elif agent_card:
-            self.url = agent_card.url
+            if agent_card.supported_interfaces:
+                self.url = agent_card.supported_interfaces[0].url
+            else:
+                # Fallback or error if no interfaces?
+                # For compatibility we might check if 'url' attr exists (it does not on proto anymore)
+                raise ValueError('AgentCard has no supported interfaces')
         else:
             raise ValueError('Must provide either agent_card or url')
 

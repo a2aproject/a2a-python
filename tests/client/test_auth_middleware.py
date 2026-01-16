@@ -22,6 +22,7 @@ from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AuthorizationCodeOAuthFlow,
     HTTPAuthSecurityScheme,
     Message,
@@ -70,7 +71,7 @@ def build_success_response(request: httpx.Request) -> httpx.Response:
         role=Role.ROLE_AGENT,
         parts=[],
     )
-    response = SendMessageResponse(msg=message)
+    response = SendMessageResponse(message=message)
     response_payload = {
         'id': request_payload['id'],
         'jsonrpc': '2.0',
@@ -176,7 +177,9 @@ async def test_client_with_simple_interceptor() -> None:
     url = 'http://agent.com/rpc'
     interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
     card = AgentCard(
-        url=url,
+        supported_interfaces=[
+            AgentInterface(url=url, protocol_binding=TransportProtocol.jsonrpc)
+        ],
         name='testbot',
         description='test bot',
         version='1.0',
@@ -184,7 +187,6 @@ async def test_client_with_simple_interceptor() -> None:
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        preferred_transport=TransportProtocol.jsonrpc,
     )
 
     async with httpx.AsyncClient() as http_client:
@@ -306,7 +308,11 @@ async def test_auth_interceptor_variants(
     )
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
-        url=test_case.url,
+        supported_interfaces=[
+            AgentInterface(
+                url=test_case.url, protocol_binding=TransportProtocol.jsonrpc
+            )
+        ],
         name=f'{test_case.scheme_name}bot',
         description=f'A bot that uses {test_case.scheme_name}',
         version='1.0',
@@ -320,7 +326,6 @@ async def test_auth_interceptor_variants(
                 test_case.security_scheme
             )
         },
-        preferred_transport=TransportProtocol.jsonrpc,
     )
 
     async with httpx.AsyncClient() as http_client:
@@ -352,7 +357,12 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     await store.set_credentials(session_id, scheme_name, credential)
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
-        url='http://agent.com/rpc',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://agent.com/rpc',
+                protocol_binding=TransportProtocol.jsonrpc,
+            )
+        ],
         name='missingbot',
         description='A bot that uses missing scheme definition',
         version='1.0',

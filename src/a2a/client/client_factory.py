@@ -202,14 +202,9 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_preferred = (
-            card.preferred_transport or TRANSPORT_PROTOCOLS_JSONRPC
-        )
-        server_set = {server_preferred: card.url}
-        if card.additional_interfaces:
-            server_set.update(
-                {x.protocol_binding: x.url for x in card.additional_interfaces}
-            )
+        server_set = {
+            x.protocol_binding: x.url for x in card.supported_interfaces
+        }
         client_set = self._config.supported_protocol_bindings or [
             TRANSPORT_PROTOCOLS_JSONRPC
         ]
@@ -268,19 +263,15 @@ def minimal_agent_card(
     if transports is None:
         transports = []
     return AgentCard(
-        url=url,
-        preferred_transport=transports[0] if transports else None,
-        additional_interfaces=[
-            AgentInterface(protocol_binding=t, url=url) for t in transports[1:]
-        ]
-        if len(transports) > 1
-        else [],
-        supports_authenticated_extended_card=True,
-        capabilities=AgentCapabilities(),
+        supported_interfaces=[
+            AgentInterface(protocol_binding=t, url=url) for t in transports
+        ],
+        capabilities=AgentCapabilities(extended_agent_card=True),
         default_input_modes=[],
         default_output_modes=[],
         description='',
         skills=[],
         version='',
         name='',
+        protocol_versions=['v1'],
     )

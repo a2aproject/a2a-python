@@ -76,7 +76,7 @@ class BaseClient(Client):
             ),
         )
         send_message_request = SendMessageRequest(
-            request=request, configuration=config, metadata=request_metadata
+            message=request, configuration=config, metadata=request_metadata
         )
 
         if not self._config.streaming or not self._card.capabilities.streaming:
@@ -91,12 +91,12 @@ class BaseClient(Client):
             if response.HasField('task'):
                 stream_response.task.CopyFrom(response.task)
                 client_event = (stream_response, response.task)
-            elif response.HasField('msg'):
-                stream_response.msg.CopyFrom(response.msg)
+            elif response.HasField('message'):
+                stream_response.message.CopyFrom(response.message)
                 client_event = (stream_response, None)
             else:
-                # Response must have either task or msg
-                raise ValueError('Response has neither task nor msg')
+                # Response must have either task or message
+                raise ValueError('Response has neither task nor message')
 
             await self.consume(client_event, self._card)
             yield client_event
@@ -116,7 +116,7 @@ class BaseClient(Client):
             client_event: ClientEvent
             # When we get a message in the stream then we don't expect any
             # further messages so yield and return
-            if stream_response.HasField('msg'):
+            if stream_response.HasField('message'):
                 client_event = (stream_response, None)
                 await self.consume(client_event, self._card)
                 yield client_event

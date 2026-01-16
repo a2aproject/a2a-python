@@ -32,6 +32,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -119,9 +120,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
     def init_fixtures(self) -> None:
         self.mock_agent_card = MagicMock(
             spec=AgentCard,
-            url='http://agent.example.com/api',
-            supports_authenticated_extended_card=True,
         )
+        self.mock_agent_card.capabilities = MagicMock(spec=AgentCapabilities)
+        self.mock_agent_card.capabilities.extended_agent_card = True
+
+        # Mock supported_interfaces list
+        interface = MagicMock(spec=AgentInterface)
+        interface.url = 'http://agent.example.com/api'
+        self.mock_agent_card.supported_interfaces = [interface]
 
     async def test_on_get_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -275,7 +281,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=(mock_task, False),
         ):
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id='task_123', context_id='session-xyz'
                 ),
             )
@@ -302,7 +308,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=(mock_task, False),
         ):
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id=mock_task.id,
                     context_id=mock_task.context_id,
                 ),
@@ -332,7 +338,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=streaming_coro(),
         ):
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id=mock_task.id, context_id=mock_task.context_id
                 ),
             )
@@ -400,7 +406,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_task_store.get.return_value = mock_task
             mock_agent_executor.execute.return_value = None
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id='task_123', context_id='session-xyz'
                 ),
             )
@@ -460,7 +466,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_task_store.get.return_value = mock_task
             mock_agent_executor.execute.return_value = None
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id=mock_task.id,
                     context_id=mock_task.context_id,
                 ),
@@ -600,7 +606,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_agent_executor.execute.return_value = None
             mock_httpx_client.post.return_value = httpx.Response(200)
             request = SendMessageRequest(
-                request=create_message(),
+                message=create_message(),
                 configuration=SendMessageConfiguration(
                     accepted_output_modes=['text'],
                     push_notification_config=PushNotificationConfig(
@@ -694,7 +700,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Act & Assert
         request = SendMessageRequest(
-            request=create_message(),
+            message=create_message(),
         )
 
         # Should raise ServerError about streaming not supported
@@ -827,7 +833,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         ):
             # Act
             request = SendMessageRequest(
-                request=create_message(),
+                message=create_message(),
             )
             response = await handler.on_message_send(request)
 
@@ -860,7 +866,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         ):
             # Act
             request = SendMessageRequest(
-                request=create_message(),
+                message=create_message(),
             )
 
             # Get the single error response
@@ -930,7 +936,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         ):
             # Act
             request = SendMessageRequest(
-                request=create_message(
+                message=create_message(
                     task_id=mock_task.id,
                     context_id=mock_task.context_id,
                 ),
@@ -963,7 +969,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             return_value=(mock_task, False),
         ):
             request = SendMessageRequest(
-                request=create_message(),  # No task_id, so UUID is generated
+                message=create_message(),  # No task_id, so UUID is generated
             )
             response = await handler.on_message_send(request)
             # The task ID mismatch should cause an error
@@ -993,7 +999,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_task_store.get.return_value = None
             mock_agent_executor.execute.return_value = None
             request = SendMessageRequest(
-                request=create_message(),
+                message=create_message(),
             )
             response = handler.on_message_send_stream(request)
             assert isinstance(response, AsyncGenerator)
@@ -1157,7 +1163,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_extended_card = AgentCard(
             name='Extended Card',
             description='More details',
-            url='http://agent.example.com/api',
+            supported_interfaces=[
+                AgentInterface(
+                    protocol_binding='HTTP+JSON',
+                    url='http://agent.example.com/api',
+                )
+            ],
+            protocol_versions=['v1'],
             version='1.1',
             capabilities=AgentCapabilities(),
             default_input_modes=['text/plain'],
@@ -1190,7 +1202,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         """Test error when authenticated extended agent card is not configured."""
         # Arrange
         mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
-        self.mock_agent_card.supports_extended_card = True
+        # Mocking capabilities
+        self.mock_agent_card.capabilities = MagicMock()
+        self.mock_agent_card.capabilities.extended_agent_card = True
         handler = JSONRPCHandler(
             self.mock_agent_card,
             mock_request_handler,
@@ -1221,7 +1235,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_base_card = AgentCard(
             name='Base Card',
             description='Base details',
-            url='http://agent.example.com/api',
+            supported_interfaces=[
+                AgentInterface(
+                    protocol_binding='HTTP+JSON',
+                    url='http://agent.example.com/api',
+                )
+            ],
+            protocol_versions=['v1'],
             version='1.0',
             capabilities=AgentCapabilities(),
             default_input_modes=['text/plain'],

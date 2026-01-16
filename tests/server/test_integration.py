@@ -34,6 +34,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AgentSkill,
     Artifact,
     DataPart,
@@ -76,7 +77,11 @@ MINIMAL_AGENT_CARD_DATA = AgentCard(
     description='Test Agent',
     name='TestAgent',
     skills=[MINIMAL_AGENT_SKILL],
-    url='http://example.com/agent',
+    supported_interfaces=[
+        AgentInterface(
+            url='http://example.com/agent', protocol_binding='HTTP+JSON'
+        )
+    ],
     version='1.0',
 )
 
@@ -94,7 +99,11 @@ EXTENDED_AGENT_CARD_DATA = AgentCard(
     description='Test Agent with more details',
     name='TestAgent Extended',
     skills=[MINIMAL_AGENT_SKILL, EXTENDED_AGENT_SKILL],
-    url='http://example.com/agent',
+    supported_interfaces=[
+        AgentInterface(
+            url='http://example.com/agent', protocol_binding='HTTP+JSON'
+        )
+    ],
     version='1.0',
 )
 from google.protobuf.struct_pb2 import Struct
@@ -172,7 +181,7 @@ def test_authenticated_extended_agent_card_endpoint_not_supported(
 ):
     """Test extended card endpoint returns 404 if not supported by main card."""
     # Ensure supportsAuthenticatedExtendedCard is False or None
-    agent_card.supports_authenticated_extended_card = False
+    agent_card.capabilities.extended_agent_card = False
     app_instance = A2AStarletteApplication(agent_card, handler)
     # The route should not even be added if supportsAuthenticatedExtendedCard is false
     # So, building the app and trying to hit it should result in 404 from Starlette itself
@@ -216,7 +225,7 @@ def test_authenticated_extended_agent_card_endpoint_not_supported_fastapi(
 ):
     """Test extended card endpoint returns 404 if not supported by main card."""
     # Ensure supportsAuthenticatedExtendedCard is False or None
-    agent_card.supports_authenticated_extended_card = False
+    agent_card.capabilities.extended_agent_card = False
     app_instance = A2AFastAPIApplication(agent_card, handler)
     # The route should not even be added if supportsAuthenticatedExtendedCard is false
     # So, building the app and trying to hit it should result in 404 from FastAPI itself
@@ -231,7 +240,7 @@ def test_authenticated_extended_agent_card_endpoint_supported_with_specific_exte
     handler: mock.AsyncMock,
 ):
     """Test extended card endpoint returns the specific extended card when provided."""
-    agent_card.supports_authenticated_extended_card = (
+    agent_card.capabilities.extended_agent_card = (
         True  # Main card must support it
     )
 
@@ -258,7 +267,7 @@ def test_authenticated_extended_agent_card_endpoint_supported_with_specific_exte
     handler: mock.AsyncMock,
 ):
     """Test extended card endpoint returns the specific extended card when provided."""
-    agent_card.supports_authenticated_extended_card = (
+    agent_card.capabilities.extended_agent_card = (
         True  # Main card must support it
     )
     app_instance = A2AFastAPIApplication(
@@ -624,7 +633,7 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
             'id': '123',
             'method': 'SendMessage',
             'params': {
-                'request': {
+                'message': {
                     'role': 'ROLE_AGENT',
                     'parts': [{'text': 'Hello'}],
                     'messageId': '111',
@@ -687,7 +696,7 @@ async def test_message_send_stream(
                 'id': '123',
                 'method': 'SendStreamingMessage',
                 'params': {
-                    'request': {
+                    'message': {
                         'role': 'ROLE_AGENT',
                         'parts': [{'text': 'Hello'}],
                         'messageId': '111',
@@ -862,7 +871,7 @@ def test_dynamic_extended_agent_card_modifier(
     handler: mock.AsyncMock,
 ):
     """Test that the extended_card_modifier dynamically alters the extended agent card."""
-    agent_card.supports_authenticated_extended_card = True
+    agent_card.capabilities.extended_agent_card = True
 
     def modifier(card: AgentCard, context: ServerCallContext) -> AgentCard:
         modified_card = AgentCard()
@@ -972,7 +981,7 @@ def test_validation_error(client: TestClient):
             'id': '123',
             'method': 'SendMessage',
             'params': {
-                'request': {
+                'message': {
                     # Missing required fields
                     'text': 'Hello'
                 }

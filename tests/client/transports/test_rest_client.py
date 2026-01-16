@@ -10,7 +10,8 @@ from a2a.client import create_text_message_object
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import SendMessageRequest
-from a2a.types.a2a_pb2 import AgentCard, Role
+from a2a.types.a2a_pb2 import AgentCard, AgentInterface, Role
+from a2a.utils.constants import TransportProtocol
 
 
 @pytest.fixture
@@ -21,7 +22,14 @@ def mock_httpx_client() -> AsyncMock:
 @pytest.fixture
 def mock_agent_card() -> MagicMock:
     mock = MagicMock(spec=AgentCard, url='http://agent.example.com/api')
-    mock.supports_authenticated_extended_card = False
+    mock.supported_interfaces = [
+        AgentInterface(
+            protocol_binding=TransportProtocol.http_json,
+            url='http://agent.example.com/api',
+        )
+    ]
+    mock.capabilities = MagicMock()
+    mock.capabilities.extended_agent_card = False
     return mock
 
 
@@ -49,7 +57,7 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
         )
         params = SendMessageRequest(
-            request=create_text_message_object(content='Hello')
+            message=create_text_message_object(content='Hello')
         )
 
         # Mock the build_request method to capture its inputs
@@ -98,7 +106,7 @@ class TestRestTransportExtensions:
             extensions=extensions,
         )
         params = SendMessageRequest(
-            request=create_text_message_object(content='Hello stream')
+            message=create_text_message_object(content='Hello stream')
         )
 
         mock_event_source = AsyncMock(spec=EventSource)

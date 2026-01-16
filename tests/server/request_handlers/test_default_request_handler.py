@@ -414,7 +414,7 @@ async def test_on_message_send_with_push_notification():
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
             parts=[],
@@ -520,7 +520,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         blocking=False,  # Non-blocking request
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_non_blocking',
             parts=[],
@@ -637,7 +637,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
-        request=Message(role=Role.ROLE_USER, message_id='msg_push', parts=[]),
+        message=Message(role=Role.ROLE_USER, message_id='msg_push', parts=[]),
         configuration=message_config,
     )
 
@@ -702,7 +702,7 @@ async def test_on_message_send_no_result_from_aggregator():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        request=Message(role=Role.ROLE_USER, message_id='msg_no_res', parts=[])
+        message=Message(role=Role.ROLE_USER, message_id='msg_no_res', parts=[])
     )
 
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
@@ -752,7 +752,7 @@ async def test_on_message_send_task_id_mismatch():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER, message_id='msg_id_mismatch', parts=[]
         )
     )
@@ -827,7 +827,7 @@ async def test_on_message_send_non_blocking():
         push_config_store=push_store,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
             parts=[Part(text='Hi')],
@@ -874,7 +874,7 @@ async def test_on_message_send_limit_history():
         push_config_store=push_store,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
             parts=[Part(text='Hi')],
@@ -913,7 +913,7 @@ async def test_on_get_task_limit_history():
         push_config_store=push_store,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
             parts=[Part(text='Hi')],
@@ -962,7 +962,7 @@ async def test_on_message_send_interrupted_flow():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER, message_id='msg_interrupt', parts=[]
         )
     )
@@ -1068,7 +1068,7 @@ async def test_on_message_send_stream_with_push_notification():
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_stream_push',
             parts=[],
@@ -1345,7 +1345,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_reconn',
             parts=[],
@@ -1440,7 +1440,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='mid',
             parts=[],
@@ -1581,7 +1581,7 @@ async def test_disconnect_persists_final_task_to_store():
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_persist',
             parts=[],
@@ -1668,7 +1668,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='mid_track',
             parts=[],
@@ -1775,7 +1775,7 @@ async def test_on_message_send_stream_task_id_mismatch():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER, message_id='msg_stream_mismatch', parts=[]
         )
     )
@@ -2150,7 +2150,7 @@ async def test_on_message_send_stream():
         DummyAgentExecutor(), InMemoryTaskStore()
     )
     message_params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg-123',
             parts=[Part(text='How are you?')],
@@ -2542,7 +2542,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal',
             parts=[],
@@ -2587,7 +2587,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal_stream',
             parts=[],
@@ -2662,7 +2662,7 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_nonexistent',
             parts=[Part(text='Hello')],
@@ -2702,7 +2702,7 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
     )
 
     params = SendMessageRequest(
-        request=Message(
+        message=Message(
             role=Role.ROLE_USER,
             message_id='msg_nonexistent_stream',
             parts=[Part(text='Hello')],
