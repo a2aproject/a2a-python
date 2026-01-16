@@ -7,6 +7,11 @@ import pytest
 
 from a2a.types.a2a_pb2 import (
     Artifact,
+    AgentCard,
+    AgentCardSignature,
+    AgentCapabilities,
+    AgentInterface,
+    AgentSkill,
     Message,
     Part,
     Role,
@@ -23,6 +28,7 @@ from a2a.utils.helpers import (
     build_text_artifact,
     create_task_obj,
     validate,
+    canonicalize_agent_card,
 )
 
 
@@ -48,6 +54,40 @@ def create_test_task(
         context_id=context_id,
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
+
+
+SAMPLE_AGENT_CARD: dict[str, Any] = {
+    'name': 'Test Agent',
+    'description': 'A test agent',
+    'supported_interfaces': [
+        AgentInterface(
+            url='http://localhost',
+            protocol_binding='HTTP+JSON',
+        )
+    ],
+    'version': '1.0.0',
+    'capabilities': AgentCapabilities(
+        streaming=None,
+        push_notifications=True,
+    ),
+    'default_input_modes': ['text/plain'],
+    'default_output_modes': ['text/plain'],
+    'documentation_url': None,
+    'icon_url': '',
+    'skills': [
+        AgentSkill(
+            id='skill1',
+            name='Test Skill',
+            description='A test skill',
+            tags=['test'],
+        )
+    ],
+    'signatures': [
+        AgentCardSignature(
+            protected='protected_header', signature='test_signature'
+        )
+    ],
+}
 
 
 # Test create_task_obj
@@ -332,3 +372,23 @@ def test_are_modalities_compatible_both_empty():
         )
         is True
     )
+
+
+def test_canonicalize_agent_card():
+    """Test canonicalize_agent_card with defaults, optionals, and exceptions.
+
+    - extensions is omitted as it's not set and optional.
+    - protocolVersion is included because it's always added by canonicalize_agent_card.
+    - signatures should be omitted.
+    """
+    agent_card = AgentCard(**SAMPLE_AGENT_CARD)
+    expected_jcs = (
+        '{"capabilities":{"pushNotifications":true},'
+        '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
+        '"description":"A test agent","name":"Test Agent",'
+        '"skills":[{"description":"A test skill","id":"skill1","name":"Test Skill","tags":["test"]}],'
+        '"supportedInterfaces":[{"protocolBinding":"HTTP+JSON","url":"http://localhost"}],'
+        '"version":"1.0.0"}'
+    )
+    result = canonicalize_agent_card(agent_card)
+    assert result == expected_jcs

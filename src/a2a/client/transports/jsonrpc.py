@@ -1,7 +1,7 @@
 import json
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any, cast
 from uuid import uuid4
 
@@ -11,6 +11,7 @@ from google.protobuf import json_format
 from httpx_sse import SSEError, aconnect_sse
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -69,6 +70,9 @@ class JsonRpcTransport(ClientTransport):
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self.extensions = extensions
+        self._needs_extended_card = (
+            agent_card.capabilities.extended_agent_card if agent_card else True
+        )
 
     async def _apply_interceptors(
         self,
@@ -168,6 +172,7 @@ class JsonRpcTransport(ClientTransport):
             **modified_kwargs,
         ) as event_source:
             try:
+                event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
                     json_rpc_response = JSONRPC20Response.from_json(sse.data)
                     if json_rpc_response.error:
@@ -176,6 +181,8 @@ class JsonRpcTransport(ClientTransport):
                         json_rpc_response.result, StreamResponse()
                     )
                     yield response
+            except httpx.HTTPStatusError as e:
+                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'
@@ -390,18 +397,32 @@ class JsonRpcTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
-        request = GetExtendedAgentCardRequest()
-        rpc_request = JSONRPC20Request(
-            method='agent/authenticatedExtendedCard',
-            params=json_format.MessageToDict(request),
-            _id=str(uuid4()),
-        )
-
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
+        )
+
+        card = self.agent_card
+        if not card:
+            resolver = A2ACardResolver(self.httpx_client, self.url)
+            card = await resolver.get_agent_card(
+                http_kwargs=modified_kwargs,
+                signature_verifier=signature_verifier,
+            )
+            self.agent_card = card
+            self._needs_extended_card = card.capabilities.extended_agent_card
+
+        if not card.capabilities.extended_agent_card:
+            return card
+
+        request = GetExtendedAgentCardRequest()
+        rpc_request = JSONRPC20Request(
+            method='GetExtendedAgentCard',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4()),
         )
         payload, modified_kwargs = await self._apply_interceptors(
             'GetExtendedAgentCard',
@@ -419,6 +440,11 @@ class JsonRpcTransport(ClientTransport):
         response: AgentCard = json_format.ParseDict(
             json_rpc_response.result, AgentCard()
         )
+        if signature_verifier:
+            signature_verifier(response)
+
+        self.agent_card = response
+        self._needs_extended_card = False
         return response
 
     async def close(self) -> None:

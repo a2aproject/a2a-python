@@ -1,7 +1,7 @@
 import json
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 from typing import Any
 
 import httpx
@@ -9,6 +9,7 @@ import httpx
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from httpx_sse import SSEError, aconnect_sse
 
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
@@ -148,9 +149,12 @@ class RestTransport(ClientTransport):
             **modified_kwargs,
         ) as event_source:
             try:
+                event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
                     event: StreamResponse = Parse(sse.data, StreamResponse())
                     yield event
+            except httpx.HTTPStatusError as e:
+                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'
@@ -354,12 +358,26 @@ class RestTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
         )
+
+        card = self.agent_card
+        if not card:
+            resolver = A2ACardResolver(self.httpx_client, self.url)
+            card = await resolver.get_agent_card(
+                http_kwargs=modified_kwargs,
+                signature_verifier=signature_verifier,
+            )
+            self.agent_card = card
+            self._needs_extended_card = card.capabilities.extended_agent_card
+
+        if not card.capabilities.extended_agent_card:
+            return card
         _, modified_kwargs = await self._apply_interceptors(
             {},
             modified_kwargs,
@@ -369,7 +387,11 @@ class RestTransport(ClientTransport):
             '/v1/card', {}, modified_kwargs
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
-        # Update the transport's agent_card and mark extended card as fetched
+
+        if signature_verifier:
+            signature_verifier(response)
+
+        # Update the transport's agent_card
         self.agent_card = response
         self._needs_extended_card = False
         return response

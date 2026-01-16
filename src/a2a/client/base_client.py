@@ -1,4 +1,4 @@
-from collections.abc import AsyncGenerator, AsyncIterator
+from collections.abc import AsyncGenerator, AsyncIterator, Callable
 from typing import Any
 
 from a2a.client.client import (
@@ -47,6 +47,7 @@ class BaseClient(Client):
         self,
         request: Message,
         *,
+        configuration: SendMessageConfiguration | None = None,
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
         extensions: list[str] | None = None,
@@ -59,6 +60,7 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
+            configuration: Optional per-call overrides for message sending behavior.
             context: The client call context.
             request_metadata: Extensions Metadata attached to the request.
             extensions: List of extensions to be activated.
@@ -75,6 +77,14 @@ class BaseClient(Client):
                 else None
             ),
         )
+
+        if configuration:
+            config.MergeFrom(configuration)
+            # Proto3 doesn't support HasField for scalars, so MergeFrom won't
+            # override with default values (e.g. False). We explicitly set it here
+            # assuming configuration is authoritative.
+            config.blocking = configuration.blocking
+
         send_message_request = SendMessageRequest(
             message=request, configuration=config, metadata=request_metadata
         )
@@ -254,6 +264,7 @@ class BaseClient(Client):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.
 
@@ -263,12 +274,15 @@ class BaseClient(Client):
         Args:
             context: The client call context.
             extensions: List of extensions to be activated.
+            signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             The `AgentCard` for the agent.
         """
         card = await self._transport.get_extended_agent_card(
-            context=context, extensions=extensions
+            context=context,
+            extensions=extensions,
+            signature_verifier=signature_verifier,
         )
         self._card = card
         return card

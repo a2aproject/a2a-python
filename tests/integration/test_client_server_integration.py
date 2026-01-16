@@ -1,6 +1,6 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import NamedTuple
+from typing import NamedTuple, Any
 from unittest.mock import ANY, AsyncMock, patch
 
 import grpc
@@ -10,6 +10,7 @@ import pytest_asyncio
 from google.protobuf.json_format import MessageToDict
 from grpc.aio import Channel
 
+from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
@@ -18,7 +19,15 @@ from a2a.client.transports.grpc import GrpcTransport
 from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import (
+    TRANSPORT_HTTP_JSON,
+    TRANSPORT_GRPC,
+    TRANSPORT_JSONRPC,
+)
+from a2a.utils.signing import (
+    create_agent_card_signer,
+    create_signature_verifier,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -39,6 +48,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from cryptography.hazmat.primitives import asymmetric
 
 # --- Test Constants ---
 
@@ -79,6 +89,15 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     final=False,
 )
+
+
+def create_key_provider(verification_key: PyJWK | str | bytes):
+    """Creates a key provider function for testing."""
+
+    def key_provider(kid: str | None, jku: str | None):
+        return verification_key
+
+    return key_provider
 
 
 # --- Test Fixtures ---
@@ -125,7 +144,7 @@ def agent_card() -> AgentCard:
         default_output_modes=['text/plain'],
         supported_interfaces=[
             AgentInterface(
-                protocol_binding=TransportProtocol.http_json,
+                protocol_binding=TRANSPORT_HTTP_JSON,
                 url='http://testserver',
             ),
             AgentInterface(protocol_binding='grpc', url='localhost:50051'),
@@ -730,6 +749,7 @@ async def test_http_transport_get_authenticated_card(
     transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
     result = await transport.get_extended_agent_card()
     assert result.name == extended_agent_card.name
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -750,9 +770,10 @@ async def test_grpc_transport_get_card(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # The transport starts with a minimal card - access agent_card property directly
+    # The transport starts with a minimal card, get_extended_agent_card() fetches the full one
+    assert transport.agent_card is not None
     transport.agent_card.capabilities.extended_agent_card = True
-    result = transport.agent_card
+    result = await transport.get_extended_agent_card()
 
     assert result.name == agent_card.name
     assert transport.agent_card.name == agent_card.name
@@ -762,7 +783,7 @@ async def test_grpc_transport_get_card(
 
 
 @pytest.mark.asyncio
-async def test_base_client_sends_message_with_extensions(
+async def test_json_transport_base_client_send_message_with_extensions(
     jsonrpc_setup: TransportSetup, agent_card: AgentCard
 ) -> None:
     """
@@ -818,3 +839,311 @@ async def test_base_client_sends_message_with_extensions(
 
     if hasattr(transport, 'close'):
         await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_base_card(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying a symmetrically signed AgentCard via JSON-RPC.
+
+    The client transport is initialized without a card, forcing it to fetch
+    the base card from the server. The server signs the card using HS384.
+    The client then verifies the signature.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    agent_card.capabilities.extended_agent_card = False
+
+    # Setup signing on the server side
+    key = 'key12345'
+    signer = create_agent_card_signer(
+        signing_key=key,
+        protected_header={
+            'alg': 'HS384',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        card_modifier=signer,  # Sign the base card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(key), ['HS384']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == agent_card.name
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_extended_card(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying an asymmetrically signed extended AgentCard via JSON-RPC.
+
+    The client has a base card and fetches the extended card, which is signed
+    by the server using ES256. The client verifies the signature on the
+    received extended card.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client, agent_card=agent_card
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert result.signatures is not None
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_base_and_extended_cards(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying both base and extended cards via JSON-RPC when no card is initially provided.
+
+    The client starts with no card. It first fetches the base card, which is
+    signed. It then fetches the extended card, which is also signed. Both signatures
+    are verified independently upon retrieval.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    assert len(agent_card.signatures) == 0
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        card_modifier=signer,  # Sign the base card
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rest_transport_get_signed_card(
+    rest_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying signed base and extended cards via REST.
+
+    The client starts with no card. It first fetches the base card, which is
+    signed. It then fetches the extended card, which is also signed. Both signatures
+    are verified independently upon retrieval.
+    """
+    mock_request_handler = rest_setup.handler
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2ARESTFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        card_modifier=signer,  # Sign the base card
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = RestTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert result.signatures is not None
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_get_signed_card(
+    mock_request_handler: AsyncMock, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying a signed AgentCard via gRPC."""
+    # Setup signing on the server side
+    agent_card.capabilities.extended_agent_card = True
+
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    server = grpc.aio.server()
+    port = server.add_insecure_port('[::]:0')
+    server_address = f'localhost:{port}'
+    agent_card.supported_interfaces[0].url = server_address
+
+    servicer = GrpcHandler(
+        agent_card,
+        mock_request_handler,
+        card_modifier=signer,
+    )
+    a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+    await server.start()
+
+    transport = None  # Initialize transport
+    try:
+
+        def channel_factory(address: str) -> Channel:
+            return grpc.aio.insecure_channel(address)
+
+        channel = channel_factory(server_address)
+        transport = GrpcTransport(channel=channel, agent_card=agent_card)
+        transport.agent_card = None
+        assert transport._needs_extended_card is True
+
+        # Get the card, this will trigger verification in get_card
+        signature_verifier = create_signature_verifier(
+            create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+        )
+        result = await transport.get_extended_agent_card(
+            signature_verifier=signature_verifier
+        )
+        assert result.signatures is not None
+        assert len(result.signatures) == 1
+        assert transport._needs_extended_card is False
+    finally:
+        if transport:
+            await transport.close()
+        await server.stop(0)  # Gracefully stop the server

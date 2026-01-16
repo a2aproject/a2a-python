@@ -311,7 +311,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
 async def test_close_graceful_py313_waits_for_join_and_children(
     event_queue: EventQueue,
 ) -> None:
-    """For Python >=3.13 and immediate=False, close should shutdown(False), then wait for join and children."""
+    """For Python >=3.13 and immediate=False, close should shut down(False), then wait for join and children."""
     with patch('sys.version_info', (3, 13, 0)):
         # Arrange
         from typing import cast

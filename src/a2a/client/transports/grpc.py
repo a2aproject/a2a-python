@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 
 try:
@@ -187,12 +187,20 @@ class GrpcTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
-        return await self.stub.GetExtendedAgentCard(
+        card = await self.stub.GetExtendedAgentCard(
             a2a_pb2.GetExtendedAgentCardRequest(),
             metadata=self._get_grpc_metadata(extensions),
         )
+
+        if signature_verifier:
+            signature_verifier(card)
+
+        self.agent_card = card
+        self._needs_extended_card = False
+        return card
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
