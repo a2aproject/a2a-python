@@ -100,7 +100,7 @@ class ResultAggregator:
         blocking: bool = True,
         event_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> tuple[Task | Message | None, bool]:
-        """Processes the event stream until completion or an interruptable state is encountered.
+        """Processes the event stream until completion or an interruptible state is encountered.
 
         If `blocking` is False, it returns after the first event that creates a Task or Message.
         If `blocking` is True, it waits for completion unless an `auth_required`
@@ -173,7 +173,7 @@ class ResultAggregator:
     ) -> None:
         """Continues processing an event stream in a background task.
 
-        Used after an interruptable state (like auth_required) is encountered
+        Used after an interruptible state (like auth_required) is encountered
         in the synchronous consumption flow.
 
         Args:
