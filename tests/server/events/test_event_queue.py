@@ -297,7 +297,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
 ) -> None:
     """Test close behavior on Python >= 3.13 (using queue.shutdown)."""
     with patch('sys.version_info', (3, 13, 0)):
-        # Inject a dummy shutdown method for non-3.13 runtimes
+        # Inject a stub shutdown method for non-3.13 runtimes
         from typing import cast
 
         queue = cast('Any', event_queue.queue)

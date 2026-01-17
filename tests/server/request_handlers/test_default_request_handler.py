@@ -1828,10 +1828,10 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
     task_id = 'task_already_cleaned'
 
     # Create a real, completed asyncio.Task for the test
-    async def dummy_coro_for_task():
+    async def noop_coro_for_task():
         pass
 
-    mock_producer_task = asyncio.create_task(dummy_coro_for_task())
+    mock_producer_task = asyncio.create_task(noop_coro_for_task())
     await asyncio.sleep(
         0
     )  # Ensure the task has a chance to complete/be scheduled

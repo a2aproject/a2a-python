@@ -351,7 +351,7 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     """Tests that AuthInterceptor skips a scheme if it's listed in security requirements but not defined in security_schemes."""
     scheme_name = 'missing'
     session_id = 'session-id'
-    credential = 'dummy-token'
+    credential = 'test-token'
     request_payload = {'foo': 'bar'}
     http_kwargs = {'fizz': 'buzz'}
     await store.set_credentials(session_id, scheme_name, credential)

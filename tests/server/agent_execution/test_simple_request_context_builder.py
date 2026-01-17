@@ -92,7 +92,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         )
         # Pass a valid User instance, e.g., UnauthenticatedUser or a mock spec'd as User
         server_call_context = ServerCallContext(
-            user=UnauthenticatedUser(), auth_token='dummy_token'
+            user=UnauthenticatedUser(), auth_token='test_token'
         )
 
         request_context = await builder.build(
