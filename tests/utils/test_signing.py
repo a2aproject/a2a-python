@@ -97,7 +97,7 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     sample_agent_card: AgentCard,
 ):
     """Test the agent card signing and verification process with symmetric key encryption.
-    This test adds a signatures to the AgentCard before signing."""
+    This test adds a signature to the AgentCard before signing."""
     encoded_header = base64url_encode(
         b'{"alg": "HS256", "kid": "old_key"}'
     ).decode('utf-8')
