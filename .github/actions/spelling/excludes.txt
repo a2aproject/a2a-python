@@ -87,5 +87,6 @@
 ^\.github/workflows/
 CHANGELOG.md
 ^src/a2a/grpc/
+^src/a2a/types/
 ^tests/
 .pre-commit-config.yaml
