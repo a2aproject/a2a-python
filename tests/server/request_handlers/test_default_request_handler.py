@@ -61,7 +61,7 @@ from a2a.utils import (
 )
 
 
-class DummyAgentExecutor(AgentExecutor):
+class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task_updater = TaskUpdater(
             event_queue, context.task_id, context.context_id
@@ -108,7 +108,7 @@ def create_server_call_context() -> ServerCallContext:
 
 def test_init_default_dependencies():
     """Test that default dependencies are created if not provided."""
-    agent_executor = DummyAgentExecutor()
+    agent_executor = MockAgentExecutor()
     task_store = InMemoryTaskStore()
 
     handler = DefaultRequestHandler(
@@ -135,7 +135,7 @@ async def test_on_get_task_not_found():
     mock_task_store.get.return_value = None
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
     params = GetTaskRequest(name='tasks/non_existent_task')
@@ -157,7 +157,7 @@ async def test_on_cancel_task_task_not_found():
     mock_task_store.get.return_value = None
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
     params = CancelTaskRequest(name='tasks/task_not_found_for_cancel')
 
@@ -1820,7 +1820,7 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_queue_manager = AsyncMock(spec=QueueManager)
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
     )
@@ -1855,7 +1855,7 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
 async def test_set_task_push_notification_config_no_notifier():
     """Test on_set_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
@@ -1886,7 +1886,7 @@ async def test_set_task_push_notification_config_task_not_found():
     mock_push_sender = AsyncMock(spec=PushNotificationSender)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
         push_sender=mock_push_sender,
@@ -1917,7 +1917,7 @@ async def test_set_task_push_notification_config_task_not_found():
 async def test_get_task_push_notification_config_no_store():
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
@@ -1941,7 +1941,7 @@ async def test_get_task_push_notification_config_task_not_found():
     mock_push_store = AsyncMock(spec=PushNotificationConfigStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
@@ -1973,7 +1973,7 @@ async def test_get_task_push_notification_config_info_not_found():
     mock_push_store.get_info.return_value = None  # Info not found
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
@@ -2004,7 +2004,7 @@ async def test_get_task_push_notification_config_info_with_config():
     push_store = InMemoryPushNotificationConfigStore()
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2051,7 +2051,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     push_store = InMemoryPushNotificationConfigStore()
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2095,7 +2095,7 @@ async def test_on_subscribe_to_task_task_not_found():
     mock_task_store.get.return_value = None  # Task not found
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
     params = SubscribeToTaskRequest(name='tasks/resub_task_not_found')
 
@@ -2124,7 +2124,7 @@ async def test_on_subscribe_to_task_queue_not_found():
     mock_queue_manager.tap.return_value = None  # Queue not found
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
     )
@@ -2149,7 +2149,7 @@ async def test_on_subscribe_to_task_queue_not_found():
 @pytest.mark.asyncio
 async def test_on_message_send_stream():
     request_handler = DefaultRequestHandler(
-        DummyAgentExecutor(), InMemoryTaskStore()
+        MockAgentExecutor(), InMemoryTaskStore()
     )
     message_params = SendMessageRequest(
         message=Message(
@@ -2187,7 +2187,7 @@ async def test_on_message_send_stream():
 async def test_list_task_push_notification_config_no_store():
     """Test on_list_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
@@ -2209,7 +2209,7 @@ async def test_list_task_push_notification_config_task_not_found():
     mock_push_store = AsyncMock(spec=PushNotificationConfigStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
@@ -2240,7 +2240,7 @@ async def test_list_no_task_push_notification_config_info():
     push_store = InMemoryPushNotificationConfigStore()
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2274,7 +2274,7 @@ async def test_list_task_push_notification_config_info_with_config():
     await push_store.set_info('task_1', push_config2)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2300,7 +2300,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     push_store = InMemoryPushNotificationConfigStore()
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2351,7 +2351,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 async def test_delete_task_push_notification_config_no_store():
     """Test on_delete_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
@@ -2375,7 +2375,7 @@ async def test_delete_task_push_notification_config_task_not_found():
     mock_push_store = AsyncMock(spec=PushNotificationConfigStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
@@ -2410,7 +2410,7 @@ async def test_delete_no_task_push_notification_config_info():
     )
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2454,7 +2454,7 @@ async def test_delete_task_push_notification_config_info_with_config():
     await push_store.set_info('task_2', push_config1)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2494,7 +2494,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
     await push_store.set_info('task_1', push_config)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
@@ -2540,7 +2540,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
     # So we should patch that instead.
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
     params = SendMessageRequest(
@@ -2585,7 +2585,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
     params = SendMessageRequest(
@@ -2631,7 +2631,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
     mock_task_store.get.return_value = terminal_task
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(),
+        agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=AsyncMock(spec=QueueManager),
     )
@@ -2660,7 +2660,7 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
     params = SendMessageRequest(
@@ -2700,7 +2700,7 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=DummyAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
     params = SendMessageRequest(

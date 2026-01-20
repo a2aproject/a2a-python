@@ -100,3 +100,7 @@ tiangolo
 typ
 typeerror
 vulnz
+buf
+openapiv2
+swagger
+pydantic

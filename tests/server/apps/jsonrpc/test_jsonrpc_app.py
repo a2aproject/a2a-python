@@ -140,7 +140,7 @@ class TestJSONRPCApplicationOptionalDeps:
     def test_create_jsonrpc_based_app_with_present_deps_succeeds(
         self, mock_app_params: dict
     ):
-        class DummyJSONRPCApp(JSONRPCApplication):
+        class MockJSONRPCApp(JSONRPCApplication):
             def build(
                 self,
                 agent_card_url='/.well-known/agent.json',
@@ -150,7 +150,7 @@ class TestJSONRPCApplicationOptionalDeps:
                 return object()
 
         try:
-            _app = DummyJSONRPCApp(**mock_app_params)
+            _app = MockJSONRPCApp(**mock_app_params)
         except ImportError:
             pytest.fail(
                 'With packages starlette and see-starlette present, creating a'
@@ -161,7 +161,7 @@ class TestJSONRPCApplicationOptionalDeps:
     def test_create_jsonrpc_based_app_with_missing_deps_raises_importerror(
         self, mock_app_params: dict, mark_pkg_starlette_not_installed: Any
     ):
-        class DummyJSONRPCApp(JSONRPCApplication):
+        class MockJSONRPCApp(JSONRPCApplication):
             def build(
                 self,
                 agent_card_url='/.well-known/agent.json',
@@ -177,7 +177,7 @@ class TestJSONRPCApplicationOptionalDeps:
                 ' the `JSONRPCApplication`'
             ),
         ):
-            _app = DummyJSONRPCApp(**mock_app_params)
+            _app = MockJSONRPCApp(**mock_app_params)
 
 
 class TestJSONRPCExtensions:
