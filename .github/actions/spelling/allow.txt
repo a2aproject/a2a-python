@@ -104,3 +104,10 @@ buf
 openapiv2
 swagger
 pydantic
+FastAPI
+OpenAPI
+Protobuf
+JSONRPC
+protobuf
+middleware
+importlib

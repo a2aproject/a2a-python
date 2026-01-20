@@ -90,4 +90,4 @@ CHANGELOG.md
 ^src/a2a/types/
 ^tests/
 .pre-commit-config.yaml
-a2a.json
+(?:^|/)a2a\.json$
