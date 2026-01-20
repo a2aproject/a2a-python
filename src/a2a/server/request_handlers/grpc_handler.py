@@ -53,13 +53,11 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md = context.invocation_metadata
+    md = context.invocation_metadata()
     raw_values: list[str | bytes] = []
     if isinstance(md, Metadata):
         raw_values = md.get_all(key)
-    elif isinstance(md, Sequence):
-        lower_key = key.lower()
-        raw_values = [e for (k, e) in md if k.lower() == lower_key]
+
     return [e if isinstance(e, str) else e.decode('utf-8') for e in raw_values]
 
 
