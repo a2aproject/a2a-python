@@ -7,7 +7,7 @@ import pytest
 
 from a2a.server.events.event_consumer import EventConsumer, QueueClosed
 from a2a.server.events.event_queue import EventQueue
-from a2a.server.apps.jsonrpc.errors import JSONRPCError
+from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
     InternalError,
 )

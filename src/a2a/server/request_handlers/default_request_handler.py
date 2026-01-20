@@ -35,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigResponse,
     Message,
+    PushNotificationConfig,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
     StreamResponse,
@@ -514,23 +515,24 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(error=UnsupportedOperationError())
 
         task_id = _extract_task_id(params.name)
+        config_id = _extract_config_id(params.name)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
-        push_notification_config = await self._push_config_store.get_info(
-            task_id
+        push_notification_configs: list[PushNotificationConfig] = (
+            await self._push_config_store.get_info(task_id) or []
         )
-        if not push_notification_config or not push_notification_config[0]:
-            raise ServerError(
-                error=InternalError(
-                    message='Push notification config not found'
-                )
-            )
 
-        return TaskPushNotificationConfig(
-            name=params.name,
-            push_notification_config=push_notification_config[0],
+        for config in push_notification_configs:
+            if config.id == config_id:
+                return TaskPushNotificationConfig(
+                    name=params.name,
+                    push_notification_config=config,
+                )
+
+        raise ServerError(
+            error=InternalError(message='Push notification config not found')
         )
 
     async def on_subscribe_to_task(

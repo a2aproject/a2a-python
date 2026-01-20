@@ -6,10 +6,10 @@ from google.protobuf.json_format import MessageToDict
 from google.protobuf.message import Message as ProtoMessage
 from jsonrpc.jsonrpc2 import JSONRPC20Response
 
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     InternalError as JSONRPCInternalError,
 )
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
 from a2a.types.a2a_pb2 import (

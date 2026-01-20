@@ -6,7 +6,7 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
     prepare_response_object,
 )
-from a2a.server.apps.jsonrpc.errors import JSONRPCError
+from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
     InvalidParamsError,
     TaskNotFoundError,

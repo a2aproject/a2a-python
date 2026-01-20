@@ -528,7 +528,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task = create_task()
         mock_task_store.get.return_value = mock_task
-        push_config = PushNotificationConfig(url='http://example.com')
+        push_config = PushNotificationConfig(
+            id='default', url='http://example.com'
+        )
         task_config = TaskPushNotificationConfig(
             name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
             push_notification_config=push_config,
@@ -536,6 +538,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Set up the config first
         request = SetTaskPushNotificationConfigRequest(
             parent=f'tasks/{mock_task.id}',
+            config_id='default',
             config=task_config,
         )
         await handler.set_push_notification_config(request)
@@ -773,9 +776,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        self.assertEqual(
-            response['error']['code'], -32004
-        )
+        self.assertEqual(response['error']['code'], -32004)
 
     async def test_on_set_push_notification_no_push_config_store(self) -> None:
         """Test set_push_notification with no push notifier configured."""
@@ -809,9 +810,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        self.assertEqual(
-            response['error']['code'], -32004
-        )
+        self.assertEqual(response['error']['code'], -32004)
 
     async def test_on_message_send_internal_error(self) -> None:
         """Test on_message_send with an internal error."""
@@ -878,9 +877,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertEqual(len(responses), 1)
             self.assertIsInstance(responses[0], dict)
             self.assertTrue(is_error_response(responses[0]))
-            self.assertEqual(
-                responses[0]['error']['code'], -32603
-            )
+            self.assertEqual(responses[0]['error']['code'], -32603)
 
     async def test_default_request_handler_with_custom_components(self) -> None:
         """Test DefaultRequestHandler initialization with custom components."""
@@ -947,9 +944,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             # Assert
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
-            self.assertEqual(
-                response['error']['code'], -32004
-            )
+            self.assertEqual(response['error']['code'], -32004)
 
     async def test_on_message_send_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1009,9 +1004,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert len(collected_events) == 1
             self.assertIsInstance(collected_events[0], dict)
             self.assertTrue(is_error_response(collected_events[0]))
-            self.assertEqual(
-                collected_events[0]['error']['code'], -32603
-            )
+            self.assertEqual(collected_events[0]['error']['code'], -32603)
 
     async def test_on_get_push_notification(self) -> None:
         """Test get_push_notification_config handling"""
@@ -1152,9 +1145,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        self.assertEqual(
-            response['error']['code'], -32004
-        )
+        self.assertEqual(response['error']['code'], -32004)
 
     async def test_get_authenticated_extended_card_success(self) -> None:
         """Test successful retrieval of the authenticated extended agent card."""

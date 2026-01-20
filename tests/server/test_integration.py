@@ -23,7 +23,7 @@ from a2a.server.apps import (
     A2AStarletteApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
     InvalidRequestError,

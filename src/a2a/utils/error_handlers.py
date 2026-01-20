@@ -15,10 +15,10 @@ else:
         Response = Any
 
 
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     InternalError as JSONRPCInternalError,
 )
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     JSONParseError,
     JSONRPCError,
 )

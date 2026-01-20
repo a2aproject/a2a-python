@@ -6,7 +6,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from a2a.server.apps import A2AFastAPIApplication, A2AStarletteApplication
-from a2a.server.apps.jsonrpc.errors import JSONParseError
+from a2a.server.jsonrpc_models import JSONParseError
 from a2a.types import (
     InvalidRequestError,
 )

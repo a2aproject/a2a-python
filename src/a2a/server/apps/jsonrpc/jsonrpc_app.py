@@ -18,14 +18,14 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.context import ServerCallContext
+from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     MethodNotFoundError,
 )
-from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import build_error_response

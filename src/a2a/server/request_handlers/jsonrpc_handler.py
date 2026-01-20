@@ -8,13 +8,13 @@ from typing import Any
 from google.protobuf.json_format import MessageToDict
 from jsonrpc.jsonrpc2 import JSONRPC20Response
 
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.context import ServerCallContext
+from a2a.server.jsonrpc_models import (
     InternalError as JSONRPCInternalError,
 )
-from a2a.server.apps.jsonrpc.errors import (
+from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
-from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,

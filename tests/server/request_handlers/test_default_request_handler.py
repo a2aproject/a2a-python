@@ -2069,7 +2069,9 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         set_config_params, create_server_call_context()
     )
 
-    params = CancelTaskRequest(name='tasks/task_1')
+    params = GetTaskPushNotificationConfigRequest(
+        name='tasks/task_1/pushNotificationConfigs/task_1'
+    )
 
     result: TaskPushNotificationConfig = (
         await request_handler.on_get_task_push_notification_config(

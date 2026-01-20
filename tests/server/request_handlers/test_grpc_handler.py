@@ -8,7 +8,7 @@ from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
-from a2a.server.apps.jsonrpc.errors import JSONParseError, JSONRPCError
+from a2a.server.jsonrpc_models import JSONParseError, JSONRPCError
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.utils.errors import ServerError
 
