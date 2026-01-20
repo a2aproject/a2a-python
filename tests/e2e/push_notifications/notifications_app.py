@@ -5,7 +5,7 @@ from typing import Annotated, Any
 from fastapi import FastAPI, HTTPException, Path, Request
 from pydantic import BaseModel, ConfigDict, ValidationError
 
-from a2a.types.a2a_pb2 import Task
+from a2a.types.a2a_pb2 import StreamResponse, Task
 from google.protobuf.json_format import ParseDict, MessageToDict
 
 
@@ -35,7 +35,12 @@ def create_notifications_app() -> FastAPI:
             )
         try:
             json_data = await request.json()
-            task = ParseDict(json_data, Task())
+            stream_response = ParseDict(json_data, StreamResponse())
+            if not stream_response.HasField('task'):
+                raise HTTPException(
+                    status_code=400, detail='Missing task in StreamResponse'
+                )
+            task = stream_response.task
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 

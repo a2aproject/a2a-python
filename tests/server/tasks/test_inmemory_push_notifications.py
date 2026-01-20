@@ -13,6 +13,7 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
 )
 from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
+    StreamResponse,
     Task,
     TaskState,
     TaskStatus,
@@ -162,7 +163,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            MessageToDict(task_data),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertNotIn(
             'auth', called_kwargs
@@ -189,7 +190,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            MessageToDict(task_data),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertEqual(
             called_kwargs['headers'],
@@ -287,7 +288,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            MessageToDict(task_data),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertNotIn(
             'auth', called_kwargs

@@ -9,7 +9,7 @@ from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
-from a2a.types.a2a_pb2 import PushNotificationConfig, Task
+from a2a.types.a2a_pb2 import PushNotificationConfig, StreamResponse, Task
 
 
 logger = logging.getLogger(__name__)
@@ -59,7 +59,7 @@ class BasePushNotificationSender(PushNotificationSender):
                 headers = {'X-A2A-Notification-Token': push_info.token}
             response = await self._client.post(
                 url,
-                json=MessageToDict(task),
+                json=MessageToDict(StreamResponse(task=task)),
                 headers=headers,
             )
             response.raise_for_status()
