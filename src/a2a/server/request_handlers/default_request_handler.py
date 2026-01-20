@@ -536,7 +536,7 @@ class DefaultRequestHandler(RequestHandler):
         self,
         params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
-    ) -> AsyncGenerator[Event]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Default handler for 'SubscribeToTask'.
 
         Allows a client to re-attach to a running streaming task's event stream.
