@@ -1,8 +1,9 @@
 ---
 name: Update A2A Schema from Specification
 on:
-  repository_dispatch:
-    types: [a2a_json_update]
+#  TODO (https://github.com/a2aproject/a2a-python/issues/559): bring back once types are migrated, currently it generates many broken PRs
+#  repository_dispatch:
+#    types: [a2a_json_update]
   workflow_dispatch:
 jobs:
   generate_and_pr:
