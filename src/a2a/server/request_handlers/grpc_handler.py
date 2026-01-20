@@ -54,9 +54,7 @@ def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
     md = context.invocation_metadata()
-    raw_values: list[str | bytes] = []
-    if isinstance(md, Metadata):
-        raw_values = md.get_all(key)
+    raw_values: list[str | bytes] = md.get_all(key) if isinstance(md, Metadata) else []
 
     return [e if isinstance(e, str) else e.decode('utf-8') for e in raw_values]
 
