@@ -80,6 +80,7 @@ class BaseClient(Client):
 
         if configuration:
             config.MergeFrom(configuration)
+            config.blocking = configuration.blocking
 
         send_message_request = SendMessageRequest(
             message=request, configuration=config, metadata=request_metadata
