@@ -3,7 +3,7 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import AsyncIterable
 
 
 try:
