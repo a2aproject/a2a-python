@@ -111,3 +111,10 @@ JSONRPC
 protobuf
 middleware
 importlib
+a2a
+A2A
+A2AFastAPI
+pb2
+proto
+Starlette
+starlette
