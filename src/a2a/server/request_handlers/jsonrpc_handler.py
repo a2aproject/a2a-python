@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigRequest,
     Message,
     SendMessageRequest,
+    SendMessageResponse,
     SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
@@ -114,22 +115,16 @@ class JSONRPCHandler:
                 request, context
             )
             # Build result based on return type
+            response = SendMessageResponse()
             if isinstance(task_or_message, Task):
-                result = {
-                    'task': MessageToDict(
-                        task_or_message, preserving_proto_field_name=False
-                    )
-                }
+                response.task.CopyFrom(task_or_message)
             elif isinstance(task_or_message, Message):
-                result = {
-                    'message': MessageToDict(
-                        task_or_message, preserving_proto_field_name=False
-                    )
-                }
+                response.message.CopyFrom(task_or_message)
             else:
-                result = MessageToDict(
-                    task_or_message, preserving_proto_field_name=False
-                )
+                # Should we handle this fallthrough?
+                pass
+
+            result = MessageToDict(response)
             return _build_success_response(request_id, result)
         except ServerError as e:
             return _build_error_response(

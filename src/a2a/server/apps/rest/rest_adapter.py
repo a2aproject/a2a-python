@@ -158,7 +158,7 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
-        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
+        return MessageToDict(card_to_serve)
 
     async def handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None

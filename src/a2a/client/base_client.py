@@ -80,10 +80,6 @@ class BaseClient(Client):
 
         if configuration:
             config.MergeFrom(configuration)
-            # Proto3 doesn't support HasField for scalars, so MergeFrom won't
-            # override with default values (e.g. False). We explicitly set it here
-            # assuming configuration is authoritative.
-            config.blocking = configuration.blocking
 
         send_message_request = SendMessageRequest(
             message=request, configuration=config, metadata=request_metadata

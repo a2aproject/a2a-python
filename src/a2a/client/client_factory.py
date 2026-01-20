@@ -19,11 +19,11 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
-
-
-TRANSPORT_PROTOCOLS_JSONRPC = 'JSONRPC'
-TRANSPORT_PROTOCOLS_GRPC = 'GRPC'
-TRANSPORT_PROTOCOLS_HTTP_JSON = 'HTTP+JSON'
+from a2a.utils.constants import (
+    TRANSPORT_GRPC,
+    TRANSPORT_HTTP_JSON,
+    TRANSPORT_JSONRPC,
+)
 
 
 try:
@@ -74,9 +74,9 @@ class ClientFactory:
 
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
-        if TRANSPORT_PROTOCOLS_JSONRPC in supported or not supported:
+        if TRANSPORT_JSONRPC in supported or not supported:
             self.register(
-                TRANSPORT_PROTOCOLS_JSONRPC,
+                TRANSPORT_JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -85,9 +85,9 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TRANSPORT_PROTOCOLS_HTTP_JSON in supported:
+        if TRANSPORT_HTTP_JSON in supported:
             self.register(
-                TRANSPORT_PROTOCOLS_HTTP_JSON,
+                TRANSPORT_HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -96,14 +96,14 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TRANSPORT_PROTOCOLS_GRPC in supported:
+        if TRANSPORT_GRPC in supported:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
             self.register(
-                TRANSPORT_PROTOCOLS_GRPC,
+                TRANSPORT_GRPC,
                 GrpcTransport.create,
             )
 
@@ -206,25 +206,30 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_set = {
-            x.protocol_binding: x.url for x in card.supported_interfaces
-        }
         client_set = self._config.supported_protocol_bindings or [
-            TRANSPORT_PROTOCOLS_JSONRPC
+            TRANSPORT_JSONRPC
         ]
         transport_protocol = None
         transport_url = None
         if self._config.use_client_preference:
-            for x in client_set:
-                if x in server_set:
-                    transport_protocol = x
-                    transport_url = server_set[x]
+            for protocol_binding in client_set:
+                supported_interface = next(
+                    (
+                        si
+                        for si in card.supported_interfaces
+                        if si.protocol_binding == protocol_binding
+                    ),
+                    None,
+                )
+                if supported_interface:
+                    transport_protocol = protocol_binding
+                    transport_url = supported_interface.url
                     break
         else:
-            for x, url in server_set.items():
-                if x in client_set:
-                    transport_protocol = x
-                    transport_url = url
+            for supported_interface in card.supported_interfaces:
+                if supported_interface.protocol_binding in client_set:
+                    transport_protocol = supported_interface.protocol_binding
+                    transport_url = supported_interface.url
                     break
         if not transport_protocol or not transport_url:
             raise ValueError('no compatible transports found.')
