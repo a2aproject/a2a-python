@@ -96,7 +96,6 @@ def apply_history_length(task: Task, history_length: int | None) -> Task:
         task_copy = Task()
         task_copy.CopyFrom(task)
         # Clear and re-add history items
-        del task_copy.history[:]
-        task_copy.history.extend(limited_history)
+        task_copy.history[:] = limited_history
         return task_copy
     return task
