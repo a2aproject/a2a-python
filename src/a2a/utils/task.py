@@ -31,7 +31,7 @@ def new_task(request: Message) -> Task:
     if not request.parts:
         raise ValueError('Message parts cannot be empty')
     for part in request.parts:
-        if part.text is not None and not part.text:
+        if part.HasField('text') and not part.text:
             raise ValueError('Message.text cannot be empty')
 
     return Task(
