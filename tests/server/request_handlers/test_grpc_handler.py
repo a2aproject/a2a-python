@@ -8,6 +8,7 @@ from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
+from a2a.server.apps.jsonrpc.errors import JSONParseError, JSONRPCError
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.utils.errors import ServerError
 
@@ -242,7 +243,7 @@ async def test_get_extended_agent_card_with_modifier(
     'server_error, grpc_status_code, error_message_part',
     [
         (
-            ServerError(error=types.JSONParseError()),
+            ServerError(error=JSONParseError()),
             grpc.StatusCode.INTERNAL,
             'JSONParseError',
         ),
@@ -297,7 +298,7 @@ async def test_get_extended_agent_card_with_modifier(
             'InvalidAgentResponseError',
         ),
         (
-            ServerError(error=types.JSONRPCError(code=99, message='Unknown')),
+            ServerError(error=JSONRPCError(code=99, message='Unknown')),
             grpc.StatusCode.UNKNOWN,
             'Unknown error',
         ),

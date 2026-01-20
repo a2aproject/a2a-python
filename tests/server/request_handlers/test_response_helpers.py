@@ -6,9 +6,9 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
     prepare_response_object,
 )
+from a2a.server.apps.jsonrpc.errors import JSONRPCError
 from a2a.types import (
     InvalidParamsError,
-    JSONRPCError,
     TaskNotFoundError,
 )
 from a2a.types.a2a_pb2 import (
@@ -29,7 +29,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(response.get('jsonrpc'), '2.0')
         self.assertEqual(response.get('id'), request_id)
         self.assertIn('error', response)
-        self.assertEqual(response['error']['code'], specific_error.code)
+        self.assertEqual(response['error']['code'], -32001)
         self.assertEqual(response['error']['message'], specific_error.message)
 
     def test_build_error_response_with_jsonrpc_error(self) -> None:
@@ -41,7 +41,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(response.get('jsonrpc'), '2.0')
         self.assertEqual(response.get('id'), request_id)
         self.assertIn('error', response)
-        self.assertEqual(response['error']['code'], json_rpc_error.code)
+        self.assertEqual(response['error']['code'], -32602)
         self.assertEqual(response['error']['message'], json_rpc_error.message)
 
     def test_build_error_response_with_invalid_params_error(self) -> None:
@@ -53,7 +53,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(response.get('jsonrpc'), '2.0')
         self.assertEqual(response.get('id'), request_id)
         self.assertIn('error', response)
-        self.assertEqual(response['error']['code'], specific_jsonrpc_error.code)
+        self.assertEqual(response['error']['code'], -32602)
         self.assertEqual(
             response['error']['message'], specific_jsonrpc_error.message
         )
@@ -128,7 +128,7 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(response.get('jsonrpc'), '2.0')
         self.assertEqual(response.get('id'), request_id)
         self.assertIn('error', response)
-        self.assertEqual(response['error']['code'], error.code)
+        self.assertEqual(response['error']['code'], -32001)
 
     def test_prepare_response_object_with_invalid_response(self) -> None:
         request_id = 'req_invalid'

@@ -6,9 +6,9 @@ import pytest
 from starlette.testclient import TestClient
 
 from a2a.server.apps import A2AFastAPIApplication, A2AStarletteApplication
+from a2a.server.apps.jsonrpc.errors import JSONParseError
 from a2a.types import (
     InvalidRequestError,
-    JSONParseError,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -162,7 +162,7 @@ def test_handle_oversized_payload(minimal_agent_card: AgentCard):
     response = client.post('/', json=payload)
     assert response.status_code == 200
     data = response.json()
-    assert data['error']['code'] == InvalidRequestError().code
+    assert data['error']['code'] == -32600
 
 
 @pytest.mark.parametrize(
@@ -199,7 +199,7 @@ def test_handle_oversized_payload_with_max_content_length(
     # rejected due to payload size. The request might fail for other reasons,
     # but it shouldn't be an InvalidRequestError related to the content length.
     if max_content_length is not None:
-        assert data['error']['code'] != InvalidRequestError().code
+        assert data['error']['code'] != -32600
 
 
 def test_handle_unicode_characters(minimal_agent_card: AgentCard):

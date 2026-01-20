@@ -10,7 +10,7 @@ from collections.abc import AsyncGenerator, Callable
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
-from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
+from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
@@ -18,9 +18,17 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
+from a2a.server.apps.jsonrpc.errors import (
+    InternalError,
+    InvalidParamsError,
+    InvalidRequestError,
+    JSONParseError,
+    MethodNotFoundError,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -41,16 +49,12 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import (
-    A2AError,
-    InternalError,
-    InvalidParamsError,
-    InvalidRequestError,
-    JSONParseError,
-    MethodNotFoundError,
     MethodNotImplementedError,
     UnsupportedOperationError,
 )
 
+
+INTERNAL_ERROR_CODE = -32603
 
 logger = logging.getLogger(__name__)
 
@@ -206,6 +210,7 @@ class JSONRPCApplication(ABC):
                 ' `JSONRPCApplication`. They can be added as a part of `a2a-sdk`'
                 ' optional dependencies, `a2a-sdk[http-server]`.'
             )
+
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
@@ -220,7 +225,7 @@ class JSONRPCApplication(ABC):
         self._max_content_length = max_content_length
 
     def _generate_error_response(
-        self, request_id: str | int | None, error: A2AError
+        self, request_id: str | int | None, error: Exception
     ) -> JSONResponse:
         """Creates a Starlette JSONResponse for a JSON-RPC error.
 
@@ -228,31 +233,31 @@ class JSONRPCApplication(ABC):
 
         Args:
             request_id: The ID of the request that caused the error.
-            error: The error object (one of the A2AError union types).
+            error: The error object (one of the JSONRPCError types).
 
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
-        error_dict = error.model_dump(exclude_none=True)
-        error_resp = JSONRPC20Response(error=error_dict, _id=request_id)
+        response_data = build_error_response(request_id, error)
+        error_info = response_data.get('error', {})
+        code = error_info.get('code')
+        message = error_info.get('message')
+        data = error_info.get('data')
 
-        log_level = (
-            logging.ERROR
-            if isinstance(error, InternalError)
-            else logging.WARNING
-        )
+        log_level = logging.WARNING
+        if code == INTERNAL_ERROR_CODE:
+            log_level = logging.ERROR
+
         logger.log(
             log_level,
             "Request Error (ID: %s): Code=%s, Message='%s'%s",
             request_id,
-            error_dict.get('code'),
-            error_dict.get('message'),
-            ', Data=' + str(error_dict.get('data'))
-            if error_dict.get('data')
-            else '',
+            code,
+            message,
+            f', Data={data}' if data else '',
         )
         return JSONResponse(
-            error_resp.data,
+            response_data,
             status_code=200,
         )
 

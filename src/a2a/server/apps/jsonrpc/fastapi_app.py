@@ -23,7 +23,7 @@ from a2a.server.apps.jsonrpc.jsonrpc_app import (
     JSONRPCApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
+from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,

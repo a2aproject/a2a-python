@@ -28,6 +28,7 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
+from a2a.server.apps.jsonrpc.errors import JSONParseError
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
@@ -337,7 +338,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
         match error.error:
-            case types.JSONParseError():
+            case JSONParseError():
                 await context.abort(
                     grpc.StatusCode.INTERNAL,
                     f'JSONParseError: {error.error.message}',

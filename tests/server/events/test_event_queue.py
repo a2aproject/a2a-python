@@ -11,8 +11,8 @@ from unittest.mock import (
 import pytest
 
 from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE, EventQueue
+from a2a.server.apps.jsonrpc.errors import JSONRPCError
 from a2a.types import (
-    JSONRPCError,
     TaskNotFoundError,
 )
 from a2a.types.a2a_pb2 import (

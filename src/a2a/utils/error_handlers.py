@@ -15,6 +15,13 @@ else:
         Response = Any
 
 
+from a2a.server.apps.jsonrpc.errors import (
+    InternalError as JSONRPCInternalError,
+)
+from a2a.server.apps.jsonrpc.errors import (
+    JSONParseError,
+    JSONRPCError,
+)
 from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
@@ -22,8 +29,6 @@ from a2a.utils.errors import (
     InvalidAgentResponseError,
     InvalidParamsError,
     InvalidRequestError,
-    JSONParseError,
-    JSONRPCError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
     ServerError,
@@ -42,6 +47,7 @@ _A2AErrorType = (
     | type[MethodNotFoundError]
     | type[InvalidParamsError]
     | type[InternalError]
+    | type[JSONRPCInternalError]
     | type[TaskNotFoundError]
     | type[TaskNotCancelableError]
     | type[PushNotificationNotSupportedError]
@@ -58,6 +64,7 @@ A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
     MethodNotFoundError: 404,
     InvalidParamsError: 422,
     InternalError: 500,
+    JSONRPCInternalError: 500,
     TaskNotFoundError: 404,
     TaskNotCancelableError: 409,
     PushNotificationNotSupportedError: 501,
@@ -91,9 +98,11 @@ def rest_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
+                getattr(error, 'code', 'N/A'),
                 error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             return JSONResponse(
                 content={'message': error.message}, status_code=http_code
@@ -129,9 +138,11 @@ def rest_stream_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
+                getattr(error, 'code', 'N/A'),
                 error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)

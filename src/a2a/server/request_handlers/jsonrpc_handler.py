@@ -8,6 +8,12 @@ from typing import Any
 from google.protobuf.json_format import MessageToDict
 from jsonrpc.jsonrpc2 import JSONRPC20Response
 
+from a2a.server.apps.jsonrpc.errors import (
+    InternalError as JSONRPCInternalError,
+)
+from a2a.server.apps.jsonrpc.errors import (
+    JSONRPCError,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
@@ -27,16 +33,53 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import (
+    A2AException,
     AuthenticatedExtendedCardNotConfiguredError,
+    ContentTypeNotSupportedError,
     InternalError,
+    InvalidAgentResponseError,
+    InvalidParamsError,
+    InvalidRequestError,
+    MethodNotFoundError,
+    PushNotificationNotSupportedError,
     ServerError,
+    TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+
+EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
+    TaskNotFoundError: JSONRPCError,
+    TaskNotCancelableError: JSONRPCError,
+    PushNotificationNotSupportedError: JSONRPCError,
+    UnsupportedOperationError: JSONRPCError,
+    ContentTypeNotSupportedError: JSONRPCError,
+    InvalidAgentResponseError: JSONRPCError,
+    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    InternalError: JSONRPCInternalError,
+    InvalidParamsError: JSONRPCError,
+    InvalidRequestError: JSONRPCError,
+    MethodNotFoundError: JSONRPCError,
+}
+
+ERROR_CODE_MAP: dict[type[A2AException], int] = {
+    TaskNotFoundError: -32001,
+    TaskNotCancelableError: -32002,
+    PushNotificationNotSupportedError: -32003,
+    UnsupportedOperationError: -32004,
+    ContentTypeNotSupportedError: -32005,
+    InvalidAgentResponseError: -32006,
+    AuthenticatedExtendedCardNotConfiguredError: -32007,
+    InvalidParamsError: -32602,
+    InvalidRequestError: -32600,
+    MethodNotFoundError: -32601,
+}
 
 
 def _build_success_response(
@@ -47,10 +90,22 @@ def _build_success_response(
 
 
 def _build_error_response(
-    request_id: str | int | None, error: Any
+    request_id: str | int | None, error: Exception
 ) -> dict[str, Any]:
     """Build a JSON-RPC error response dict."""
-    error_dict = error.model_dump(exclude_none=True)
+    jsonrpc_error: JSONRPCError
+    if isinstance(error, A2AException):
+        error_type = type(error)
+        model_class = EXCEPTION_MAP.get(error_type, JSONRPCInternalError)
+        code = ERROR_CODE_MAP.get(error_type, -32603)
+        jsonrpc_error = model_class(
+            code=code,
+            message=str(error),
+        )
+    else:
+        jsonrpc_error = JSONRPCInternalError(message=str(error))
+
+    error_dict = jsonrpc_error.model_dump(exclude_none=True)
     return JSONRPC20Response(error=error_dict, _id=request_id).data
 
 

@@ -2,8 +2,6 @@
 
 from typing import Any
 
-from a2a.utils.errors import A2AError
-
 
 class A2AClientError(Exception):
     """Base exception for A2A Client errors."""
@@ -79,13 +77,13 @@ class A2AClientInvalidStateError(A2AClientError):
 class A2AClientJSONRPCError(A2AClientError):
     """Client exception for JSON-RPC errors returned by the server."""
 
-    error: dict[str, Any] | A2AError
+    error: dict[str, Any]
 
-    def __init__(self, error: dict[str, Any] | A2AError):
+    def __init__(self, error: dict[str, Any]):
         """Initializes the A2AClientJsonRPCError.
 
         Args:
-            error: The JSON-RPC error dict from the jsonrpc library, or A2AError object.
+            error: The JSON-RPC error dict from the jsonrpc library.
         """
         self.error = error
         super().__init__(f'JSON-RPC Error {self.error}')

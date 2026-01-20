@@ -4,7 +4,7 @@ from unittest.mock import AsyncMock
 import pytest
 
 from a2a.server.tasks import TaskManager
-from a2a.types import InvalidParamsError
+from a2a.utils.errors import InvalidParamsError
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,

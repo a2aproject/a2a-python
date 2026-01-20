@@ -23,12 +23,14 @@ from a2a.server.apps import (
     A2AStarletteApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.types import (
+from a2a.server.apps.jsonrpc.errors import (
     InternalError,
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     MethodNotFoundError,
+)
+from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
@@ -950,7 +952,7 @@ def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert 'error' in data
-    assert data['error']['code'] == UnsupportedOperationError().code
+    assert data['error']['code'] == -32004  # UnsupportedOperationError
 
 
 def test_unknown_method(client: TestClient):

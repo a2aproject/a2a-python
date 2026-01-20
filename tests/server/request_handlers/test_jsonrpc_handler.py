@@ -165,7 +165,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.on_get_task(request, call_context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        assert response['error']['code'] == TaskNotFoundError().code
+        assert response['error']['code'] == -32001
 
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -230,7 +230,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
-            assert response['error']['code'] == UnsupportedOperationError().code
+            assert response['error']['code'] == -32004
             mock_agent_executor.cancel.assert_called_once()
 
     async def test_on_cancel_task_not_found(self) -> None:
@@ -246,7 +246,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.on_cancel_task(request, call_context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        assert response['error']['code'] == TaskNotFoundError().code
+        assert response['error']['code'] == -32001
         mock_task_store.get.assert_called_once_with(
             'nonexistent_id', unittest.mock.ANY
         )
@@ -346,7 +346,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
-            assert response['error']['code'] == UnsupportedOperationError().code
+            assert response['error']['code'] == -32004
             mock_agent_executor.execute.assert_called_once()
 
     @patch(
@@ -682,7 +682,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         assert len(collected_events) == 1
         self.assertIsInstance(collected_events[0], dict)
         self.assertTrue(is_error_response(collected_events[0]))
-        assert collected_events[0]['error']['code'] == TaskNotFoundError().code
+        assert collected_events[0]['error']['code'] == -32001
 
     async def test_streaming_not_supported_error(
         self,
@@ -774,7 +774,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         self.assertEqual(
-            response['error']['code'], UnsupportedOperationError().code
+            response['error']['code'], -32004
         )
 
     async def test_on_set_push_notification_no_push_config_store(self) -> None:
@@ -810,7 +810,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         self.assertEqual(
-            response['error']['code'], UnsupportedOperationError().code
+            response['error']['code'], -32004
         )
 
     async def test_on_message_send_internal_error(self) -> None:
@@ -840,7 +840,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             # Assert
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
-            self.assertEqual(response['error']['code'], InternalError().code)
+            self.assertEqual(response['error']['code'], -32603)
 
     async def test_on_message_stream_internal_error(self) -> None:
         """Test on_message_send_stream with an internal error."""
@@ -879,7 +879,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertIsInstance(responses[0], dict)
             self.assertTrue(is_error_response(responses[0]))
             self.assertEqual(
-                responses[0]['error']['code'], InternalError().code
+                responses[0]['error']['code'], -32603
             )
 
     async def test_default_request_handler_with_custom_components(self) -> None:
@@ -948,7 +948,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
             self.assertEqual(
-                response['error']['code'], UnsupportedOperationError().code
+                response['error']['code'], -32004
             )
 
     async def test_on_message_send_task_id_mismatch(self) -> None:
@@ -975,7 +975,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             # The task ID mismatch should cause an error
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
-            self.assertEqual(response['error']['code'], InternalError().code)
+            self.assertEqual(response['error']['code'], -32603)
 
     async def test_on_message_stream_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1010,7 +1010,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertIsInstance(collected_events[0], dict)
             self.assertTrue(is_error_response(collected_events[0]))
             self.assertEqual(
-                collected_events[0]['error']['code'], InternalError().code
+                collected_events[0]['error']['code'], -32603
             )
 
     async def test_on_get_push_notification(self) -> None:
@@ -1107,7 +1107,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
-        self.assertEqual(response['error']['code'], InternalError().code)
+        self.assertEqual(response['error']['code'], -32603)
 
     async def test_on_delete_push_notification(self) -> None:
         """Test delete_push_notification_config handling"""
@@ -1153,7 +1153,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         self.assertEqual(
-            response['error']['code'], UnsupportedOperationError().code
+            response['error']['code'], -32004
         )
 
     async def test_get_authenticated_extended_card_success(self) -> None:
