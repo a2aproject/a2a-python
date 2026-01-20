@@ -37,6 +37,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     SendMessageRequest,
     SetTaskPushNotificationConfigRequest,
+    StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
