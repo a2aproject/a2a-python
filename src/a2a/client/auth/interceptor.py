@@ -26,6 +26,9 @@ class AuthInterceptor(ClientCallInterceptor):
         context: ClientCallContext | None,
     ) -> tuple[dict[str, Any], dict[str, Any]]:
         """Applies authentication headers to the request if credentials are available."""
+        # Proto3 repeated fields (security) and maps (security_schemes) do not track presence.
+        # HasField() raises ValueError for them.
+        # We check for truthiness to see if they are non-empty.
         if (
             agent_card is None
             or not agent_card.security
