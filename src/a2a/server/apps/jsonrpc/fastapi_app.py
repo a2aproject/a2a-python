@@ -1,3 +1,5 @@
+import importlib.resources
+import json
 import logging
 
 from collections.abc import Callable
@@ -43,6 +45,25 @@ class A2AFastAPI(FastAPI):
 
     def openapi(self) -> dict[str, Any]:
         """Generates the OpenAPI schema for the application."""
+        if self.openapi_schema:
+            return self.openapi_schema
+
+        # Try to use the a2a.json schema generated from the proto file
+        # if available, instead of generating one from the python types.
+        try:
+            from a2a import types
+
+            schema_file = importlib.resources.files(types).joinpath('a2a.json')
+            if schema_file.is_file():
+                self.openapi_schema = json.loads(
+                    schema_file.read_text(encoding='utf-8')
+                )
+                return self.openapi_schema
+        except Exception:  # pylint: disable=broad-except
+            logger.warning(
+                "Could not load 'a2a.json' from 'a2a.types'. Falling back to auto-generation."
+            )
+
         openapi_schema = super().openapi()
         if not self._a2a_components_added:
             # A2ARequest is now a Union type of proto messages, so we can't use

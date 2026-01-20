@@ -29,3 +29,7 @@ plugins:
   # Generates *_pb2.pyi files.
   - remote: buf.build/protocolbuffers/pyi
     out: src/a2a/types
+  # Generates a2a.swagger.json (OpenAPI v2)
+  - remote: buf.build/grpc-ecosystem/openapiv2
+    out: src/a2a/types
+    opt: json_names_for_fields=true

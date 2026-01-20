@@ -58,8 +58,15 @@ changelog = "https://github.com/a2aproject/a2a-python/blob/main/CHANGELOG.md"
 documentation = "https://a2a-protocol.org/latest/sdk/python/"
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling", "uv-dynamic-versioning", "hatch-build-scripts"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.build-scripts]
+artifacts = ["src/a2a/types/a2a.json"]
+
+[[tool.hatch.build.hooks.build-scripts.scripts]]
+commands = ["bash scripts/gen_proto.sh"]
+work_dir = "."
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
