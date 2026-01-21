@@ -2,36 +2,31 @@ import asyncio
 import logging
 import os
 import uuid
-from datetime import datetime, timezone
 
 from datetime import datetime, timezone
 
-from fastapi import FastAPI
 from uvicorn import Config, Server
-
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
+from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
-    AgentCard,
     AgentCapabilities,
+    AgentCard,
     AgentProvider,
     Message,
-    TextPart,
-    Task,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+    TextPart,
 )
-from a2a.auth.user import UnauthenticatedUser
-from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
@@ -39,13 +34,17 @@ logger = logging.getLogger('SUTAgent')
 
 
 class SUTAgentExecutor(AgentExecutor):
-    def __init__(self):
+    """Execution logic for the SUT agent."""
+
+    def __init__(self) -> None:
+        """Initializes the SUT agent executor."""
         self.running_tasks = set()
         self.last_context_id = None
 
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        """Cancels a task."""
         api_task_id = context.task_id
         if api_task_id in self.running_tasks:
             self.running_tasks.remove(api_task_id)
@@ -64,6 +63,7 @@ class SUTAgentExecutor(AgentExecutor):
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        """Executes a task."""
         user_message = context.message
         task_id = context.task_id
         context_id = context.context_id
@@ -72,8 +72,10 @@ class SUTAgentExecutor(AgentExecutor):
         self.running_tasks.add(task_id)
 
         logger.info(
-            f'[SUTAgentExecutor] Processing message {user_message.message_id} '
-            f'for task {task_id} (context: {context_id})'
+            '[SUTAgentExecutor] Processing message %s for task %s (context: %s)',
+            user_message.message_id,
+            task_id,
+            context_id,
         )
 
         working_status = TaskStatusUpdateEvent(
@@ -98,10 +100,10 @@ class SUTAgentExecutor(AgentExecutor):
         await asyncio.sleep(3)  # Simulate processing delay
 
         if task_id not in self.running_tasks:
-            logger.info(f'Task {task_id} was cancelled.')
+            logger.info('Task %s was cancelled.', task_id)
             return
 
-        logger.info(f'[SUTAgentExecutor] Response: {agent_reply_text}')
+        logger.info('[SUTAgentExecutor] Response: %s', agent_reply_text)
 
         agent_message = Message(
             role='agent',
@@ -124,8 +126,9 @@ class SUTAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(final_update)
 
 
-async def main():
-    HTTP_PORT = int(os.environ.get('HTTP_PORT', 41241))
+async def main() -> None:
+    """Main entrypoint."""
+    http_port = int(os.environ.get('HTTP_PORT', '41241'))
 
     agent_executor = SUTAgentExecutor()
     task_store = InMemoryTaskStore()
@@ -140,7 +143,7 @@ async def main():
     sut_agent_card = AgentCard(
         name='SUT Agent',
         description='A sample agent to be used as SUT against tck tests.',
-        url=f'http://localhost:{HTTP_PORT}/a2a/jsonrpc',
+        url=f'http://localhost:{http_port}/a2a/jsonrpc',
         provider=AgentProvider(
             organization='A2A Samples',
             url='https://example.com/a2a-samples',
@@ -169,7 +172,7 @@ async def main():
         preferred_transport='JSONRPC',
         additional_interfaces=[
             {
-                'url': f'http://localhost:{HTTP_PORT}/a2a/jsonrpc',
+                'url': f'http://localhost:{http_port}/a2a/jsonrpc',
                 'transport': 'JSONRPC',
             },
         ],
@@ -183,8 +186,8 @@ async def main():
         rpc_url='/a2a/jsonrpc', agent_card_url='/.well-known/agent-card.json'
     )
 
-    logger.info(f'Starting HTTP server on port {HTTP_PORT}...')
-    config = Config(app, host='0.0.0.0', port=HTTP_PORT, log_level='info')
+    logger.info('Starting HTTP server on port %s...', http_port)
+    config = Config(app, host='127.0.0.1', port=http_port, log_level='info')
     server = Server(config)
 
     await server.serve()

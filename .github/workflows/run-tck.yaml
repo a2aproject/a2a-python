@@ -44,7 +44,7 @@ jobs:
         run: uv python install ${{ matrix.python-version }}
 
       - name: Install Dependencies
-        run: uv sync --all-extras --locked
+        run: uv sync --all-extras
 
       - name: Checkout a2a-tck
         uses: actions/checkout@v4
