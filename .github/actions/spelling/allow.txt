@@ -52,8 +52,8 @@ JPY
 JSONRPCt
 jwk
 jwks
-JWS
 jws
+JWS
 kid
 kwarg
 langgraph
@@ -83,6 +83,8 @@ RUF
 SLF
 socio
 sse
+sut
+SUT
 tagwords
 taskupdate
 testuuid
@@ -90,5 +92,3 @@ Tful
 tiangolo
 typeerror
 vulnz
-SUT
-sut
