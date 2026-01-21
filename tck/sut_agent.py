@@ -5,13 +5,12 @@ import uuid
 
 from datetime import datetime, timezone
 
-from uvicorn import Config, Server
+import uvicorn
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.server.apps import A2AStarletteApplication
 from a2a.server.events.event_queue import EventQueue
-from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
@@ -28,7 +27,8 @@ from a2a.types import (
 )
 
 
-# Configure logging
+JSONRPC_URL = '/a2a/jsonrpc'
+
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('SUTAgent')
 
@@ -124,24 +124,15 @@ class SUTAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(final_update)
 
 
-async def main() -> None:
+
+def main() -> None:
     """Main entrypoint."""
     http_port = int(os.environ.get('HTTP_PORT', '41241'))
 
-    agent_executor = SUTAgentExecutor()
-    task_store = InMemoryTaskStore()
-    queue_manager = InMemoryQueueManager()
-
-    request_handler = DefaultRequestHandler(
-        task_store=task_store,
-        queue_manager=queue_manager,
-        agent_executor=agent_executor,
-    )
-
-    sut_agent_card = AgentCard(
+    agent_card = AgentCard(
         name='SUT Agent',
-        description='A sample agent to be used as SUT against tck tests.',
-        url=f'http://localhost:{http_port}/a2a/jsonrpc',
+        description='An agent to be used as SUT against TCK tests.',
+        url=f'http://localhost:{http_port}{JSONRPC_URL}',
         provider=AgentProvider(
             organization='A2A Samples',
             url='https://example.com/a2a-samples',
@@ -170,26 +161,27 @@ async def main() -> None:
         preferred_transport='JSONRPC',
         additional_interfaces=[
             {
-                'url': f'http://localhost:{http_port}/a2a/jsonrpc',
+                'url': f'http://localhost:{http_port}{JSONRPC_URL}',
                 'transport': 'JSONRPC',
             },
         ],
     )
 
-    json_rpc_app = A2AFastAPIApplication(
-        agent_card=sut_agent_card,
+    request_handler = DefaultRequestHandler(
+        agent_executor=SUTAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+    )
+
+    server = A2AStarletteApplication(
+        agent_card=agent_card,
         http_handler=request_handler,
     )
-    app = json_rpc_app.build(
-        rpc_url='/a2a/jsonrpc', agent_card_url='/.well-known/agent-card.json'
-    )
+
+    app = server.build(rpc_url=JSONRPC_URL)
 
     logger.info('Starting HTTP server on port %s...', http_port)
-    config = Config(app, host='127.0.0.1', port=http_port, log_level='info')
-    server = Server(config)
-
-    await server.serve()
+    uvicorn.run(app, host='127.0.0.1', port=http_port, log_level='info')
 
 
 if __name__ == '__main__':
-    asyncio.run(main())
+    main()
