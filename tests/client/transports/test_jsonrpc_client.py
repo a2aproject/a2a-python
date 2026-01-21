@@ -485,14 +485,14 @@ class TestJsonRpcTransport:
                 id='stream_id_123',
                 jsonrpc='2.0',
                 result=create_text_message_object(
-                    content='First part ', role=Role.agent
+                    content='First part', role=Role.agent
                 ),
             )
             mock_stream_response_2 = SendMessageSuccessResponse(
                 id='stream_id_123',
                 jsonrpc='2.0',
                 result=create_text_message_object(
-                    content='second part ', role=Role.agent
+                    content='Second part', role=Role.agent
                 ),
             )
 
@@ -521,16 +521,8 @@ class TestJsonRpcTransport:
             ]
 
             assert len(results) == 2
-            assert isinstance(results[0], Message)
-            assert (
-                results[0].model_dump()
-                == mock_stream_response_1.result.model_dump()
-            )
-            assert isinstance(results[1], Message)
-            assert (
-                results[1].model_dump()
-                == mock_stream_response_2.result.model_dump()
-            )
+            assert results[0] == mock_stream_response_1.result
+            assert results[1] == mock_stream_response_2.result
 
     @pytest.mark.asyncio
     async def test_send_request_http_status_error(
