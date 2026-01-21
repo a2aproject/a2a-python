@@ -132,7 +132,6 @@ class TestRestTransportExtensions:
                 f'data: {MessageToJson(mock_stream_response_2, indent=None)}\n\n'
                 ': keep-alive\n\n'
             )
-            print(sse_content)
 
             respx.post(
                 f'{mock_agent_card.url.rstrip("/")}/v1/message:stream'
@@ -144,12 +143,9 @@ class TestRestTransportExtensions:
                 )
             )
 
-            results = [
-                item
-                async for item in transport.send_message_streaming(
-                    request=params
-                )
-            ]
+            results = []
+            async for item in transport.send_message_streaming(request=params):
+                results.append(item)
 
             assert len(results) == 2
             assert results[0].parts[0].root.text == 'First part'
