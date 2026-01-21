@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
+import respx
 
 from httpx_sse import EventSource, SSEError, ServerSentEvent
 
@@ -465,6 +466,71 @@ class TestJsonRpcTransport:
             results[1].model_dump()
             == mock_stream_response_2.result.model_dump()
         )
+
+    # Repro of https://github.com/a2aproject/a2a-python/issues/540
+    @pytest.mark.asyncio
+    @respx.mock
+    async def test_send_message_streaming_comment_success(
+        self,
+        mock_agent_card: MagicMock,
+    ):
+        async with httpx.AsyncClient() as client:
+            transport = JsonRpcTransport(
+                httpx_client=client, agent_card=mock_agent_card
+            )
+            params = MessageSendParams(
+                message=create_text_message_object(content='Hello stream')
+            )
+            mock_stream_response_1 = SendMessageSuccessResponse(
+                id='stream_id_123',
+                jsonrpc='2.0',
+                result=create_text_message_object(
+                    content='First part ', role=Role.agent
+                ),
+            )
+            mock_stream_response_2 = SendMessageSuccessResponse(
+                id='stream_id_123',
+                jsonrpc='2.0',
+                result=create_text_message_object(
+                    content='second part ', role=Role.agent
+                ),
+            )
+
+            sse_content = (
+                'id: stream_id_1\n'
+                f'data: {mock_stream_response_1.model_dump_json()}\n\n'
+                ': keep-alive\n\n'
+                'id: stream_id_2\n'
+                f'data: {mock_stream_response_2.model_dump_json()}\n\n'
+                ': keep-alive\n\n'
+            )
+
+            respx.post(mock_agent_card.url).mock(
+                return_value=httpx.Response(
+                    200,
+                    headers={'Content-Type': 'text/event-stream'},
+                    content=sse_content,
+                )
+            )
+
+            results = [
+                item
+                async for item in transport.send_message_streaming(
+                    request=params
+                )
+            ]
+
+            assert len(results) == 2
+            assert isinstance(results[0], Message)
+            assert (
+                results[0].model_dump()
+                == mock_stream_response_1.result.model_dump()
+            )
+            assert isinstance(results[1], Message)
+            assert (
+                results[1].model_dump()
+                == mock_stream_response_2.result.model_dump()
+            )
 
     @pytest.mark.asyncio
     async def test_send_request_http_status_error(
