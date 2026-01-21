@@ -108,5 +108,5 @@ jobs:
       - name: Stop SUT
         if: always()
         run: |
-           pkill -f sut_agent.py || true
+          pkill -f sut_agent.py || true
           sleep 2
