@@ -39,7 +39,6 @@ class SUTAgentExecutor(AgentExecutor):
     def __init__(self) -> None:
         """Initializes the SUT agent executor."""
         self.running_tasks = set()
-        self.last_context_id = None
 
     async def cancel(
         self, context: RequestContext, event_queue: EventQueue
@@ -51,7 +50,7 @@ class SUTAgentExecutor(AgentExecutor):
 
         status_update = TaskStatusUpdateEvent(
             task_id=api_task_id,
-            context_id=self.last_context_id or str(uuid.uuid4()),
+            context_id=context.context_id or str(uuid.uuid4()),
             status=TaskStatus(
                 state=TaskState.canceled,
                 timestamp=datetime.now(timezone.utc).isoformat(),
@@ -67,7 +66,6 @@ class SUTAgentExecutor(AgentExecutor):
         user_message = context.message
         task_id = context.task_id
         context_id = context.context_id
-        self.last_context_id = context_id
 
         self.running_tasks.add(task_id)
 
