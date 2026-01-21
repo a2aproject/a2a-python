@@ -92,7 +92,7 @@ jobs:
         id: run-tck-mandatory
         timeout-minutes: 5
         run: |
-          ./run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category mandatory --transports jsonrpc
+          uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category mandatory --transports jsonrpc
         working-directory: tck/a2a-tck
 
       - name: Run TCK (capabilities)
