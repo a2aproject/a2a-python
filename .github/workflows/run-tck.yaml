@@ -26,6 +26,7 @@ concurrency:
 
 jobs:
   tck-test:
+    name: Run TCK with Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
