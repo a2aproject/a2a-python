@@ -53,12 +53,6 @@ jobs:
           path: tck/a2a-tck
           ref: ${{ env.TCK_VERSION }}
 
-      - name: Install uv and Python dependencies
-        run: |
-          pip install uv
-          uv pip install -e .
-        working-directory: tck/a2a-tck
-
       - name: Start SUT
         run: |
           uv run tck/sut_agent.py &
