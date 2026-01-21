@@ -56,8 +56,6 @@ jobs:
       - name: Start SUT
         run: |
           uv run tck/sut_agent.py &
-        env:
-          HTTP_PORT: 41241
 
       - name: Wait for SUT to start
         run: |
@@ -90,14 +88,12 @@ jobs:
 
       - name: Run TCK (mandatory)
         id: run-tck-mandatory
-        timeout-minutes: 5
         run: |
           uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category mandatory --transports jsonrpc
         working-directory: tck/a2a-tck
 
       - name: Run TCK (capabilities)
         id: run-tck-capabilities
-        timeout-minutes: 5
         run: |
           uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category capabilities --transports jsonrpc
         working-directory: tck/a2a-tck
