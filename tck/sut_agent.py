@@ -124,7 +124,6 @@ class SUTAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(final_update)
 
 
-
 def main() -> None:
     """Main entrypoint."""
     http_port = int(os.environ.get('HTTP_PORT', '41241'))
