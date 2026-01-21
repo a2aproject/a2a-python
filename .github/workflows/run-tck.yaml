@@ -10,6 +10,9 @@ on:
       - 'LICENSE'
       - '.github/CODEOWNERS'
 
+permissions:
+  contents: read
+
 env:
   TCK_VERSION: 0.3.0.beta3
   SUT_BASE_URL: http://localhost:41241
