@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 
 try:
@@ -12,10 +12,12 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
+
 from a2a.client.client import ClientConfig
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
+from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.grpc import a2a_pb2, a2a_pb2_grpc
 from a2a.types import (
     AgentCard,
@@ -44,6 +46,7 @@ class GrpcTransport(ClientTransport):
         self,
         channel: Channel,
         agent_card: AgentCard | None,
+        extensions: list[str] | None = None,
     ):
         """Initializes the GrpcTransport."""
         self.agent_card = agent_card
@@ -54,6 +57,18 @@ class GrpcTransport(ClientTransport):
             if agent_card
             else True
         )
+        self.extensions = extensions
+
+    def _get_grpc_metadata(
+        self,
+        extensions: list[str] | None = None,
+    ) -> list[tuple[str, str]] | None:
+        """Creates gRPC metadata for extensions."""
+        if extensions is not None:
+            return [(HTTP_EXTENSION_HEADER, ','.join(extensions))]
+        if self.extensions is not None:
+            return [(HTTP_EXTENSION_HEADER, ','.join(self.extensions))]
+        return None
 
     @classmethod
     def create(
@@ -66,16 +81,14 @@ class GrpcTransport(ClientTransport):
         """Creates a gRPC transport for the A2A client."""
         if config.grpc_channel_factory is None:
             raise ValueError('grpc_channel_factory is required when using gRPC')
-        return cls(
-            config.grpc_channel_factory(url),
-            card,
-        )
+        return cls(config.grpc_channel_factory(url), card, config.extensions)
 
     async def send_message(
         self,
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task | Message:
         """Sends a non-streaming message request to the agent."""
         response = await self.stub.SendMessage(
@@ -85,7 +98,8 @@ class GrpcTransport(ClientTransport):
                     request.configuration
                 ),
                 metadata=proto_utils.ToProto.metadata(request.metadata),
-            )
+            ),
+            metadata=self._get_grpc_metadata(extensions),
         )
         if response.HasField('task'):
             return proto_utils.FromProto.task(response.task)
@@ -96,6 +110,7 @@ class GrpcTransport(ClientTransport):
         request: MessageSendParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
@@ -107,7 +122,8 @@ class GrpcTransport(ClientTransport):
                     request.configuration
                 ),
                 metadata=proto_utils.ToProto.metadata(request.metadata),
-            )
+            ),
+            metadata=self._get_grpc_metadata(extensions),
         )
         while True:
             response = await stream.read()
@@ -116,13 +132,18 @@ class GrpcTransport(ClientTransport):
             yield proto_utils.FromProto.stream_response(response)
 
     async def resubscribe(
-        self, request: TaskIdParams, *, context: ClientCallContext | None = None
+        self,
+        request: TaskIdParams,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> AsyncGenerator[
         Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ]:
         """Reconnects to get task updates."""
         stream = self.stub.TaskSubscription(
-            a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}')
+            a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}'),
+            metadata=self._get_grpc_metadata(extensions),
         )
         while True:
             response = await stream.read()
@@ -135,13 +156,15 @@ class GrpcTransport(ClientTransport):
         request: TaskQueryParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         task = await self.stub.GetTask(
             a2a_pb2.GetTaskRequest(
                 name=f'tasks/{request.id}',
                 history_length=request.history_length,
-            )
+            ),
+            metadata=self._get_grpc_metadata(extensions),
         )
         return proto_utils.FromProto.task(task)
 
@@ -150,10 +173,12 @@ class GrpcTransport(ClientTransport):
         request: TaskIdParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         task = await self.stub.CancelTask(
-            a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
+            a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}'),
+            metadata=self._get_grpc_metadata(extensions),
         )
         return proto_utils.FromProto.task(task)
 
@@ -162,6 +187,7 @@ class GrpcTransport(ClientTransport):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         config = await self.stub.CreateTaskPushNotificationConfig(
@@ -171,7 +197,8 @@ class GrpcTransport(ClientTransport):
                 config=proto_utils.ToProto.task_push_notification_config(
                     request
                 ),
-            )
+            ),
+            metadata=self._get_grpc_metadata(extensions),
         )
         return proto_utils.FromProto.task_push_notification_config(config)
 
@@ -180,12 +207,14 @@ class GrpcTransport(ClientTransport):
         request: GetTaskPushNotificationConfigParams,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         config = await self.stub.GetTaskPushNotificationConfig(
             a2a_pb2.GetTaskPushNotificationConfigRequest(
                 name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
-            )
+            ),
+            metadata=self._get_grpc_metadata(extensions),
         )
         return proto_utils.FromProto.task_push_notification_config(config)
 
@@ -193,6 +222,8 @@ class GrpcTransport(ClientTransport):
         self,
         *,
         context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
@@ -203,8 +234,12 @@ class GrpcTransport(ClientTransport):
 
         card_pb = await self.stub.GetAgentCard(
             a2a_pb2.GetAgentCardRequest(),
+            metadata=self._get_grpc_metadata(extensions),
         )
         card = proto_utils.FromProto.agent_card(card_pb)
+        if signature_verifier:
+            signature_verifier(card)
+
         self.agent_card = card
         self._needs_extended_card = False
         return card

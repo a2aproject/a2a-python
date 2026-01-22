@@ -39,12 +39,14 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
             TransportProtocol.jsonrpc,
             TransportProtocol.http_json,
         ],
+        extensions=['https://example.com/test-ext/v0'],
     )
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
     assert isinstance(client._transport, JsonRpcTransport)
     assert client._transport.url == 'http://primary-url.com'
+    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
 
 
 def test_client_factory_selects_secondary_transport_url(
@@ -65,12 +67,14 @@ def test_client_factory_selects_secondary_transport_url(
             TransportProtocol.jsonrpc,
         ],
         use_client_preference=True,
+        extensions=['https://example.com/test-ext/v0'],
     )
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
     assert isinstance(client._transport, RestTransport)
     assert client._transport.url == 'http://secondary-url.com'
+    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
 
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):
@@ -186,6 +190,7 @@ async def test_client_factory_connect_with_resolver_args(
         mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
             relative_card_path=relative_path,
             http_kwargs=http_kwargs,
+            signature_verifier=None,
         )
 
 
@@ -212,6 +217,7 @@ async def test_client_factory_connect_resolver_args_without_client(
         mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
             relative_card_path=relative_path,
             http_kwargs=http_kwargs,
+            signature_verifier=None,
         )
 
 

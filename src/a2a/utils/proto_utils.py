@@ -203,6 +203,7 @@ class ToProto:
                 if task.history
                 else None
             ),
+            metadata=cls.metadata(task.metadata),
         )
 
     @classmethod
@@ -395,6 +396,21 @@ class ToProto:
                 cls.agent_interface(x) for x in card.additional_interfaces
             ]
             if card.additional_interfaces
+            else None,
+            signatures=[cls.agent_card_signature(x) for x in card.signatures]
+            if card.signatures
+            else None,
+        )
+
+    @classmethod
+    def agent_card_signature(
+        cls, signature: types.AgentCardSignature
+    ) -> a2a_pb2.AgentCardSignature:
+        return a2a_pb2.AgentCardSignature(
+            protected=signature.protected,
+            signature=signature.signature,
+            header=dict_to_struct(signature.header)
+            if signature.header is not None
             else None,
         )
 
@@ -660,6 +676,7 @@ class FromProto:
             status=cls.task_status(task.status),
             artifacts=[cls.artifact(a) for a in task.artifacts],
             history=[cls.message(h) for h in task.history],
+            metadata=cls.metadata(task.metadata),
         )
 
     @classmethod
@@ -863,6 +880,19 @@ class FromProto:
             ]
             if card.additional_interfaces
             else None,
+            signatures=[cls.agent_card_signature(x) for x in card.signatures]
+            if card.signatures
+            else None,
+        )
+
+    @classmethod
+    def agent_card_signature(
+        cls, signature: a2a_pb2.AgentCardSignature
+    ) -> types.AgentCardSignature:
+        return types.AgentCardSignature(
+            protected=signature.protected,
+            signature=signature.signature,
+            header=json_format.MessageToDict(signature.header),
         )
 
     @classmethod

@@ -7,6 +7,10 @@ import pytest
 
 from a2a.types import (
     Artifact,
+    AgentCard,
+    AgentCardSignature,
+    AgentCapabilities,
+    AgentSkill,
     Message,
     MessageSendParams,
     Part,
@@ -23,6 +27,7 @@ from a2a.utils.helpers import (
     build_text_artifact,
     create_task_obj,
     validate,
+    canonicalize_agent_card,
 )
 
 
@@ -43,6 +48,34 @@ MINIMAL_TASK: dict[str, Any] = {
     'context_id': 'session-xyz',
     'status': MINIMAL_TASK_STATUS,
     'type': 'task',
+}
+
+SAMPLE_AGENT_CARD: dict[str, Any] = {
+    'name': 'Test Agent',
+    'description': 'A test agent',
+    'url': 'http://localhost',
+    'version': '1.0.0',
+    'capabilities': AgentCapabilities(
+        streaming=None,
+        push_notifications=True,
+    ),
+    'default_input_modes': ['text/plain'],
+    'default_output_modes': ['text/plain'],
+    'documentation_url': None,
+    'icon_url': '',
+    'skills': [
+        AgentSkill(
+            id='skill1',
+            name='Test Skill',
+            description='A test skill',
+            tags=['test'],
+        )
+    ],
+    'signatures': [
+        AgentCardSignature(
+            protected='protected_header', signature='test_signature'
+        )
+    ],
 }
 
 
@@ -328,3 +361,22 @@ def test_are_modalities_compatible_both_empty():
         )
         is True
     )
+
+
+def test_canonicalize_agent_card():
+    """Test canonicalize_agent_card with defaults, optionals, and exceptions.
+
+    - extensions is omitted as it's not set and optional.
+    - protocolVersion is included because it's always added by canonicalize_agent_card.
+    - signatures should be omitted.
+    """
+    agent_card = AgentCard(**SAMPLE_AGENT_CARD)
+    expected_jcs = (
+        '{"capabilities":{"pushNotifications":true},'
+        '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
+        '"description":"A test agent","name":"Test Agent",'
+        '"skills":[{"description":"A test skill","id":"skill1","name":"Test Skill","tags":["test"]}],'
+        '"url":"http://localhost","version":"1.0.0"}'
+    )
+    result = canonicalize_agent_card(agent_card)
+    assert result == expected_jcs
