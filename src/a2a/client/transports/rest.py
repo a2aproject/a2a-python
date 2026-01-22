@@ -154,6 +154,8 @@ class RestTransport(ClientTransport):
             try:
                 event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
                     event = a2a_pb2.StreamResponse()
                     Parse(sse.data, event)
                     yield proto_utils.FromProto.stream_response(event)

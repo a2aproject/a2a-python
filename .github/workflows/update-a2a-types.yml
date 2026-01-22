@@ -1,8 +1,9 @@
 ---
 name: Update A2A Schema from Specification
 on:
-  repository_dispatch:
-    types: [a2a_json_update]
+#  TODO (https://github.com/a2aproject/a2a-python/issues/559): bring back once types are migrated, currently it generates many broken PRs
+#  repository_dispatch:
+#    types: [a2a_json_update]
   workflow_dispatch:
 jobs:
   generate_and_pr:
@@ -22,7 +23,7 @@ jobs:
       - name: Configure uv shell
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies (datamodel-code-generator)
-        run: uv sync
+        run: uv sync --locked
       - name: Define output file variable
         id: vars
         run: |
