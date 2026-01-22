@@ -176,6 +176,8 @@ class JsonRpcTransport(ClientTransport):
             try:
                 event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
                     response = SendStreamingMessageResponse.model_validate(
                         json.loads(sse.data)
                     )
