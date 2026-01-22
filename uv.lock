@@ -155,14 +155,14 @@ dev = [
 
 [[package]]
 name = "aiomysql"
-version = "0.2.0"
+version = "0.3.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "pymysql" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/67/76/2c5b55e4406a1957ffdfd933a94c2517455291c97d2b81cec6813754791a/aiomysql-0.2.0.tar.gz", hash = "sha256:558b9c26d580d08b8c5fd1be23c5231ce3aeff2dadad989540fee740253deb67", size = 114706, upload-time = "2023-06-11T19:57:53.608Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/07/5a/30166db4f993a61926dc84b4eba37303804d8a3bb6a196c954cc7274b636/aiomysql-0.3.0.tar.gz", hash = "sha256:9e850677d456dc4fea59ad871d4bcdb6adbce02326aaa32a97a43125256f23de", size = 108229, upload-time = "2025-10-21T22:33:40.083Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/42/87/c982ee8b333c85b8ae16306387d703a1fcdfc81a2f3f15a24820ab1a512d/aiomysql-0.2.0-py3-none-any.whl", hash = "sha256:b7c26da0daf23a5ec5e0b133c03d20657276e4eae9b73e040b72787f6f6ade0a", size = 44215, upload-time = "2023-06-11T19:57:51.09Z" },
+    { url = "https://files.pythonhosted.org/packages/d2/12/bf5241e737e84c4efb9f39b9c779c034bb4457852768d9d3ca0d39b68825/aiomysql-0.3.0-py3-none-any.whl", hash = "sha256:448b31e0d11b6e8dd6e8356b7f39cec0e44293b2c6e368c9e8eeeaff77b3cbec", size = 71836, upload-time = "2025-10-21T22:33:37.468Z" },
 ]
 
 [[package]]
