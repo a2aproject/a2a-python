@@ -55,7 +55,7 @@ class TestRestTransportExtensions:
     async def test_send_message_with_default_extensions(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
-        """Test that SSE comments are ignored."""
+        """Test that send_message adds extensions to headers."""
         extensions = [
             'https://example.com/test-ext/v1',
             'https://example.com/test-ext/v2',
@@ -100,7 +100,7 @@ class TestRestTransportExtensions:
         self,
         mock_agent_card: MagicMock,
     ):
-        """Test successful streaming in RestTransport."""
+        """Test that SSE comments are ignored."""
         async with httpx.AsyncClient() as client:
             transport = RestTransport(
                 httpx_client=client, agent_card=mock_agent_card
