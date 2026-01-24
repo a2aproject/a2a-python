@@ -9,12 +9,12 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
-from a2a.grpc import a2a_pb2
+from a2a.types import a2a_pb2
 from a2a.server.apps.rest import fastapi_app, rest_adapter
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     Message,
     Part,
@@ -22,7 +22,6 @@ from a2a.types import (
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
@@ -183,22 +182,22 @@ async def test_send_message_success_message(
     client: AsyncClient, request_handler: MagicMock
 ) -> None:
     expected_response = a2a_pb2.SendMessageResponse(
-        msg=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test',
             role=a2a_pb2.Role.ROLE_AGENT,
-            content=[
+            parts=[
                 a2a_pb2.Part(text='response message'),
             ],
         ),
     )
     request_handler.on_message_send.return_value = Message(
         message_id='test',
-        role=Role.agent,
-        parts=[Part(TextPart(text='response message'))],
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='response message')],
     )
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(),
+        message=a2a_pb2.Message(),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
@@ -223,10 +222,10 @@ async def test_send_message_success_task(
             context_id='test_context_id',
             status=a2a_pb2.TaskStatus(
                 state=a2a_pb2.TaskState.TASK_STATE_COMPLETED,
-                update=a2a_pb2.Message(
+                message=a2a_pb2.Message(
                     message_id='test',
-                    role=a2a_pb2.ROLE_AGENT,
-                    content=[
+                    role=a2a_pb2.Role.ROLE_AGENT,
+                    parts=[
                         a2a_pb2.Part(text='response task message'),
                     ],
                 ),
@@ -237,17 +236,17 @@ async def test_send_message_success_task(
         id='test_task_id',
         context_id='test_context_id',
         status=TaskStatus(
-            state=TaskState.completed,
+            state=TaskState.TASK_STATE_COMPLETED,
             message=Message(
                 message_id='test',
-                role=Role.agent,
-                parts=[Part(TextPart(text='response task message'))],
+                role=Role.ROLE_AGENT,
+                parts=[Part(text='response task message')],
             ),
         ),
     )
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(),
+        message=a2a_pb2.Message(),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
@@ -278,23 +277,23 @@ async def test_streaming_message_request_body_consumption(
         """Mock streaming response generator."""
         yield Message(
             message_id='stream_msg_1',
-            role=Role.agent,
-            parts=[Part(TextPart(text='First streaming response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='First streaming response')],
         )
         yield Message(
             message_id='stream_msg_2',
-            role=Role.agent,
-            parts=[Part(TextPart(text='Second streaming response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='Second streaming response')],
         )
 
     request_handler.on_message_send_stream.return_value = mock_stream_response()
 
     # Create a valid streaming request
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
-            content=[a2a_pb2.Part(text='Test streaming message')],
+            parts=[a2a_pb2.Part(text='Test streaming message')],
         ),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )
@@ -325,17 +324,17 @@ async def test_streaming_endpoint_with_invalid_content_type(
     async def mock_stream_response():
         yield Message(
             message_id='stream_msg_1',
-            role=Role.agent,
-            parts=[Part(TextPart(text='Response'))],
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='Response')],
         )
 
     request_handler.on_message_send_stream.return_value = mock_stream_response()
 
     request = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(
+        message=a2a_pb2.Message(
             message_id='test_stream_msg',
             role=a2a_pb2.ROLE_USER,
-            content=[a2a_pb2.Part(text='Test message')],
+            parts=[a2a_pb2.Part(text='Test message')],
         ),
         configuration=a2a_pb2.SendMessageConfiguration(),
     )

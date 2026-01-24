@@ -13,6 +13,8 @@ dependencies = [
   "pydantic>=2.11.3",
   "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
+  "json-rpc>=1.15.0",
+  "googleapis-common-protos>=1.70.0",
 ]
 
 classifiers = [
@@ -35,6 +37,7 @@ grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
+signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
@@ -45,6 +48,7 @@ all = [
   "a2a-sdk[encryption]",
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
+  "a2a-sdk[signing]",
 ]
 
 [project.urls]
@@ -54,8 +58,15 @@ changelog = "https://github.com/a2aproject/a2a-python/blob/main/CHANGELOG.md"
 documentation = "https://a2a-protocol.org/latest/sdk/python/"
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning"]
+requires = ["hatchling", "uv-dynamic-versioning", "hatch-build-scripts"]
 build-backend = "hatchling.build"
+
+[tool.hatch.build.hooks.build-scripts]
+artifacts = ["src/a2a/types/a2a.json"]
+
+[[tool.hatch.build.hooks.build-scripts.scripts]]
+commands = ["bash scripts/gen_proto.sh"]
+work_dir = "."
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
@@ -74,6 +85,16 @@ addopts = "-ra --strict-markers"
 markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
 ]
+filterwarnings = [
+  # SQLAlchemy warning about duplicate class registration - this is a known limitation
+  # of the dynamic model creation pattern used in models.py for custom table names
+  "ignore:This declarative base already contains a class with the same class name:sqlalchemy.exc.SAWarning",
+  # ResourceWarnings from asyncio event loop/socket cleanup during garbage collection
+  # These appear intermittently between tests due to pytest-asyncio and sse-starlette timing
+  "ignore:unclosed event loop:ResourceWarning",
+  "ignore:unclosed transport:ResourceWarning", 
+  "ignore:unclosed <socket.socket:ResourceWarning",
+]
 
 [tool.pytest-asyncio]
 mode = "strict"
@@ -84,8 +105,8 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
-  "datamodel-code-generator>=0.30.0",
   "mypy>=1.15.0",
+  "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
@@ -114,7 +135,7 @@ explicit = true
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-exclude = ["src/a2a/grpc/"]
+exclude = ["src/a2a/types/a2a_pb2\\.py", "src/a2a/types/a2a_pb2_grpc\\.py"]
 disable_error_code = [
   "import-not-found",
   "annotation-unchecked",
@@ -134,7 +155,8 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
-  "src/a2a/grpc/",
+  "src/a2a/types/a2a_pb2.py",
+  "src/a2a/types/a2a_pb2_grpc.py",
 ]
 reportMissingImports = "none"
 reportMissingModuleSource = "none"
@@ -145,7 +167,8 @@ omit = [
     "*/tests/*",
     "*/site-packages/*",
     "*/__init__.py",
-    "src/a2a/grpc/*",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2_grpc.py",
 ]
 
 [tool.coverage.report]
@@ -257,7 +280,9 @@ exclude = [
     "node_modules",
     "venv",
     "*/migrations/*",
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
     "tests/**",
 ]
 
@@ -311,7 +336,9 @@ inline-quotes = "single"
 
 [tool.ruff.format]
 exclude = [
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
 ]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"

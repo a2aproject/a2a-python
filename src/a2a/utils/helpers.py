@@ -2,21 +2,24 @@
 
 import functools
 import inspect
+import json
 import logging
 
 from collections.abc import Callable
 from typing import Any
 from uuid import uuid4
 
-from a2a.types import (
+from google.protobuf.json_format import MessageToDict
+
+from a2a.types.a2a_pb2 import (
+    AgentCard,
     Artifact,
-    MessageSendParams,
     Part,
+    SendMessageRequest,
     Task,
     TaskArtifactUpdateEvent,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 from a2a.utils.errors import ServerError, UnsupportedOperationError
 from a2a.utils.telemetry import trace_function
@@ -26,13 +29,13 @@ logger = logging.getLogger(__name__)
 
 
 @trace_function()
-def create_task_obj(message_send_params: MessageSendParams) -> Task:
+def create_task_obj(message_send_params: SendMessageRequest) -> Task:
     """Create a new task object from message send params.
 
     Generates UUIDs for task and context IDs if they are not already present in the message.
 
     Args:
-        message_send_params: The `MessageSendParams` object containing the initial message.
+        message_send_params: The `SendMessageRequest` object containing the initial message.
 
     Returns:
         A new `Task` object initialized with 'submitted' status and the input message in history.
@@ -40,12 +43,13 @@ def create_task_obj(message_send_params: MessageSendParams) -> Task:
     if not message_send_params.message.context_id:
         message_send_params.message.context_id = str(uuid4())
 
-    return Task(
+    task = Task(
         id=str(uuid4()),
         context_id=message_send_params.message.context_id,
-        status=TaskStatus(state=TaskState.submitted),
-        history=[message_send_params.message],
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
+    task.history.append(message_send_params.message)
+    return task
 
 
 @trace_function()
@@ -59,9 +63,6 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
         task: The `Task` object to modify.
         event: The `TaskArtifactUpdateEvent` containing the artifact data.
     """
-    if not task.artifacts:
-        task.artifacts = []
-
     new_artifact_data: Artifact = event.artifact
     artifact_id: str = new_artifact_data.artifact_id
     append_parts: bool = event.append or False
@@ -83,7 +84,9 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             logger.debug(
                 'Replacing artifact at id %s for task %s', artifact_id, task.id
             )
-            task.artifacts[existing_artifact_list_index] = new_artifact_data
+            task.artifacts[existing_artifact_list_index].CopyFrom(
+                new_artifact_data
+            )
         else:
             # Append the new artifact since no artifact with this index exists yet
             logger.debug(
@@ -118,10 +121,9 @@ def build_text_artifact(text: str, artifact_id: str) -> Artifact:
         artifact_id: The ID for the artifact.
 
     Returns:
-        An `Artifact` object containing a single `TextPart`.
+        An `Artifact` object containing a single text Part.
     """
-    text_part = TextPart(text=text)
-    part = Part(root=text_part)
+    part = Part(text=text)
     return Artifact(parts=[part], artifact_id=artifact_id)
 
 
@@ -340,3 +342,29 @@ def are_modalities_compatible(
         return True
 
     return any(x in server_output_modes for x in client_output_modes)
+
+
+def _clean_empty(d: Any) -> Any:
+    """Recursively remove empty strings, lists and dicts from a dictionary."""
+    if isinstance(d, dict):
+        cleaned_dict: dict[Any, Any] = {
+            k: _clean_empty(v) for k, v in d.items()
+        }
+        return {k: v for k, v in cleaned_dict.items() if v}
+    if isinstance(d, list):
+        cleaned_list: list[Any] = [_clean_empty(v) for v in d]
+        return [v for v in cleaned_list if v]
+    return d if d not in ['', [], {}] else None
+
+
+def canonicalize_agent_card(agent_card: AgentCard) -> str:
+    """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
+    card_dict = MessageToDict(
+        agent_card,
+    )
+    # Remove signatures field if present
+    card_dict.pop('signatures', None)
+
+    # Recursively remove empty values
+    cleaned_dict = _clean_empty(card_dict)
+    return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)

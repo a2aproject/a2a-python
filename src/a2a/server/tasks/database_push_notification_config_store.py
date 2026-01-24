@@ -4,7 +4,7 @@ import logging
 
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
+from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
@@ -37,7 +37,7 @@ from a2a.server.models import (
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig
+from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 if TYPE_CHECKING:
@@ -141,11 +141,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     def _to_orm(
         self, task_id: str, config: PushNotificationConfig
     ) -> PushNotificationConfigModel:
-        """Maps a Pydantic PushNotificationConfig to a SQLAlchemy model instance.
+        """Maps a PushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
-        json_payload = config.model_dump_json().encode('utf-8')
+        json_payload = MessageToJson(config).encode('utf-8')
 
         if self._fernet:
             data_to_store = self._fernet.encrypt(json_payload)
@@ -161,7 +161,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     def _from_orm(
         self, model_instance: PushNotificationConfigModel
     ) -> PushNotificationConfig:
-        """Maps a SQLAlchemy model instance to a Pydantic PushNotificationConfig.
+        """Maps a SQLAlchemy model instance to a PushNotificationConfig proto.
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
@@ -172,35 +172,41 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)
-                return PushNotificationConfig.model_validate_json(
-                    decrypted_payload
+                return Parse(
+                    decrypted_payload.decode('utf-8'), PushNotificationConfig()
                 )
-            except (json.JSONDecodeError, ValidationError) as e:
-                logger.exception(
-                    'Failed to parse decrypted push notification config for task %s, config %s. '
-                    'Data is corrupted or not valid JSON after decryption.',
-                    model_instance.task_id,
-                    model_instance.config_id,
-                )
-                raise ValueError(
-                    'Failed to parse decrypted push notification config data'
-                ) from e
-            except InvalidToken:
-                # Decryption failed. This could be because the data is not encrypted.
-                # We'll log a warning and try to parse it as plain JSON as a fallback.
-                logger.warning(
-                    'Failed to decrypt push notification config for task %s, config %s. '
-                    'Attempting to parse as unencrypted JSON. '
-                    'This may indicate an incorrect encryption key or unencrypted data in the database.',
-                    model_instance.task_id,
-                    model_instance.config_id,
-                )
-                # Fall through to the unencrypted parsing logic below.
+            except (json.JSONDecodeError, Exception) as e:
+                if isinstance(e, InvalidToken):
+                    # Decryption failed. This could be because the data is not encrypted.
+                    # We'll log a warning and try to parse it as plain JSON as a fallback.
+                    logger.warning(
+                        'Failed to decrypt push notification config for task %s, config %s. '
+                        'Attempting to parse as unencrypted JSON. '
+                        'This may indicate an incorrect encryption key or unencrypted data in the database.',
+                        model_instance.task_id,
+                        model_instance.config_id,
+                    )
+                    # Fall through to the unencrypted parsing logic below.
+                else:
+                    logger.exception(
+                        'Failed to parse decrypted push notification config for task %s, config %s. '
+                        'Data is corrupted or not valid JSON after decryption.',
+                        model_instance.task_id,
+                        model_instance.config_id,
+                    )
+                    raise ValueError(  # noqa: TRY004
+                        'Failed to parse decrypted push notification config data'
+                    ) from e
 
         # Try to parse as plain JSON.
         try:
-            return PushNotificationConfig.model_validate_json(payload)
-        except (json.JSONDecodeError, ValidationError) as e:
+            payload_str = (
+                payload.decode('utf-8')
+                if isinstance(payload, bytes)
+                else payload
+            )
+            return Parse(payload_str, PushNotificationConfig())
+        except Exception as e:
             if self._fernet:
                 logger.exception(
                     'Failed to parse push notification config for task %s, config %s. '
@@ -228,8 +234,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
 
-        config_to_save = notification_config.model_copy()
-        if config_to_save.id is None:
+        # Create a copy of the config using proto CopyFrom
+        config_to_save = PushNotificationConfig()
+        config_to_save.CopyFrom(notification_config)
+        if not config_to_save.id:
             config_to_save.id = task_id
 
         db_config = self._to_orm(task_id, config_to_save)
@@ -281,10 +289,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             result = await session.execute(stmt)
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info(
                     'Deleted %s push notification config(s) for task %s.',
-                    result.rowcount,
+                    result.rowcount,  # type: ignore[attr-defined]
                     task_id,
                 )
             else:

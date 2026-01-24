@@ -10,9 +10,11 @@ else:
         return func
 
 
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.message import Message as ProtoMessage
 from pydantic import BaseModel
 
-from a2a.types import Artifact, Message, TaskStatus
+from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
@@ -35,11 +37,11 @@ except ImportError as e:
     ) from e
 
 
-T = TypeVar('T', bound=BaseModel)
+T = TypeVar('T')
 
 
 class PydanticType(TypeDecorator[T], Generic[T]):
-    """SQLAlchemy type that handles Pydantic model serialization."""
+    """SQLAlchemy type that handles Pydantic model and Protobuf message serialization."""
 
     impl = JSON
     cache_ok = True
@@ -48,7 +50,7 @@ class PydanticType(TypeDecorator[T], Generic[T]):
         """Initialize the PydanticType.
 
         Args:
-            pydantic_type: The Pydantic model type to handle.
+            pydantic_type: The Pydantic model or Protobuf message type to handle.
             **kwargs: Additional arguments for TypeDecorator.
         """
         self.pydantic_type = pydantic_type
@@ -57,26 +59,32 @@ class PydanticType(TypeDecorator[T], Generic[T]):
     def process_bind_param(
         self, value: T | None, dialect: Dialect
     ) -> dict[str, Any] | None:
-        """Convert Pydantic model to a JSON-serializable dictionary for the database."""
+        """Convert Pydantic model or Protobuf message to a JSON-serializable dictionary for the database."""
         if value is None:
             return None
-        return (
-            value.model_dump(mode='json')
-            if isinstance(value, BaseModel)
-            else value
-        )
+        if isinstance(value, ProtoMessage):
+            return MessageToDict(value, preserving_proto_field_name=False)
+        if isinstance(value, BaseModel):
+            return value.model_dump(mode='json')
+        return value  # type: ignore[return-value]
 
     def process_result_value(
         self, value: dict[str, Any] | None, dialect: Dialect
     ) -> T | None:
-        """Convert a JSON-like dictionary from the database back to a Pydantic model."""
+        """Convert a JSON-like dictionary from the database back to a Pydantic model or Protobuf message."""
         if value is None:
             return None
-        return self.pydantic_type.model_validate(value)
+        # Check if it's a protobuf message class
+        if isinstance(self.pydantic_type, type) and issubclass(
+            self.pydantic_type, ProtoMessage
+        ):
+            return ParseDict(value, self.pydantic_type())  # type: ignore[return-value]
+        # Assume it's a Pydantic model
+        return self.pydantic_type.model_validate(value)  # type: ignore[attr-defined]
 
 
 class PydanticListType(TypeDecorator, Generic[T]):
-    """SQLAlchemy type that handles lists of Pydantic models."""
+    """SQLAlchemy type that handles lists of Pydantic models or Protobuf messages."""
 
     impl = JSON
     cache_ok = True
@@ -85,7 +93,7 @@ class PydanticListType(TypeDecorator, Generic[T]):
         """Initialize the PydanticListType.
 
         Args:
-            pydantic_type: The Pydantic model type for items in the list.
+            pydantic_type: The Pydantic model or Protobuf message type for items in the list.
             **kwargs: Additional arguments for TypeDecorator.
         """
         self.pydantic_type = pydantic_type
@@ -94,23 +102,34 @@ class PydanticListType(TypeDecorator, Generic[T]):
     def process_bind_param(
         self, value: list[T] | None, dialect: Dialect
     ) -> list[dict[str, Any]] | None:
-        """Convert a list of Pydantic models to a JSON-serializable list for the DB."""
+        """Convert a list of Pydantic models or Protobuf messages to a JSON-serializable list for the DB."""
         if value is None:
             return None
-        return [
-            item.model_dump(mode='json')
-            if isinstance(item, BaseModel)
-            else item
-            for item in value
-        ]
+        result: list[dict[str, Any]] = []
+        for item in value:
+            if isinstance(item, ProtoMessage):
+                result.append(
+                    MessageToDict(item, preserving_proto_field_name=False)
+                )
+            elif isinstance(item, BaseModel):
+                result.append(item.model_dump(mode='json'))
+            else:
+                result.append(item)  # type: ignore[arg-type]
+        return result
 
     def process_result_value(
         self, value: list[dict[str, Any]] | None, dialect: Dialect
     ) -> list[T] | None:
-        """Convert a JSON-like list from the DB back to a list of Pydantic models."""
+        """Convert a JSON-like list from the DB back to a list of Pydantic models or Protobuf messages."""
         if value is None:
             return None
-        return [self.pydantic_type.model_validate(item) for item in value]
+        # Check if it's a protobuf message class
+        if isinstance(self.pydantic_type, type) and issubclass(
+            self.pydantic_type, ProtoMessage
+        ):
+            return [ParseDict(item, self.pydantic_type()) for item in value]  # type: ignore[misc]
+        # Assume it's a Pydantic model
+        return [self.pydantic_type.model_validate(item) for item in value]  # type: ignore[attr-defined]
 
 
 # Base class for all database models

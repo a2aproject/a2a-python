@@ -27,8 +27,8 @@ from a2a.server.apps.jsonrpc.jsonrpc_app import (
     JSONRPCApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
-from a2a.types import AgentCard
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
@@ -140,7 +140,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             )
 
         # TODO: deprecated endpoint to be removed in a future release
-        if self.agent_card.supports_authenticated_extended_card:
+        if self.agent_card.capabilities.extended_agent_card:
             app_routes.append(
                 Route(
                     extended_agent_card_url,

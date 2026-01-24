@@ -3,13 +3,15 @@ import asyncio
 from datetime import datetime, timezone
 from typing import Any
 
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from a2a.server.events import EventQueue
 from a2a.server.id_generator import (
     IDGenerator,
     IDGeneratorContext,
     UUIDGenerator,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
@@ -50,10 +52,10 @@ class TaskUpdater:
         self._lock = asyncio.Lock()
         self._terminal_state_reached = False
         self._terminal_states = {
-            TaskState.completed,
-            TaskState.canceled,
-            TaskState.failed,
-            TaskState.rejected,
+            TaskState.TASK_STATE_COMPLETED,
+            TaskState.TASK_STATE_CANCELLED,
+            TaskState.TASK_STATE_FAILED,
+            TaskState.TASK_STATE_REJECTED,
         }
         self._artifact_id_generator = (
             artifact_id_generator if artifact_id_generator else UUIDGenerator()
@@ -88,22 +90,27 @@ class TaskUpdater:
                 self._terminal_state_reached = True
                 final = True
 
-            current_timestamp = (
-                timestamp
-                if timestamp
-                else datetime.now(timezone.utc).isoformat()
-            )
+            # Create proto timestamp from datetime
+            ts = Timestamp()
+            if timestamp:
+                # If timestamp string provided, parse it
+                dt = datetime.fromisoformat(timestamp.replace('Z', '+00:00'))
+                ts.FromDatetime(dt)
+            else:
+                ts.FromDatetime(datetime.now(timezone.utc))
+
+            status = TaskStatus(state=state)
+            if message:
+                status.message.CopyFrom(message)
+            status.timestamp.CopyFrom(ts)
+
             await self.event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=self.task_id,
                     context_id=self.context_id,
                     final=final,
                     metadata=metadata,
-                    status=TaskStatus(
-                        state=state,
-                        message=message,
-                        timestamp=current_timestamp,
-                    ),
+                    status=status,
                 )
             )
 
@@ -154,39 +161,41 @@ class TaskUpdater:
     async def complete(self, message: Message | None = None) -> None:
         """Marks the task as completed and publishes a final status update."""
         await self.update_status(
-            TaskState.completed,
+            TaskState.TASK_STATE_COMPLETED,
             message=message,
             final=True,
         )
 
     async def failed(self, message: Message | None = None) -> None:
         """Marks the task as failed and publishes a final status update."""
-        await self.update_status(TaskState.failed, message=message, final=True)
+        await self.update_status(
+            TaskState.TASK_STATE_FAILED, message=message, final=True
+        )
 
     async def reject(self, message: Message | None = None) -> None:
         """Marks the task as rejected and publishes a final status update."""
         await self.update_status(
-            TaskState.rejected, message=message, final=True
+            TaskState.TASK_STATE_REJECTED, message=message, final=True
         )
 
     async def submit(self, message: Message | None = None) -> None:
         """Marks the task as submitted and publishes a status update."""
         await self.update_status(
-            TaskState.submitted,
+            TaskState.TASK_STATE_SUBMITTED,
             message=message,
         )
 
     async def start_work(self, message: Message | None = None) -> None:
         """Marks the task as working and publishes a status update."""
         await self.update_status(
-            TaskState.working,
+            TaskState.TASK_STATE_WORKING,
             message=message,
         )
 
     async def cancel(self, message: Message | None = None) -> None:
         """Marks the task as cancelled and publishes a finalstatus update."""
         await self.update_status(
-            TaskState.canceled, message=message, final=True
+            TaskState.TASK_STATE_CANCELLED, message=message, final=True
         )
 
     async def requires_input(
@@ -194,7 +203,7 @@ class TaskUpdater:
     ) -> None:
         """Marks the task as input required and publishes a status update."""
         await self.update_status(
-            TaskState.input_required,
+            TaskState.TASK_STATE_INPUT_REQUIRED,
             message=message,
             final=final,
         )
@@ -204,7 +213,7 @@ class TaskUpdater:
     ) -> None:
         """Marks the task as auth required and publishes a status update."""
         await self.update_status(
-            TaskState.auth_required, message=message, final=final
+            TaskState.TASK_STATE_AUTH_REQUIRED, message=message, final=final
         )
 
     def new_agent_message(
@@ -225,7 +234,7 @@ class TaskUpdater:
             A new `Message` object.
         """
         return Message(
-            role=Role.agent,
+            role=Role.ROLE_AGENT,
             task_id=self.task_id,
             context_id=self.context_id,
             message_id=self._message_id_generator.generate(

@@ -1,26 +1,27 @@
-from typing import Any
-
 import pytest
 
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import Task
+from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus
 
 
-MINIMAL_TASK: dict[str, Any] = {
-    'id': 'task-abc',
-    'context_id': 'session-xyz',
-    'status': {'state': 'submitted'},
-    'kind': 'task',
-}
+def create_minimal_task(
+    task_id: str = 'task-abc', context_id: str = 'session-xyz'
+) -> Task:
+    """Create a minimal task for testing."""
+    return Task(
+        id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
 
 
 @pytest.mark.asyncio
 async def test_in_memory_task_store_save_and_get() -> None:
     """Test saving and retrieving a task from the in-memory store."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
+    task = create_minimal_task()
     await store.save(task)
-    retrieved_task = await store.get(MINIMAL_TASK['id'])
+    retrieved_task = await store.get('task-abc')
     assert retrieved_task == task
 
 
@@ -36,10 +37,10 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
 async def test_in_memory_task_store_delete() -> None:
     """Test deleting a task from the store."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
+    task = create_minimal_task()
     await store.save(task)
-    await store.delete(MINIMAL_TASK['id'])
-    retrieved_task = await store.get(MINIMAL_TASK['id'])
+    await store.delete('task-abc')
+    retrieved_task = await store.get('task-abc')
     assert retrieved_task is None
 
 

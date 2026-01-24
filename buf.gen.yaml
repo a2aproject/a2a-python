@@ -21,11 +21,15 @@ plugins:
   # Generate python protobuf related code
   # Generates *_pb2.py files, one for each .proto
   - remote: buf.build/protocolbuffers/python:v29.3
-    out: src/a2a/grpc
+    out: src/a2a/types
   # Generate python service code.
   # Generates *_pb2_grpc.py
   - remote: buf.build/grpc/python
-    out: src/a2a/grpc
+    out: src/a2a/types
   # Generates *_pb2.pyi files.
   - remote: buf.build/protocolbuffers/pyi
-    out: src/a2a/grpc
+    out: src/a2a/types
+  # Generates a2a.swagger.json (OpenAPI v2)
+  - remote: buf.build/grpc-ecosystem/openapiv2
+    out: src/a2a/types
+    opt: json_names_for_fields=true

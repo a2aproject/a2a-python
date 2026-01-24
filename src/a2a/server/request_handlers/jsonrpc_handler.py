@@ -1,56 +1,112 @@
+"""JSON-RPC handler for A2A server requests."""
+
 import logging
 
 from collections.abc import AsyncIterable, Callable
+from typing import Any
+
+from google.protobuf.json_format import MessageToDict
+from jsonrpc.jsonrpc2 import JSONRPC20Response
 
 from a2a.server.context import ServerCallContext
+from a2a.server.jsonrpc_models import (
+    InternalError as JSONRPCInternalError,
+)
+from a2a.server.jsonrpc_models import (
+    JSONRPCError,
+)
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.response_helpers import prepare_response_object
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    AuthenticatedExtendedCardNotConfiguredError,
     CancelTaskRequest,
-    CancelTaskResponse,
-    CancelTaskSuccessResponse,
     DeleteTaskPushNotificationConfigRequest,
-    DeleteTaskPushNotificationConfigResponse,
-    DeleteTaskPushNotificationConfigSuccessResponse,
-    GetAuthenticatedExtendedCardRequest,
-    GetAuthenticatedExtendedCardResponse,
-    GetAuthenticatedExtendedCardSuccessResponse,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigResponse,
-    GetTaskPushNotificationConfigSuccessResponse,
     GetTaskRequest,
-    GetTaskResponse,
-    GetTaskSuccessResponse,
-    InternalError,
-    JSONRPCErrorResponse,
     ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
-    ListTaskPushNotificationConfigSuccessResponse,
     Message,
     SendMessageRequest,
     SendMessageResponse,
-    SendMessageSuccessResponse,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SendStreamingMessageSuccessResponse,
     SetTaskPushNotificationConfigRequest,
-    SetTaskPushNotificationConfigResponse,
-    SetTaskPushNotificationConfigSuccessResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskNotFoundError,
-    TaskPushNotificationConfig,
-    TaskResubscriptionRequest,
-    TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils import proto_utils
+from a2a.utils.errors import (
+    A2AException,
+    AuthenticatedExtendedCardNotConfiguredError,
+    ContentTypeNotSupportedError,
+    InternalError,
+    InvalidAgentResponseError,
+    InvalidParamsError,
+    InvalidRequestError,
+    MethodNotFoundError,
+    PushNotificationNotSupportedError,
+    ServerError,
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+)
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+
+EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
+    TaskNotFoundError: JSONRPCError,
+    TaskNotCancelableError: JSONRPCError,
+    PushNotificationNotSupportedError: JSONRPCError,
+    UnsupportedOperationError: JSONRPCError,
+    ContentTypeNotSupportedError: JSONRPCError,
+    InvalidAgentResponseError: JSONRPCError,
+    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    InternalError: JSONRPCInternalError,
+    InvalidParamsError: JSONRPCError,
+    InvalidRequestError: JSONRPCError,
+    MethodNotFoundError: JSONRPCError,
+}
+
+ERROR_CODE_MAP: dict[type[A2AException], int] = {
+    TaskNotFoundError: -32001,
+    TaskNotCancelableError: -32002,
+    PushNotificationNotSupportedError: -32003,
+    UnsupportedOperationError: -32004,
+    ContentTypeNotSupportedError: -32005,
+    InvalidAgentResponseError: -32006,
+    AuthenticatedExtendedCardNotConfiguredError: -32007,
+    InvalidParamsError: -32602,
+    InvalidRequestError: -32600,
+    MethodNotFoundError: -32601,
+}
+
+
+def _build_success_response(
+    request_id: str | int | None, result: Any
+) -> dict[str, Any]:
+    """Build a JSON-RPC success response dict."""
+    return JSONRPC20Response(result=result, _id=request_id).data
+
+
+def _build_error_response(
+    request_id: str | int | None, error: Exception
+) -> dict[str, Any]:
+    """Build a JSON-RPC error response dict."""
+    jsonrpc_error: JSONRPCError
+    if isinstance(error, A2AException):
+        error_type = type(error)
+        model_class = EXCEPTION_MAP.get(error_type, JSONRPCInternalError)
+        code = ERROR_CODE_MAP.get(error_type, -32603)
+        jsonrpc_error = model_class(
+            code=code,
+            message=str(error),
+        )
+    else:
+        jsonrpc_error = JSONRPCInternalError(message=str(error))
+
+    error_dict = jsonrpc_error.model_dump(exclude_none=True)
+    return JSONRPC20Response(error=error_dict, _id=request_id).data
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -86,38 +142,48 @@ class JSONRPCHandler:
         self.extended_card_modifier = extended_card_modifier
         self.card_modifier = card_modifier
 
+    def _get_request_id(
+        self, context: ServerCallContext | None
+    ) -> str | int | None:
+        """Get the JSON-RPC request ID from the context."""
+        if context is None:
+            return None
+        return context.state.get('request_id')
+
     async def on_message_send(
         self,
         request: SendMessageRequest,
         context: ServerCallContext | None = None,
-    ) -> SendMessageResponse:
+    ) -> dict[str, Any]:
         """Handles the 'message/send' JSON-RPC method.
 
         Args:
-            request: The incoming `SendMessageRequest` object.
+            request: The incoming `SendMessageRequest` proto message.
             context: Context provided by the server.
 
         Returns:
-            A `SendMessageResponse` object containing the result (Task or Message)
-            or a JSON-RPC error response if a `ServerError` is raised by the handler.
+            A dict representing the JSON-RPC response.
         """
-        # TODO: Wrap in error handler to return error states
+        request_id = self._get_request_id(context)
         try:
             task_or_message = await self.request_handler.on_message_send(
-                request.params, context
+                request, context
             )
-            return prepare_response_object(
-                request.id,
-                task_or_message,
-                (Task, Message),
-                SendMessageSuccessResponse,
-                SendMessageResponse,
-            )
+            # Build result based on return type
+            response = SendMessageResponse()
+            if isinstance(task_or_message, Task):
+                response.task.CopyFrom(task_or_message)
+            elif isinstance(task_or_message, Message):
+                response.message.CopyFrom(task_or_message)
+            else:
+                # Should we handle this fallthrough?
+                pass
+
+            result = MessageToDict(response)
+            return _build_success_response(request_id, result)
         except ServerError as e:
-            return SendMessageResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
     @validate(
@@ -126,50 +192,43 @@ class JSONRPCHandler:
     )
     async def on_message_send_stream(
         self,
-        request: SendStreamingMessageRequest,
+        request: SendMessageRequest,
         context: ServerCallContext | None = None,
-    ) -> AsyncIterable[SendStreamingMessageResponse]:
+    ) -> AsyncIterable[dict[str, Any]]:
         """Handles the 'message/stream' JSON-RPC method.
 
         Yields response objects as they are produced by the underlying handler's stream.
 
         Args:
-            request: The incoming `SendStreamingMessageRequest` object.
+            request: The incoming `SendMessageRequest` object (for streaming).
             context: Context provided by the server.
 
         Yields:
-            `SendStreamingMessageResponse` objects containing streaming events
-            (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent)
-            or JSON-RPC error responses if a `ServerError` is raised.
+            Dict representations of JSON-RPC responses containing streaming events.
         """
         try:
             async for event in self.request_handler.on_message_send_stream(
-                request.params, context
+                request, context
             ):
-                yield prepare_response_object(
-                    request.id,
-                    event,
-                    (
-                        Task,
-                        Message,
-                        TaskArtifactUpdateEvent,
-                        TaskStatusUpdateEvent,
-                    ),
-                    SendStreamingMessageSuccessResponse,
-                    SendStreamingMessageResponse,
+                # Wrap the event in StreamResponse for consistent client parsing
+                stream_response = proto_utils.to_stream_response(event)
+                result = MessageToDict(
+                    stream_response, preserving_proto_field_name=False
+                )
+                yield _build_success_response(
+                    self._get_request_id(context), result
                 )
         except ServerError as e:
-            yield SendStreamingMessageResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            yield _build_error_response(
+                self._get_request_id(context),
+                e.error if e.error else InternalError(),
             )
 
     async def on_cancel_task(
         self,
         request: CancelTaskRequest,
         context: ServerCallContext | None = None,
-    ) -> CancelTaskResponse:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/cancel' JSON-RPC method.
 
         Args:
@@ -177,77 +236,61 @@ class JSONRPCHandler:
             context: Context provided by the server.
 
         Returns:
-            A `CancelTaskResponse` object containing the updated Task or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
-            task = await self.request_handler.on_cancel_task(
-                request.params, context
-            )
+            task = await self.request_handler.on_cancel_task(request, context)
         except ServerError as e:
-            return CancelTaskResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
         if task:
-            return prepare_response_object(
-                request.id,
-                task,
-                (Task,),
-                CancelTaskSuccessResponse,
-                CancelTaskResponse,
-            )
+            result = MessageToDict(task, preserving_proto_field_name=False)
+            return _build_success_response(request_id, result)
 
-        return CancelTaskResponse(
-            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
-        )
+        return _build_error_response(request_id, TaskNotFoundError())
 
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
-        request: TaskResubscriptionRequest,
+        request: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
-    ) -> AsyncIterable[SendStreamingMessageResponse]:
-        """Handles the 'tasks/resubscribe' JSON-RPC method.
+    ) -> AsyncIterable[dict[str, Any]]:
+        """Handles the 'SubscribeToTask' JSON-RPC method.
 
         Yields response objects as they are produced by the underlying handler's stream.
 
         Args:
-            request: The incoming `TaskResubscriptionRequest` object.
+            request: The incoming `SubscribeToTaskRequest` object.
             context: Context provided by the server.
 
         Yields:
-            `SendStreamingMessageResponse` objects containing streaming events
-            or JSON-RPC error responses if a `ServerError` is raised.
+            Dict representations of JSON-RPC responses containing streaming events.
         """
         try:
-            async for event in self.request_handler.on_resubscribe_to_task(
-                request.params, context
+            async for event in self.request_handler.on_subscribe_to_task(
+                request, context
             ):
-                yield prepare_response_object(
-                    request.id,
-                    event,
-                    (
-                        Task,
-                        Message,
-                        TaskArtifactUpdateEvent,
-                        TaskStatusUpdateEvent,
-                    ),
-                    SendStreamingMessageSuccessResponse,
-                    SendStreamingMessageResponse,
+                # Wrap the event in StreamResponse for consistent client parsing
+                stream_response = proto_utils.to_stream_response(event)
+                result = MessageToDict(
+                    stream_response, preserving_proto_field_name=False
+                )
+                yield _build_success_response(
+                    self._get_request_id(context), result
                 )
         except ServerError as e:
-            yield SendStreamingMessageResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            yield _build_error_response(
+                self._get_request_id(context),
+                e.error if e.error else InternalError(),
             )
 
     async def get_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> GetTaskPushNotificationConfigResponse:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/get' JSON-RPC method.
 
         Args:
@@ -255,26 +298,20 @@ class JSONRPCHandler:
             context: Context provided by the server.
 
         Returns:
-            A `GetTaskPushNotificationConfigResponse` object containing the config or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
             config = (
                 await self.request_handler.on_get_task_push_notification_config(
-                    request.params, context
+                    request, context
                 )
             )
-            return prepare_response_object(
-                request.id,
-                config,
-                (TaskPushNotificationConfig,),
-                GetTaskPushNotificationConfigSuccessResponse,
-                GetTaskPushNotificationConfigResponse,
-            )
+            result = MessageToDict(config, preserving_proto_field_name=False)
+            return _build_success_response(request_id, result)
         except ServerError as e:
-            return GetTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
     @validate(
@@ -285,7 +322,7 @@ class JSONRPCHandler:
         self,
         request: SetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> SetTaskPushNotificationConfigResponse:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/set' JSON-RPC method.
 
         Requires the agent to support push notifications.
@@ -295,37 +332,34 @@ class JSONRPCHandler:
             context: Context provided by the server.
 
         Returns:
-            A `SetTaskPushNotificationConfigResponse` object containing the config or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
 
         Raises:
             ServerError: If push notifications are not supported by the agent
                 (due to the `@validate` decorator).
         """
+        request_id = self._get_request_id(context)
         try:
-            config = (
+            # Pass the full request to the handler
+            result_config = (
                 await self.request_handler.on_set_task_push_notification_config(
-                    request.params, context
+                    request, context
                 )
             )
-            return prepare_response_object(
-                request.id,
-                config,
-                (TaskPushNotificationConfig,),
-                SetTaskPushNotificationConfigSuccessResponse,
-                SetTaskPushNotificationConfigResponse,
+            result = MessageToDict(
+                result_config, preserving_proto_field_name=False
             )
+            return _build_success_response(request_id, result)
         except ServerError as e:
-            return SetTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
     async def on_get_task(
         self,
         request: GetTaskRequest,
         context: ServerCallContext | None = None,
-    ) -> GetTaskResponse:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/get' JSON-RPC method.
 
         Args:
@@ -333,111 +367,90 @@ class JSONRPCHandler:
             context: Context provided by the server.
 
         Returns:
-            A `GetTaskResponse` object containing the Task or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
-            task = await self.request_handler.on_get_task(
-                request.params, context
-            )
+            task = await self.request_handler.on_get_task(request, context)
         except ServerError as e:
-            return GetTaskResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
         if task:
-            return prepare_response_object(
-                request.id,
-                task,
-                (Task,),
-                GetTaskSuccessResponse,
-                GetTaskResponse,
-            )
+            result = MessageToDict(task, preserving_proto_field_name=False)
+            return _build_success_response(request_id, result)
 
-        return GetTaskResponse(
-            root=JSONRPCErrorResponse(id=request.id, error=TaskNotFoundError())
-        )
+        return _build_error_response(request_id, TaskNotFoundError())
 
     async def list_push_notification_config(
         self,
         request: ListTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
-        """Handles the 'tasks/pushNotificationConfig/list' JSON-RPC method.
+    ) -> dict[str, Any]:
+        """Handles the 'ListTaskPushNotificationConfig' JSON-RPC method.
 
         Args:
             request: The incoming `ListTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:
-            A `ListTaskPushNotificationConfigResponse` object containing the config or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
-            config = await self.request_handler.on_list_task_push_notification_config(
-                request.params, context
+            response = await self.request_handler.on_list_task_push_notification_config(
+                request, context
             )
-            return prepare_response_object(
-                request.id,
-                config,
-                (list,),
-                ListTaskPushNotificationConfigSuccessResponse,
-                ListTaskPushNotificationConfigResponse,
-            )
+            # response is a ListTaskPushNotificationConfigResponse proto
+            result = MessageToDict(response, preserving_proto_field_name=False)
+            return _build_success_response(request_id, result)
         except ServerError as e:
-            return ListTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
     async def delete_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> DeleteTaskPushNotificationConfigResponse:
-        """Handles the 'tasks/pushNotificationConfig/list' JSON-RPC method.
+    ) -> dict[str, Any]:
+        """Handles the 'tasks/pushNotificationConfig/delete' JSON-RPC method.
 
         Args:
             request: The incoming `DeleteTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:
-            A `DeleteTaskPushNotificationConfigResponse` object containing the config or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
-            (
-                await self.request_handler.on_delete_task_push_notification_config(
-                    request.params, context
-                )
+            await self.request_handler.on_delete_task_push_notification_config(
+                request, context
             )
-            return DeleteTaskPushNotificationConfigResponse(
-                root=DeleteTaskPushNotificationConfigSuccessResponse(
-                    id=request.id, result=None
-                )
-            )
+            return _build_success_response(request_id, None)
         except ServerError as e:
-            return DeleteTaskPushNotificationConfigResponse(
-                root=JSONRPCErrorResponse(
-                    id=request.id, error=e.error if e.error else InternalError()
-                )
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
 
     async def get_authenticated_extended_card(
         self,
-        request: GetAuthenticatedExtendedCardRequest,
+        request: GetExtendedAgentCardRequest,
         context: ServerCallContext | None = None,
-    ) -> GetAuthenticatedExtendedCardResponse:
+    ) -> dict[str, Any]:
         """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method.
 
         Args:
-            request: The incoming `GetAuthenticatedExtendedCardRequest` object.
+            request: The incoming `GetExtendedAgentCardRequest` object.
             context: Context provided by the server.
 
         Returns:
-            A `GetAuthenticatedExtendedCardResponse` object containing the config or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
-        if not self.agent_card.supports_authenticated_extended_card:
+        request_id = self._get_request_id(context)
+        if not self.agent_card.capabilities.extended_agent_card:
             raise ServerError(
                 error=AuthenticatedExtendedCardNotConfiguredError(
                     message='Authenticated card not supported'
@@ -454,8 +467,5 @@ class JSONRPCHandler:
         elif self.card_modifier:
             card_to_serve = self.card_modifier(base_card)
 
-        return GetAuthenticatedExtendedCardResponse(
-            root=GetAuthenticatedExtendedCardSuccessResponse(
-                id=request.id, result=card_to_serve
-            )
-        )
+        result = MessageToDict(card_to_serve, preserving_proto_field_name=False)
+        return _build_success_response(request_id, result)

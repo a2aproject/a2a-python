@@ -19,10 +19,12 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from google.protobuf.json_format import MessageToDict
+
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task  # Task is the Pydantic model
+from a2a.types.a2a_pb2 import Task
 
 
 logger = logging.getLogger(__name__)
@@ -94,31 +96,38 @@ class DatabaseTaskStore(TaskStore):
             await self.initialize()
 
     def _to_orm(self, task: Task) -> TaskModel:
-        """Maps a Pydantic Task to a SQLAlchemy TaskModel instance."""
+        """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
+        # Pass proto objects directly - PydanticType/PydanticListType
+        # handle serialization via process_bind_param
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
-            kind=task.kind,
-            status=task.status,
-            artifacts=task.artifacts,
-            history=task.history,
-            task_metadata=task.metadata,
+            kind='task',  # Default kind for tasks
+            status=task.status if task.HasField('status') else None,
+            artifacts=list(task.artifacts) if task.artifacts else [],
+            history=list(task.history) if task.history else [],
+            task_metadata=(
+                MessageToDict(task.metadata) if task.metadata.fields else None
+            ),
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
-        """Maps a SQLAlchemy TaskModel to a Pydantic Task instance."""
-        # Map database columns to Pydantic model fields
-        task_data_from_db = {
-            'id': task_model.id,
-            'context_id': task_model.context_id,
-            'kind': task_model.kind,
-            'status': task_model.status,
-            'artifacts': task_model.artifacts,
-            'history': task_model.history,
-            'metadata': task_model.task_metadata,  # Map task_metadata column to metadata field
-        }
-        # Pydantic's model_validate will parse the nested dicts/lists from JSON
-        return Task.model_validate(task_data_from_db)
+        """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
+        # PydanticType/PydanticListType already deserialize to proto objects
+        # via process_result_value, so we can construct the Task directly
+        task = Task(
+            id=task_model.id,
+            context_id=task_model.context_id,
+        )
+        if task_model.status:
+            task.status.CopyFrom(task_model.status)
+        if task_model.artifacts:
+            task.artifacts.extend(task_model.artifacts)
+        if task_model.history:
+            task.history.extend(task_model.history)
+        if task_model.task_metadata:
+            task.metadata.update(task_model.task_metadata)
+        return task
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
@@ -158,7 +167,7 @@ class DatabaseTaskStore(TaskStore):
             result = await session.execute(stmt)
             # Commit is automatic when using session.begin()
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info('Task %s deleted successfully.', task_id)
             else:
                 logger.warning(

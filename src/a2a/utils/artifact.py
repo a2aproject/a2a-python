@@ -4,7 +4,9 @@ import uuid
 
 from typing import Any
 
-from a2a.types import Artifact, DataPart, Part, TextPart
+from google.protobuf.struct_pb2 import Struct
+
+from a2a.types.a2a_pb2 import Artifact, DataPart, Part
 from a2a.utils.parts import get_text_parts
 
 
@@ -36,7 +38,7 @@ def new_text_artifact(
     text: str,
     description: str | None = None,
 ) -> Artifact:
-    """Creates a new Artifact object containing only a single TextPart.
+    """Creates a new Artifact object containing only a single text Part.
 
     Args:
         name: The human-readable name of the artifact.
@@ -47,7 +49,7 @@ def new_text_artifact(
         A new `Artifact` object with a generated artifact_id.
     """
     return new_artifact(
-        [Part(root=TextPart(text=text))],
+        [Part(text=text)],
         name,
         description,
     )
@@ -68,8 +70,10 @@ def new_data_artifact(
     Returns:
         A new `Artifact` object with a generated artifact_id.
     """
+    struct_data = Struct()
+    struct_data.update(data)
     return new_artifact(
-        [Part(root=DataPart(data=data))],
+        [Part(data=DataPart(data=struct_data))],
         name,
         description,
     )

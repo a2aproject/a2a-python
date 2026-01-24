@@ -10,17 +10,16 @@ from a2a.server.agent_execution.simple_request_context_builder import (
     SimpleRequestContextBuilder,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
-    MessageSendParams,
     Part,
-    # ServerCallContext, # Removed from a2a.types
     Role,
+    SendMessageRequest,
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
@@ -28,13 +27,13 @@ from a2a.types import (
 def create_sample_message(
     content: str = 'test message',
     msg_id: str = 'msg1',
-    role: Role = Role.user,
+    role: Role = Role.ROLE_USER,
     reference_task_ids: list[str] | None = None,
 ) -> Message:
     return Message(
         message_id=msg_id,
         role=role,
-        parts=[Part(root=TextPart(text=content))],
+        parts=[Part(text=content)],
         reference_task_ids=reference_task_ids if reference_task_ids else [],
     )
 
@@ -42,7 +41,7 @@ def create_sample_message(
 # Helper to create a simple task
 def create_sample_task(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.submitted,
+    status_state: TaskState = TaskState.TASK_STATE_SUBMITTED,
     context_id: str = 'ctx1',
 ) -> Task:
     return Task(
@@ -85,7 +84,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             task_store=self.mock_task_store,
         )
 
-        params = MessageSendParams(message=create_sample_message())
+        params = SendMessageRequest(message=create_sample_message())
         task_id = 'test_task_id_1'
         context_id = 'test_context_id_1'
         current_task = create_sample_task(
@@ -93,7 +92,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         )
         # Pass a valid User instance, e.g., UnauthenticatedUser or a mock spec'd as User
         server_call_context = ServerCallContext(
-            user=UnauthenticatedUser(), auth_token='dummy_token'
+            user=UnauthenticatedUser(), auth_token='test_token'
         )
 
         request_context = await builder.build(
@@ -142,7 +141,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
 
         self.mock_task_store.get = AsyncMock(side_effect=get_side_effect)
 
-        params = MessageSendParams(
+        params = SendMessageRequest(
             message=create_sample_message(
                 reference_task_ids=[ref_task_id1, ref_task_id2, ref_task_id3]
             )
@@ -193,7 +192,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         server_call_context = ServerCallContext(user=UnauthenticatedUser())
 
         # Test with empty list
-        params_empty_refs = MessageSendParams(
+        params_empty_refs = SendMessageRequest(
             message=create_sample_message(reference_task_ids=[])
         )
         request_context_empty = await builder.build(
@@ -210,14 +209,17 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
 
         self.mock_task_store.get.reset_mock()  # Reset for next call
 
-        # Test with referenceTaskIds=None (Pydantic model might default it to empty list or handle it)
+        # Test with reference_task_ids=None (Pydantic model might default it to empty list or handle it)
         # create_sample_message defaults to [] if None is passed, so this tests the same as above.
         # To explicitly test None in Message, we'd have to bypass Pydantic default or modify helper.
         # For now, this covers the "no IDs to process" case.
         msg_with_no_refs = Message(
-            message_id='m2', role=Role.user, parts=[], referenceTaskIds=None
+            message_id='m2',
+            role=Role.ROLE_USER,
+            parts=[],
+            reference_task_ids=None,
         )
-        params_none_refs = MessageSendParams(message=msg_with_no_refs)
+        params_none_refs = SendMessageRequest(message=msg_with_no_refs)
         request_context_none = await builder.build(
             params=params_none_refs,
             task_id='t2',
@@ -237,7 +239,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             should_populate_referred_tasks=True,
             task_store=None,  # Explicitly None
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             message=create_sample_message(reference_task_ids=['ref1'])
         )
         server_call_context = ServerCallContext(user=UnauthenticatedUser())
@@ -258,7 +260,7 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
             should_populate_referred_tasks=False,
             task_store=self.mock_task_store,
         )
-        params = MessageSendParams(
+        params = SendMessageRequest(
             message=create_sample_message(
                 reference_task_ids=['ref_task_should_not_be_fetched']
             )
@@ -274,6 +276,65 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(request_context.related_tasks, [])
         self.mock_task_store.get.assert_not_called()
+
+    async def test_build_with_custom_id_generators(self) -> None:
+        mock_task_id_generator = AsyncMock(spec=IDGenerator)
+        mock_context_id_generator = AsyncMock(spec=IDGenerator)
+        mock_task_id_generator.generate.return_value = 'custom_task_id'
+        mock_context_id_generator.generate.return_value = 'custom_context_id'
+
+        builder = SimpleRequestContextBuilder(
+            should_populate_referred_tasks=False,
+            task_store=self.mock_task_store,
+            task_id_generator=mock_task_id_generator,
+            context_id_generator=mock_context_id_generator,
+        )
+        params = SendMessageRequest(message=create_sample_message())
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+
+        request_context = await builder.build(
+            params=params,
+            task_id=None,
+            context_id=None,
+            task=None,
+            context=server_call_context,
+        )
+
+        mock_task_id_generator.generate.assert_called_once()
+        mock_context_id_generator.generate.assert_called_once()
+        self.assertEqual(request_context.task_id, 'custom_task_id')
+        self.assertEqual(request_context.context_id, 'custom_context_id')
+
+    async def test_build_with_provided_ids_and_custom_id_generators(
+        self,
+    ) -> None:
+        mock_task_id_generator = AsyncMock(spec=IDGenerator)
+        mock_context_id_generator = AsyncMock(spec=IDGenerator)
+
+        builder = SimpleRequestContextBuilder(
+            should_populate_referred_tasks=False,
+            task_store=self.mock_task_store,
+            task_id_generator=mock_task_id_generator,
+            context_id_generator=mock_context_id_generator,
+        )
+        params = SendMessageRequest(message=create_sample_message())
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+
+        provided_task_id = 'provided_task_id'
+        provided_context_id = 'provided_context_id'
+
+        request_context = await builder.build(
+            params=params,
+            task_id=provided_task_id,
+            context_id=provided_context_id,
+            task=None,
+            context=server_call_context,
+        )
+
+        mock_task_id_generator.generate.assert_not_called()
+        mock_context_id_generator.generate.assert_not_called()
+        self.assertEqual(request_context.task_id, provided_task_id)
+        self.assertEqual(request_context.context_id, provided_context_id)
 
 
 if __name__ == '__main__':

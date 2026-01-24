@@ -1,17 +1,18 @@
 import json
 import logging
 
+from collections.abc import Callable
 from typing import Any
 
 import httpx
 
-from pydantic import ValidationError
+from google.protobuf.json_format import ParseDict, ParseError
 
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
@@ -44,6 +45,7 @@ class A2ACardResolver:
         self,
         relative_card_path: str | None = None,
         http_kwargs: dict[str, Any] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Fetches an agent card from a specified path relative to the base_url.
 
@@ -56,6 +58,7 @@ class A2ACardResolver:
                 agent card path. Use `'/'` for an empty path.
             http_kwargs: Optional dictionary of keyword arguments to pass to the
                 underlying httpx.get request.
+            signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             An `AgentCard` object representing the agent's capabilities.
@@ -85,7 +88,9 @@ class A2ACardResolver:
                 target_url,
                 agent_card_data,
             )
-            agent_card = AgentCard.model_validate(agent_card_data)
+            agent_card = ParseDict(agent_card_data, AgentCard())
+            if signature_verifier:
+                signature_verifier(agent_card)
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(
                 e.response.status_code,
@@ -100,9 +105,9 @@ class A2ACardResolver:
                 503,
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e
-        except ValidationError as e:  # Pydantic validation error
+        except ParseError as e:
             raise A2AClientJSONError(
-                f'Failed to validate agent card structure from {target_url}: {e.json()}'
+                f'Failed to validate agent card structure from {target_url}: {e}'
             ) from e
 
         return agent_card

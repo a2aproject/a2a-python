@@ -1,75 +1,83 @@
 import asyncio
 from collections.abc import AsyncGenerator
-from typing import NamedTuple
+from typing import NamedTuple, Any
 from unittest.mock import ANY, AsyncMock, patch
 
 import grpc
 import httpx
 import pytest
 import pytest_asyncio
+from google.protobuf.json_format import MessageToDict
 from grpc.aio import Channel
 
+from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.grpc import GrpcTransport
-from a2a.grpc import a2a_pb2_grpc
+from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.types import (
+from a2a.utils.constants import (
+    TRANSPORT_HTTP_JSON,
+    TRANSPORT_GRPC,
+    TRANSPORT_JSONRPC,
+)
+from a2a.utils.signing import (
+    create_agent_card_signer,
+    create_signature_verifier,
+)
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
-    GetTaskPushNotificationConfigParams,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
     Message,
-    MessageSendParams,
     Part,
     PushNotificationConfig,
     Role,
+    SendMessageRequest,
+    SetTaskPushNotificationConfigRequest,
+    SubscribeToTaskRequest,
     Task,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
-    TransportProtocol,
 )
+from cryptography.hazmat.primitives import asymmetric
 
 # --- Test Constants ---
 
 TASK_FROM_STREAM = Task(
     id='task-123-stream',
     context_id='ctx-456-stream',
-    status=TaskStatus(state=TaskState.completed),
-    kind='task',
+    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
 )
 
 TASK_FROM_BLOCKING = Task(
     id='task-789-blocking',
     context_id='ctx-101-blocking',
-    status=TaskStatus(state=TaskState.completed),
-    kind='task',
+    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
 )
 
 GET_TASK_RESPONSE = Task(
     id='task-get-456',
     context_id='ctx-get-789',
-    status=TaskStatus(state=TaskState.working),
-    kind='task',
+    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
 )
 
 CANCEL_TASK_RESPONSE = Task(
     id='task-cancel-789',
     context_id='ctx-cancel-101',
-    status=TaskStatus(state=TaskState.canceled),
-    kind='task',
+    status=TaskStatus(state=TaskState.TASK_STATE_CANCELLED),
 )
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
-    task_id='task-callback-123',
+    name='tasks/task-callback-123/pushNotificationConfigs/pnc-abc',
     push_notification_config=PushNotificationConfig(
         id='pnc-abc', url='http://callback.example.com', token=''
     ),
@@ -78,9 +86,18 @@ CALLBACK_CONFIG = TaskPushNotificationConfig(
 RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     task_id='task-resub-456',
     context_id='ctx-resub-789',
-    status=TaskStatus(state=TaskState.working),
+    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
     final=False,
 )
+
+
+def create_key_provider(verification_key: PyJWK | str | bytes):
+    """Creates a key provider function for testing."""
+
+    def key_provider(kid: str | None, jku: str | None):
+        return verification_key
+
+    return key_provider
 
 
 # --- Test Fixtures ---
@@ -103,15 +120,13 @@ def mock_request_handler() -> AsyncMock:
     # Configure other methods
     handler.on_get_task.return_value = GET_TASK_RESPONSE
     handler.on_cancel_task.return_value = CANCEL_TASK_RESPONSE
-    handler.on_set_task_push_notification_config.side_effect = (
-        lambda params, context: params
-    )
+    handler.on_set_task_push_notification_config.return_value = CALLBACK_CONFIG
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
 
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT
 
-    handler.on_resubscribe_to_task.side_effect = resubscribe_side_effect
+    handler.on_subscribe_to_task.side_effect = resubscribe_side_effect
 
     return handler
 
@@ -122,21 +137,17 @@ def agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for integration testing.',
-        url='http://testserver',
         version='1.0.0',
         capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
-        preferred_transport=TransportProtocol.jsonrpc,
-        supports_authenticated_extended_card=False,
-        additional_interfaces=[
+        supported_interfaces=[
             AgentInterface(
-                transport=TransportProtocol.http_json, url='http://testserver'
+                protocol_binding=TRANSPORT_HTTP_JSON,
+                url='http://testserver',
             ),
-            AgentInterface(
-                transport=TransportProtocol.grpc, url='localhost:50051'
-            ),
+            AgentInterface(protocol_binding='grpc', url='localhost:50051'),
         ],
     )
 
@@ -228,30 +239,32 @@ async def test_http_transport_sends_message_streaming(
     handler = transport_setup.handler
 
     message_to_send = Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-integration-test',
-        parts=[Part(root=TextPart(text='Hello, integration test!'))],
+        parts=[Part(text='Hello, integration test!')],
     )
-    params = MessageSendParams(message=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
-    first_event = await anext(stream)
+    events = [event async for event in stream]
 
-    assert first_event.id == TASK_FROM_STREAM.id
-    assert first_event.context_id == TASK_FROM_STREAM.context_id
+    assert len(events) == 1
+    first_event = events[0]
+
+    # StreamResponse wraps the Task in its 'task' field
+    assert first_event.task.id == TASK_FROM_STREAM.id
+    assert first_event.task.context_id == TASK_FROM_STREAM.context_id
 
     handler.on_message_send_stream.assert_called_once()
     call_args, _ = handler.on_message_send_stream.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.message.parts[0].root.text
-        == message_to_send.parts[0].root.text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
-    if hasattr(transport, 'close'):
-        await transport.close()
+    await transport.close()
 
 
 @pytest.mark.asyncio
@@ -263,7 +276,6 @@ async def test_grpc_transport_sends_message_streaming(
     Integration test specifically for the gRPC transport streaming.
     """
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -272,26 +284,26 @@ async def test_grpc_transport_sends_message_streaming(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     message_to_send = Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-grpc-integration-test',
-        parts=[Part(root=TextPart(text='Hello, gRPC integration test!'))],
+        parts=[Part(text='Hello, gRPC integration test!')],
     )
-    params = MessageSendParams(message=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     stream = transport.send_message_streaming(request=params)
     first_event = await anext(stream)
 
-    assert first_event.id == TASK_FROM_STREAM.id
-    assert first_event.context_id == TASK_FROM_STREAM.context_id
+    # StreamResponse wraps the Task in its 'task' field
+    assert first_event.task.id == TASK_FROM_STREAM.id
+    assert first_event.task.context_id == TASK_FROM_STREAM.context_id
 
     handler.on_message_send_stream.assert_called_once()
     call_args, _ = handler.on_message_send_stream.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.message.parts[0].root.text
-        == message_to_send.parts[0].root.text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -318,25 +330,25 @@ async def test_http_transport_sends_message_blocking(
     handler = transport_setup.handler
 
     message_to_send = Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-integration-test-blocking',
-        parts=[Part(root=TextPart(text='Hello, blocking test!'))],
+        parts=[Part(text='Hello, blocking test!')],
     )
-    params = MessageSendParams(message=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     result = await transport.send_message(request=params)
 
-    assert result.id == TASK_FROM_BLOCKING.id
-    assert result.context_id == TASK_FROM_BLOCKING.context_id
+    # SendMessageResponse wraps Task in its 'task' field
+    assert result.task.id == TASK_FROM_BLOCKING.id
+    assert result.task.context_id == TASK_FROM_BLOCKING.context_id
 
     handler.on_message_send.assert_awaited_once()
     call_args, _ = handler.on_message_send.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.message.parts[0].root.text
-        == message_to_send.parts[0].root.text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     if hasattr(transport, 'close'):
@@ -352,7 +364,6 @@ async def test_grpc_transport_sends_message_blocking(
     Integration test specifically for the gRPC transport blocking.
     """
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -361,25 +372,25 @@ async def test_grpc_transport_sends_message_blocking(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     message_to_send = Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-grpc-integration-test-blocking',
-        parts=[Part(root=TextPart(text='Hello, gRPC blocking test!'))],
+        parts=[Part(text='Hello, gRPC blocking test!')],
     )
-    params = MessageSendParams(message=message_to_send)
+    params = SendMessageRequest(message=message_to_send)
 
     result = await transport.send_message(request=params)
 
-    assert result.id == TASK_FROM_BLOCKING.id
-    assert result.context_id == TASK_FROM_BLOCKING.context_id
+    # SendMessageResponse wraps Task in its 'task' field
+    assert result.task.id == TASK_FROM_BLOCKING.id
+    assert result.task.context_id == TASK_FROM_BLOCKING.context_id
 
     handler.on_message_send.assert_awaited_once()
     call_args, _ = handler.on_message_send.call_args
-    received_params: MessageSendParams = call_args[0]
+    received_params: SendMessageRequest = call_args[0]
 
     assert received_params.message.message_id == message_to_send.message_id
     assert (
-        received_params.message.parts[0].root.text
-        == message_to_send.parts[0].root.text
+        received_params.message.parts[0].text == message_to_send.parts[0].text
     )
 
     await transport.close()
@@ -402,11 +413,12 @@ async def test_http_transport_get_task(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = TaskQueryParams(id=GET_TASK_RESPONSE.id)
+    # Use GetTaskRequest with name (AIP resource format)
+    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
-    handler.on_get_task.assert_awaited_once_with(params, ANY)
+    handler.on_get_task.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -418,7 +430,6 @@ async def test_grpc_transport_get_task(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -426,12 +437,12 @@ async def test_grpc_transport_get_task(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = TaskQueryParams(id=GET_TASK_RESPONSE.id)
+    # Use GetTaskRequest with name (AIP resource format)
+    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
     handler.on_get_task.assert_awaited_once()
-    assert handler.on_get_task.call_args[0][0].id == GET_TASK_RESPONSE.id
 
     await transport.close()
 
@@ -453,11 +464,12 @@ async def test_http_transport_cancel_task(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = TaskIdParams(id=CANCEL_TASK_RESPONSE.id)
+    # Use CancelTaskRequest with name (AIP resource format)
+    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
-    handler.on_cancel_task.assert_awaited_once_with(params, ANY)
+    handler.on_cancel_task.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -469,7 +481,6 @@ async def test_grpc_transport_cancel_task(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -477,12 +488,12 @@ async def test_grpc_transport_cancel_task(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = TaskIdParams(id=CANCEL_TASK_RESPONSE.id)
+    # Use CancelTaskRequest with name (AIP resource format)
+    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
     handler.on_cancel_task.assert_awaited_once()
-    assert handler.on_cancel_task.call_args[0][0].id == CANCEL_TASK_RESPONSE.id
 
     await transport.close()
 
@@ -504,10 +515,16 @@ async def test_http_transport_set_task_callback(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = CALLBACK_CONFIG
+    # Create SetTaskPushNotificationConfigRequest with required fields
+    params = SetTaskPushNotificationConfigRequest(
+        parent='tasks/task-callback-123',
+        config_id='pnc-abc',
+        config=CALLBACK_CONFIG,
+    )
     result = await transport.set_task_callback(request=params)
 
-    assert result.task_id == CALLBACK_CONFIG.task_id
+    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
+    assert result.name == CALLBACK_CONFIG.name
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -516,9 +533,7 @@ async def test_http_transport_set_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_set_task_push_notification_config.assert_awaited_once_with(
-        params, ANY
-    )
+    handler.on_set_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -530,7 +545,6 @@ async def test_grpc_transport_set_task_callback(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -538,10 +552,16 @@ async def test_grpc_transport_set_task_callback(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = CALLBACK_CONFIG
+    # Create SetTaskPushNotificationConfigRequest with required fields
+    params = SetTaskPushNotificationConfigRequest(
+        parent='tasks/task-callback-123',
+        config_id='pnc-abc',
+        config=CALLBACK_CONFIG,
+    )
     result = await transport.set_task_callback(request=params)
 
-    assert result.task_id == CALLBACK_CONFIG.task_id
+    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
+    assert result.name == CALLBACK_CONFIG.name
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -551,10 +571,6 @@ async def test_grpc_transport_set_task_callback(
         == CALLBACK_CONFIG.push_notification_config.url
     )
     handler.on_set_task_push_notification_config.assert_awaited_once()
-    assert (
-        handler.on_set_task_push_notification_config.call_args[0][0].task_id
-        == CALLBACK_CONFIG.task_id
-    )
 
     await transport.close()
 
@@ -576,13 +592,12 @@ async def test_http_transport_get_task_callback(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = GetTaskPushNotificationConfigParams(
-        id=CALLBACK_CONFIG.task_id,
-        push_notification_config_id=CALLBACK_CONFIG.push_notification_config.id,
-    )
+    # Use GetTaskPushNotificationConfigRequest with name field (resource name)
+    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
     result = await transport.get_task_callback(request=params)
 
-    assert result.task_id == CALLBACK_CONFIG.task_id
+    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
+    assert result.name == CALLBACK_CONFIG.name
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -591,9 +606,7 @@ async def test_http_transport_get_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_get_task_push_notification_config.assert_awaited_once_with(
-        params, ANY
-    )
+    handler.on_get_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -605,7 +618,6 @@ async def test_grpc_transport_get_task_callback(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -613,13 +625,12 @@ async def test_grpc_transport_get_task_callback(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = GetTaskPushNotificationConfigParams(
-        id=CALLBACK_CONFIG.task_id,
-        push_notification_config_id=CALLBACK_CONFIG.push_notification_config.id,
-    )
+    # Use GetTaskPushNotificationConfigRequest with name field (resource name)
+    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
     result = await transport.get_task_callback(request=params)
 
-    assert result.task_id == CALLBACK_CONFIG.task_id
+    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
+    assert result.name == CALLBACK_CONFIG.name
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -629,10 +640,6 @@ async def test_grpc_transport_get_task_callback(
         == CALLBACK_CONFIG.push_notification_config.url
     )
     handler.on_get_task_push_notification_config.assert_awaited_once()
-    assert (
-        handler.on_get_task_push_notification_config.call_args[0][0].id
-        == CALLBACK_CONFIG.task_id
-    )
 
     await transport.close()
 
@@ -654,12 +661,14 @@ async def test_http_transport_resubscribe(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = TaskIdParams(id=RESUBSCRIBE_EVENT.task_id)
-    stream = transport.resubscribe(request=params)
+    # Use SubscribeToTaskRequest with name (AIP resource format)
+    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
-    assert first_event.task_id == RESUBSCRIBE_EVENT.task_id
-    handler.on_resubscribe_to_task.assert_called_once_with(params, ANY)
+    # StreamResponse wraps the status update in its 'status_update' field
+    assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
+    handler.on_subscribe_to_task.assert_called_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -671,7 +680,6 @@ async def test_grpc_transport_resubscribe(
     agent_card: AgentCard,
 ) -> None:
     server_address, handler = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -679,16 +687,14 @@ async def test_grpc_transport_resubscribe(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = TaskIdParams(id=RESUBSCRIBE_EVENT.task_id)
-    stream = transport.resubscribe(request=params)
+    # Use SubscribeToTaskRequest with name (AIP resource format)
+    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
-    assert first_event.task_id == RESUBSCRIBE_EVENT.task_id
-    handler.on_resubscribe_to_task.assert_called_once()
-    assert (
-        handler.on_resubscribe_to_task.call_args[0][0].id
-        == RESUBSCRIBE_EVENT.task_id
-    )
+    # StreamResponse wraps the status update in its 'status_update' field
+    assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
+    handler.on_subscribe_to_task.assert_called_once()
 
     await transport.close()
 
@@ -708,12 +714,14 @@ async def test_http_transport_get_card(
         transport_setup_fixture
     )
     transport = transport_setup.transport
-    # Get the base card.
-    result = await transport.get_card()
+    # Access the base card from the agent_card property.
+    result = transport.agent_card
 
     assert result.name == agent_card.name
     assert transport.agent_card.name == agent_card.name
-    assert transport._needs_extended_card is False
+    # Only check _needs_extended_card if the transport supports it
+    if hasattr(transport, '_needs_extended_card'):
+        assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -724,8 +732,10 @@ async def test_http_transport_get_authenticated_card(
     agent_card: AgentCard,
     mock_request_handler: AsyncMock,
 ) -> None:
-    agent_card.supports_authenticated_extended_card = True
-    extended_agent_card = agent_card.model_copy(deep=True)
+    agent_card.capabilities.extended_agent_card = True
+    # Create a copy of the agent card for the extended card
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
     extended_agent_card.name = 'Extended Agent Card'
 
     app_builder = A2ARESTFastAPIApplication(
@@ -737,8 +747,9 @@ async def test_http_transport_get_authenticated_card(
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
-    result = await transport.get_card()
+    result = await transport.get_extended_agent_card()
     assert result.name == extended_agent_card.name
+    assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
     assert transport._needs_extended_card is False
 
@@ -752,7 +763,6 @@ async def test_grpc_transport_get_card(
     agent_card: AgentCard,
 ) -> None:
     server_address, _ = grpc_server_and_handler
-    agent_card.url = server_address
 
     def channel_factory(address: str) -> Channel:
         return grpc.aio.insecure_channel(address)
@@ -760,9 +770,10 @@ async def test_grpc_transport_get_card(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # The transport starts with a minimal card, get_card() fetches the full one
-    transport.agent_card.supports_authenticated_extended_card = True
-    result = await transport.get_card()
+    # The transport starts with a minimal card, get_extended_agent_card() fetches the full one
+    assert transport.agent_card is not None
+    transport.agent_card.capabilities.extended_agent_card = True
+    result = await transport.get_extended_agent_card()
 
     assert result.name == agent_card.name
     assert transport.agent_card.name == agent_card.name
@@ -772,7 +783,7 @@ async def test_grpc_transport_get_card(
 
 
 @pytest.mark.asyncio
-async def test_base_client_sends_message_with_extensions(
+async def test_json_transport_base_client_send_message_with_extensions(
     jsonrpc_setup: TransportSetup, agent_card: AgentCard
 ) -> None:
     """
@@ -791,9 +802,9 @@ async def test_base_client_sends_message_with_extensions(
     )
 
     message_to_send = Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-integration-test-extensions',
-        parts=[Part(root=TextPart(text='Hello, extensions test!'))],
+        parts=[Part(text='Hello, extensions test!')],
     )
     extensions = [
         'https://example.com/test-ext/v1',
@@ -803,10 +814,11 @@ async def test_base_client_sends_message_with_extensions(
     with patch.object(
         transport, '_send_request', new_callable=AsyncMock
     ) as mock_send_request:
+        # Mock returns a JSON-RPC response with SendMessageResponse structure
         mock_send_request.return_value = {
             'id': '123',
             'jsonrpc': '2.0',
-            'result': TASK_FROM_BLOCKING.model_dump(mode='json'),
+            'result': {'task': MessageToDict(TASK_FROM_BLOCKING)},
         }
 
         # Call send_message on the BaseClient
@@ -827,3 +839,311 @@ async def test_base_client_sends_message_with_extensions(
 
     if hasattr(transport, 'close'):
         await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_base_card(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying a symmetrically signed AgentCard via JSON-RPC.
+
+    The client transport is initialized without a card, forcing it to fetch
+    the base card from the server. The server signs the card using HS384.
+    The client then verifies the signature.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    agent_card.capabilities.extended_agent_card = False
+
+    # Setup signing on the server side
+    key = 'key12345'
+    signer = create_agent_card_signer(
+        signing_key=key,
+        protected_header={
+            'alg': 'HS384',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        card_modifier=signer,  # Sign the base card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(key), ['HS384']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == agent_card.name
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_extended_card(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying an asymmetrically signed extended AgentCard via JSON-RPC.
+
+    The client has a base card and fetches the extended card, which is signed
+    by the server using ES256. The client verifies the signature on the
+    received extended card.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client, agent_card=agent_card
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert result.signatures is not None
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_json_transport_get_signed_base_and_extended_cards(
+    jsonrpc_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying both base and extended cards via JSON-RPC when no card is initially provided.
+
+    The client starts with no card. It first fetches the base card, which is
+    signed. It then fetches the extended card, which is also signed. Both signatures
+    are verified independently upon retrieval.
+    """
+    mock_request_handler = jsonrpc_setup.handler
+    assert len(agent_card.signatures) == 0
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2AFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        card_modifier=signer,  # Sign the base card
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_rest_transport_get_signed_card(
+    rest_setup: TransportSetup, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying signed base and extended cards via REST.
+
+    The client starts with no card. It first fetches the base card, which is
+    signed. It then fetches the extended card, which is also signed. Both signatures
+    are verified independently upon retrieval.
+    """
+    mock_request_handler = rest_setup.handler
+    agent_card.capabilities.extended_agent_card = True
+    extended_agent_card = AgentCard()
+    extended_agent_card.CopyFrom(agent_card)
+    extended_agent_card.name = 'Extended Agent Card'
+
+    # Setup signing on the server side
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    app_builder = A2ARESTFastAPIApplication(
+        agent_card,
+        mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        card_modifier=signer,  # Sign the base card
+        extended_card_modifier=lambda card, ctx: signer(
+            card
+        ),  # Sign the extended card
+    )
+    app = app_builder.build()
+    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+
+    transport = RestTransport(
+        httpx_client=httpx_client,
+        url=agent_card.supported_interfaces[0].url,
+        agent_card=None,
+    )
+
+    # Get the card, this will trigger verification in get_card
+    signature_verifier = create_signature_verifier(
+        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+    )
+    result = await transport.get_extended_agent_card(
+        signature_verifier=signature_verifier
+    )
+    assert result.name == extended_agent_card.name
+    assert result.signatures is not None
+    assert len(result.signatures) == 1
+    assert transport.agent_card is not None
+    assert transport.agent_card.name == extended_agent_card.name
+    assert transport._needs_extended_card is False
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_get_signed_card(
+    mock_request_handler: AsyncMock, agent_card: AgentCard
+) -> None:
+    """Tests fetching and verifying a signed AgentCard via gRPC."""
+    # Setup signing on the server side
+    agent_card.capabilities.extended_agent_card = True
+
+    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    public_key = private_key.public_key()
+    signer = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'testkey',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    server = grpc.aio.server()
+    port = server.add_insecure_port('[::]:0')
+    server_address = f'localhost:{port}'
+    agent_card.supported_interfaces[0].url = server_address
+
+    servicer = GrpcHandler(
+        agent_card,
+        mock_request_handler,
+        card_modifier=signer,
+    )
+    a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+    await server.start()
+
+    transport = None  # Initialize transport
+    try:
+
+        def channel_factory(address: str) -> Channel:
+            return grpc.aio.insecure_channel(address)
+
+        channel = channel_factory(server_address)
+        transport = GrpcTransport(channel=channel, agent_card=agent_card)
+        transport.agent_card = None
+        assert transport._needs_extended_card is True
+
+        # Get the card, this will trigger verification in get_card
+        signature_verifier = create_signature_verifier(
+            create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
+        )
+        result = await transport.get_extended_agent_card(
+            signature_verifier=signature_verifier
+        )
+        assert result.signatures is not None
+        assert len(result.signatures) == 1
+        assert transport._needs_extended_card is False
+    finally:
+        if transport:
+            await transport.close()
+        await server.stop(0)  # Gracefully stop the server

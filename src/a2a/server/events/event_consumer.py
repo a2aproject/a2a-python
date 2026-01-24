@@ -7,14 +7,13 @@ from collections.abc import AsyncGenerator
 from pydantic import ValidationError
 
 from a2a.server.events.event_queue import Event, EventQueue
-from a2a.types import (
-    InternalError,
+from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskState,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InternalError, ServerError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -109,12 +108,12 @@ class EventConsumer:
                         isinstance(event, Task)
                         and event.status.state
                         in (
-                            TaskState.completed,
-                            TaskState.canceled,
-                            TaskState.failed,
-                            TaskState.rejected,
-                            TaskState.unknown,
-                            TaskState.input_required,
+                            TaskState.TASK_STATE_COMPLETED,
+                            TaskState.TASK_STATE_CANCELLED,
+                            TaskState.TASK_STATE_FAILED,
+                            TaskState.TASK_STATE_REJECTED,
+                            TaskState.TASK_STATE_UNSPECIFIED,
+                            TaskState.TASK_STATE_INPUT_REQUIRED,
                         )
                     )
                 )

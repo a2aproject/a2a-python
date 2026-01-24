@@ -11,33 +11,41 @@ from unittest.mock import (
 import pytest
 
 from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE, EventQueue
+from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
-    A2AError,
+    TaskNotFoundError,
+)
+from a2a.types.a2a_pb2 import (
     Artifact,
-    JSONRPCError,
     Message,
     Part,
+    Role,
     Task,
     TaskArtifactUpdateEvent,
-    TaskNotFoundError,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
 
-MINIMAL_TASK: dict[str, Any] = {
-    'id': '123',
-    'context_id': 'session-xyz',
-    'status': {'state': 'submitted'},
-    'kind': 'task',
-}
-MESSAGE_PAYLOAD: dict[str, Any] = {
-    'role': 'agent',
-    'parts': [{'text': 'test message'}],
-    'message_id': '111',
-}
+def create_sample_message(message_id: str = '111') -> Message:
+    """Create a sample Message proto object."""
+    return Message(
+        message_id=message_id,
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='test message')],
+    )
+
+
+def create_sample_task(
+    task_id: str = '123', context_id: str = 'session-xyz'
+) -> Task:
+    """Create a sample Task proto object."""
+    return Task(
+        id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
 
 
 @pytest.fixture
@@ -73,7 +81,7 @@ def test_constructor_invalid_max_queue_size() -> None:
 @pytest.mark.asyncio
 async def test_enqueue_and_dequeue_event(event_queue: EventQueue) -> None:
     """Test that an event can be enqueued and dequeued."""
-    event = Message(**MESSAGE_PAYLOAD)
+    event = create_sample_message()
     await event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event()
     assert dequeued_event == event
@@ -82,7 +90,7 @@ async def test_enqueue_and_dequeue_event(event_queue: EventQueue) -> None:
 @pytest.mark.asyncio
 async def test_dequeue_event_no_wait(event_queue: EventQueue) -> None:
     """Test dequeue_event with no_wait=True."""
-    event = Task(**MINIMAL_TASK)
+    event = create_sample_task()
     await event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event(no_wait=True)
     assert dequeued_event == event
@@ -103,7 +111,7 @@ async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
     event = TaskStatusUpdateEvent(
         task_id='task_123',
         context_id='session-xyz',
-        status=TaskStatus(state=TaskState.working),
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         final=True,
     )
     await event_queue.enqueue_event(event)
@@ -117,9 +125,7 @@ async def test_task_done(event_queue: EventQueue) -> None:
     event = TaskArtifactUpdateEvent(
         task_id='task_123',
         context_id='session-xyz',
-        artifact=Artifact(
-            artifact_id='11', parts=[Part(TextPart(text='text'))]
-        ),
+        artifact=Artifact(artifact_id='11', parts=[Part(text='text')]),
     )
     await event_queue.enqueue_event(event)
     _ = await event_queue.dequeue_event()
@@ -132,7 +138,7 @@ async def test_enqueue_different_event_types(
 ) -> None:
     """Test enqueuing different types of events."""
     events: list[Any] = [
-        A2AError(TaskNotFoundError()),
+        TaskNotFoundError(),
         JSONRPCError(code=111, message='rpc error'),
     ]
     for event in events:
@@ -149,8 +155,8 @@ async def test_enqueue_event_propagates_to_children(
     child_queue1 = event_queue.tap()
     child_queue2 = event_queue.tap()
 
-    event1 = Message(**MESSAGE_PAYLOAD)
-    event2 = Task(**MINIMAL_TASK)
+    event1 = create_sample_message()
+    event2 = create_sample_task()
 
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
@@ -175,7 +181,7 @@ async def test_enqueue_event_when_closed(
     """Test that no event is enqueued if the parent queue is closed."""
     await event_queue.close()  # Close the queue first
 
-    event = Message(**MESSAGE_PAYLOAD)
+    event = create_sample_message()
     # Attempt to enqueue, should do nothing or log a warning as per implementation
     await event_queue.enqueue_event(event)
 
@@ -291,7 +297,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
 ) -> None:
     """Test close behavior on Python >= 3.13 (using queue.shutdown)."""
     with patch('sys.version_info', (3, 13, 0)):
-        # Inject a dummy shutdown method for non-3.13 runtimes
+        # Inject a stub shutdown method for non-3.13 runtimes
         from typing import cast
 
         queue = cast('Any', event_queue.queue)
@@ -305,7 +311,7 @@ async def test_close_sets_flag_and_handles_internal_queue_new_python(
 async def test_close_graceful_py313_waits_for_join_and_children(
     event_queue: EventQueue,
 ) -> None:
-    """For Python >=3.13 and immediate=False, close should shutdown(False), then wait for join and children."""
+    """For Python >=3.13 and immediate=False, close should shut down(False), then wait for join and children."""
     with patch('sys.version_info', (3, 13, 0)):
         # Arrange
         from typing import cast
@@ -388,8 +394,8 @@ async def test_is_closed_reflects_state(event_queue: EventQueue) -> None:
 async def test_close_with_immediate_true(event_queue: EventQueue) -> None:
     """Test close with immediate=True clears events immediately."""
     # Add some events to the queue
-    event1 = Message(**MESSAGE_PAYLOAD)
-    event2 = Task(**MINIMAL_TASK)
+    event1 = create_sample_message()
+    event2 = create_sample_task()
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
 
@@ -412,7 +418,7 @@ async def test_close_immediate_propagates_to_children(
     child_queue = event_queue.tap()
 
     # Add events to both parent and child
-    event = Message(**MESSAGE_PAYLOAD)
+    event = create_sample_message()
     await event_queue.enqueue_event(event)
 
     assert child_queue.is_closed() is False
@@ -430,8 +436,8 @@ async def test_close_immediate_propagates_to_children(
 async def test_clear_events_current_queue_only(event_queue: EventQueue) -> None:
     """Test clear_events clears only the current queue when clear_child_queues=False."""
     child_queue = event_queue.tap()
-    event1 = Message(**MESSAGE_PAYLOAD)
-    event2 = Task(**MINIMAL_TASK)
+    event1 = create_sample_message()
+    event2 = create_sample_task()
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
 
@@ -457,8 +463,8 @@ async def test_clear_events_with_children(event_queue: EventQueue) -> None:
     child_queue2 = event_queue.tap()
 
     # Add events to parent queue
-    event1 = Message(**MESSAGE_PAYLOAD)
-    event2 = Task(**MINIMAL_TASK)
+    event1 = create_sample_message()
+    event2 = create_sample_task()
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
 
@@ -493,7 +499,7 @@ async def test_clear_events_closed_queue(event_queue: EventQueue) -> None:
         # Mock queue.join as it's called in older versions
         event_queue.queue.join = AsyncMock()
 
-    event = Message(**MESSAGE_PAYLOAD)
+    event = create_sample_message()
     await event_queue.enqueue_event(event)
     await event_queue.close()
 

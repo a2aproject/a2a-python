@@ -8,7 +8,7 @@ from pydantic import BaseModel, Field
 
 
 if TYPE_CHECKING:
-    from a2a.types import AgentCard
+    from a2a.types.a2a_pb2 import AgentCard
 
 
 class ClientCallContext(BaseModel):

@@ -14,11 +14,15 @@ from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
-    TransportProtocol,
+)
+from a2a.utils.constants import (
+    TRANSPORT_GRPC,
+    TRANSPORT_HTTP_JSON,
+    TRANSPORT_JSONRPC,
 )
 
 
@@ -66,15 +70,13 @@ class ClientFactory:
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults(config.supported_transports)
+        self._register_defaults(config.supported_protocol_bindings)
 
-    def _register_defaults(
-        self, supported: list[str | TransportProtocol]
-    ) -> None:
+    def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
-        if TransportProtocol.jsonrpc in supported or not supported:
+        if TRANSPORT_JSONRPC in supported or not supported:
             self.register(
-                TransportProtocol.jsonrpc,
+                TRANSPORT_JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -83,9 +85,9 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TransportProtocol.http_json in supported:
+        if TRANSPORT_HTTP_JSON in supported:
             self.register(
-                TransportProtocol.http_json,
+                TRANSPORT_HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -94,14 +96,14 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TransportProtocol.grpc in supported:
+        if TRANSPORT_GRPC in supported:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
             self.register(
-                TransportProtocol.grpc,
+                TRANSPORT_GRPC,
                 GrpcTransport.create,
             )
 
@@ -116,6 +118,7 @@ class ClientFactory:
         resolver_http_kwargs: dict[str, Any] | None = None,
         extra_transports: dict[str, TransportProducer] | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> Client:
         """Convenience method for constructing a client.
 
@@ -146,6 +149,7 @@ class ClientFactory:
           extra_transports: Additional transport protocols to enable when
             constructing the client.
           extensions: List of extensions to be activated.
+          signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
           A `Client` object.
@@ -158,12 +162,14 @@ class ClientFactory:
                     card = await resolver.get_agent_card(
                         relative_card_path=relative_card_path,
                         http_kwargs=resolver_http_kwargs,
+                        signature_verifier=signature_verifier,
                     )
             else:
                 resolver = A2ACardResolver(client_config.httpx_client, agent)
                 card = await resolver.get_agent_card(
                     relative_card_path=relative_card_path,
                     http_kwargs=resolver_http_kwargs,
+                    signature_verifier=signature_verifier,
                 )
         else:
             card = agent
@@ -200,28 +206,30 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
-        server_set = {server_preferred: card.url}
-        if card.additional_interfaces:
-            server_set.update(
-                {x.transport: x.url for x in card.additional_interfaces}
-            )
-        client_set = self._config.supported_transports or [
-            TransportProtocol.jsonrpc
+        client_set = self._config.supported_protocol_bindings or [
+            TRANSPORT_JSONRPC
         ]
         transport_protocol = None
         transport_url = None
         if self._config.use_client_preference:
-            for x in client_set:
-                if x in server_set:
-                    transport_protocol = x
-                    transport_url = server_set[x]
+            for protocol_binding in client_set:
+                supported_interface = next(
+                    (
+                        si
+                        for si in card.supported_interfaces
+                        if si.protocol_binding == protocol_binding
+                    ),
+                    None,
+                )
+                if supported_interface:
+                    transport_protocol = protocol_binding
+                    transport_url = supported_interface.url
                     break
         else:
-            for x, url in server_set.items():
-                if x in client_set:
-                    transport_protocol = x
-                    transport_url = url
+            for supported_interface in card.supported_interfaces:
+                if supported_interface.protocol_binding in client_set:
+                    transport_protocol = supported_interface.protocol_binding
+                    transport_url = supported_interface.url
                     break
         if not transport_protocol or not transport_url:
             raise ValueError('no compatible transports found.')
@@ -256,7 +264,7 @@ def minimal_agent_card(
     """Generates a minimal card to simplify bootstrapping client creation.
 
     This minimal card is not viable itself to interact with the remote agent.
-    Instead this is a short hand way to take a known url and transport option
+    Instead this is a shorthand way to take a known url and transport option
     and interact with the get card endpoint of the agent server to get the
     correct agent card. This pattern is necessary for gRPC based card access
     as typically these servers won't expose a well known path card.
@@ -264,19 +272,15 @@ def minimal_agent_card(
     if transports is None:
         transports = []
     return AgentCard(
-        url=url,
-        preferred_transport=transports[0] if transports else None,
-        additional_interfaces=[
-            AgentInterface(transport=t, url=url) for t in transports[1:]
-        ]
-        if len(transports) > 1
-        else [],
-        supports_authenticated_extended_card=True,
-        capabilities=AgentCapabilities(),
+        supported_interfaces=[
+            AgentInterface(protocol_binding=t, url=url) for t in transports
+        ],
+        capabilities=AgentCapabilities(extended_agent_card=True),
         default_input_modes=[],
         default_output_modes=[],
         description='',
         skills=[],
         version='',
         name='',
+        protocol_versions=['v1'],
     )

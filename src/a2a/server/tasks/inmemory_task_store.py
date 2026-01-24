@@ -3,7 +3,7 @@ import logging
 
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task
+from a2a.types.a2a_pb2 import Task
 
 
 logger = logging.getLogger(__name__)

@@ -1,4 +1,5 @@
 import os
+from datetime import datetime, timezone
 
 from collections.abc import AsyncGenerator
 
@@ -15,9 +16,11 @@ pytest.importorskip('sqlalchemy', reason='Database tests require SQLAlchemy')
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.inspection import inspect
 
+from google.protobuf.json_format import MessageToDict
+
 from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
@@ -25,7 +28,6 @@ from a2a.types import (
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
@@ -71,17 +73,11 @@ else:
 
 
 # Minimal Task object for testing - remains the same
-task_status_submitted = TaskStatus(
-    state=TaskState.submitted, timestamp='2023-01-01T00:00:00Z'
-)
+task_status_submitted = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
     context_id='session-xyz',
     status=task_status_submitted,
-    kind='task',
-    metadata={'test_key': 'test_value'},
-    artifacts=[],
-    history=[],
 )
 
 
@@ -142,7 +138,9 @@ async def test_initialize_creates_table(
 @pytest.mark.asyncio
 async def test_save_task(db_store_parameterized: DatabaseTaskStore) -> None:
     """Test saving a task to the DatabaseTaskStore."""
-    task_to_save = MINIMAL_TASK_OBJ.model_copy(deep=True)
+    # Create a copy of the minimal task with a unique ID
+    task_to_save = Task()
+    task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
     # Ensure unique ID for parameterized tests if needed, or rely on table isolation
     task_to_save.id = (
         f'save-task-{db_store_parameterized.engine.url.drivername}'
@@ -152,7 +150,7 @@ async def test_save_task(db_store_parameterized: DatabaseTaskStore) -> None:
     retrieved_task = await db_store_parameterized.get(task_to_save.id)
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
-    assert retrieved_task.model_dump() == task_to_save.model_dump()
+    assert MessageToDict(retrieved_task) == MessageToDict(task_to_save)
     await db_store_parameterized.delete(task_to_save.id)  # Cleanup
 
 
@@ -160,14 +158,16 @@ async def test_save_task(db_store_parameterized: DatabaseTaskStore) -> None:
 async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
     """Test retrieving a task from the DatabaseTaskStore."""
     task_id = f'get-test-task-{db_store_parameterized.engine.url.drivername}'
-    task_to_save = MINIMAL_TASK_OBJ.model_copy(update={'id': task_id})
+    task_to_save = Task()
+    task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
+    task_to_save.id = task_id
     await db_store_parameterized.save(task_to_save)
 
     retrieved_task = await db_store_parameterized.get(task_to_save.id)
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
     assert retrieved_task.context_id == task_to_save.context_id
-    assert retrieved_task.status.state == TaskState.submitted
+    assert retrieved_task.status.state == TaskState.TASK_STATE_SUBMITTED
     await db_store_parameterized.delete(task_to_save.id)  # Cleanup
 
 
@@ -184,9 +184,9 @@ async def test_get_nonexistent_task(
 async def test_delete_task(db_store_parameterized: DatabaseTaskStore) -> None:
     """Test deleting a task from the DatabaseTaskStore."""
     task_id = f'delete-test-task-{db_store_parameterized.engine.url.drivername}'
-    task_to_save_and_delete = MINIMAL_TASK_OBJ.model_copy(
-        update={'id': task_id}
-    )
+    task_to_save_and_delete = Task()
+    task_to_save_and_delete.CopyFrom(MINIMAL_TASK_OBJ)
+    task_to_save_and_delete.id = task_id
     await db_store_parameterized.save(task_to_save_and_delete)
 
     assert (
@@ -210,25 +210,25 @@ async def test_save_and_get_detailed_task(
 ) -> None:
     """Test saving and retrieving a task with more fields populated."""
     task_id = f'detailed-task-{db_store_parameterized.engine.url.drivername}'
+    test_timestamp = datetime(2023, 1, 1, 12, 0, 0, tzinfo=timezone.utc)
     test_task = Task(
         id=task_id,
         context_id='test-session-1',
         status=TaskStatus(
-            state=TaskState.working, timestamp='2023-01-01T12:00:00Z'
+            state=TaskState.TASK_STATE_WORKING, timestamp=test_timestamp
         ),
-        kind='task',
         metadata={'key1': 'value1', 'key2': 123},
         artifacts=[
             Artifact(
                 artifact_id='artifact-1',
-                parts=[Part(root=TextPart(text='hello'))],
+                parts=[Part(text='hello')],
             )
         ],
         history=[
             Message(
                 message_id='msg-1',
-                role=Role.user,
-                parts=[Part(root=TextPart(text='user input'))],
+                role=Role.ROLE_USER,
+                parts=[Part(text='user input')],
             )
         ],
     )
@@ -239,18 +239,22 @@ async def test_save_and_get_detailed_task(
     assert retrieved_task is not None
     assert retrieved_task.id == test_task.id
     assert retrieved_task.context_id == test_task.context_id
-    assert retrieved_task.status.state == TaskState.working
-    assert retrieved_task.status.timestamp == '2023-01-01T12:00:00Z'
-    assert retrieved_task.metadata == {'key1': 'value1', 'key2': 123}
-
-    # Pydantic models handle their own serialization for comparison if model_dump is used
+    assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
+    # Compare timestamps - proto Timestamp has ToDatetime() method
     assert (
-        retrieved_task.model_dump()['artifacts']
-        == test_task.model_dump()['artifacts']
+        retrieved_task.status.timestamp.ToDatetime()
+        == test_timestamp.replace(tzinfo=None)
+    )
+    assert dict(retrieved_task.metadata) == {'key1': 'value1', 'key2': 123}
+
+    # Use MessageToDict for proto serialization comparisons
+    assert (
+        MessageToDict(retrieved_task)['artifacts']
+        == MessageToDict(test_task)['artifacts']
     )
     assert (
-        retrieved_task.model_dump()['history']
-        == test_task.model_dump()['history']
+        MessageToDict(retrieved_task)['history']
+        == MessageToDict(test_task)['history']
     )
 
     await db_store_parameterized.delete(test_task.id)
@@ -261,14 +265,14 @@ async def test_save_and_get_detailed_task(
 async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
     """Test updating an existing task."""
     task_id = f'update-test-task-{db_store_parameterized.engine.url.drivername}'
+    original_timestamp = datetime(2023, 1, 2, 10, 0, 0, tzinfo=timezone.utc)
     original_task = Task(
         id=task_id,
         context_id='session-update',
         status=TaskStatus(
-            state=TaskState.submitted, timestamp='2023-01-02T10:00:00Z'
+            state=TaskState.TASK_STATE_SUBMITTED, timestamp=original_timestamp
         ),
-        kind='task',
-        metadata=None,  # Explicitly None
+        # Proto metadata is a Struct, can't be None - leave empty
         artifacts=[],
         history=[],
     )
@@ -276,20 +280,28 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
 
     retrieved_before_update = await db_store_parameterized.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.submitted
-    assert retrieved_before_update.metadata is None
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
+    assert (
+        len(retrieved_before_update.metadata) == 0
+    )  # Proto map is empty, not None
 
-    updated_task = original_task.model_copy(deep=True)
-    updated_task.status.state = TaskState.completed
-    updated_task.status.timestamp = '2023-01-02T11:00:00Z'
-    updated_task.metadata = {'update_key': 'update_value'}
+    updated_timestamp = datetime(2023, 1, 2, 11, 0, 0, tzinfo=timezone.utc)
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_COMPLETED
+    updated_task.status.timestamp.FromDatetime(updated_timestamp)
+    updated_task.metadata['update_key'] = 'update_value'
 
     await db_store_parameterized.save(updated_task)
 
     retrieved_after_update = await db_store_parameterized.get(task_id)
     assert retrieved_after_update is not None
-    assert retrieved_after_update.status.state == TaskState.completed
-    assert retrieved_after_update.metadata == {'update_key': 'update_value'}
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_COMPLETED
+    assert dict(retrieved_after_update.metadata) == {
+        'update_key': 'update_value'
+    }
 
     await db_store_parameterized.delete(task_id)
 
@@ -298,43 +310,41 @@ async def test_update_task(db_store_parameterized: DatabaseTaskStore) -> None:
 async def test_metadata_field_mapping(
     db_store_parameterized: DatabaseTaskStore,
 ) -> None:
-    """Test that metadata field is correctly mapped between Pydantic and SQLAlchemy.
+    """Test that metadata field is correctly mapped between Proto and SQLAlchemy.
 
     This test verifies:
-    1. Metadata can be None
+    1. Metadata can be empty (proto Struct can't be None)
     2. Metadata can be a simple dict
     3. Metadata can contain nested structures
     4. Metadata is correctly saved and retrieved
     5. The mapping between task.metadata and task_metadata column works
     """
-    # Test 1: Task with no metadata (None)
+    # Test 1: Task with no metadata (empty Struct in proto)
     task_no_metadata = Task(
         id='task-metadata-test-1',
         context_id='session-meta-1',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
     await db_store_parameterized.save(task_no_metadata)
     retrieved_no_metadata = await db_store_parameterized.get(
         'task-metadata-test-1'
     )
     assert retrieved_no_metadata is not None
-    assert retrieved_no_metadata.metadata is None
+    # Proto Struct is empty, not None
+    assert len(retrieved_no_metadata.metadata) == 0
 
     # Test 2: Task with simple metadata
     simple_metadata = {'key': 'value', 'number': 42, 'boolean': True}
     task_simple_metadata = Task(
         id='task-metadata-test-2',
         context_id='session-meta-2',
-        status=TaskStatus(state=TaskState.working),
-        kind='task',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         metadata=simple_metadata,
     )
     await db_store_parameterized.save(task_simple_metadata)
     retrieved_simple = await db_store_parameterized.get('task-metadata-test-2')
     assert retrieved_simple is not None
-    assert retrieved_simple.metadata == simple_metadata
+    assert dict(retrieved_simple.metadata) == simple_metadata
 
     # Test 3: Task with complex nested metadata
     complex_metadata = {
@@ -347,48 +357,47 @@ async def test_metadata_field_mapping(
         },
         'special_chars': 'Hello\nWorld\t!',
         'unicode': '🚀 Unicode test 你好',
-        'null_value': None,
     }
     task_complex_metadata = Task(
         id='task-metadata-test-3',
         context_id='session-meta-3',
-        status=TaskStatus(state=TaskState.completed),
-        kind='task',
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         metadata=complex_metadata,
     )
     await db_store_parameterized.save(task_complex_metadata)
     retrieved_complex = await db_store_parameterized.get('task-metadata-test-3')
     assert retrieved_complex is not None
-    assert retrieved_complex.metadata == complex_metadata
+    # Convert proto Struct to dict for comparison
+    retrieved_meta = MessageToDict(retrieved_complex.metadata)
+    assert retrieved_meta == complex_metadata
 
-    # Test 4: Update metadata from None to dict
+    # Test 4: Update metadata from empty to dict
     task_update_metadata = Task(
         id='task-metadata-test-4',
         context_id='session-meta-4',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
     await db_store_parameterized.save(task_update_metadata)
 
     # Update metadata
-    task_update_metadata.metadata = {'updated': True, 'timestamp': '2024-01-01'}
+    task_update_metadata.metadata['updated'] = True
+    task_update_metadata.metadata['timestamp'] = '2024-01-01'
     await db_store_parameterized.save(task_update_metadata)
 
     retrieved_updated = await db_store_parameterized.get('task-metadata-test-4')
     assert retrieved_updated is not None
-    assert retrieved_updated.metadata == {
+    assert dict(retrieved_updated.metadata) == {
         'updated': True,
         'timestamp': '2024-01-01',
     }
 
-    # Test 5: Update metadata from dict to None
-    task_update_metadata.metadata = None
+    # Test 5: Clear metadata (set to empty)
+    task_update_metadata.metadata.Clear()
     await db_store_parameterized.save(task_update_metadata)
 
     retrieved_none = await db_store_parameterized.get('task-metadata-test-4')
     assert retrieved_none is not None
-    assert retrieved_none.metadata is None
+    assert len(retrieved_none.metadata) == 0
 
     # Cleanup
     await db_store_parameterized.delete('task-metadata-test-1')

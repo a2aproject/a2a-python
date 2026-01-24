@@ -1,90 +1,43 @@
+"""Tests for protobuf-based A2A types.
+
+This module tests the proto-generated types from a2a_pb2, using protobuf
+patterns like ParseDict, proto constructors, and MessageToDict.
+"""
+
 from typing import Any
 
 import pytest
+from google.protobuf.json_format import MessageToDict, ParseDict
 
-from pydantic import ValidationError
-
-from a2a.types import (
-    A2AError,
-    A2ARequest,
-    APIKeySecurityScheme,
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     AgentProvider,
     AgentSkill,
+    APIKeySecurityScheme,
     Artifact,
     CancelTaskRequest,
-    CancelTaskResponse,
-    CancelTaskSuccessResponse,
-    ContentTypeNotSupportedError,
     DataPart,
-    FileBase,
     FilePart,
-    FileWithBytes,
-    FileWithUri,
-    GetAuthenticatedExtendedCardRequest,
-    GetAuthenticatedExtendedCardResponse,
-    GetAuthenticatedExtendedCardSuccessResponse,
-    GetTaskPushNotificationConfigParams,
     GetTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigResponse,
-    GetTaskPushNotificationConfigSuccessResponse,
     GetTaskRequest,
-    GetTaskResponse,
-    GetTaskSuccessResponse,
-    In,
-    InternalError,
-    InvalidParamsError,
-    InvalidRequestError,
-    JSONParseError,
-    JSONRPCError,
-    JSONRPCErrorResponse,
-    JSONRPCMessage,
-    JSONRPCRequest,
-    JSONRPCResponse,
     Message,
-    MessageSendParams,
-    MethodNotFoundError,
-    OAuth2SecurityScheme,
     Part,
-    PartBase,
-    PushNotificationAuthenticationInfo,
     PushNotificationConfig,
-    PushNotificationNotSupportedError,
     Role,
     SecurityScheme,
     SendMessageRequest,
-    SendMessageResponse,
-    SendMessageSuccessResponse,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SendStreamingMessageSuccessResponse,
     SetTaskPushNotificationConfigRequest,
-    SetTaskPushNotificationConfigResponse,
-    SetTaskPushNotificationConfigSuccessResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
-    TaskNotCancelableError,
-    TaskNotFoundError,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskResubscriptionRequest,
     TaskState,
     TaskStatus,
-    TaskStatusUpdateEvent,
-    TextPart,
-    UnsupportedOperationError,
 )
 
 
 # --- Helper Data ---
-
-MINIMAL_AGENT_SECURITY_SCHEME: dict[str, Any] = {
-    'type': 'apiKey',
-    'in': 'header',
-    'name': 'X-API-KEY',
-}
 
 MINIMAL_AGENT_SKILL: dict[str, Any] = {
     'id': 'skill-123',
@@ -92,6 +45,7 @@ MINIMAL_AGENT_SKILL: dict[str, Any] = {
     'description': 'Finds recipes',
     'tags': ['cooking'],
 }
+
 FULL_AGENT_SKILL: dict[str, Any] = {
     'id': 'skill-123',
     'name': 'Recipe Finder',
@@ -103,115 +57,35 @@ FULL_AGENT_SKILL: dict[str, Any] = {
 }
 
 MINIMAL_AGENT_CARD: dict[str, Any] = {
-    'capabilities': {},  # AgentCapabilities is required but can be empty
+    'capabilities': {},
     'defaultInputModes': ['text/plain'],
     'defaultOutputModes': ['application/json'],
     'description': 'Test Agent',
     'name': 'TestAgent',
     'skills': [MINIMAL_AGENT_SKILL],
-    'url': 'http://example.com/agent',
+    'supportedInterfaces': [
+        {'url': 'http://example.com/agent', 'protocolBinding': 'HTTP+JSON'}
+    ],
     'version': '1.0',
 }
 
-TEXT_PART_DATA: dict[str, Any] = {'kind': 'text', 'text': 'Hello'}
-FILE_URI_PART_DATA: dict[str, Any] = {
-    'kind': 'file',
-    'file': {'uri': 'file:///path/to/file.txt', 'mimeType': 'text/plain'},
-}
-FILE_BYTES_PART_DATA: dict[str, Any] = {
-    'kind': 'file',
-    'file': {'bytes': 'aGVsbG8=', 'name': 'hello.txt'},  # base64 for "hello"
-}
-DATA_PART_DATA: dict[str, Any] = {'kind': 'data', 'data': {'key': 'value'}}
 
-MINIMAL_MESSAGE_USER: dict[str, Any] = {
-    'role': 'user',
-    'parts': [TEXT_PART_DATA],
-    'message_id': 'msg-123',
-    'kind': 'message',
-}
-
-AGENT_MESSAGE_WITH_FILE: dict[str, Any] = {
-    'role': 'agent',
-    'parts': [TEXT_PART_DATA, FILE_URI_PART_DATA],
-    'metadata': {'timestamp': 'now'},
-    'message_id': 'msg-456',
-}
-
-MINIMAL_TASK_STATUS: dict[str, Any] = {'state': 'submitted'}
-FULL_TASK_STATUS: dict[str, Any] = {
-    'state': 'working',
-    'message': MINIMAL_MESSAGE_USER,
-    'timestamp': '2023-10-27T10:00:00Z',
-}
-
-MINIMAL_TASK: dict[str, Any] = {
-    'id': 'task-abc',
-    'context_id': 'session-xyz',
-    'status': MINIMAL_TASK_STATUS,
-    'kind': 'task',
-}
-FULL_TASK: dict[str, Any] = {
-    'id': 'task-abc',
-    'context_id': 'session-xyz',
-    'status': FULL_TASK_STATUS,
-    'history': [MINIMAL_MESSAGE_USER, AGENT_MESSAGE_WITH_FILE],
-    'artifacts': [
-        {
-            'artifactId': 'artifact-123',
-            'parts': [DATA_PART_DATA],
-            'name': 'result_data',
-        }
-    ],
-    'metadata': {'priority': 'high'},
-    'kind': 'task',
-}
-
-MINIMAL_TASK_ID_PARAMS: dict[str, Any] = {'id': 'task-123'}
-FULL_TASK_ID_PARAMS: dict[str, Any] = {
-    'id': 'task-456',
-    'metadata': {'source': 'test'},
-}
-
-JSONRPC_ERROR_DATA: dict[str, Any] = {
-    'code': -32600,
-    'message': 'Invalid Request',
-}
-JSONRPC_SUCCESS_RESULT: dict[str, Any] = {'status': 'ok', 'data': [1, 2, 3]}
-
-# --- Test Functions ---
-
-
-def test_security_scheme_valid():
-    scheme = SecurityScheme.model_validate(MINIMAL_AGENT_SECURITY_SCHEME)
-    assert isinstance(scheme.root, APIKeySecurityScheme)
-    assert scheme.root.type == 'apiKey'
-    assert scheme.root.in_ == In.header
-    assert scheme.root.name == 'X-API-KEY'
-
-
-def test_security_scheme_invalid():
-    with pytest.raises(ValidationError):
-        APIKeySecurityScheme(
-            name='my_api_key',
-        )  # Missing "in"  # type: ignore
-
-    with pytest.raises(ValidationError):
-        OAuth2SecurityScheme(
-            description='OAuth2 scheme missing flows',
-        )  # Missing "flows"  # type: ignore
+# --- Test Agent Types ---
 
 
 def test_agent_capabilities():
-    caps = AgentCapabilities(
-        streaming=None, state_transition_history=None, push_notifications=None
-    )  # All optional
-    assert caps.push_notifications is None
-    assert caps.state_transition_history is None
-    assert caps.streaming is None
+    """Test AgentCapabilities proto construction."""
+    # Empty capabilities
+    caps = AgentCapabilities()
+    assert caps.streaming is False  # Proto default
+    assert caps.state_transition_history is False
+    assert caps.push_notifications is False
 
+    # Full capabilities
     caps_full = AgentCapabilities(
-        push_notifications=True, state_transition_history=False, streaming=True
+        push_notifications=True,
+        state_transition_history=False,
+        streaming=True,
     )
     assert caps_full.push_notifications is True
     assert caps_full.state_transition_history is False
@@ -219,1448 +93,523 @@ def test_agent_capabilities():
 
 
 def test_agent_provider():
-    provider = AgentProvider(organization='Test Org', url='http://test.org')
+    """Test AgentProvider proto construction."""
+    provider = AgentProvider(
+        organization='Test Org',
+        url='http://test.org',
+    )
     assert provider.organization == 'Test Org'
     assert provider.url == 'http://test.org'
 
-    with pytest.raises(ValidationError):
-        AgentProvider(organization='Test Org')  # Missing url  # type: ignore
 
-
-def test_agent_skill_valid():
-    skill = AgentSkill(**MINIMAL_AGENT_SKILL)
+def test_agent_skill():
+    """Test AgentSkill proto construction and ParseDict."""
+    # Direct construction
+    skill = AgentSkill(
+        id='skill-123',
+        name='Recipe Finder',
+        description='Finds recipes',
+        tags=['cooking'],
+    )
     assert skill.id == 'skill-123'
     assert skill.name == 'Recipe Finder'
     assert skill.description == 'Finds recipes'
-    assert skill.tags == ['cooking']
-    assert skill.examples is None
+    assert list(skill.tags) == ['cooking']
 
-    skill_full = AgentSkill(**FULL_AGENT_SKILL)
-    assert skill_full.examples == ['Find me a pasta recipe']
-    assert skill_full.input_modes == ['text/plain']
-
-
-def test_agent_skill_invalid():
-    with pytest.raises(ValidationError):
-        AgentSkill(
-            id='abc', name='n', description='d'
-        )  # Missing tags  # type: ignore
-
-    AgentSkill(
-        **MINIMAL_AGENT_SKILL,
-        invalid_extra='foo',  # type: ignore
-    )  # Extra field
+    # ParseDict from dictionary
+    skill_full = ParseDict(FULL_AGENT_SKILL, AgentSkill())
+    assert skill_full.id == 'skill-123'
+    assert list(skill_full.examples) == ['Find me a pasta recipe']
+    assert list(skill_full.input_modes) == ['text/plain']
 
 
-def test_agent_card_valid():
-    card = AgentCard(**MINIMAL_AGENT_CARD)
+def test_agent_card():
+    """Test AgentCard proto construction and ParseDict."""
+    card = ParseDict(MINIMAL_AGENT_CARD, AgentCard())
     assert card.name == 'TestAgent'
     assert card.version == '1.0'
     assert len(card.skills) == 1
     assert card.skills[0].id == 'skill-123'
-    assert card.provider is None  # Optional
+    assert not card.HasField('provider')  # Optional, not set
 
 
-def test_agent_card_invalid():
-    bad_card_data = MINIMAL_AGENT_CARD.copy()
-    del bad_card_data['name']
-    with pytest.raises(ValidationError):
-        AgentCard(**bad_card_data)  # Missing name
+def test_security_scheme():
+    """Test SecurityScheme oneof handling."""
+    # API Key scheme
+    api_key = APIKeySecurityScheme(
+        name='X-API-KEY',
+        location='header',  # location is a string in proto
+    )
+    scheme = SecurityScheme(api_key_security_scheme=api_key)
+    assert scheme.HasField('api_key_security_scheme')
+    assert scheme.api_key_security_scheme.name == 'X-API-KEY'
+    assert scheme.api_key_security_scheme.location == 'header'
 
 
-# --- Test Parts ---
+# --- Test Part Types ---
 
 
 def test_text_part():
-    part = TextPart(**TEXT_PART_DATA)
-    assert part.kind == 'text'
+    """Test Part with text field (Part has text as a direct string field)."""
+    # Part with text
+    part = Part(text='Hello')
     assert part.text == 'Hello'
-    assert part.metadata is None
-
-    with pytest.raises(ValidationError):
-        TextPart(type='text')  # Missing text # type: ignore
-    with pytest.raises(ValidationError):
-        TextPart(
-            kind='file',  # type: ignore
-            text='hello',
-        )  # Wrong type literal
+    # Check oneof
+    assert part.WhichOneof('part') == 'text'
 
 
-def test_file_part_variants():
-    # URI variant
-    file_uri = FileWithUri(
-        uri='file:///path/to/file.txt', mime_type='text/plain'
+def test_file_part_with_uri():
+    """Test FilePart with file_with_uri."""
+    file_part = FilePart(
+        file_with_uri='file:///path/to/file.txt',
+        media_type='text/plain',
     )
-    part_uri = FilePart(kind='file', file=file_uri)
-    assert isinstance(part_uri.file, FileWithUri)
-    assert part_uri.file.uri == 'file:///path/to/file.txt'
-    assert part_uri.file.mime_type == 'text/plain'
-    assert not hasattr(part_uri.file, 'bytes')
+    assert file_part.file_with_uri == 'file:///path/to/file.txt'
+    assert file_part.media_type == 'text/plain'
 
-    # Bytes variant
-    file_bytes = FileWithBytes(bytes='aGVsbG8=', name='hello.txt')
-    part_bytes = FilePart(kind='file', file=file_bytes)
-    assert isinstance(part_bytes.file, FileWithBytes)
-    assert part_bytes.file.bytes == 'aGVsbG8='
-    assert part_bytes.file.name == 'hello.txt'
-    assert not hasattr(part_bytes.file, 'uri')
+    # Part with file
+    part = Part(file=file_part)
+    assert part.HasField('file')
+    assert part.WhichOneof('part') == 'file'
 
-    # Test deserialization directly
-    part_uri_deserialized = FilePart.model_validate(FILE_URI_PART_DATA)
-    assert isinstance(part_uri_deserialized.file, FileWithUri)
-    assert part_uri_deserialized.file.uri == 'file:///path/to/file.txt'
 
-    part_bytes_deserialized = FilePart.model_validate(FILE_BYTES_PART_DATA)
-    assert isinstance(part_bytes_deserialized.file, FileWithBytes)
-    assert part_bytes_deserialized.file.bytes == 'aGVsbG8='
-
-    # Invalid - wrong type literal
-    with pytest.raises(ValidationError):
-        FilePart(kind='text', file=file_uri)  # type: ignore
-
-    FilePart(**FILE_URI_PART_DATA, extra='extra')  # type: ignore
+def test_file_part_with_bytes():
+    """Test FilePart with file_with_bytes."""
+    file_part = FilePart(
+        file_with_bytes=b'hello',
+        name='hello.txt',
+    )
+    assert file_part.file_with_bytes == b'hello'
+    assert file_part.name == 'hello.txt'
 
 
 def test_data_part():
-    part = DataPart(**DATA_PART_DATA)
-    assert part.kind == 'data'
-    assert part.data == {'key': 'value'}
+    """Test DataPart proto construction."""
+    data_part = DataPart()
+    data_part.data.update({'key': 'value'})
+    assert dict(data_part.data) == {'key': 'value'}
 
-    with pytest.raises(ValidationError):
-        DataPart(type='data')  # Missing data  # type: ignore
-
-
-def test_part_root_model():
-    # Test deserialization of the Union RootModel
-    part_text = Part.model_validate(TEXT_PART_DATA)
-    assert isinstance(part_text.root, TextPart)
-    assert part_text.root.text == 'Hello'
-
-    part_file = Part.model_validate(FILE_URI_PART_DATA)
-    assert isinstance(part_file.root, FilePart)
-    assert isinstance(part_file.root.file, FileWithUri)
-
-    part_data = Part.model_validate(DATA_PART_DATA)
-    assert isinstance(part_data.root, DataPart)
-    assert part_data.root.data == {'key': 'value'}
-
-    # Test serialization
-    assert part_text.model_dump(exclude_none=True) == TEXT_PART_DATA
-    assert part_file.model_dump(exclude_none=True) == FILE_URI_PART_DATA
-    assert part_data.model_dump(exclude_none=True) == DATA_PART_DATA
+    # Part with data
+    part = Part(data=data_part)
+    assert part.HasField('data')
+    assert part.WhichOneof('part') == 'data'
 
 
 # --- Test Message and Task ---
 
 
 def test_message():
-    msg = Message(**MINIMAL_MESSAGE_USER)
-    assert msg.role == Role.user
+    """Test Message proto construction."""
+    part = Part(text='Hello')
+
+    msg = Message(
+        role=Role.ROLE_USER,
+        message_id='msg-123',
+    )
+    msg.parts.append(part)
+
+    assert msg.role == Role.ROLE_USER
+    assert msg.message_id == 'msg-123'
     assert len(msg.parts) == 1
-    assert isinstance(
-        msg.parts[0].root, TextPart
-    )  # Access root for RootModel Part
-    assert msg.metadata is None
+    assert msg.parts[0].text == 'Hello'
 
-    msg_agent = Message(**AGENT_MESSAGE_WITH_FILE)
-    assert msg_agent.role == Role.agent
-    assert len(msg_agent.parts) == 2
-    assert isinstance(msg_agent.parts[1].root, FilePart)
-    assert msg_agent.metadata == {'timestamp': 'now'}
 
-    with pytest.raises(ValidationError):
-        Message(
-            role='invalid_role',  # type: ignore
-            parts=[TEXT_PART_DATA],  # type: ignore
-        )  # Invalid enum
-    with pytest.raises(ValidationError):
-        Message(role=Role.user)  # Missing parts  # type: ignore
+def test_message_with_metadata():
+    """Test Message with metadata."""
+    msg = Message(
+        role=Role.ROLE_AGENT,
+        message_id='msg-456',
+    )
+    msg.metadata.update({'timestamp': 'now'})
+
+    assert msg.role == Role.ROLE_AGENT
+    assert dict(msg.metadata) == {'timestamp': 'now'}
 
 
 def test_task_status():
-    status = TaskStatus(**MINIMAL_TASK_STATUS)
-    assert status.state == TaskState.submitted
-    assert status.message is None
-    assert status.timestamp is None
+    """Test TaskStatus proto construction."""
+    status = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
+    assert status.state == TaskState.TASK_STATE_SUBMITTED
+    assert not status.HasField('message')
+    # timestamp is a Timestamp proto, default has seconds=0
+    assert status.timestamp.seconds == 0
 
-    status_full = TaskStatus(**FULL_TASK_STATUS)
-    assert status_full.state == TaskState.working
-    assert isinstance(status_full.message, Message)
-    assert status_full.timestamp == '2023-10-27T10:00:00Z'
+    # TaskStatus with timestamp
+    from google.protobuf.timestamp_pb2 import Timestamp
 
-    with pytest.raises(ValidationError):
-        TaskStatus(state='invalid_state')  # Invalid enum  # type: ignore
+    ts = Timestamp()
+    ts.FromJsonString('2023-10-27T10:00:00Z')
+    status_working = TaskStatus(
+        state=TaskState.TASK_STATE_WORKING,
+        timestamp=ts,
+    )
+    assert status_working.state == TaskState.TASK_STATE_WORKING
+    assert status_working.timestamp.seconds == ts.seconds
 
 
 def test_task():
-    task = Task(**MINIMAL_TASK)
+    """Test Task proto construction."""
+    status = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
+    task = Task(
+        id='task-abc',
+        context_id='session-xyz',
+        status=status,
+    )
+
     assert task.id == 'task-abc'
     assert task.context_id == 'session-xyz'
-    assert task.status.state == TaskState.submitted
-    assert task.history is None
-    assert task.artifacts is None
-    assert task.metadata is None
-
-    task_full = Task(**FULL_TASK)
-    assert task_full.id == 'task-abc'
-    assert task_full.status.state == TaskState.working
-    assert task_full.history is not None and len(task_full.history) == 2
-    assert isinstance(task_full.history[0], Message)
-    assert task_full.artifacts is not None and len(task_full.artifacts) == 1
-    assert isinstance(task_full.artifacts[0], Artifact)
-    assert task_full.artifacts[0].name == 'result_data'
-    assert task_full.metadata == {'priority': 'high'}
-
-    with pytest.raises(ValidationError):
-        Task(id='abc', sessionId='xyz')  # Missing status # type: ignore
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert len(task.history) == 0
+    assert len(task.artifacts) == 0
 
 
-# --- Test JSON-RPC Structures ---
-
-
-def test_jsonrpc_error():
-    err = JSONRPCError(code=-32600, message='Invalid Request')
-    assert err.code == -32600
-    assert err.message == 'Invalid Request'
-    assert err.data is None
-
-    err_data = JSONRPCError(
-        code=-32001, message='Task not found', data={'taskId': '123'}
+def test_task_with_history():
+    """Test Task with history."""
+    status = TaskStatus(state=TaskState.TASK_STATE_WORKING)
+    task = Task(
+        id='task-abc',
+        context_id='session-xyz',
+        status=status,
     )
-    assert err_data.code == -32001
-    assert err_data.data == {'taskId': '123'}
+
+    # Add message to history
+    msg = Message(role=Role.ROLE_USER, message_id='msg-1')
+    msg.parts.append(Part(text='Hello'))
+    task.history.append(msg)
+
+    assert len(task.history) == 1
+    assert task.history[0].role == Role.ROLE_USER
 
 
-def test_jsonrpc_request():
-    req = JSONRPCRequest(jsonrpc='2.0', method='test_method', id=1)
-    assert req.jsonrpc == '2.0'
-    assert req.method == 'test_method'
-    assert req.id == 1
-    assert req.params is None
-
-    req_params = JSONRPCRequest(
-        jsonrpc='2.0', method='add', params={'a': 1, 'b': 2}, id='req-1'
+def test_task_with_artifacts():
+    """Test Task with artifacts."""
+    status = TaskStatus(state=TaskState.TASK_STATE_COMPLETED)
+    task = Task(
+        id='task-abc',
+        context_id='session-xyz',
+        status=status,
     )
-    assert req_params.params == {'a': 1, 'b': 2}
-    assert req_params.id == 'req-1'
 
-    with pytest.raises(ValidationError):
-        JSONRPCRequest(
-            jsonrpc='1.0',  # type: ignore
-            method='m',
-            id=1,
-        )  # Wrong version
-    with pytest.raises(ValidationError):
-        JSONRPCRequest(jsonrpc='2.0', id=1)  # Missing method  # type: ignore
+    # Add artifact
+    artifact = Artifact(artifact_id='artifact-123', name='result')
+    data_part = DataPart()
+    data_part.data.update({'result': 42})
+    artifact.parts.append(Part(data=data_part))
+    task.artifacts.append(artifact)
 
-
-def test_jsonrpc_error_response():
-    err_obj = JSONRPCError(**JSONRPC_ERROR_DATA)
-    resp = JSONRPCErrorResponse(jsonrpc='2.0', error=err_obj, id='err-1')
-    assert resp.jsonrpc == '2.0'
-    assert resp.id == 'err-1'
-    assert resp.error.code == -32600
-    assert resp.error.message == 'Invalid Request'
-
-    with pytest.raises(ValidationError):
-        JSONRPCErrorResponse(
-            jsonrpc='2.0', id='err-1'
-        )  # Missing error # type: ignore
+    assert len(task.artifacts) == 1
+    assert task.artifacts[0].artifact_id == 'artifact-123'
+    assert task.artifacts[0].name == 'result'
 
 
-def test_jsonrpc_response_root_model() -> None:
-    # Success case
-    success_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': MINIMAL_TASK,
-        'id': 1,
-    }
-    resp_success = JSONRPCResponse.model_validate(success_data)
-    assert isinstance(resp_success.root, SendMessageSuccessResponse)
-    assert resp_success.root.result == Task(**MINIMAL_TASK)
-
-    # Error case
-    error_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPC_ERROR_DATA,
-        'id': 'err-1',
-    }
-    resp_error = JSONRPCResponse.model_validate(error_data)
-    assert isinstance(resp_error.root, JSONRPCErrorResponse)
-    assert resp_error.root.error.code == -32600
-    # Note: .model_dump() might serialize the nested error model
-    assert resp_error.model_dump(exclude_none=True) == error_data
-
-    # Invalid case (neither success nor error structure)
-    with pytest.raises(ValidationError):
-        JSONRPCResponse.model_validate({'jsonrpc': '2.0', 'id': 1})
+# --- Test Request Types ---
 
 
-# --- Test Request/Response Wrappers ---
+def test_send_message_request():
+    """Test SendMessageRequest proto construction."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-123')
+    msg.parts.append(Part(text='Hello'))
+
+    request = SendMessageRequest(message=msg)
+    assert request.message.role == Role.ROLE_USER
+    assert request.message.parts[0].text == 'Hello'
 
 
-def test_send_message_request() -> None:
-    params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
-    req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/send',
-        'params': params.model_dump(),
-        'id': 5,
-    }
-    req = SendMessageRequest.model_validate(req_data)
-    assert req.method == 'message/send'
-    assert isinstance(req.params, MessageSendParams)
-    assert req.params.message.role == Role.user
-
-    with pytest.raises(ValidationError):  # Wrong method literal
-        SendMessageRequest.model_validate(
-            {**req_data, 'method': 'wrong/method'}
-        )
+def test_get_task_request():
+    """Test GetTaskRequest proto construction."""
+    request = GetTaskRequest(name='task-123')
+    assert request.name == 'task-123'
 
 
-def test_send_subscribe_request() -> None:
-    params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
-    req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/stream',
-        'params': params.model_dump(),
-        'id': 5,
-    }
-    req = SendStreamingMessageRequest.model_validate(req_data)
-    assert req.method == 'message/stream'
-    assert isinstance(req.params, MessageSendParams)
-    assert req.params.message.role == Role.user
-
-    with pytest.raises(ValidationError):  # Wrong method literal
-        SendStreamingMessageRequest.model_validate(
-            {**req_data, 'method': 'wrong/method'}
-        )
+def test_cancel_task_request():
+    """Test CancelTaskRequest proto construction."""
+    request = CancelTaskRequest(name='task-123')
+    assert request.name == 'task-123'
 
 
-def test_get_task_request() -> None:
-    params = TaskQueryParams(id='task-1', history_length=2)
-    req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/get',
-        'params': params.model_dump(),
-        'id': 5,
-    }
-    req = GetTaskRequest.model_validate(req_data)
-    assert req.method == 'tasks/get'
-    assert isinstance(req.params, TaskQueryParams)
-    assert req.params.id == 'task-1'
-    assert req.params.history_length == 2
-
-    with pytest.raises(ValidationError):  # Wrong method literal
-        GetTaskRequest.model_validate({**req_data, 'method': 'wrong/method'})
+def test_subscribe_to_task_request():
+    """Test SubscribeToTaskRequest proto construction."""
+    request = SubscribeToTaskRequest(name='task-123')
+    assert request.name == 'task-123'
 
 
-def test_cancel_task_request() -> None:
-    params = TaskIdParams(id='task-1')
-    req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/cancel',
-        'params': params.model_dump(),
-        'id': 5,
-    }
-    req = CancelTaskRequest.model_validate(req_data)
-    assert req.method == 'tasks/cancel'
-    assert isinstance(req.params, TaskIdParams)
-    assert req.params.id == 'task-1'
-
-    with pytest.raises(ValidationError):  # Wrong method literal
-        CancelTaskRequest.model_validate({**req_data, 'method': 'wrong/method'})
-
-
-def test_get_task_response() -> None:
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': MINIMAL_TASK,
-        'id': 'resp-1',
-    }
-    resp = GetTaskResponse.model_validate(resp_data)
-    assert resp.root.id == 'resp-1'
-    assert isinstance(resp.root, GetTaskSuccessResponse)
-    assert isinstance(resp.root.result, Task)
-    assert resp.root.result.id == 'task-abc'
-
-    with pytest.raises(ValidationError):  # Result is not a Task
-        GetTaskResponse.model_validate(
-            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
-        )
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = GetTaskResponse.model_validate(resp_data_err)
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-def test_send_message_response() -> None:
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': MINIMAL_TASK,
-        'id': 'resp-1',
-    }
-    resp = SendMessageResponse.model_validate(resp_data)
-    assert resp.root.id == 'resp-1'
-    assert isinstance(resp.root, SendMessageSuccessResponse)
-    assert isinstance(resp.root.result, Task)
-    assert resp.root.result.id == 'task-abc'
-
-    with pytest.raises(ValidationError):  # Result is not a Task
-        SendMessageResponse.model_validate(
-            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
-        )
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = SendMessageResponse.model_validate(resp_data_err)
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-def test_cancel_task_response() -> None:
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': MINIMAL_TASK,
-        'id': 1,
-    }
-    resp = CancelTaskResponse.model_validate(resp_data)
-    assert resp.root.id == 1
-    assert isinstance(resp.root, CancelTaskSuccessResponse)
-    assert isinstance(resp.root.result, Task)
-    assert resp.root.result.id == 'task-abc'
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = CancelTaskResponse.model_validate(resp_data_err)
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-def test_send_message_streaming_status_update_response() -> None:
-    task_status_update_event_data: dict[str, Any] = {
-        'status': MINIMAL_TASK_STATUS,
-        'taskId': '1',
-        'context_id': '2',
-        'final': False,
-        'kind': 'status-update',
-    }
-
-    event_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'id': 1,
-        'result': task_status_update_event_data,
-    }
-    response = SendStreamingMessageResponse.model_validate(event_data)
-    assert response.root.id == 1
-    assert isinstance(response.root, SendStreamingMessageSuccessResponse)
-    assert isinstance(response.root.result, TaskStatusUpdateEvent)
-    assert response.root.result.status.state == TaskState.submitted
-    assert response.root.result.task_id == '1'
-    assert not response.root.result.final
-
-    with pytest.raises(
-        ValidationError
-    ):  # Result is not a TaskStatusUpdateEvent
-        SendStreamingMessageResponse.model_validate(
-            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
-        )
-
-    event_data = {
-        'jsonrpc': '2.0',
-        'id': 1,
-        'result': {**task_status_update_event_data, 'final': True},
-    }
-    response = SendStreamingMessageResponse.model_validate(event_data)
-    assert response.root.id == 1
-    assert isinstance(response.root, SendStreamingMessageSuccessResponse)
-    assert isinstance(response.root.result, TaskStatusUpdateEvent)
-    assert response.root.result.final
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = SendStreamingMessageResponse.model_validate(resp_data_err)
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-def test_send_message_streaming_artifact_update_response() -> None:
-    text_part = TextPart(**TEXT_PART_DATA)
-    data_part = DataPart(**DATA_PART_DATA)
-    artifact = Artifact(
-        artifact_id='artifact-123',
-        name='result_data',
-        parts=[Part(root=text_part), Part(root=data_part)],
-    )
-    task_artifact_update_event_data: dict[str, Any] = {
-        'artifact': artifact,
-        'taskId': 'task_id',
-        'context_id': '2',
-        'append': False,
-        'lastChunk': True,
-        'kind': 'artifact-update',
-    }
-    event_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'id': 1,
-        'result': task_artifact_update_event_data,
-    }
-    response = SendStreamingMessageResponse.model_validate(event_data)
-    assert response.root.id == 1
-    assert isinstance(response.root, SendStreamingMessageSuccessResponse)
-    assert isinstance(response.root.result, TaskArtifactUpdateEvent)
-    assert response.root.result.artifact.artifact_id == 'artifact-123'
-    assert response.root.result.artifact.name == 'result_data'
-    assert response.root.result.task_id == 'task_id'
-    assert not response.root.result.append
-    assert response.root.result.last_chunk
-    assert len(response.root.result.artifact.parts) == 2
-    assert isinstance(response.root.result.artifact.parts[0].root, TextPart)
-    assert isinstance(response.root.result.artifact.parts[1].root, DataPart)
-
-
-def test_set_task_push_notification_response() -> None:
-    task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
+def test_set_task_push_notification_config_request():
+    """Test SetTaskPushNotificationConfigRequest proto construction."""
+    config = TaskPushNotificationConfig(
         push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='token'
+            url='https://example.com/webhook',
         ),
     )
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': task_push_config.model_dump(),
-        'id': 1,
-    }
-    resp = SetTaskPushNotificationConfigResponse.model_validate(resp_data)
-    assert resp.root.id == 1
-    assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
-    assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.task_id == 't2'
+    request = SetTaskPushNotificationConfigRequest(
+        parent='tasks/task-123',
+        config_id='config-1',
+        config=config,
+    )
+    assert request.parent == 'tasks/task-123'
     assert (
-        resp.root.result.push_notification_config.url == 'https://example.com'
+        request.config.push_notification_config.url
+        == 'https://example.com/webhook'
     )
-    assert resp.root.result.push_notification_config.token == 'token'
-    assert resp.root.result.push_notification_config.authentication is None
 
-    auth_info_dict: dict[str, Any] = {
-        'schemes': ['Bearer', 'Basic'],
-        'credentials': 'user:pass',
-    }
-    task_push_config.push_notification_config.authentication = (
-        PushNotificationAuthenticationInfo(**auth_info_dict)
-    )
-    resp_data = {
-        'jsonrpc': '2.0',
-        'result': task_push_config.model_dump(),
-        'id': 1,
-    }
-    resp = SetTaskPushNotificationConfigResponse.model_validate(resp_data)
-    assert isinstance(resp.root, SetTaskPushNotificationConfigSuccessResponse)
-    assert resp.root.result.push_notification_config.authentication is not None
-    assert resp.root.result.push_notification_config.authentication.schemes == [
-        'Bearer',
-        'Basic',
-    ]
+
+def test_get_task_push_notification_config_request():
+    """Test GetTaskPushNotificationConfigRequest proto construction."""
+    request = GetTaskPushNotificationConfigRequest(name='task-123')
+    assert request.name == 'task-123'
+
+
+# --- Test Enum Values ---
+
+
+def test_role_enum():
+    """Test Role enum values."""
+    assert Role.ROLE_UNSPECIFIED == 0
+    assert Role.ROLE_USER == 1
+    assert Role.ROLE_AGENT == 2
+
+
+def test_task_state_enum():
+    """Test TaskState enum values."""
+    assert TaskState.TASK_STATE_UNSPECIFIED == 0
+    assert TaskState.TASK_STATE_SUBMITTED == 1
+    assert TaskState.TASK_STATE_WORKING == 2
+    assert TaskState.TASK_STATE_COMPLETED == 3
+    assert TaskState.TASK_STATE_FAILED == 4
+    assert TaskState.TASK_STATE_CANCELLED == 5
+    assert TaskState.TASK_STATE_INPUT_REQUIRED == 6
+    assert TaskState.TASK_STATE_REJECTED == 7
+    assert TaskState.TASK_STATE_AUTH_REQUIRED == 8
+
+
+# --- Test ParseDict and MessageToDict ---
+
+
+def test_parse_dict_agent_card():
+    """Test ParseDict for AgentCard."""
+    card = ParseDict(MINIMAL_AGENT_CARD, AgentCard())
+    assert card.name == 'TestAgent'
+    assert card.supported_interfaces[0].url == 'http://example.com/agent'
+
+    # Round-trip through MessageToDict
+    card_dict = MessageToDict(card)
+    assert card_dict['name'] == 'TestAgent'
     assert (
-        resp.root.result.push_notification_config.authentication.credentials
-        == 'user:pass'
-    )
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = SetTaskPushNotificationConfigResponse.model_validate(
-        resp_data_err
-    )
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-def test_get_task_push_notification_response() -> None:
-    task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='token'
-        ),
-    )
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': task_push_config.model_dump(),
-        'id': 1,
-    }
-    resp = GetTaskPushNotificationConfigResponse.model_validate(resp_data)
-    assert resp.root.id == 1
-    assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
-    assert isinstance(resp.root.result, TaskPushNotificationConfig)
-    assert resp.root.result.task_id == 't2'
-    assert (
-        resp.root.result.push_notification_config.url == 'https://example.com'
-    )
-    assert resp.root.result.push_notification_config.token == 'token'
-    assert resp.root.result.push_notification_config.authentication is None
-
-    auth_info_dict: dict[str, Any] = {
-        'schemes': ['Bearer', 'Basic'],
-        'credentials': 'user:pass',
-    }
-    task_push_config.push_notification_config.authentication = (
-        PushNotificationAuthenticationInfo(**auth_info_dict)
-    )
-    resp_data = {
-        'jsonrpc': '2.0',
-        'result': task_push_config.model_dump(),
-        'id': 1,
-    }
-    resp = GetTaskPushNotificationConfigResponse.model_validate(resp_data)
-    assert isinstance(resp.root, GetTaskPushNotificationConfigSuccessResponse)
-    assert resp.root.result.push_notification_config.authentication is not None
-    assert resp.root.result.push_notification_config.authentication.schemes == [
-        'Bearer',
-        'Basic',
-    ]
-    assert (
-        resp.root.result.push_notification_config.authentication.credentials
-        == 'user:pass'
-    )
-
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = GetTaskPushNotificationConfigResponse.model_validate(
-        resp_data_err
-    )
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
-
-
-# --- Test A2ARequest Root Model ---
-
-
-def test_a2a_request_root_model() -> None:
-    # SendMessageRequest case
-    send_params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
-    send_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/send',
-        'params': send_params.model_dump(),
-        'id': 1,
-    }
-    a2a_req_send = A2ARequest.model_validate(send_req_data)
-    assert isinstance(a2a_req_send.root, SendMessageRequest)
-    assert a2a_req_send.root.method == 'message/send'
-
-    # SendStreamingMessageRequest case
-    send_subs_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/stream',
-        'params': send_params.model_dump(),
-        'id': 1,
-    }
-    a2a_req_send_subs = A2ARequest.model_validate(send_subs_req_data)
-    assert isinstance(a2a_req_send_subs.root, SendStreamingMessageRequest)
-    assert a2a_req_send_subs.root.method == 'message/stream'
-
-    # GetTaskRequest case
-    get_params = TaskQueryParams(id='t2')
-    get_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/get',
-        'params': get_params.model_dump(),
-        'id': 2,
-    }
-    a2a_req_get = A2ARequest.model_validate(get_req_data)
-    assert isinstance(a2a_req_get.root, GetTaskRequest)
-    assert a2a_req_get.root.method == 'tasks/get'
-
-    # CancelTaskRequest case
-    id_params = TaskIdParams(id='t2')
-    cancel_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/cancel',
-        'params': id_params.model_dump(),
-        'id': 2,
-    }
-    a2a_req_cancel = A2ARequest.model_validate(cancel_req_data)
-    assert isinstance(a2a_req_cancel.root, CancelTaskRequest)
-    assert a2a_req_cancel.root.method == 'tasks/cancel'
-
-    # SetTaskPushNotificationConfigRequest
-    task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='token'
-        ),
-    )
-    set_push_notif_req_data: dict[str, Any] = {
-        'id': 1,
-        'jsonrpc': '2.0',
-        'method': 'tasks/pushNotificationConfig/set',
-        'params': task_push_config.model_dump(),
-    }
-    a2a_req_set_push_req = A2ARequest.model_validate(set_push_notif_req_data)
-    assert isinstance(
-        a2a_req_set_push_req.root, SetTaskPushNotificationConfigRequest
-    )
-    assert isinstance(
-        a2a_req_set_push_req.root.params, TaskPushNotificationConfig
-    )
-    assert (
-        a2a_req_set_push_req.root.method == 'tasks/pushNotificationConfig/set'
-    )
-
-    # GetTaskPushNotificationConfigRequest
-    id_params = TaskIdParams(id='t2')
-    get_push_notif_req_data: dict[str, Any] = {
-        'id': 1,
-        'jsonrpc': '2.0',
-        'method': 'tasks/pushNotificationConfig/get',
-        'params': id_params.model_dump(),
-    }
-    a2a_req_get_push_req = A2ARequest.model_validate(get_push_notif_req_data)
-    assert isinstance(
-        a2a_req_get_push_req.root, GetTaskPushNotificationConfigRequest
-    )
-    assert isinstance(a2a_req_get_push_req.root.params, TaskIdParams)
-    assert (
-        a2a_req_get_push_req.root.method == 'tasks/pushNotificationConfig/get'
-    )
-
-    # TaskResubscriptionRequest
-    task_resubscribe_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/resubscribe',
-        'params': id_params.model_dump(),
-        'id': 2,
-    }
-    a2a_req_task_resubscribe_req = A2ARequest.model_validate(
-        task_resubscribe_req_data
-    )
-    assert isinstance(
-        a2a_req_task_resubscribe_req.root, TaskResubscriptionRequest
-    )
-    assert isinstance(a2a_req_task_resubscribe_req.root.params, TaskIdParams)
-    assert a2a_req_task_resubscribe_req.root.method == 'tasks/resubscribe'
-
-    # GetAuthenticatedExtendedCardRequest
-    get_auth_card_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'agent/getAuthenticatedExtendedCard',
-        'id': 2,
-    }
-    a2a_req_get_auth_card = A2ARequest.model_validate(get_auth_card_req_data)
-    assert isinstance(
-        a2a_req_get_auth_card.root, GetAuthenticatedExtendedCardRequest
-    )
-    assert (
-        a2a_req_get_auth_card.root.method
-        == 'agent/getAuthenticatedExtendedCard'
-    )
-
-    # Invalid method case
-    invalid_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'invalid/method',
-        'params': {},
-        'id': 3,
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(invalid_req_data)
-
-
-def test_a2a_request_root_model_id_validation() -> None:
-    # SendMessageRequest case
-    send_params = MessageSendParams(message=Message(**MINIMAL_MESSAGE_USER))
-    send_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/send',
-        'params': send_params.model_dump(),
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(send_req_data)  # missing id
-
-    # SendStreamingMessageRequest case
-    send_subs_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'message/stream',
-        'params': send_params.model_dump(),
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(send_subs_req_data)  # missing id
-
-    # GetTaskRequest case
-    get_params = TaskQueryParams(id='t2')
-    get_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/get',
-        'params': get_params.model_dump(),
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(get_req_data)  # missing id
-
-    # CancelTaskRequest case
-    id_params = TaskIdParams(id='t2')
-    cancel_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/cancel',
-        'params': id_params.model_dump(),
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(cancel_req_data)  # missing id
-
-    # SetTaskPushNotificationConfigRequest
-    task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='token'
-        ),
-    )
-    set_push_notif_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/pushNotificationConfig/set',
-        'params': task_push_config.model_dump(),
-        'task_id': 2,
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(set_push_notif_req_data)  # missing id
-
-    # GetTaskPushNotificationConfigRequest
-    id_params = TaskIdParams(id='t2')
-    get_push_notif_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/pushNotificationConfig/get',
-        'params': id_params.model_dump(),
-        'task_id': 2,
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(get_push_notif_req_data)
-
-    # TaskResubscriptionRequest
-    task_resubscribe_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'tasks/resubscribe',
-        'params': id_params.model_dump(),
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(task_resubscribe_req_data)
-
-    # GetAuthenticatedExtendedCardRequest
-    get_auth_card_req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'agent/getAuthenticatedExtendedCard',
-    }
-    with pytest.raises(ValidationError):
-        A2ARequest.model_validate(get_auth_card_req_data)  # missing id
-
-
-def test_content_type_not_supported_error():
-    # Test ContentTypeNotSupportedError
-    err = ContentTypeNotSupportedError(
-        code=-32005, message='Incompatible content types'
-    )
-    assert err.code == -32005
-    assert err.message == 'Incompatible content types'
-    assert err.data is None
-
-    with pytest.raises(ValidationError):  # Wrong code
-        ContentTypeNotSupportedError(
-            code=-32000,  # type: ignore
-            message='Incompatible content types',
-        )
-
-    ContentTypeNotSupportedError(
-        code=-32005,
-        message='Incompatible content types',
-        extra='extra',  # type: ignore
+        card_dict['supportedInterfaces'][0]['url'] == 'http://example.com/agent'
     )
 
 
-def test_task_not_found_error():
-    # Test TaskNotFoundError
-    err2 = TaskNotFoundError(
-        code=-32001, message='Task not found', data={'taskId': 'abc'}
-    )
-    assert err2.code == -32001
-    assert err2.message == 'Task not found'
-    assert err2.data == {'taskId': 'abc'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        TaskNotFoundError(code=-32000, message='Task not found')  # type: ignore
-
-    TaskNotFoundError(code=-32001, message='Task not found', extra='extra')  # type: ignore
-
-
-def test_push_notification_not_supported_error():
-    # Test PushNotificationNotSupportedError
-    err3 = PushNotificationNotSupportedError(data={'taskId': 'abc'})
-    assert err3.code == -32003
-    assert err3.message == 'Push Notification is not supported'
-    assert err3.data == {'taskId': 'abc'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        PushNotificationNotSupportedError(
-            code=-32000,  # type: ignore
-            message='Push Notification is not available',
-        )
-    with pytest.raises(ValidationError):  # Extra field
-        PushNotificationNotSupportedError(
-            code=-32001,
-            message='Push Notification is not available',
-            extra='extra',  # type: ignore
-        )
-
-
-def test_internal_error():
-    # Test InternalError
-    err_internal = InternalError()
-    assert err_internal.code == -32603
-    assert err_internal.message == 'Internal error'
-    assert err_internal.data is None
-
-    err_internal_data = InternalError(
-        code=-32603, message='Internal error', data={'details': 'stack trace'}
-    )
-    assert err_internal_data.data == {'details': 'stack trace'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        InternalError(code=-32000, message='Internal error')  # type: ignore
-
-    InternalError(code=-32603, message='Internal error', extra='extra')  # type: ignore
-
-
-def test_invalid_params_error():
-    # Test InvalidParamsError
-    err_params = InvalidParamsError()
-    assert err_params.code == -32602
-    assert err_params.message == 'Invalid parameters'
-    assert err_params.data is None
-
-    err_params_data = InvalidParamsError(
-        code=-32602, message='Invalid parameters', data=['param1', 'param2']
-    )
-    assert err_params_data.data == ['param1', 'param2']
-
-    with pytest.raises(ValidationError):  # Wrong code
-        InvalidParamsError(code=-32000, message='Invalid parameters')  # type: ignore
-
-    InvalidParamsError(
-        code=-32602,
-        message='Invalid parameters',
-        extra='extra',  # type: ignore
-    )
-
-
-def test_invalid_request_error():
-    # Test InvalidRequestError
-    err_request = InvalidRequestError()
-    assert err_request.code == -32600
-    assert err_request.message == 'Request payload validation error'
-    assert err_request.data is None
-
-    err_request_data = InvalidRequestError(data={'field': 'missing'})
-    assert err_request_data.data == {'field': 'missing'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        InvalidRequestError(
-            code=-32000,  # type: ignore
-            message='Request payload validation error',
-        )
-
-    InvalidRequestError(
-        code=-32600,
-        message='Request payload validation error',
-        extra='extra',  # type: ignore
-    )  # type: ignore
-
-
-def test_json_parse_error():
-    # Test JSONParseError
-    err_parse = JSONParseError(code=-32700, message='Invalid JSON payload')
-    assert err_parse.code == -32700
-    assert err_parse.message == 'Invalid JSON payload'
-    assert err_parse.data is None
-
-    err_parse_data = JSONParseError(data={'foo': 'bar'})  # Explicit None data
-    assert err_parse_data.data == {'foo': 'bar'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        JSONParseError(code=-32000, message='Invalid JSON payload')  # type: ignore
-
-    JSONParseError(code=-32700, message='Invalid JSON payload', extra='extra')  # type: ignore
-
-
-def test_method_not_found_error():
-    # Test MethodNotFoundError
-    err_parse = MethodNotFoundError()
-    assert err_parse.code == -32601
-    assert err_parse.message == 'Method not found'
-    assert err_parse.data is None
-
-    err_parse_data = JSONParseError(data={'foo': 'bar'})
-    assert err_parse_data.data == {'foo': 'bar'}
-
-    with pytest.raises(ValidationError):  # Wrong code
-        JSONParseError(code=-32000, message='Invalid JSON payload')  # type: ignore
-
-    JSONParseError(code=-32700, message='Invalid JSON payload', extra='extra')  # type: ignore
-
-
-def test_task_not_cancelable_error():
-    # Test TaskNotCancelableError
-    err_parse = TaskNotCancelableError()
-    assert err_parse.code == -32002
-    assert err_parse.message == 'Task cannot be canceled'
-    assert err_parse.data is None
-
-    err_parse_data = JSONParseError(
-        data={'foo': 'bar'}, message='not cancelled'
-    )
-    assert err_parse_data.data == {'foo': 'bar'}
-    assert err_parse_data.message == 'not cancelled'
-
-    with pytest.raises(ValidationError):  # Wrong code
-        JSONParseError(code=-32000, message='Task cannot be canceled')  # type: ignore
-
-    JSONParseError(
-        code=-32700,
-        message='Task cannot be canceled',
-        extra='extra',  # type: ignore
-    )
-
-
-def test_unsupported_operation_error():
-    # Test UnsupportedOperationError
-    err_parse = UnsupportedOperationError()
-    assert err_parse.code == -32004
-    assert err_parse.message == 'This operation is not supported'
-    assert err_parse.data is None
-
-    err_parse_data = JSONParseError(
-        data={'foo': 'bar'}, message='not supported'
-    )
-    assert err_parse_data.data == {'foo': 'bar'}
-    assert err_parse_data.message == 'not supported'
-
-    with pytest.raises(ValidationError):  # Wrong code
-        JSONParseError(code=-32000, message='Unsupported')  # type: ignore
-
-    JSONParseError(code=-32700, message='Unsupported', extra='extra')  # type: ignore
-
-
-# --- Test TaskIdParams ---
-
-
-def test_task_id_params_valid():
-    """Tests successful validation of TaskIdParams."""
-    # Minimal valid data
-    params_min = TaskIdParams(**MINIMAL_TASK_ID_PARAMS)
-    assert params_min.id == 'task-123'
-    assert params_min.metadata is None
-
-    # Full valid data
-    params_full = TaskIdParams(**FULL_TASK_ID_PARAMS)
-    assert params_full.id == 'task-456'
-    assert params_full.metadata == {'source': 'test'}
-
-
-def test_task_id_params_invalid():
-    """Tests validation errors for TaskIdParams."""
-    # Missing required 'id' field
-    with pytest.raises(ValidationError) as excinfo_missing:
-        TaskIdParams()  # type: ignore
-    assert 'id' in str(
-        excinfo_missing.value
-    )  # Check that 'id' is mentioned in the error
-
-    invalid_data = MINIMAL_TASK_ID_PARAMS.copy()
-    invalid_data['extra_field'] = 'allowed'
-    TaskIdParams(**invalid_data)  # type: ignore
-
-    # Incorrect type for metadata (should be dict)
-    invalid_metadata_type = {'id': 'task-789', 'metadata': 'not_a_dict'}
-    with pytest.raises(ValidationError) as excinfo_type:
-        TaskIdParams(**invalid_metadata_type)  # type: ignore
-    assert 'metadata' in str(
-        excinfo_type.value
-    )  # Check that 'metadata' is mentioned
-
-
-def test_task_push_notification_config() -> None:
-    """Tests successful validation of TaskPushNotificationConfig."""
-    auth_info_dict: dict[str, Any] = {
-        'schemes': ['Bearer', 'Basic'],
-        'credentials': 'user:pass',
-    }
-    auth_info = PushNotificationAuthenticationInfo(**auth_info_dict)
-
-    push_notification_config = PushNotificationConfig(
-        url='https://example.com', token='token', authentication=auth_info
-    )
-    assert push_notification_config.url == 'https://example.com'
-    assert push_notification_config.token == 'token'
-    assert push_notification_config.authentication == auth_info
-
-    task_push_notification_config = TaskPushNotificationConfig(
-        task_id='task-123', push_notification_config=push_notification_config
-    )
-    assert task_push_notification_config.task_id == 'task-123'
-    assert (
-        task_push_notification_config.push_notification_config
-        == push_notification_config
-    )
-    assert task_push_notification_config.model_dump(exclude_none=True) == {
-        'taskId': 'task-123',
-        'pushNotificationConfig': {
-            'url': 'https://example.com',
-            'token': 'token',
-            'authentication': {
-                'schemes': ['Bearer', 'Basic'],
-                'credentials': 'user:pass',
-            },
+def test_parse_dict_task():
+    """Test ParseDict for Task with nested structures."""
+    task_data = {
+        'id': 'task-123',
+        'contextId': 'ctx-456',
+        'status': {
+            'state': 'TASK_STATE_WORKING',
         },
+        'history': [
+            {
+                'role': 'ROLE_USER',
+                'messageId': 'msg-1',
+                'parts': [{'text': 'Hello'}],
+            }
+        ],
     }
+    task = ParseDict(task_data, Task())
+    assert task.id == 'task-123'
+    assert task.context_id == 'ctx-456'
+    assert task.status.state == TaskState.TASK_STATE_WORKING
+    assert len(task.history) == 1
+    assert task.history[0].role == Role.ROLE_USER
 
 
-def test_jsonrpc_message_valid():
-    """Tests successful validation of JSONRPCMessage."""
-    # With string ID
-    msg_str_id = JSONRPCMessage(jsonrpc='2.0', id='req-1')
-    assert msg_str_id.jsonrpc == '2.0'
-    assert msg_str_id.id == 'req-1'
+def test_message_to_dict_preserves_structure():
+    """Test that MessageToDict produces correct structure."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-123')
+    msg.parts.append(Part(text='Hello'))
 
-    # With integer ID (will be coerced to float by Pydantic for JSON number compatibility)
-    msg_int_id = JSONRPCMessage(jsonrpc='2.0', id=1)
-    assert msg_int_id.jsonrpc == '2.0'
-    assert (
-        msg_int_id.id == 1
-    )  # Pydantic v2 keeps int if possible, but float is in type hint
-
-    rpc_message = JSONRPCMessage(id=1)
-    assert rpc_message.jsonrpc == '2.0'
-    assert rpc_message.id == 1
+    msg_dict = MessageToDict(msg)
+    assert msg_dict['role'] == 'ROLE_USER'
+    assert msg_dict['messageId'] == 'msg-123'
+    # Part.text is a direct string field in proto
+    assert msg_dict['parts'][0]['text'] == 'Hello'
 
 
-def test_jsonrpc_message_invalid():
-    """Tests validation errors for JSONRPCMessage."""
-    # Incorrect jsonrpc version
-    with pytest.raises(ValidationError):
-        JSONRPCMessage(jsonrpc='1.0', id=1)  # type: ignore
-
-    JSONRPCMessage(jsonrpc='2.0', id=1, extra_field='extra')  # type: ignore
-
-    # Invalid ID type (e.g., list) - Pydantic should catch this based on type hints
-    with pytest.raises(ValidationError):
-        JSONRPCMessage(jsonrpc='2.0', id=[1, 2])  # type: ignore
+# --- Test Proto Copy and Equality ---
 
 
-def test_file_base_valid():
-    """Tests successful validation of FileBase."""
-    # No optional fields
-    base1 = FileBase()
-    assert base1.mime_type is None
-    assert base1.name is None
-
-    # With mime_type only
-    base2 = FileBase(mime_type='image/png')
-    assert base2.mime_type == 'image/png'
-    assert base2.name is None
-
-    # With name only
-    base3 = FileBase(name='document.pdf')
-    assert base3.mime_type is None
-    assert base3.name == 'document.pdf'
-
-    # With both fields
-    base4 = FileBase(mime_type='application/json', name='data.json')
-    assert base4.mime_type == 'application/json'
-    assert base4.name == 'data.json'
-
-
-def test_file_base_invalid():
-    """Tests validation errors for FileBase."""
-    FileBase(extra_field='allowed')  # type: ignore
-
-    # Incorrect type for mime_type
-    with pytest.raises(ValidationError) as excinfo_type_mime:
-        FileBase(mime_type=123)  # type: ignore
-    assert 'mime_type' in str(excinfo_type_mime.value)
-
-    # Incorrect type for name
-    with pytest.raises(ValidationError) as excinfo_type_name:
-        FileBase(name=['list', 'is', 'wrong'])  # type: ignore
-    assert 'name' in str(excinfo_type_name.value)
-
-
-def test_part_base_valid() -> None:
-    """Tests successful validation of PartBase."""
-    # No optional fields (metadata is None)
-    base1 = PartBase()
-    assert base1.metadata is None
-
-    # With metadata
-    meta_data: dict[str, Any] = {'source': 'test', 'timestamp': 12345}
-    base2 = PartBase(metadata=meta_data)
-    assert base2.metadata == meta_data
-
-
-def test_part_base_invalid():
-    """Tests validation errors for PartBase."""
-    PartBase(extra_field='allowed')  # type: ignore
-
-    # Incorrect type for metadata (should be dict)
-    with pytest.raises(ValidationError) as excinfo_type:
-        PartBase(metadata='not_a_dict')  # type: ignore
-    assert 'metadata' in str(excinfo_type.value)
-
-
-def test_a2a_error_validation_and_serialization() -> None:
-    """Tests validation and serialization of the A2AError RootModel."""
-
-    # 1. Test JSONParseError
-    json_parse_instance = JSONParseError()
-    json_parse_data = json_parse_instance.model_dump(exclude_none=True)
-    a2a_err_parse = A2AError.model_validate(json_parse_data)
-    assert isinstance(a2a_err_parse.root, JSONParseError)
-
-    # 2. Test InvalidRequestError
-    invalid_req_instance = InvalidRequestError()
-    invalid_req_data = invalid_req_instance.model_dump(exclude_none=True)
-    a2a_err_invalid_req = A2AError.model_validate(invalid_req_data)
-    assert isinstance(a2a_err_invalid_req.root, InvalidRequestError)
-
-    # 3. Test MethodNotFoundError
-    method_not_found_instance = MethodNotFoundError()
-    method_not_found_data = method_not_found_instance.model_dump(
-        exclude_none=True
-    )
-    a2a_err_method = A2AError.model_validate(method_not_found_data)
-    assert isinstance(a2a_err_method.root, MethodNotFoundError)
-
-    # 4. Test InvalidParamsError
-    invalid_params_instance = InvalidParamsError()
-    invalid_params_data = invalid_params_instance.model_dump(exclude_none=True)
-    a2a_err_params = A2AError.model_validate(invalid_params_data)
-    assert isinstance(a2a_err_params.root, InvalidParamsError)
-
-    # 5. Test InternalError
-    internal_err_instance = InternalError()
-    internal_err_data = internal_err_instance.model_dump(exclude_none=True)
-    a2a_err_internal = A2AError.model_validate(internal_err_data)
-    assert isinstance(a2a_err_internal.root, InternalError)
-
-    # 6. Test TaskNotFoundError
-    task_not_found_instance = TaskNotFoundError(data={'taskId': 't1'})
-    task_not_found_data = task_not_found_instance.model_dump(exclude_none=True)
-    a2a_err_task_nf = A2AError.model_validate(task_not_found_data)
-    assert isinstance(a2a_err_task_nf.root, TaskNotFoundError)
-
-    # 7. Test TaskNotCancelableError
-    task_not_cancelable_instance = TaskNotCancelableError()
-    task_not_cancelable_data = task_not_cancelable_instance.model_dump(
-        exclude_none=True
-    )
-    a2a_err_task_nc = A2AError.model_validate(task_not_cancelable_data)
-    assert isinstance(a2a_err_task_nc.root, TaskNotCancelableError)
-
-    # 8. Test PushNotificationNotSupportedError
-    push_not_supported_instance = PushNotificationNotSupportedError()
-    push_not_supported_data = push_not_supported_instance.model_dump(
-        exclude_none=True
-    )
-    a2a_err_push_ns = A2AError.model_validate(push_not_supported_data)
-    assert isinstance(a2a_err_push_ns.root, PushNotificationNotSupportedError)
-
-    # 9. Test UnsupportedOperationError
-    unsupported_op_instance = UnsupportedOperationError()
-    unsupported_op_data = unsupported_op_instance.model_dump(exclude_none=True)
-    a2a_err_unsupported = A2AError.model_validate(unsupported_op_data)
-    assert isinstance(a2a_err_unsupported.root, UnsupportedOperationError)
-
-    # 10. Test ContentTypeNotSupportedError
-    content_type_err_instance = ContentTypeNotSupportedError()
-    content_type_err_data = content_type_err_instance.model_dump(
-        exclude_none=True
-    )
-    a2a_err_content = A2AError.model_validate(content_type_err_data)
-    assert isinstance(a2a_err_content.root, ContentTypeNotSupportedError)
-
-    # 11. Test invalid data (doesn't match any known error code/structure)
-    invalid_data: dict[str, Any] = {'code': -99999, 'message': 'Unknown error'}
-    with pytest.raises(ValidationError):
-        A2AError.model_validate(invalid_data)
-
-
-def test_subclass_enums() -> None:
-    """validate subtype enum types"""
-    assert In.cookie == 'cookie'
-
-    assert Role.user == 'user'
-
-    assert TaskState.working == 'working'
-
-
-def test_get_task_push_config_params() -> None:
-    """Tests successful validation of GetTaskPushNotificationConfigParams."""
-    # Minimal valid data
-    params = {'id': 'task-1234'}
-    TaskIdParams.model_validate(params)
-    GetTaskPushNotificationConfigParams.model_validate(params)
-
-
-def test_use_get_task_push_notification_params_for_request() -> None:
-    # GetTaskPushNotificationConfigRequest
-    get_push_notif_req_data: dict[str, Any] = {
-        'id': 1,
-        'jsonrpc': '2.0',
-        'method': 'tasks/pushNotificationConfig/get',
-        'params': {'id': 'task-1234', 'pushNotificationConfigId': 'c1'},
-    }
-    a2a_req_get_push_req = A2ARequest.model_validate(get_push_notif_req_data)
-    assert isinstance(
-        a2a_req_get_push_req.root, GetTaskPushNotificationConfigRequest
-    )
-    assert isinstance(
-        a2a_req_get_push_req.root.params, GetTaskPushNotificationConfigParams
-    )
-    assert (
-        a2a_req_get_push_req.root.method == 'tasks/pushNotificationConfig/get'
+def test_proto_copy():
+    """Test copying proto messages."""
+    original = Task(
+        id='task-123',
+        context_id='ctx-456',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
 
+    # Copy using CopyFrom
+    copy = Task()
+    copy.CopyFrom(original)
 
-def test_camelCase_access_raises_attribute_error() -> None:
-    """
-    Tests that accessing or setting fields via their camelCase alias
-    raises an AttributeError.
-    """
-    skill = AgentSkill(
-        id='hello_world',
-        name='Returns hello world',
-        description='just returns hello world',
-        tags=['hello world'],
-        examples=['hi', 'hello world'],
+    assert copy.id == 'task-123'
+    assert copy.context_id == 'ctx-456'
+    assert copy.status.state == TaskState.TASK_STATE_SUBMITTED
+
+    # Modifying copy doesn't affect original
+    copy.id = 'task-999'
+    assert original.id == 'task-123'
+
+
+def test_proto_equality():
+    """Test proto message equality."""
+    task1 = Task(
+        id='task-123',
+        context_id='ctx-456',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
+    task2 = Task(
+        id='task-123',
+        context_id='ctx-456',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
 
-    # Initialization with camelCase still works due to Pydantic's populate_by_name config
-    agent_card = AgentCard(
-        name='Hello World Agent',
-        description='Just a hello world agent',
-        url='http://localhost:9999/',
-        version='1.0.0',
-        defaultInputModes=['text'],  # type: ignore
-        defaultOutputModes=['text'],  # type: ignore
-        capabilities=AgentCapabilities(streaming=True),
-        skills=[skill],
-        supportsAuthenticatedExtendedCard=True,  # type: ignore
+    assert task1 == task2
+
+    task2.id = 'task-999'
+    assert task1 != task2
+
+
+# --- Test HasField for Optional Fields ---
+
+
+def test_has_field_optional():
+    """Test HasField for checking optional field presence."""
+    status = TaskStatus(state=TaskState.TASK_STATE_SUBMITTED)
+    assert not status.HasField('message')
+
+    # Add message
+    msg = Message(role=Role.ROLE_USER, message_id='msg-1')
+    status.message.CopyFrom(msg)
+    assert status.HasField('message')
+
+
+def test_has_field_oneof():
+    """Test HasField for oneof fields."""
+    part = Part(text='Hello')
+    assert part.HasField('text')
+    assert not part.HasField('file')
+    assert not part.HasField('data')
+
+    # WhichOneof for checking which oneof is set
+    assert part.WhichOneof('part') == 'text'
+
+
+# --- Test Repeated Fields ---
+
+
+def test_repeated_field_operations():
+    """Test operations on repeated fields."""
+    task = Task(
+        id='task-123',
+        context_id='ctx-456',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
 
-    # --- Test that using camelCase aliases raises errors ---
+    # append
+    msg1 = Message(role=Role.ROLE_USER, message_id='msg-1')
+    task.history.append(msg1)
+    assert len(task.history) == 1
 
-    # Test setting an attribute via camelCase alias raises AttributeError
-    with pytest.raises(
-        ValueError,
-        match='"AgentCard" object has no field "supportsAuthenticatedExtendedCard"',
-    ):
-        agent_card.supportsAuthenticatedExtendedCard = False
+    # extend
+    msg2 = Message(role=Role.ROLE_AGENT, message_id='msg-2')
+    msg3 = Message(role=Role.ROLE_USER, message_id='msg-3')
+    task.history.extend([msg2, msg3])
+    assert len(task.history) == 3
 
-    # Test getting an attribute via camelCase alias raises AttributeError
-    with pytest.raises(
-        AttributeError,
-        match="'AgentCard' object has no attribute 'defaultInputModes'",
-    ):
-        _ = agent_card.defaultInputModes
-
-    # --- Test that using snake_case names works correctly ---
-
-    # The value should be unchanged because the camelCase setattr failed
-    assert agent_card.supports_authenticated_extended_card is True
-
-    # Now, set it correctly using the snake_case name
-    agent_card.supports_authenticated_extended_card = False
-    assert agent_card.supports_authenticated_extended_card is False
-
-    # Get the attribute correctly using the snake_case name
-    default_input_modes = agent_card.default_input_modes
-    assert default_input_modes == ['text']
-    assert agent_card.default_input_modes == ['text']
+    # iteration
+    roles = [m.role for m in task.history]
+    assert roles == [Role.ROLE_USER, Role.ROLE_AGENT, Role.ROLE_USER]
 
 
-def test_get_authenticated_extended_card_request() -> None:
-    req_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'method': 'agent/getAuthenticatedExtendedCard',
-        'id': 5,
-    }
-    req = GetAuthenticatedExtendedCardRequest.model_validate(req_data)
-    assert req.method == 'agent/getAuthenticatedExtendedCard'
-    assert req.id == 5
-    # This request has no params, so we don't check for that.
+def test_map_field_operations():
+    """Test operations on map fields."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-1')
 
-    with pytest.raises(ValidationError):  # Wrong method literal
-        GetAuthenticatedExtendedCardRequest.model_validate(
-            {**req_data, 'method': 'wrong/method'}
-        )
+    # Update map
+    msg.metadata.update({'key1': 'value1', 'key2': 'value2'})
+    assert dict(msg.metadata) == {'key1': 'value1', 'key2': 'value2'}
 
-    with pytest.raises(ValidationError):  # Missing id
-        GetAuthenticatedExtendedCardRequest.model_validate(
-            {'jsonrpc': '2.0', 'method': 'agent/getAuthenticatedExtendedCard'}
-        )
+    # Access individual keys
+    assert msg.metadata['key1'] == 'value1'
+
+    # Check containment
+    assert 'key1' in msg.metadata
+    assert 'key3' not in msg.metadata
 
 
-def test_get_authenticated_extended_card_response() -> None:
-    resp_data: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'result': MINIMAL_AGENT_CARD,
-        'id': 'resp-1',
-    }
-    resp = GetAuthenticatedExtendedCardResponse.model_validate(resp_data)
-    assert resp.root.id == 'resp-1'
-    assert isinstance(resp.root, GetAuthenticatedExtendedCardSuccessResponse)
-    assert isinstance(resp.root.result, AgentCard)
-    assert resp.root.result.name == 'TestAgent'
+# --- Test Serialization ---
 
-    with pytest.raises(ValidationError):  # Result is not an AgentCard
-        GetAuthenticatedExtendedCardResponse.model_validate(
-            {'jsonrpc': '2.0', 'result': {'wrong': 'data'}, 'id': 1}
-        )
 
-    resp_data_err: dict[str, Any] = {
-        'jsonrpc': '2.0',
-        'error': JSONRPCError(**TaskNotFoundError().model_dump()),
-        'id': 'resp-1',
-    }
-    resp_err = GetAuthenticatedExtendedCardResponse.model_validate(
-        resp_data_err
-    )
-    assert resp_err.root.id == 'resp-1'
-    assert isinstance(resp_err.root, JSONRPCErrorResponse)
-    assert resp_err.root.error is not None
-    assert isinstance(resp_err.root.error, JSONRPCError)
+def test_serialize_to_bytes():
+    """Test serializing proto to bytes."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-123')
+    msg.parts.append(Part(text='Hello'))
+
+    # Serialize
+    data = msg.SerializeToString()
+    assert isinstance(data, bytes)
+    assert len(data) > 0
+
+    # Deserialize
+    msg2 = Message()
+    msg2.ParseFromString(data)
+    assert msg2.role == Role.ROLE_USER
+    assert msg2.message_id == 'msg-123'
+    assert msg2.parts[0].text == 'Hello'
+
+
+def test_serialize_to_json():
+    """Test serializing proto to JSON via MessageToDict."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-123')
+    msg.parts.append(Part(text='Hello'))
+
+    # MessageToDict for JSON-serializable dict
+    msg_dict = MessageToDict(msg)
+
+    import json
+
+    json_str = json.dumps(msg_dict)
+    assert 'ROLE_USER' in json_str
+    assert 'msg-123' in json_str
+
+
+# --- Test Default Values ---
+
+
+def test_default_values():
+    """Test proto default values."""
+    # Empty message has defaults
+    msg = Message()
+    assert msg.role == Role.ROLE_UNSPECIFIED  # Enum default is 0
+    assert msg.message_id == ''  # String default is empty
+    assert len(msg.parts) == 0  # Repeated field default is empty
+
+    # Task status defaults
+    status = TaskStatus()
+    assert status.state == TaskState.TASK_STATE_UNSPECIFIED
+    assert status.timestamp.seconds == 0  # Timestamp proto default
+
+
+def test_clear_field():
+    """Test clearing fields."""
+    msg = Message(role=Role.ROLE_USER, message_id='msg-123')
+    assert msg.message_id == 'msg-123'
+
+    msg.ClearField('message_id')
+    assert msg.message_id == ''  # Back to default
+
+    # Clear nested message
+    status = TaskStatus(state=TaskState.TASK_STATE_WORKING)
+    status.message.CopyFrom(Message(role=Role.ROLE_USER))
+    assert status.HasField('message')
+
+    status.ClearField('message')
+    assert not status.HasField('message')

@@ -1,3 +1,5 @@
+import importlib.resources
+import json
 import logging
 
 from collections.abc import Callable
@@ -23,8 +25,8 @@ from a2a.server.apps.jsonrpc.jsonrpc_app import (
     JSONRPCApplication,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.request_handlers.jsonrpc_handler import RequestHandler
-from a2a.types import A2ARequest, AgentCard
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
@@ -43,17 +45,31 @@ class A2AFastAPI(FastAPI):
 
     def openapi(self) -> dict[str, Any]:
         """Generates the OpenAPI schema for the application."""
+        if self.openapi_schema:
+            return self.openapi_schema
+
+        # Try to use the a2a.json schema generated from the proto file
+        # if available, instead of generating one from the python types.
+        try:
+            from a2a import types
+
+            schema_file = importlib.resources.files(types).joinpath('a2a.json')
+            if schema_file.is_file():
+                self.openapi_schema = json.loads(
+                    schema_file.read_text(encoding='utf-8')
+                )
+                return self.openapi_schema
+        except Exception:  # pylint: disable=broad-except
+            logger.warning(
+                "Could not load 'a2a.json' from 'a2a.types'. Falling back to auto-generation."
+            )
+
         openapi_schema = super().openapi()
         if not self._a2a_components_added:
-            a2a_request_schema = A2ARequest.model_json_schema(
-                ref_template='#/components/schemas/{model}'
-            )
-            defs = a2a_request_schema.pop('$defs', {})
-            component_schemas = openapi_schema.setdefault(
-                'components', {}
-            ).setdefault('schemas', {})
-            component_schemas.update(defs)
-            component_schemas['A2ARequest'] = a2a_request_schema
+            # A2ARequest is now a Union type of proto messages, so we can't use
+            # model_json_schema. Instead, we just mark it as added without
+            # adding the schema since proto types don't have Pydantic schemas.
+            # The OpenAPI schema will still be functional for the endpoints.
             self._a2a_components_added = True
         return openapi_schema
 
@@ -154,7 +170,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
                 self._handle_get_agent_card
             )
 
-        if self.agent_card.supports_authenticated_extended_card:
+        if self.agent_card.capabilities.extended_agent_card:
             app.get(extended_agent_card_url)(
                 self._handle_get_authenticated_extended_agent_card
             )

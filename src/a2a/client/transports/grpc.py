@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
 
 
 try:
@@ -18,20 +18,20 @@ from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2, a2a_pb2_grpc
-from a2a.types import (
+from a2a.types import a2a_pb2, a2a_pb2_grpc
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    Message,
-    MessageSendParams,
+    CancelTaskRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    SendMessageRequest,
+    SendMessageResponse,
+    SetTaskPushNotificationConfigRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskStatusUpdateEvent,
 )
-from a2a.utils import proto_utils
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -53,9 +53,7 @@ class GrpcTransport(ClientTransport):
         self.channel = channel
         self.stub = a2a_pb2_grpc.A2AServiceStub(channel)
         self._needs_extended_card = (
-            agent_card.supports_authenticated_extended_card
-            if agent_card
-            else True
+            agent_card.capabilities.extended_agent_card if agent_card else True
         )
         self.extensions = extensions
 
@@ -85,157 +83,121 @@ class GrpcTransport(ClientTransport):
 
     async def send_message(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> Task | Message:
+    ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
-        response = await self.stub.SendMessage(
-            a2a_pb2.SendMessageRequest(
-                request=proto_utils.ToProto.message(request.message),
-                configuration=proto_utils.ToProto.message_send_configuration(
-                    request.configuration
-                ),
-                metadata=proto_utils.ToProto.metadata(request.metadata),
-            ),
+        return await self.stub.SendMessage(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
-        if response.HasField('task'):
-            return proto_utils.FromProto.task(response.task)
-        return proto_utils.FromProto.message(response.msg)
 
     async def send_message_streaming(
         self,
-        request: MessageSendParams,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         stream = self.stub.SendStreamingMessage(
-            a2a_pb2.SendMessageRequest(
-                request=proto_utils.ToProto.message(request.message),
-                configuration=proto_utils.ToProto.message_send_configuration(
-                    request.configuration
-                ),
-                metadata=proto_utils.ToProto.metadata(request.metadata),
-            ),
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
         while True:
             response = await stream.read()
             if response == grpc.aio.EOF:  # pyright: ignore[reportAttributeAccessIssue]
                 break
-            yield proto_utils.FromProto.stream_response(response)
+            yield response
 
-    async def resubscribe(
+    async def subscribe(
         self,
-        request: TaskIdParams,
+        request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> AsyncGenerator[
-        Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ]:
+    ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        stream = self.stub.TaskSubscription(
-            a2a_pb2.TaskSubscriptionRequest(name=f'tasks/{request.id}'),
+        stream = self.stub.SubscribeToTask(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
         while True:
             response = await stream.read()
             if response == grpc.aio.EOF:  # pyright: ignore[reportAttributeAccessIssue]
                 break
-            yield proto_utils.FromProto.stream_response(response)
+            yield response
 
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
-        task = await self.stub.GetTask(
-            a2a_pb2.GetTaskRequest(
-                name=f'tasks/{request.id}',
-                history_length=request.history_length,
-            ),
+        return await self.stub.GetTask(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
-        return proto_utils.FromProto.task(task)
 
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
-        task = await self.stub.CancelTask(
-            a2a_pb2.CancelTaskRequest(name=f'tasks/{request.id}'),
+        return await self.stub.CancelTask(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
-        return proto_utils.FromProto.task(task)
 
     async def set_task_callback(
         self,
-        request: TaskPushNotificationConfig,
+        request: SetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        config = await self.stub.CreateTaskPushNotificationConfig(
-            a2a_pb2.CreateTaskPushNotificationConfigRequest(
-                parent=f'tasks/{request.task_id}',
-                config_id=request.push_notification_config.id,
-                config=proto_utils.ToProto.task_push_notification_config(
-                    request
-                ),
-            ),
+        return await self.stub.SetTaskPushNotificationConfig(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
-        return proto_utils.FromProto.task_push_notification_config(config)
 
     async def get_task_callback(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
-        config = await self.stub.GetTaskPushNotificationConfig(
-            a2a_pb2.GetTaskPushNotificationConfigRequest(
-                name=f'tasks/{request.id}/pushNotificationConfigs/{request.push_notification_config_id}',
-            ),
+        return await self.stub.GetTaskPushNotificationConfig(
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
-        return proto_utils.FromProto.task_push_notification_config(config)
 
-    async def get_card(
+    async def get_extended_agent_card(
         self,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
-        card = self.agent_card
-        if card and not self._needs_extended_card:
-            return card
-        if card is None and not self._needs_extended_card:
-            raise ValueError('Agent card is not available.')
-
-        card_pb = await self.stub.GetAgentCard(
-            a2a_pb2.GetAgentCardRequest(),
+        card = await self.stub.GetExtendedAgentCard(
+            a2a_pb2.GetExtendedAgentCardRequest(),
             metadata=self._get_grpc_metadata(extensions),
         )
-        card = proto_utils.FromProto.agent_card(card_pb)
+
+        if signature_verifier:
+            signature_verifier(card)
+
         self.agent_card = card
         self._needs_extended_card = False
         return card

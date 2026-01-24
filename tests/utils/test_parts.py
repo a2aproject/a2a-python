@@ -1,10 +1,9 @@
-from a2a.types import (
+from google.protobuf.struct_pb2 import Struct
+
+from a2a.types.a2a_pb2 import (
     DataPart,
     FilePart,
-    FileWithBytes,
-    FileWithUri,
     Part,
-    TextPart,
 )
 from a2a.utils.parts import (
     get_data_parts,
@@ -16,7 +15,7 @@ from a2a.utils.parts import (
 class TestGetTextParts:
     def test_get_text_parts_single_text_part(self):
         # Setup
-        parts = [Part(root=TextPart(text='Hello world'))]
+        parts = [Part(text='Hello world')]
 
         # Exercise
         result = get_text_parts(parts)
@@ -27,9 +26,9 @@ class TestGetTextParts:
     def test_get_text_parts_multiple_text_parts(self):
         # Setup
         parts = [
-            Part(root=TextPart(text='First part')),
-            Part(root=TextPart(text='Second part')),
-            Part(root=TextPart(text='Third part')),
+            Part(text='First part'),
+            Part(text='Second part'),
+            Part(text='Third part'),
         ]
 
         # Exercise
@@ -52,7 +51,9 @@ class TestGetTextParts:
 class TestGetDataParts:
     def test_get_data_parts_single_data_part(self):
         # Setup
-        parts = [Part(root=DataPart(data={'key': 'value'}))]
+        data = Struct()
+        data.update({'key': 'value'})
+        parts = [Part(data=DataPart(data=data))]
 
         # Exercise
         result = get_data_parts(parts)
@@ -62,9 +63,13 @@ class TestGetDataParts:
 
     def test_get_data_parts_multiple_data_parts(self):
         # Setup
+        data1 = Struct()
+        data1.update({'key1': 'value1'})
+        data2 = Struct()
+        data2.update({'key2': 'value2'})
         parts = [
-            Part(root=DataPart(data={'key1': 'value1'})),
-            Part(root=DataPart(data={'key2': 'value2'})),
+            Part(data=DataPart(data=data1)),
+            Part(data=DataPart(data=data2)),
         ]
 
         # Exercise
@@ -75,10 +80,14 @@ class TestGetDataParts:
 
     def test_get_data_parts_mixed_parts(self):
         # Setup
+        data1 = Struct()
+        data1.update({'key1': 'value1'})
+        data2 = Struct()
+        data2.update({'key2': 'value2'})
         parts = [
-            Part(root=TextPart(text='some text')),
-            Part(root=DataPart(data={'key1': 'value1'})),
-            Part(root=DataPart(data={'key2': 'value2'})),
+            Part(text='some text'),
+            Part(data=DataPart(data=data1)),
+            Part(data=DataPart(data=data2)),
         ]
 
         # Exercise
@@ -90,7 +99,7 @@ class TestGetDataParts:
     def test_get_data_parts_no_data_parts(self):
         # Setup
         parts = [
-            Part(root=TextPart(text='some text')),
+            Part(text='some text'),
         ]
 
         # Exercise
@@ -113,58 +122,65 @@ class TestGetDataParts:
 class TestGetFileParts:
     def test_get_file_parts_single_file_part(self):
         # Setup
-        file_with_uri = FileWithUri(
-            uri='file://path/to/file', mimeType='text/plain'
+        file_part = FilePart(
+            file_with_uri='file://path/to/file', media_type='text/plain'
         )
-        parts = [Part(root=FilePart(file=file_with_uri))]
+        parts = [Part(file=file_part)]
 
         # Exercise
         result = get_file_parts(parts)
 
         # Verify
-        assert result == [file_with_uri]
+        assert len(result) == 1
+        assert result[0].file_with_uri == 'file://path/to/file'
+        assert result[0].media_type == 'text/plain'
 
     def test_get_file_parts_multiple_file_parts(self):
         # Setup
-        file_with_uri1 = FileWithUri(
-            uri='file://path/to/file1', mime_type='text/plain'
+        file_part1 = FilePart(
+            file_with_uri='file://path/to/file1', media_type='text/plain'
         )
-        file_with_bytes = FileWithBytes(
-            bytes='ZmlsZSBjb250ZW50',
-            mime_type='application/octet-stream',  # 'file content'
+        file_part2 = FilePart(
+            file_with_bytes=b'file content',
+            media_type='application/octet-stream',
         )
         parts = [
-            Part(root=FilePart(file=file_with_uri1)),
-            Part(root=FilePart(file=file_with_bytes)),
+            Part(file=file_part1),
+            Part(file=file_part2),
         ]
 
         # Exercise
         result = get_file_parts(parts)
 
         # Verify
-        assert result == [file_with_uri1, file_with_bytes]
+        assert len(result) == 2
+        assert result[0].file_with_uri == 'file://path/to/file1'
+        assert result[1].file_with_bytes == b'file content'
 
     def test_get_file_parts_mixed_parts(self):
         # Setup
-        file_with_uri = FileWithUri(
-            uri='file://path/to/file', mime_type='text/plain'
+        file_part = FilePart(
+            file_with_uri='file://path/to/file', media_type='text/plain'
         )
         parts = [
-            Part(root=TextPart(text='some text')),
-            Part(root=FilePart(file=file_with_uri)),
+            Part(text='some text'),
+            Part(file=file_part),
         ]
 
         # Exercise
         result = get_file_parts(parts)
 
         # Verify
-        assert result == [file_with_uri]
+        assert len(result) == 1
+        assert result[0].file_with_uri == 'file://path/to/file'
 
     def test_get_file_parts_no_file_parts(self):
         # Setup
+        data = Struct()
+        data.update({'key': 'value'})
         parts = [
-            Part(root=TextPart(text='some text')),
-            Part(root=DataPart(data={'key': 'value'})),
+            Part(text='some text'),
+            Part(data=DataPart(data=data)),
         ]
 
         # Exercise

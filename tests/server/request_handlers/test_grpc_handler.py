@@ -6,8 +6,9 @@ import pytest
 
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2
+from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
+from a2a.server.jsonrpc_models import JSONParseError, JSONRPCError
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.utils.errors import ServerError
 
@@ -33,7 +34,11 @@ def sample_agent_card() -> types.AgentCard:
     return types.AgentCard(
         name='Test Agent',
         description='A test agent',
-        url='http://localhost',
+        supported_interfaces=[
+            types.AgentInterface(
+                protocol_binding='GRPC', url='http://localhost'
+            )
+        ],
         version='1.0.0',
         capabilities=types.AgentCapabilities(
             streaming=True, push_notifications=True
@@ -64,12 +69,12 @@ async def test_send_message_success(
 ) -> None:
     """Test successful SendMessage call."""
     request_proto = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(message_id='msg-1')
+        message=a2a_pb2.Message(message_id='msg-1')
     )
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.completed),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
     )
     mock_request_handler.on_message_send.return_value = response_model
 
@@ -110,7 +115,7 @@ async def test_get_task_success(
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.working),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
     )
     mock_request_handler.on_get_task.return_value = response_model
 
@@ -169,7 +174,7 @@ async def test_send_streaming_message(
         yield types.Task(
             id='task-1',
             context_id='ctx-1',
-            status=types.TaskStatus(state=types.TaskState.working),
+            status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
         )
 
     mock_request_handler.on_message_send_stream.return_value = mock_stream()
@@ -188,29 +193,33 @@ async def test_send_streaming_message(
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card(
+async def test_get_extended_agent_card(
     grpc_handler: GrpcHandler,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call."""
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler.GetAgentCard(request_proto, mock_grpc_context)
+    """Test GetExtendedAgentCard call."""
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler.GetExtendedAgentCard(
+        request_proto, mock_grpc_context
+    )
 
     assert response.name == sample_agent_card.name
     assert response.version == sample_agent_card.version
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card_with_modifier(
+async def test_get_extended_agent_card_with_modifier(
     mock_request_handler: AsyncMock,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call with a card_modifier."""
+    """Test GetExtendedAgentCard call with a card_modifier."""
 
     def modifier(card: types.AgentCard) -> types.AgentCard:
-        modified_card = card.model_copy(deep=True)
+        # For proto, we need to create a new message with modified fields
+        modified_card = types.AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
@@ -220,8 +229,8 @@ async def test_get_agent_card_with_modifier(
         card_modifier=modifier,
     )
 
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler_modified.GetAgentCard(
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
 
@@ -234,7 +243,7 @@ async def test_get_agent_card_with_modifier(
     'server_error, grpc_status_code, error_message_part',
     [
         (
-            ServerError(error=types.JSONParseError()),
+            ServerError(error=JSONParseError()),
             grpc.StatusCode.INTERNAL,
             'JSONParseError',
         ),
@@ -289,7 +298,7 @@ async def test_get_agent_card_with_modifier(
             'InvalidAgentResponseError',
         ),
         (
-            ServerError(error=types.JSONRPCError(code=99, message='Unknown')),
+            ServerError(error=JSONRPCError(code=99, message='Unknown')),
             grpc.StatusCode.UNKNOWN,
             'Unknown error',
         ),
@@ -332,7 +341,9 @@ class TestGrpcExtensions:
             return types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.completed),
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_COMPLETED
+                ),
             )
 
         mock_request_handler.on_message_send.side_effect = side_effect
@@ -367,8 +378,8 @@ class TestGrpcExtensions:
         )
         mock_request_handler.on_message_send.return_value = types.Message(
             message_id='1',
-            role=types.Role.agent,
-            parts=[types.Part(root=types.TextPart(text='test'))],
+            role=types.Role.ROLE_AGENT,
+            parts=[types.Part(text='test')],
         )
 
         await grpc_handler.SendMessage(
@@ -397,7 +408,9 @@ class TestGrpcExtensions:
             yield types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.working),
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_WORKING
+                ),
             )
 
         mock_request_handler.on_message_send_stream.side_effect = side_effect

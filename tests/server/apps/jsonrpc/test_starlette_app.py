@@ -8,7 +8,7 @@ from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,  # For mock spec
 )
-from a2a.types import AgentCard  # For mock spec
+from a2a.types.a2a_pb2 import AgentCard  # For mock spec
 
 
 # --- A2AStarletteApplication Tests ---

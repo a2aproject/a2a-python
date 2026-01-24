@@ -15,32 +15,56 @@ else:
         Response = Any
 
 
-from a2a._base import A2ABaseModel
-from a2a.types import (
+from a2a.server.jsonrpc_models import (
+    InternalError as JSONRPCInternalError,
+)
+from a2a.server.jsonrpc_models import (
+    JSONParseError,
+    JSONRPCError,
+)
+from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
     InvalidRequestError,
-    JSONParseError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
+    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
 
-A2AErrorToHttpStatus: dict[type[A2ABaseModel], int] = {
+_A2AErrorType = (
+    type[JSONRPCError]
+    | type[JSONParseError]
+    | type[InvalidRequestError]
+    | type[MethodNotFoundError]
+    | type[InvalidParamsError]
+    | type[InternalError]
+    | type[JSONRPCInternalError]
+    | type[TaskNotFoundError]
+    | type[TaskNotCancelableError]
+    | type[PushNotificationNotSupportedError]
+    | type[UnsupportedOperationError]
+    | type[ContentTypeNotSupportedError]
+    | type[InvalidAgentResponseError]
+    | type[AuthenticatedExtendedCardNotConfiguredError]
+)
+
+A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
+    JSONRPCError: 500,
     JSONParseError: 400,
     InvalidRequestError: 400,
     MethodNotFoundError: 404,
     InvalidParamsError: 422,
     InternalError: 500,
+    JSONRPCInternalError: 500,
     TaskNotFoundError: 404,
     TaskNotCancelableError: 409,
     PushNotificationNotSupportedError: 501,
@@ -74,9 +98,11 @@ def rest_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
+                getattr(error, 'code', 'N/A'),
                 error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             return JSONResponse(
                 content={'message': error.message}, status_code=http_code
@@ -112,17 +138,19 @@ def rest_stream_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
+                getattr(error, 'code', 'N/A'),
                 error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we runt the error handling logic (provides logging)
+            # Instead, we run the error handling logic (provides logging)
             # and reraise the error and let server framework manage
             raise e
         except Exception as e:
             # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we runt the error handling logic (provides logging)
+            # Instead, we run the error handling logic (provides logging)
             # and reraise the error and let server framework manage
             raise e
 
