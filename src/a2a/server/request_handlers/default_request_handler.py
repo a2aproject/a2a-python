@@ -312,6 +312,7 @@ class DefaultRequestHandler(RequestHandler):
             blocking = False
 
         interrupted_or_non_blocking = False
+        success = False
         try:
             # Create async callback for push notifications
             async def push_notification_callback() -> None:
@@ -327,6 +328,7 @@ class DefaultRequestHandler(RequestHandler):
                 blocking=blocking,
                 event_callback=push_notification_callback,
             )
+            success = True
 
         except Exception:
             logger.exception('Agent execution failed')
@@ -339,7 +341,14 @@ class DefaultRequestHandler(RequestHandler):
                 cleanup_task.set_name(f'cleanup_producer:{task_id}')
                 self._track_background_task(cleanup_task)
             else:
-                await self._cleanup_producer(producer_task, task_id)
+                # If we are blocking and not interrupted, but the result is not set
+                # (meaning exception or other failure), we should cancel the producer.
+                # 'result' (local var) is bound before this block if success.
+                # However, to be safe, we can check if successful using a flag.
+                cancel_producer = not success
+                await self._cleanup_producer(
+                    producer_task, task_id, cancel=cancel_producer
+                )
 
         if not result:
             raise ServerError(error=InternalError())
@@ -433,8 +442,11 @@ class DefaultRequestHandler(RequestHandler):
         self,
         producer_task: asyncio.Task,
         task_id: str,
+        cancel: bool = False,
     ) -> None:
         """Cleans up the agent execution task and queue manager entry."""
+        if cancel:
+            producer_task.cancel()
         await producer_task
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
