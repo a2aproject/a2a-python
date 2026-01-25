@@ -190,6 +190,19 @@ def test_security_scheme_valid():
     assert scheme.root.name == 'X-API-KEY'
 
 
+def test_security_scheme_accepts_in_field_name():
+    scheme = SecurityScheme.model_validate(
+        {
+            'type': 'apiKey',
+            'in_': 'header',
+            'name': 'X-API-KEY',
+        }
+    )
+    assert isinstance(scheme.root, APIKeySecurityScheme)
+    assert scheme.root.in_ == In.header
+    assert scheme.model_dump(mode='json', exclude_none=True)['in'] == 'header'
+
+
 def test_security_scheme_invalid():
     with pytest.raises(ValidationError):
         APIKeySecurityScheme(
