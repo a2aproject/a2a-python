@@ -3,6 +3,8 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
+from pydantic import ValidationError
 
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
@@ -129,6 +131,40 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             },
         )
         mock_response.raise_for_status.assert_called_once()
+
+    def test_authorization_header_no_credentials(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['Bearer'], credentials=None
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) is None
+
+    def test_authorization_header_empty_schemes(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=[], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) is None
+
+    def test_authorization_header_non_bearer_scheme(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['Basic'], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) == 'Basic token'
+
+    def test_authorization_header_filters_empty_schemes(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['', 'Bearer'], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) == 'Bearer token'
+
+    def test_authorization_header_none_scheme_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            PushNotificationAuthenticationInfo(
+                schemes=['Bearer', None], credentials='token'
+            )
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
