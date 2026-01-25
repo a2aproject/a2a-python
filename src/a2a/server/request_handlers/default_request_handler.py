@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from collections.abc import AsyncGenerator
+from contextlib import suppress
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -447,10 +448,8 @@ class DefaultRequestHandler(RequestHandler):
         """Cleans up the agent execution task and queue manager entry."""
         if cancel:
             producer_task.cancel()
-        try:
+        with suppress(asyncio.CancelledError):
             await producer_task
-        except asyncio.CancelledError:
-            pass
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)

@@ -86,7 +86,7 @@ except ImportError:
         def __call__(self, *args: Any, **kwargs: Any) -> Any:
             return self
 
-        def __enter__(self) -> '_NoOp':
+        def __enter__(self) -> Any:
             return self
 
         def __exit__(self, *args: object, **kwargs: Any) -> None:
