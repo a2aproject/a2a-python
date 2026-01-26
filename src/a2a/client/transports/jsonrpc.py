@@ -176,6 +176,8 @@ class JsonRpcTransport(ClientTransport):
             try:
                 event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
                     response = SendStreamingMessageResponse.model_validate(
                         json.loads(sse.data)
                     )
@@ -390,9 +392,10 @@ class JsonRpcTransport(ClientTransport):
 
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(http_kwargs=modified_kwargs)
-            if signature_verifier is not None:
-                signature_verifier(card)
+            card = await resolver.get_agent_card(
+                http_kwargs=modified_kwargs,
+                signature_verifier=signature_verifier,
+            )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
             )
@@ -418,7 +421,7 @@ class JsonRpcTransport(ClientTransport):
         if isinstance(response.root, JSONRPCErrorResponse):
             raise A2AClientJSONRPCError(response.root)
         card = response.root.result
-        if signature_verifier is not None:
+        if signature_verifier:
             signature_verifier(card)
 
         self.agent_card = card

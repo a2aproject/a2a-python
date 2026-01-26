@@ -1,7 +1,7 @@
 import json
 import logging
 
-from unittest.mock import AsyncMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock, patch
 
 import httpx
 import pytest
@@ -371,9 +371,30 @@ class TestGetAgentCard:
         self, resolver, mock_httpx_client, mock_response, valid_agent_card_data
     ):
         """Test that get_agent_card returns an AgentCard instance."""
+        mock_response.json.return_value = valid_agent_card_data
+        mock_httpx_client.get.return_value = mock_response
         mock_agent_card = Mock(spec=AgentCard)
+
         with patch.object(
             AgentCard, 'model_validate', return_value=mock_agent_card
         ):
             result = await resolver.get_agent_card()
             assert result == mock_agent_card
+            mock_response.raise_for_status.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_get_agent_card_with_signature_verifier(
+        self, resolver, mock_httpx_client, valid_agent_card_data
+    ):
+        """Test that the signature verifier is called if provided."""
+        mock_verifier = MagicMock()
+
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.json.return_value = valid_agent_card_data
+        mock_httpx_client.get.return_value = mock_response
+
+        agent_card = await resolver.get_agent_card(
+            signature_verifier=mock_verifier
+        )
+
+        mock_verifier.assert_called_once_with(agent_card)

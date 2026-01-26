@@ -154,6 +154,8 @@ class RestTransport(ClientTransport):
             try:
                 event_source.response.raise_for_status()
                 async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
                     event = a2a_pb2.StreamResponse()
                     Parse(sse.data, event)
                     yield proto_utils.FromProto.stream_response(event)
@@ -382,9 +384,10 @@ class RestTransport(ClientTransport):
 
         if not card:
             resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(http_kwargs=modified_kwargs)
-            if signature_verifier is not None:
-                signature_verifier(card)
+            card = await resolver.get_agent_card(
+                http_kwargs=modified_kwargs,
+                signature_verifier=signature_verifier,
+            )
             self._needs_extended_card = (
                 card.supports_authenticated_extended_card
             )
@@ -402,7 +405,7 @@ class RestTransport(ClientTransport):
             '/v1/card', {}, modified_kwargs
         )
         card = AgentCard.model_validate(response_data)
-        if signature_verifier is not None:
+        if signature_verifier:
             signature_verifier(card)
 
         self.agent_card = card
