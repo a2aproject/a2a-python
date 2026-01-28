@@ -71,6 +71,7 @@ import os
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
+
 from typing_extensions import Self
 
 
