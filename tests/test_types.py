@@ -182,12 +182,22 @@ JSONRPC_SUCCESS_RESULT: dict[str, Any] = {'status': 'ok', 'data': [1, 2, 3]}
 # --- Test Functions ---
 
 
-def test_security_scheme_valid():
-    scheme = SecurityScheme.model_validate(MINIMAL_AGENT_SECURITY_SCHEME)
+@pytest.mark.parametrize('in_field_name', ['in', 'in_'])
+def test_security_scheme_in_field_handling(in_field_name: str) -> None:
+    scheme_data = {
+        'type': 'apiKey',
+        'name': 'X-API-KEY',
+        in_field_name: 'header',
+    }
+    scheme = SecurityScheme.model_validate(scheme_data)
     assert isinstance(scheme.root, APIKeySecurityScheme)
     assert scheme.root.type == 'apiKey'
     assert scheme.root.in_ == In.header
     assert scheme.root.name == 'X-API-KEY'
+
+    serialized_data = scheme.model_dump(mode='json', exclude_none=True)
+    assert serialized_data.get('in') == 'header'
+    assert 'in_' not in serialized_data
 
 
 def test_security_scheme_invalid():
