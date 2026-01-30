@@ -1,4 +1,5 @@
 import pytest
+
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     find_extension_by_uri,

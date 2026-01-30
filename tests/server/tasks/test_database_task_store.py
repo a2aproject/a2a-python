@@ -19,6 +19,7 @@ from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types import (
     Artifact,
+    ListTasksParams,
     Message,
     Part,
     Role,
@@ -169,6 +170,216 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
     assert retrieved_task.context_id == task_to_save.context_id
     assert retrieved_task.status.state == TaskState.submitted
     await db_store_parameterized.delete(task_to_save.id)  # Cleanup
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'params, expected_ids, total_count, next_page_token',
+    [
+        # No parameters, should return all tasks
+        (
+            ListTasksParams(),
+            ['task-2', 'task-1', 'task-0', 'task-4', 'task-3'],
+            5,
+            None,
+        ),
+        # Unknown context
+        (
+            ListTasksParams(context_id='nonexistent'),
+            [],
+            0,
+            None,
+        ),
+        # Pagination (first page)
+        (
+            ListTasksParams(page_size=2),
+            ['task-2', 'task-1'],
+            5,
+            'dGFzay0w',  # base64 for 'task-0'
+        ),
+        # Pagination (same timestamp)
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0x',  # base64 for 'task-1'
+            ),
+            ['task-1', 'task-0'],
+            5,
+            'dGFzay00',  # base64 for 'task-4'
+        ),
+        # Pagination (final page)
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0z',  # base64 for 'task-3'
+            ),
+            ['task-3'],
+            5,
+            None,
+        ),
+        # Filtering by context_id
+        (
+            ListTasksParams(context_id='context-1'),
+            ['task-1', 'task-3'],
+            2,
+            None,
+        ),
+        # Filtering by status
+        (
+            ListTasksParams(status=TaskState.working),
+            ['task-1', 'task-3'],
+            2,
+            None,
+        ),
+        # Combined filtering (context_id and status)
+        (
+            ListTasksParams(context_id='context-0', status=TaskState.submitted),
+            ['task-2', 'task-0'],
+            2,
+            None,
+        ),
+        # Combined filtering and pagination
+        (
+            ListTasksParams(
+                context_id='context-0',
+                page_size=1,
+            ),
+            ['task-2'],
+            3,
+            'dGFzay0w',  # base64 for 'task-0'
+        ),
+    ],
+)
+async def test_list_tasks(
+    db_store_parameterized: DatabaseTaskStore,
+    params: ListTasksParams,
+    expected_ids: list[str],
+    total_count: int,
+    next_page_token: str,
+) -> None:
+    """Test listing tasks with various filters and pagination."""
+    tasks_to_create = [
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-0',
+                'context_id': 'context-0',
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-1',
+                'context_id': 'context-1',
+                'status': TaskStatus(
+                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-2',
+                'context_id': 'context-0',
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-02T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-3',
+                'context_id': 'context-1',
+                'status': TaskStatus(state=TaskState.working),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-4',
+                'context_id': 'context-0',
+                'status': TaskStatus(state=TaskState.completed),
+                'kind': 'task',
+            }
+        ),
+    ]
+    for task in tasks_to_create:
+        await db_store_parameterized.save(task)
+
+    page = await db_store_parameterized.list(params)
+
+    retrieved_ids = [task.id for task in page.tasks]
+    assert retrieved_ids == expected_ids
+    assert page.total_size == total_count
+    assert page.next_page_token == next_page_token
+
+    # Cleanup
+    for task in tasks_to_create:
+        await db_store_parameterized.delete(task.id)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'params, expected_error_message',
+    [
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='invalid',
+            ),
+            'Token is not a valid base64-encoded cursor.',
+        ),
+        (
+            ListTasksParams(
+                page_size=2,
+                page_token='dGFzay0xMDA=',  # base64 for 'task-100'
+            ),
+            'Invalid page token: dGFzay0xMDA=',
+        ),
+    ],
+)
+async def test_list_tasks_fails(
+    db_store_parameterized: DatabaseTaskStore,
+    params: ListTasksParams,
+    expected_error_message: str,
+) -> None:
+    """Test listing tasks with invalid parameters that should fail."""
+    tasks_to_create = [
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-0',
+                'context_id': 'context-0',
+                'status': TaskStatus(
+                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+        MINIMAL_TASK_OBJ.model_copy(
+            update={
+                'id': 'task-1',
+                'context_id': 'context-1',
+                'status': TaskStatus(
+                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
+                ),
+                'kind': 'task',
+            }
+        ),
+    ]
+    for task in tasks_to_create:
+        await db_store_parameterized.save(task)
+
+    with pytest.raises(ValueError) as excinfo:
+        await db_store_parameterized.list(params)
+
+    assert expected_error_message in str(excinfo.value)
+
+    # Cleanup
+    for task in tasks_to_create:
+        await db_store_parameterized.delete(task.id)
 
 
 @pytest.mark.asyncio

@@ -2,7 +2,7 @@
 name: Lint Code Base
 on:
   pull_request:
-    branches: [main]
+    branches: [main, "ishymko/tests-base"]
 permissions:
   contents: read
 jobs:

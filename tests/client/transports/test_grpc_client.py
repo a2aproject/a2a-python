@@ -11,6 +11,7 @@ from a2a.types import (
     AgentCard,
     Artifact,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
     Message,
     MessageSendParams,
     Part,
@@ -38,6 +39,7 @@ def mock_grpc_stub() -> AsyncMock:
     stub.SendMessage = AsyncMock()
     stub.SendStreamingMessage = MagicMock()
     stub.GetTask = AsyncMock()
+    stub.ListTasks = AsyncMock()
     stub.CancelTask = AsyncMock()
     stub.CreateTaskPushNotificationConfig = AsyncMock()
     stub.GetTaskPushNotificationConfig = AsyncMock()
@@ -96,6 +98,16 @@ def sample_task() -> Task:
         id='task-1',
         context_id='ctx-1',
         status=TaskStatus(state=TaskState.completed),
+    )
+
+
+@pytest.fixture
+def sample_task_2() -> Task:
+    """Provides a sample Task object."""
+    return Task(
+        id='task-2',
+        context_id='ctx-2',
+        status=TaskStatus(state=TaskState.failed),
     )
 
 
@@ -319,6 +331,32 @@ async def test_get_task(
         ],
     )
     assert response.id == sample_task.id
+
+
+@pytest.mark.asyncio
+async def test_list_tasks(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task: Task,
+    sample_task_2: Task,
+):
+    """Test listing tasks."""
+    mock_grpc_stub.ListTasks.return_value = a2a_pb2.ListTasksResponse(
+        tasks=[
+            proto_utils.ToProto.task(t) for t in [sample_task, sample_task_2]
+        ],
+        total_size=2,
+    )
+    params = ListTasksParams()
+
+    result = await grpc_transport.list_tasks(params)
+
+    mock_grpc_stub.ListTasks.assert_awaited_once_with(
+        proto_utils.ToProto.list_tasks_request(params)
+    )
+    assert result.total_size == 2
+    assert not result.next_page_token
+    assert [t.id for t in result.tasks] == [sample_task.id, sample_task_2.id]
 
 
 @pytest.mark.asyncio

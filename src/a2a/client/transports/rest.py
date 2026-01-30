@@ -8,6 +8,7 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from httpx_sse import SSEError, aconnect_sse
+from pydantic import BaseModel
 
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import A2AClientHTTPError, A2AClientJSONError
@@ -18,6 +19,8 @@ from a2a.grpc import a2a_pb2
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    ListTasksParams,
+    ListTasksResult,
     Message,
     MessageSendParams,
     Task,
@@ -28,6 +31,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import proto_utils
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -239,6 +243,28 @@ class RestTransport(ClientTransport):
         ParseDict(response_data, task)
         return proto_utils.FromProto.task(task)
 
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        _, modified_kwargs = await self._apply_interceptors(
+            request.model_dump(mode='json', exclude_none=True),
+            self._get_http_args(context),
+            context,
+        )
+        response_data = await self._send_get_request(
+            '/v1/tasks',
+            _model_to_query_params(request),
+            modified_kwargs,
+        )
+        response = a2a_pb2.ListTasksResponse()
+        ParseDict(response_data, response)
+        page_size = request.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+        return proto_utils.FromProto.list_tasks_result(response, page_size)
+
     async def cancel_task(
         self,
         request: TaskIdParams,
@@ -404,3 +430,21 @@ class RestTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
+
+
+def _model_to_query_params(instance: BaseModel) -> dict[str, str]:
+    data = instance.model_dump(mode='json', exclude_none=True)
+    return _json_to_query_params(data)
+
+
+def _json_to_query_params(data: dict[str, Any]) -> dict[str, str]:
+    query_dict = {}
+    for key, value in data.items():
+        if isinstance(value, list):
+            query_dict[key] = ','.join(map(str, value))
+        elif isinstance(value, bool):
+            query_dict[key] = str(value).lower()
+        else:
+            query_dict[key] = str(value)
+
+    return query_dict
