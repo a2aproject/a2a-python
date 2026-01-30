@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.3.23](https://github.com/a2aproject/a2a-python/compare/v0.3.22...v0.3.23) (2026-01-30)
+
+
+### Features
+
+* support disabling OTel instrumentation via env var ([#611](https://github.com/a2aproject/a2a-python/issues/611)) ([72216b9](https://github.com/a2aproject/a2a-python/commit/72216b988c0681e07d26ea8d5489a619d1ad6dda))
+
+
+### Bug Fixes
+
+* do not crash on SSE comment line ([#636](https://github.com/a2aproject/a2a-python/issues/636)) ([3dcb847](https://github.com/a2aproject/a2a-python/commit/3dcb84772fdc8a4d3b63b518ed491e5ed3d38d0a))
+
+
+### Documentation
+
+* Update README to include Code Wiki badge ([2698cc0](https://github.com/a2aproject/a2a-python/commit/2698cc04f15282fb358018f06bd88ae159d987b4))
+
 ## [0.3.22](https://github.com/a2aproject/a2a-python/compare/v0.3.21...v0.3.22) (2025-12-16)
 
 
