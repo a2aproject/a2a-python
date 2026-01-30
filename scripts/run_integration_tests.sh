@@ -77,11 +77,15 @@ done
 if [[ "$DEBUG_MODE" == "true" ]]; then
   echo "---------------------------------------------------"
   echo "Debug mode enabled. Databases are running."
-  echo "You can connect to them using the following DSNs:"
-  [[ -n "$POSTGRES_TEST_DSN" ]] && echo "Postgres: $POSTGRES_TEST_DSN"
-  [[ -n "$MYSQL_TEST_DSN" ]] && echo "MySQL:    $MYSQL_TEST_DSN"
+  echo "You can connect to them using the following DSNs."
+  echo ""
+  echo "Run the following commands to set up your environment:"
+  echo ""
+  [[ -n "$POSTGRES_TEST_DSN" ]] && echo "export POSTGRES_TEST_DSN=\"$POSTGRES_TEST_DSN\""
+  [[ -n "$MYSQL_TEST_DSN" ]] && echo "export MYSQL_TEST_DSN=\"$MYSQL_TEST_DSN\""
+  echo ""
   echo "---------------------------------------------------"
-  echo "Run ./scripts/run_integration_tests.sh --stop to shut them down."
+  echo "Run ./scripts/run_integration_tests.sh --stop to shut databases down."
   exit 0
 fi
 
