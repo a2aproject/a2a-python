@@ -321,7 +321,7 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo'),
             (HTTP_EXTENSION_HEADER, 'bar'),
         )
@@ -361,7 +361,7 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo ,, bar,'),
             (HTTP_EXTENSION_HEADER, 'baz  , bar'),
         )
@@ -386,7 +386,7 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
             (HTTP_EXTENSION_HEADER, 'foo'),
             (HTTP_EXTENSION_HEADER, 'bar'),
         )
