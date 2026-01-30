@@ -63,6 +63,7 @@ Llm
 lstrips
 mikeas
 mockurl
+mysqladmin
 notif
 oauthoidc
 oidc
@@ -71,6 +72,7 @@ otherurl
 postgres
 POSTGRES
 postgresql
+proot
 protoc
 pyi
 pypistats
