@@ -1,4 +1,4 @@
-from collections.abc import AsyncIterator
+from collections.abc import AsyncIterator, Callable
 from typing import Any
 
 from a2a.client.client import (
@@ -272,6 +272,7 @@ class BaseClient(Client):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.
 
@@ -281,12 +282,15 @@ class BaseClient(Client):
         Args:
             context: The client call context.
             extensions: List of extensions to be activated.
+            signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             The `AgentCard` for the agent.
         """
         card = await self._transport.get_card(
-            context=context, extensions=extensions
+            context=context,
+            extensions=extensions,
+            signature_verifier=signature_verifier,
         )
         self._card = card
         return card

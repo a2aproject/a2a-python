@@ -5,9 +5,10 @@
 ![PyPI - Python Version](https://img.shields.io/pypi/pyversions/a2a-sdk)
 [![PyPI - Downloads](https://img.shields.io/pypi/dw/a2a-sdk)](https://pypistats.org/packages/a2a-sdk)
 [![Python Unit Tests](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml/badge.svg)](https://github.com/a2aproject/a2a-python/actions/workflows/unit-tests.yml)
-[![Ask DeepWiki](https://deepwiki.com/badge.svg)](https://deepwiki.com/a2aproject/a2a-python)
-
 <!-- markdownlint-disable no-inline-html -->
+<a href="https://codewiki.google/github.com/a2aproject/a2a-python">
+  <img src="https://www.gstatic.com/_/boq-sdlc-agents-ui/_/r/Mvosg4klCA4.svg" alt="Ask Code Wiki" height="20">
+</a>
 
 <div align="center">
    <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg" width="256" alt="A2A Logo"/>

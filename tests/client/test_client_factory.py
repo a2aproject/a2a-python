@@ -190,6 +190,7 @@ async def test_client_factory_connect_with_resolver_args(
         mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
             relative_card_path=relative_path,
             http_kwargs=http_kwargs,
+            signature_verifier=None,
         )
 
 
@@ -216,6 +217,7 @@ async def test_client_factory_connect_resolver_args_without_client(
         mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
             relative_card_path=relative_path,
             http_kwargs=http_kwargs,
+            signature_verifier=None,
         )
 
 

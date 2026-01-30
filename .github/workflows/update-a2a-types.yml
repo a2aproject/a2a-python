@@ -1,8 +1,9 @@
 ---
 name: Update A2A Schema from Specification
 on:
-  repository_dispatch:
-    types: [a2a_json_update]
+#  TODO (https://github.com/a2aproject/a2a-python/issues/559): bring back once types are migrated, currently it generates many broken PRs
+#  repository_dispatch:
+#    types: [a2a_json_update]
   workflow_dispatch:
 jobs:
   generate_and_pr:
@@ -12,7 +13,7 @@ jobs:
       pull-requests: write
     steps:
       - name: Checkout code
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
@@ -22,7 +23,7 @@ jobs:
       - name: Configure uv shell
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies (datamodel-code-generator)
-        run: uv sync
+        run: uv sync --locked
       - name: Define output file variable
         id: vars
         run: |
@@ -42,7 +43,7 @@ jobs:
           uv run scripts/grpc_gen_post_processor.py
           echo "Buf generate finished."
       - name: Create Pull Request with Updates
-        uses: peter-evans/create-pull-request@v7
+        uses: peter-evans/create-pull-request@v8
         with:
           token: ${{ secrets.A2A_BOT_PAT }}
           committer: a2a-bot <a2a-bot@google.com>

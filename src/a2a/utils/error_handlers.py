@@ -117,12 +117,12 @@ def rest_stream_error_handler(
                 ', Data=' + str(error.data) if error.data else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we runt the error handling logic (provides logging)
+            # Instead, we run the error handling logic (provides logging)
             # and reraise the error and let server framework manage
             raise e
         except Exception as e:
             # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we runt the error handling logic (provides logging)
+            # Instead, we run the error handling logic (provides logging)
             # and reraise the error and let server framework manage
             raise e
 

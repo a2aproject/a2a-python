@@ -2,6 +2,7 @@
 
 import functools
 import inspect
+import json
 import logging
 
 from collections.abc import Callable
@@ -9,6 +10,7 @@ from typing import Any
 from uuid import uuid4
 
 from a2a.types import (
+    AgentCard,
     Artifact,
     MessageSendParams,
     Part,
@@ -340,3 +342,29 @@ def are_modalities_compatible(
         return True
 
     return any(x in server_output_modes for x in client_output_modes)
+
+
+def _clean_empty(d: Any) -> Any:
+    """Recursively remove empty strings, lists and dicts from a dictionary."""
+    if isinstance(d, dict):
+        cleaned_dict: dict[Any, Any] = {
+            k: _clean_empty(v) for k, v in d.items()
+        }
+        return {k: v for k, v in cleaned_dict.items() if v}
+    if isinstance(d, list):
+        cleaned_list: list[Any] = [_clean_empty(v) for v in d]
+        return [v for v in cleaned_list if v]
+    return d if d not in ['', [], {}] else None
+
+
+def canonicalize_agent_card(agent_card: AgentCard) -> str:
+    """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
+    card_dict = agent_card.model_dump(
+        exclude={'signatures'},
+        exclude_defaults=True,
+        exclude_none=True,
+        by_alias=True,
+    )
+    # Recursively remove empty values
+    cleaned_dict = _clean_empty(card_dict)
+    return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)

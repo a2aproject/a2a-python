@@ -73,7 +73,7 @@ class EventQueue:
         closed but when there are no events on the queue. Two ways to avoid this
         are to call this with no_wait = True which won't block, but is the
         callers responsibility to retry as appropriate. Alternatively, one can
-        use a async Task management solution to cancel the get task if the queue
+        use an async Task management solution to cancel the get task if the queue
         has closed or some other condition is met. The implementation of the
         EventConsumer uses an async.wait with a timeout to abort the
         dequeue_event call and retry, when it will return with a closed error.

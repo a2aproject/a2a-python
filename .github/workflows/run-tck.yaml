@@ -1,0 +1,106 @@
+name: Run TCK
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - '.github/CODEOWNERS'
+
+permissions:
+  contents: read
+
+env:
+  TCK_VERSION: 0.3.0.beta3
+  SUT_BASE_URL: http://localhost:41241
+  SUT_JSONRPC_URL: http://localhost:41241/a2a/jsonrpc
+  UV_SYSTEM_PYTHON: 1
+  TCK_STREAMING_TIMEOUT: 5.0
+
+concurrency:
+  group: '${{ github.workflow }} @ ${{ github.head_ref || github.ref }}'
+  cancel-in-progress: true
+
+jobs:
+  tck-test:
+    name: Run TCK with Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.13']
+    steps:
+      - name: Checkout a2a-python
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Checkout a2a-tck
+        uses: actions/checkout@v6
+        with:
+          repository: a2aproject/a2a-tck
+          path: tck/a2a-tck
+          ref: ${{ env.TCK_VERSION }}
+
+      - name: Start SUT
+        run: |
+          uv run tck/sut_agent.py &
+
+      - name: Wait for SUT to start
+        run: |
+          URL="${{ env.SUT_BASE_URL }}/.well-known/agent-card.json"
+          EXPECTED_STATUS=200
+          TIMEOUT=120
+          RETRY_INTERVAL=2
+          START_TIME=$(date +%s)
+
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            if [ "$ELAPSED_TIME" -ge "$TIMEOUT" ]; then
+                echo "❌ Timeout: Server did not respond with status $EXPECTED_STATUS within $TIMEOUT seconds."
+                exit 1
+            fi
+
+            HTTP_STATUS=$(curl --output /dev/null --silent --write-out "%{http_code}" "$URL") || true
+            echo "STATUS: ${HTTP_STATUS}"
+
+            if [ "$HTTP_STATUS" -eq "$EXPECTED_STATUS" ]; then
+                echo "✅ Server is up! Received status $HTTP_STATUS after $ELAPSED_TIME seconds."
+                break;
+            fi
+
+            echo "⏳ Server not ready (status: $HTTP_STATUS). Retrying in $RETRY_INTERVAL seconds..."
+            sleep "$RETRY_INTERVAL"
+          done
+
+      - name: Run TCK (mandatory)
+        id: run-tck-mandatory
+        run: |
+          uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category mandatory --transports jsonrpc
+        working-directory: tck/a2a-tck
+
+      - name: Run TCK (capabilities)
+        id: run-tck-capabilities
+        run: |
+          uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category capabilities --transports jsonrpc
+        working-directory: tck/a2a-tck
+
+      - name: Stop SUT
+        if: always()
+        run: |
+          pkill -f sut_agent.py || true
+          sleep 2
