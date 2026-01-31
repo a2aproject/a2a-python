@@ -60,7 +60,7 @@ class RESTAdapter:
         context_builder: CallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], AgentCard] | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
     ):
@@ -77,9 +77,9 @@ class RESTAdapter:
               ServerCallContext is passed.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
-            extended_card_modifier: An optional callback to dynamically modify
-              the extended agent card before it is served. It receives the
-              call context.
+            extended_card_modifier: An optional async callback to dynamically
+              modify the extended agent card before it is served. It receives
+              the call context.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -182,7 +182,9 @@ class RESTAdapter:
 
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
-            card_to_serve = self.extended_card_modifier(card_to_serve, context)
+            card_to_serve = await self.extended_card_modifier(
+                card_to_serve, context
+            )
         elif self.card_modifier:
             card_to_serve = self.card_modifier(card_to_serve)
 
