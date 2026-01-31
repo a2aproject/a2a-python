@@ -5,8 +5,9 @@ import inspect
 import json
 import logging
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from inspect import isawaitable
+from typing import Any, ParamSpec, TypeVar
 from uuid import uuid4
 
 from a2a.types import (
@@ -22,6 +23,10 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError, UnsupportedOperationError
 from a2a.utils.telemetry import trace_function
+
+
+T = TypeVar('T')
+P = ParamSpec('P')
 
 
 logger = logging.getLogger(__name__)
@@ -368,3 +373,13 @@ def canonicalize_agent_card(agent_card: AgentCard) -> str:
     # Recursively remove empty values
     cleaned_dict = _clean_empty(card_dict)
     return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)
+
+
+async def apply_optional_awaitable(
+    func: Callable[P, Awaitable[T] | T], *args: P.args, **kwargs: P.kwargs
+) -> T:
+    """Applies a function that may be sync or async and returns the result."""
+    result = func(*args, **kwargs)
+    if isawaitable(result):
+        return await result
+    return result

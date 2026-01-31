@@ -4,7 +4,7 @@ import logging
 import traceback
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -51,6 +51,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
+from a2a.utils.helpers import apply_optional_awaitable
 
 
 logger = logging.getLogger(__name__)
@@ -178,9 +179,10 @@ class JSONRPCApplication(ABC):
         http_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
@@ -576,7 +578,9 @@ class JSONRPCApplication(ABC):
 
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = self.card_modifier(card_to_serve)
+            card_to_serve = await apply_optional_awaitable(
+                self.card_modifier, card_to_serve
+            )
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -605,7 +609,9 @@ class JSONRPCApplication(ABC):
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
             base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = self.extended_card_modifier(base_card, context)
+            card_to_serve = await apply_optional_awaitable(
+                self.extended_card_modifier, base_card, context
+            )
 
         if card_to_serve:
             return JSONResponse(

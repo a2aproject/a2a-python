@@ -209,6 +209,34 @@ async def test_get_agent_card_with_modifier(
 ) -> None:
     """Test GetAgentCard call with a card_modifier."""
 
+    async def modifier(card: types.AgentCard) -> types.AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.name = 'Modified gRPC Agent'
+        return modified_card
+
+    grpc_handler_modified = GrpcHandler(
+        agent_card=sample_agent_card,
+        request_handler=mock_request_handler,
+        card_modifier=modifier,
+    )
+
+    request_proto = a2a_pb2.GetAgentCardRequest()
+    response = await grpc_handler_modified.GetAgentCard(
+        request_proto, mock_grpc_context
+    )
+
+    assert response.name == 'Modified gRPC Agent'
+    assert response.version == sample_agent_card.version
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_with_modifier_sync(
+    mock_request_handler: AsyncMock,
+    sample_agent_card: types.AgentCard,
+    mock_grpc_context: AsyncMock,
+) -> None:
+    """Test GetAgentCard call with a synchronous card_modifier."""
+
     def modifier(card: types.AgentCard) -> types.AgentCard:
         modified_card = card.model_copy(deep=True)
         modified_card.name = 'Modified gRPC Agent'

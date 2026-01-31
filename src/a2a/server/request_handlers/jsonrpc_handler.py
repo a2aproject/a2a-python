@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncIterable, Callable
+from collections.abc import AsyncIterable, Awaitable, Callable
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -46,7 +46,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import ServerError
-from a2a.utils.helpers import validate
+from a2a.utils.helpers import apply_optional_awaitable, validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -63,10 +63,11 @@ class JSONRPCHandler:
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
     ):
         """Initializes the JSONRPCHandler.
 
@@ -450,9 +451,13 @@ class JSONRPCHandler:
 
         card_to_serve = base_card
         if self.extended_card_modifier and context:
-            card_to_serve = self.extended_card_modifier(base_card, context)
+            card_to_serve = await apply_optional_awaitable(
+                self.extended_card_modifier, base_card, context
+            )
         elif self.card_modifier:
-            card_to_serve = self.card_modifier(base_card)
+            card_to_serve = await apply_optional_awaitable(
+                self.card_modifier, base_card
+            )
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(

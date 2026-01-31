@@ -1,20 +1,17 @@
-from a2a.types import (
-    AgentCard,
-    AgentCapabilities,
-    AgentSkill,
-)
-from a2a.types import (
-    AgentCard,
-    AgentCapabilities,
-    AgentSkill,
-    AgentCardSignature,
-)
-from a2a.utils import signing
 from typing import Any
-from jwt.utils import base64url_encode
 
 import pytest
+
 from cryptography.hazmat.primitives import asymmetric
+from jwt.utils import base64url_encode
+
+from a2a.types import (
+    AgentCapabilities,
+    AgentCard,
+    AgentCardSignature,
+    AgentSkill,
+)
+from a2a.utils import signing
 
 
 def create_key_provider(verification_key: str | bytes | dict[str, Any]):
