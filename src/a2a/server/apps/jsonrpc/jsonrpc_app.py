@@ -51,7 +51,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
-from a2a.utils.helpers import apply_optional_awaitable
+from a2a.utils.helpers import maybe_await
 
 
 logger = logging.getLogger(__name__)
@@ -578,9 +578,7 @@ class JSONRPCApplication(ABC):
 
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = await apply_optional_awaitable(
-                self.card_modifier, card_to_serve
-            )
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -609,8 +607,8 @@ class JSONRPCApplication(ABC):
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
             base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = await apply_optional_awaitable(
-                self.extended_card_modifier, base_card, context
+            card_to_serve = await maybe_await(
+                self.extended_card_modifier(base_card, context)
             )
 
         if card_to_serve:

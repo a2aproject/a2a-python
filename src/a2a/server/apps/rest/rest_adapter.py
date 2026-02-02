@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from a2a.utils.helpers import apply_optional_awaitable
+from a2a.utils.helpers import maybe_await
 
 
 if TYPE_CHECKING:
@@ -153,9 +153,7 @@ class RESTAdapter:
         """
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = await apply_optional_awaitable(
-                self.card_modifier, card_to_serve
-            )
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 
@@ -187,13 +185,11 @@ class RESTAdapter:
 
         if self.extended_card_modifier:
             context = self._context_builder.build(request)
-            card_to_serve = await apply_optional_awaitable(
-                self.extended_card_modifier, card_to_serve, context
+            card_to_serve = await maybe_await(
+                self.extended_card_modifier(card_to_serve, context)
             )
         elif self.card_modifier:
-            card_to_serve = await apply_optional_awaitable(
-                self.card_modifier, card_to_serve
-            )
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return card_to_serve.model_dump(mode='json', exclude_none=True)
 

@@ -46,7 +46,7 @@ from a2a.types import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import ServerError
-from a2a.utils.helpers import apply_optional_awaitable, validate
+from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -451,13 +451,11 @@ class JSONRPCHandler:
 
         card_to_serve = base_card
         if self.extended_card_modifier and context:
-            card_to_serve = await apply_optional_awaitable(
-                self.extended_card_modifier, base_card, context
+            card_to_serve = await maybe_await(
+                self.extended_card_modifier(base_card, context)
             )
         elif self.card_modifier:
-            card_to_serve = await apply_optional_awaitable(
-                self.card_modifier, base_card
-            )
+            card_to_serve = await maybe_await(self.card_modifier(base_card))
 
         return GetAuthenticatedExtendedCardResponse(
             root=GetAuthenticatedExtendedCardSuccessResponse(

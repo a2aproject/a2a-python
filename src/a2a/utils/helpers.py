@@ -6,8 +6,7 @@ import json
 import logging
 
 from collections.abc import Awaitable, Callable
-from inspect import isawaitable
-from typing import Any, ParamSpec, TypeVar
+from typing import Any, TypeVar
 from uuid import uuid4
 
 from a2a.types import (
@@ -26,7 +25,6 @@ from a2a.utils.telemetry import trace_function
 
 
 T = TypeVar('T')
-P = ParamSpec('P')
 
 
 logger = logging.getLogger(__name__)
@@ -375,11 +373,8 @@ def canonicalize_agent_card(agent_card: AgentCard) -> str:
     return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)
 
 
-async def apply_optional_awaitable(
-    func: Callable[P, Awaitable[T] | T], *args: P.args, **kwargs: P.kwargs
-) -> T:
-    """Applies a function that may be sync or async and returns the result."""
-    result = func(*args, **kwargs)
-    if isawaitable(result):
-        return await result
-    return result
+async def maybe_await(value: T | Awaitable[T]) -> T:
+    """Awaits a value if it's awaitable, otherwise simply provides it back."""
+    if inspect.isawaitable(value):
+        return await value
+    return value
