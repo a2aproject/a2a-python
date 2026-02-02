@@ -40,6 +40,7 @@
 
 * return updated `agent_card` in `JsonRpcTransport.get_card()` ([#552](https://github.com/a2aproject/a2a-python/issues/552)) ([0ce239e](https://github.com/a2aproject/a2a-python/commit/0ce239e98f67ccbf154f2edcdbcee43f3b080ead))
 
+
 ## [0.3.17](https://github.com/a2aproject/a2a-python/compare/v0.3.16...v0.3.17) (2025-11-24)
 
 
@@ -75,6 +76,20 @@
 ### Bug Fixes
 
 * return entire history when history_length=0 ([#537](https://github.com/a2aproject/a2a-python/issues/537)) ([acdc0de](https://github.com/a2aproject/a2a-python/commit/acdc0de4fa03d34a6b287ab252ff51b19c3016b5))
+
+## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
+
+
+### Bug Fixes
+
+* **grpc:** Add `extensions` to `Artifact` converters. ([#523](https://github.com/a2aproject/a2a-python/issues/523)) ([c03129b](https://github.com/a2aproject/a2a-python/commit/c03129b99a663ae1f1ae72f20e4ead7807ede941))
+
+## [0.3.11](https://github.com/a2aproject/a2a-python/compare/v0.3.10...v0.3.11) (2025-11-07)
+
+
+### Bug Fixes
+
+* add metadata to send message request ([12b4a1d](https://github.com/a2aproject/a2a-python/commit/12b4a1d565a53794f5b55c8bd1728221c906ed41))
 
 ## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
 

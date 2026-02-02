@@ -8,6 +8,7 @@ import re
 from typing import Any
 
 from google.protobuf import json_format, struct_pb2
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a import types
 from a2a.grpc import a2a_pb2
@@ -584,6 +585,34 @@ class ToProto:
             case _:
                 return a2a_pb2.Role.ROLE_UNSPECIFIED
 
+    @classmethod
+    def list_tasks_request(
+        cls, params: types.ListTasksParams
+    ) -> a2a_pb2.ListTasksRequest:
+        last_updated_time = None
+        if params.last_updated_after is not None:
+            last_updated_time = Timestamp()
+            last_updated_time.FromMilliseconds(params.last_updated_after)
+        return a2a_pb2.ListTasksRequest(
+            context_id=params.context_id,
+            status=cls.task_state(params.status) if params.status else None,
+            page_size=params.page_size,
+            page_token=params.page_token,
+            history_length=params.history_length,
+            last_updated_time=last_updated_time,
+            include_artifacts=params.include_artifacts,
+        )
+
+    @classmethod
+    def list_tasks_response(
+        cls, result: types.ListTasksResult
+    ) -> a2a_pb2.ListTasksResponse:
+        return a2a_pb2.ListTasksResponse(
+            next_page_token=result.next_page_token or '',
+            tasks=[cls.task(t) for t in result.tasks],
+            total_size=result.total_size or 0,
+        )
+
 
 class FromProto:
     """Converts proto types to Python types."""
@@ -817,6 +846,28 @@ class FromProto:
         return types.TaskIdParams(id=m.group(1))
 
     @classmethod
+    def list_tasks_result(
+        cls,
+        response: a2a_pb2.ListTasksResponse,
+        page_size: int,
+    ) -> types.ListTasksResult:
+        """Converts a ListTasksResponse to a ListTasksResult.
+
+        Args:
+            response: The ListTasksResponse to convert.
+            page_size: The maximum number of tasks returned in this response.
+
+        Returns:
+            A `ListTasksResult` object.
+        """
+        return types.ListTasksResult(
+            next_page_token=response.next_page_token,
+            page_size=page_size,
+            tasks=[cls.task(t) for t in response.tasks],
+            total_size=response.total_size,
+        )
+
+    @classmethod
     def task_push_notification_config_request(
         cls,
         request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
@@ -923,6 +974,22 @@ class FromProto:
             else None,
             id=m.group(1),
             metadata=None,
+        )
+
+    @classmethod
+    def list_tasks_params(
+        cls, request: a2a_pb2.ListTasksRequest
+    ) -> types.ListTasksParams:
+        return types.ListTasksParams(
+            context_id=request.context_id,
+            history_length=request.history_length,
+            include_artifacts=request.include_artifacts,
+            last_updated_after=request.last_updated_time.ToMilliseconds()
+            if request.last_updated_time
+            else None,
+            page_size=request.page_size,
+            page_token=request.page_token,
+            status=cls.task_state(request.status) if request.status else None,
         )
 
     @classmethod

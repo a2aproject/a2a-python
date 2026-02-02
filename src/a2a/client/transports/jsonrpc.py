@@ -31,6 +31,10 @@ from a2a.types import (
     GetTaskRequest,
     GetTaskResponse,
     JSONRPCErrorResponse,
+    ListTasksParams,
+    ListTasksRequest,
+    ListTasksResponse,
+    ListTasksResult,
     Message,
     MessageSendParams,
     SendMessageRequest,
@@ -240,6 +244,26 @@ class JsonRpcTransport(ClientTransport):
         )
         response_data = await self._send_request(payload, modified_kwargs)
         response = GetTaskResponse.model_validate(response_data)
+        if isinstance(response.root, JSONRPCErrorResponse):
+            raise A2AClientJSONRPCError(response.root)
+        return response.root.result
+
+    async def list_tasks(
+        self,
+        request: ListTasksParams,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResult:
+        """Retrieves tasks for an agent."""
+        rpc_request = ListTasksRequest(params=request, id=str(uuid4()))
+        payload, modified_kwargs = await self._apply_interceptors(
+            'tasks/list',
+            rpc_request.model_dump(mode='json', exclude_none=True),
+            self._get_http_args(context),
+            context,
+        )
+        response_data = await self._send_request(payload, modified_kwargs)
+        response = ListTasksResponse.model_validate(response_data)
         if isinstance(response.root, JSONRPCErrorResponse):
             raise A2AClientJSONRPCError(response.root)
         return response.root.result

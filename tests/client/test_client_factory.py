@@ -46,7 +46,7 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
 
     assert isinstance(client._transport, JsonRpcTransport)
     assert client._transport.url == 'http://primary-url.com'
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
+    assert client._transport.extensions == ['https://example.com/test-ext/v0']
 
 
 def test_client_factory_selects_secondary_transport_url(
@@ -74,7 +74,7 @@ def test_client_factory_selects_secondary_transport_url(
 
     assert isinstance(client._transport, RestTransport)
     assert client._transport.url == 'http://secondary-url.com'
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
+    assert client._transport.extensions == ['https://example.com/test-ext/v0']
 
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):
