@@ -53,7 +53,7 @@ class TaskUpdater:
         self._terminal_state_reached = False
         self._terminal_states = {
             TaskState.TASK_STATE_COMPLETED,
-            TaskState.TASK_STATE_CANCELLED,
+            TaskState.TASK_STATE_CANCELED,
             TaskState.TASK_STATE_FAILED,
             TaskState.TASK_STATE_REJECTED,
         }
@@ -68,7 +68,6 @@ class TaskUpdater:
         self,
         state: TaskState,
         message: Message | None = None,
-        final: bool = False,
         timestamp: str | None = None,
         metadata: dict[str, Any] | None = None,
     ) -> None:
@@ -77,7 +76,6 @@ class TaskUpdater:
         Args:
             state: The new state of the task.
             message: An optional message associated with the status update.
-            final: If True, indicates this is the final status update for the task.
             timestamp: Optional ISO 8601 datetime string. Defaults to current time.
             metadata: Optional metadata for extensions.
         """
@@ -88,7 +86,6 @@ class TaskUpdater:
                 )
             if state in self._terminal_states:
                 self._terminal_state_reached = True
-                final = True
 
             # Create proto timestamp from datetime
             ts = Timestamp()
@@ -108,7 +105,6 @@ class TaskUpdater:
                 TaskStatusUpdateEvent(
                     task_id=self.task_id,
                     context_id=self.context_id,
-                    final=final,
                     metadata=metadata,
                     status=status,
                 )
@@ -163,19 +159,20 @@ class TaskUpdater:
         await self.update_status(
             TaskState.TASK_STATE_COMPLETED,
             message=message,
-            final=True,
         )
 
     async def failed(self, message: Message | None = None) -> None:
         """Marks the task as failed and publishes a final status update."""
         await self.update_status(
-            TaskState.TASK_STATE_FAILED, message=message, final=True
+            TaskState.TASK_STATE_FAILED,
+            message=message,
         )
 
     async def reject(self, message: Message | None = None) -> None:
         """Marks the task as rejected and publishes a final status update."""
         await self.update_status(
-            TaskState.TASK_STATE_REJECTED, message=message, final=True
+            TaskState.TASK_STATE_REJECTED,
+            message=message,
         )
 
     async def submit(self, message: Message | None = None) -> None:
@@ -195,25 +192,21 @@ class TaskUpdater:
     async def cancel(self, message: Message | None = None) -> None:
         """Marks the task as cancelled and publishes a finalstatus update."""
         await self.update_status(
-            TaskState.TASK_STATE_CANCELLED, message=message, final=True
+            TaskState.TASK_STATE_CANCELED,
+            message=message,
         )
 
-    async def requires_input(
-        self, message: Message | None = None, final: bool = False
-    ) -> None:
+    async def requires_input(self, message: Message | None = None) -> None:
         """Marks the task as input required and publishes a status update."""
         await self.update_status(
             TaskState.TASK_STATE_INPUT_REQUIRED,
             message=message,
-            final=final,
         )
 
-    async def requires_auth(
-        self, message: Message | None = None, final: bool = False
-    ) -> None:
+    async def requires_auth(self, message: Message | None = None) -> None:
         """Marks the task as auth required and publishes a status update."""
         await self.update_status(
-            TaskState.TASK_STATE_AUTH_REQUIRED, message=message, final=final
+            TaskState.TASK_STATE_AUTH_REQUIRED, message=message
         )
 
     def new_agent_message(

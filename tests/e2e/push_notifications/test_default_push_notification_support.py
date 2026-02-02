@@ -25,7 +25,7 @@ from a2a.types.a2a_pb2 import (
     Part,
     PushNotificationConfig,
     Role,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -190,15 +190,13 @@ async def test_notification_triggering_after_config_change_e2e(
     # Set the push notification config.
     token = uuid.uuid4().hex
     await a2a_client.set_task_callback(
-        SetTaskPushNotificationConfigRequest(
-            parent=f'tasks/{task.id}',
+        CreateTaskPushNotificationConfigRequest(
+            task_id=f'tasks/{task.id}',
             config_id='after-config-change',
-            config=TaskPushNotificationConfig(
-                push_notification_config=PushNotificationConfig(
-                    id='after-config-change',
-                    url=f'{notifications_server}/notifications',
-                    token=token,
-                ),
+            config=PushNotificationConfig(
+                id='after-config-change',
+                url=f'{notifications_server}/notifications',
+                token=token,
             ),
         )
     )

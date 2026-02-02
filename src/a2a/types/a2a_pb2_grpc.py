@@ -46,9 +46,9 @@ class A2AServiceStub(object):
                 request_serializer=a2a__pb2.SubscribeToTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.StreamResponse.FromString,
                 _registered_method=True)
-        self.SetTaskPushNotificationConfig = channel.unary_unary(
-                '/a2a.v1.A2AService/SetTaskPushNotificationConfig',
-                request_serializer=a2a__pb2.SetTaskPushNotificationConfigRequest.SerializeToString,
+        self.CreateTaskPushNotificationConfig = channel.unary_unary(
+                '/a2a.v1.A2AService/CreateTaskPushNotificationConfig',
+                request_serializer=a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
                 response_deserializer=a2a__pb2.TaskPushNotificationConfig.FromString,
                 _registered_method=True)
         self.GetTaskPushNotificationConfig = channel.unary_unary(
@@ -114,14 +114,14 @@ class A2AServiceServicer(object):
 
     def SubscribeToTask(self, request, context):
         """SubscribeToTask allows subscribing to task updates for tasks not in terminal state.
-        Returns UnsupportedOperationError if task is in terminal state (completed, failed, cancelled, rejected).
+        Returns UnsupportedOperationError if task is in terminal state (completed, failed, canceled, rejected).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def SetTaskPushNotificationConfig(self, request, context):
-        """Set a push notification config for a task.
+    def CreateTaskPushNotificationConfig(self, request, context):
+        """Create a push notification config for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -188,9 +188,9 @@ def add_A2AServiceServicer_to_server(servicer, server):
                     request_deserializer=a2a__pb2.SubscribeToTaskRequest.FromString,
                     response_serializer=a2a__pb2.StreamResponse.SerializeToString,
             ),
-            'SetTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
-                    servicer.SetTaskPushNotificationConfig,
-                    request_deserializer=a2a__pb2.SetTaskPushNotificationConfigRequest.FromString,
+            'CreateTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
+                    servicer.CreateTaskPushNotificationConfig,
+                    request_deserializer=a2a__pb2.CreateTaskPushNotificationConfigRequest.FromString,
                     response_serializer=a2a__pb2.TaskPushNotificationConfig.SerializeToString,
             ),
             'GetTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
@@ -388,7 +388,7 @@ class A2AService(object):
             _registered_method=True)
 
     @staticmethod
-    def SetTaskPushNotificationConfig(request,
+    def CreateTaskPushNotificationConfig(request,
             target,
             options=(),
             channel_credentials=None,
@@ -401,8 +401,8 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/SetTaskPushNotificationConfig',
-            a2a__pb2.SetTaskPushNotificationConfigRequest.SerializeToString,
+            '/a2a.v1.A2AService/CreateTaskPushNotificationConfig',
+            a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
             a2a__pb2.TaskPushNotificationConfig.FromString,
             options,
             channel_credentials,

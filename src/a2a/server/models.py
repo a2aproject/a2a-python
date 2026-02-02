@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
 
 
 if TYPE_CHECKING:
@@ -65,7 +65,7 @@ class PydanticType(TypeDecorator[T], Generic[T]):
         if isinstance(value, ProtoMessage):
             return MessageToDict(value, preserving_proto_field_name=False)
         if isinstance(value, BaseModel):
-            return value.model_dump(mode='json')
+            return cast('BaseModel', value).model_dump(mode='json')
         return value  # type: ignore[return-value]
 
     def process_result_value(
@@ -112,7 +112,7 @@ class PydanticListType(TypeDecorator, Generic[T]):
                     MessageToDict(item, preserving_proto_field_name=False)
                 )
             elif isinstance(item, BaseModel):
-                result.append(item.model_dump(mode='json'))
+                result.append(cast('BaseModel', item).model_dump(mode='json'))
             else:
                 result.append(item)  # type: ignore[arg-type]
         return result

@@ -29,6 +29,7 @@ from a2a.server.tasks import (
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
@@ -37,8 +38,6 @@ from a2a.types.a2a_pb2 import (
     Message,
     PushNotificationConfig,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
-    StreamResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -57,10 +56,11 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 def _extract_task_id(resource_name: str) -> str:
-    """Extract task ID from a resource name like 'tasks/{task_id}' or 'tasks/{task_id}/...'."""
+    """Extract task ID from a resource name like 'tasks/{task_id}' or just returns '{task_id}'."""
     match = re.match(r'^tasks/([^/]+)', resource_name)
     if match:
         return match.group(1)
+    return resource_name
     # Fall back to the raw value if no match (for backwards compatibility)
     return resource_name
 
@@ -79,7 +79,7 @@ logger = logging.getLogger(__name__)
 
 TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELLED,
+    TaskState.TASK_STATE_CANCELED,
     TaskState.TASK_STATE_FAILED,
     TaskState.TASK_STATE_REJECTED,
 }
@@ -141,7 +141,7 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
-        task_id = _extract_task_id(params.name)
+        task_id = _extract_task_id(params.id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -158,7 +158,7 @@ class DefaultRequestHandler(RequestHandler):
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
-        task_id = _extract_task_id(params.name)
+        task_id = _extract_task_id(params.id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -206,7 +206,7 @@ class DefaultRequestHandler(RequestHandler):
                 )
             )
 
-        if result.status.state != TaskState.TASK_STATE_CANCELLED:
+        if result.status.state != TaskState.TASK_STATE_CANCELED:
             raise ServerError(
                 error=TaskNotCancelableError(
                     message=f'Task cannot be canceled - current state: {result.status.state}'
@@ -476,7 +476,7 @@ class DefaultRequestHandler(RequestHandler):
 
     async def on_set_task_push_notification_config(
         self,
-        params: SetTaskPushNotificationConfigRequest,
+        params: CreateTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/set'.
@@ -486,20 +486,20 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.parent)
+        task_id = _extract_task_id(params.task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
         await self._push_config_store.set_info(
             task_id,
-            params.config.push_notification_config,
+            params.config,
         )
 
-        # Build the response config with the proper name
         return TaskPushNotificationConfig(
-            name=f'{params.parent}/pushNotificationConfigs/{params.config_id}',
-            push_notification_config=params.config.push_notification_config,
+            task_id=task_id,
+            id=params.config_id,
+            push_notification_config=params.config,
         )
 
     async def on_get_task_push_notification_config(
@@ -514,8 +514,8 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.name)
-        config_id = _extract_config_id(params.name)
+        task_id = _extract_task_id(params.task_id)
+        config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -527,7 +527,8 @@ class DefaultRequestHandler(RequestHandler):
         for config in push_notification_configs:
             if config.id == config_id:
                 return TaskPushNotificationConfig(
-                    name=params.name,
+                    task_id=task_id,
+                    id=config.id,
                     push_notification_config=config,
                 )
 
@@ -539,13 +540,13 @@ class DefaultRequestHandler(RequestHandler):
         self,
         params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
-    ) -> AsyncGenerator[StreamResponse]:
+    ) -> AsyncGenerator[Event, None]:
         """Default handler for 'SubscribeToTask'.
 
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        task_id = _extract_task_id(params.name)
+        task_id = _extract_task_id(params.id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -587,7 +588,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.parent)
+        task_id = _extract_task_id(params.task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -599,7 +600,8 @@ class DefaultRequestHandler(RequestHandler):
         return ListTaskPushNotificationConfigResponse(
             configs=[
                 TaskPushNotificationConfig(
-                    name=f'tasks/{task_id}/pushNotificationConfigs/{config.id}',
+                    task_id=task_id,
+                    id=config.id,
                     push_notification_config=config,
                 )
                 for config in push_notification_config_list
@@ -618,8 +620,8 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.name)
-        config_id = _extract_config_id(params.name)
+        task_id = _extract_task_id(params.task_id)
+        config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())

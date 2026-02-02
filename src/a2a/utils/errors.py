@@ -5,7 +5,7 @@ as well as server exception classes.
 """
 
 
-class A2AException(Exception):
+class A2AError(Exception):
     """Base exception for A2A errors."""
 
     message: str = 'A2A Error'
@@ -16,54 +16,81 @@ class A2AException(Exception):
         super().__init__(self.message)
 
 
-class TaskNotFoundError(A2AException):
+class TaskNotFoundError(A2AError):
+    """Exception raised when a task is not found."""
+
     message = 'Task not found'
 
 
-class TaskNotCancelableError(A2AException):
+class TaskNotCancelableError(A2AError):
+    """Exception raised when a task cannot be canceled."""
+
     message = 'Task cannot be canceled'
 
 
-class PushNotificationNotSupportedError(A2AException):
+class PushNotificationNotSupportedError(A2AError):
+    """Exception raised when push notifications are not supported."""
+
     message = 'Push Notification is not supported'
 
 
-class UnsupportedOperationError(A2AException):
+class UnsupportedOperationError(A2AError):
+    """Exception raised when an operation is not supported."""
+
     message = 'This operation is not supported'
 
 
-class ContentTypeNotSupportedError(A2AException):
+class ContentTypeNotSupportedError(A2AError):
+    """Exception raised when the content type is incompatible."""
+
     message = 'Incompatible content types'
 
 
-class InternalError(A2AException):
+class InternalError(A2AError):
+    """Exception raised for internal server errors."""
+
     message = 'Internal error'
 
 
-class InvalidAgentResponseError(A2AException):
+class InvalidAgentResponseError(A2AError):
+    """Exception raised when the agent response is invalid."""
+
     message = 'Invalid agent response'
 
 
-class AuthenticatedExtendedCardNotConfiguredError(A2AException):
+class AuthenticatedExtendedCardNotConfiguredError(A2AError):
+    """Exception raised when the authenticated extended card is not configured."""
+
     message = 'Authenticated Extended Card is not configured'
 
 
-class InvalidParamsError(A2AException):
+class InvalidParamsError(A2AError):
+    """Exception raised when parameters are invalid."""
+
     message = 'Invalid params'
 
 
-class InvalidRequestError(A2AException):
+class InvalidRequestError(A2AError):
+    """Exception raised when the request is invalid."""
+
     message = 'Invalid Request'
 
 
-class MethodNotFoundError(A2AException):
+class MethodNotFoundError(A2AError):
+    """Exception raised when a method is not found."""
+
     message = 'Method not found'
+
+
+# For backward compatibility
+A2AException = A2AError
 
 
 # For backward compatibility if needed, or just aliases for clean refactor
 # We remove the Pydantic models here.
 
 __all__ = [
+    'A2AError',
     'A2AException',
     'A2AServerError',
     'AuthenticatedExtendedCardNotConfiguredError',

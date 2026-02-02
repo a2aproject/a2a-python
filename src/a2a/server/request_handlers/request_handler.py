@@ -5,6 +5,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
@@ -12,7 +13,6 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigResponse,
     Message,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -109,7 +109,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_set_task_push_notification_config(
         self,
-        params: SetTaskPushNotificationConfigRequest,
+        params: CreateTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/set' method.

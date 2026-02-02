@@ -32,7 +32,6 @@ def base_agent_card() -> AgentCard:
         skills=[],
         default_input_modes=[],
         default_output_modes=[],
-        protocol_versions=['v1'],
     )
 
 

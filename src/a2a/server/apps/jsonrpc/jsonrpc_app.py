@@ -24,6 +24,7 @@ from a2a.server.jsonrpc_models import (
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
+    JSONRPCError,
     MethodNotFoundError,
 )
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
@@ -33,13 +34,13 @@ from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
 )
 from a2a.utils.constants import (
@@ -49,6 +50,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import (
+    A2AException,
     MethodNotImplementedError,
     UnsupportedOperationError,
 )
@@ -164,7 +166,7 @@ class JSONRPCApplication(ABC):
         'SendStreamingMessage': SendMessageRequest,  # Same proto type as SendMessage
         'GetTask': GetTaskRequest,
         'CancelTask': CancelTaskRequest,
-        'SetTaskPushNotificationConfig': SetTaskPushNotificationConfigRequest,
+        'CreateTaskPushNotificationConfig': CreateTaskPushNotificationConfigRequest,
         'GetTaskPushNotificationConfig': GetTaskPushNotificationConfigRequest,
         'ListTaskPushNotificationConfig': ListTaskPushNotificationConfigRequest,
         'DeleteTaskPushNotificationConfig': DeleteTaskPushNotificationConfigRequest,
@@ -225,7 +227,9 @@ class JSONRPCApplication(ABC):
         self._max_content_length = max_content_length
 
     def _generate_error_response(
-        self, request_id: str | int | None, error: Exception
+        self,
+        request_id: str | int | None,
+        error: Exception | JSONRPCError | A2AException,
     ) -> JSONResponse:
         """Creates a Starlette JSONResponse for a JSON-RPC error.
 
@@ -238,6 +242,9 @@ class JSONRPCApplication(ABC):
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
+        if not isinstance(error, A2AException | JSONRPCError):
+            error = InternalError(message=str(error))
+
         response_data = build_error_response(request_id, error)
         error_info = response_data.get('error', {})
         code = error_info.get('code')
@@ -457,7 +464,7 @@ class JSONRPCApplication(ABC):
                 handler_result = await self.handler.on_get_task(
                     request_obj, context
                 )
-            case SetTaskPushNotificationConfigRequest():
+            case CreateTaskPushNotificationConfigRequest():
                 handler_result = (
                     await self.handler.set_push_notification_config(
                         request_obj,

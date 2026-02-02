@@ -1,5 +1,7 @@
 import logging
 
+from typing import Any, cast
+
 
 try:
     from sqlalchemy import Table, delete, select
@@ -126,7 +128,9 @@ class DatabaseTaskStore(TaskStore):
         if task_model.history:
             task.history.extend(task_model.history)
         if task_model.task_metadata:
-            task.metadata.update(task_model.task_metadata)
+            task.metadata.update(
+                cast('dict[str, Any]', task_model.task_metadata)
+            )
         return task
 
     async def save(

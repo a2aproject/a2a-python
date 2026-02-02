@@ -5,7 +5,12 @@ from a2a.extensions.common import (
     get_requested_extensions,
     update_extension_header,
 )
-from a2a.types.a2a_pb2 import AgentCapabilities, AgentInterface, AgentCard, AgentExtension
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentInterface,
+    AgentCard,
+    AgentExtension,
+)
 
 
 def test_get_requested_extensions():
@@ -34,7 +39,9 @@ def test_find_extension_by_uri():
         name='Test Agent',
         description='Test Agent Description',
         version='1.0',
-        supported_interfaces=[AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')],
+        supported_interfaces=[
+            AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')
+        ],
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
@@ -51,7 +58,9 @@ def test_find_extension_by_uri_no_extensions():
         name='Test Agent',
         description='Test Agent Description',
         version='1.0',
-        supported_interfaces=[AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')],
+        supported_interfaces=[
+            AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')
+        ],
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],

@@ -2,7 +2,7 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 
 if TYPE_CHECKING:
@@ -88,7 +88,9 @@ def rest_error_handler(
             error = e.error or InternalError(
                 message='Internal error due to unknown reason'
             )
-            http_code = A2AErrorToHttpStatus.get(type(error), 500)
+            http_code = A2AErrorToHttpStatus.get(
+                cast('_A2AErrorType', type(error)), 500
+            )
 
             log_level = (
                 logging.ERROR
@@ -99,13 +101,14 @@ def rest_error_handler(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
-                error.message,
+                getattr(error, 'message', str(error)),
                 ', Data=' + str(getattr(error, 'data', ''))
                 if getattr(error, 'data', None)
                 else '',
             )
             return JSONResponse(
-                content={'message': error.message}, status_code=http_code
+                content={'message': getattr(error, 'message', str(error))},
+                status_code=http_code,
             )
         except Exception:
             logger.exception('Unknown error occurred')
@@ -139,7 +142,7 @@ def rest_stream_error_handler(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
-                error.message,
+                getattr(error, 'message', str(error)),
                 ', Data=' + str(getattr(error, 'data', ''))
                 if getattr(error, 'data', None)
                 else '',

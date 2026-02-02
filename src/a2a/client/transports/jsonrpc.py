@@ -24,12 +24,12 @@ from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -278,14 +278,14 @@ class JsonRpcTransport(ClientTransport):
 
     async def set_task_callback(
         self,
-        request: SetTaskPushNotificationConfigRequest,
+        request: CreateTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
-            method='SetTaskPushNotificationConfig',
+            method='CreateTaskPushNotificationConfig',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -294,7 +294,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'SetTaskPushNotificationConfig',
+            'CreateTaskPushNotificationConfig',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,

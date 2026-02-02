@@ -262,17 +262,17 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
     )
-    async def SetTaskPushNotificationConfig(
+    async def CreateTaskPushNotificationConfig(
         self,
-        request: a2a_pb2.SetTaskPushNotificationConfigRequest,
+        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.TaskPushNotificationConfig:
-        """Handles the 'SetTaskPushNotificationConfig' gRPC method.
+        """Handles the 'CreateTaskPushNotificationConfig' gRPC method.
 
         Requires the agent to support push notifications.
 
         Args:
-            request: The incoming `SetTaskPushNotificationConfigRequest` object.
+            request: The incoming `CreateTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:

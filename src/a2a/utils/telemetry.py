@@ -61,6 +61,8 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+from typing_extensions import Self
+
 
 if TYPE_CHECKING:
     from opentelemetry.trace import SpanKind as SpanKindType
@@ -86,7 +88,7 @@ except ImportError:
         def __call__(self, *args: Any, **kwargs: Any) -> Any:
             return self
 
-        def __enter__(self) -> '_NoOp':
+        def __enter__(self) -> Self:
             return self
 
         def __exit__(self, *args: object, **kwargs: Any) -> None:

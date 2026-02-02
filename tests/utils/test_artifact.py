@@ -7,7 +7,6 @@ from google.protobuf.struct_pb2 import Struct
 
 from a2a.types.a2a_pb2 import (
     Artifact,
-    DataPart,
     Part,
 )
 from a2a.utils.artifact import (
@@ -79,9 +78,7 @@ class TestArtifact(unittest.TestCase):
         # Compare via MessageToDict for proto Struct
         from google.protobuf.json_format import MessageToDict
 
-        self.assertEqual(
-            MessageToDict(artifact.parts[0].data.data), sample_data
-        )
+        self.assertEqual(MessageToDict(artifact.parts[0].data), sample_data)
 
     def test_new_data_artifact_assigns_name_description(self):
         sample_data = {'info': 'some details'}

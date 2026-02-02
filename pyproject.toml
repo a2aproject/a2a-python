@@ -148,6 +148,7 @@ follow_imports = "skip"
 
 [tool.pyright]
 include = ["src"]
+ignore = ["src/a2a/types"]
 exclude = [
   "**/__pycache__",
   "**/dist",
@@ -155,11 +156,9 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
-  "src/a2a/types/a2a_pb2.py",
-  "src/a2a/types/a2a_pb2_grpc.py",
 ]
-reportMissingImports = "none"
-reportMissingModuleSource = "none"
+venvPath = "."
+venv = ".venv"
 
 [tool.coverage.run]
 branch = true

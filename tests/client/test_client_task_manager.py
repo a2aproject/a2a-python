@@ -100,7 +100,6 @@ async def test_process_with_status_update(
         status=TaskStatus(
             state=TaskState.TASK_STATE_COMPLETED, message=sample_message
         ),
-        final=True,
     )
     status_event = StreamResponse(status_update=status_update)
     updated_task = await task_manager.process(status_event)
@@ -145,7 +144,6 @@ async def test_process_creates_task_if_not_exists_on_status_update(
         task_id='new_task',
         context_id='new_context',
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-        final=False,
     )
     status_event = StreamResponse(status_update=status_update)
     updated_task = await task_manager.process(status_event)

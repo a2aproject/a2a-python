@@ -56,7 +56,7 @@ def create_sample_status_update(
         task_id=task_id,
         context_id=context_id,
         status=TaskStatus(state=status_state),
-        final=False,  # Typically false unless it's the very last update
+        # Typically false unless it's the very last update
     )
 
 

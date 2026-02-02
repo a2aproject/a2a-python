@@ -29,7 +29,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageConfiguration,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -276,7 +276,7 @@ class TestGetTask:
         mock_httpx_client.post.return_value = mock_response
 
         # Proto uses 'name' field for task identifier in request
-        request = GetTaskRequest(name=f'tasks/{task_id}')
+        request = GetTaskRequest(id=f'tasks/{task_id}')
         response = await transport.get_task(request)
 
         assert isinstance(response, Task)
@@ -303,7 +303,7 @@ class TestGetTask:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = GetTaskRequest(name=f'tasks/{task_id}', history_length=10)
+        request = GetTaskRequest(id=f'tasks/{task_id}', history_length=10)
         response = await transport.get_task(request)
 
         assert isinstance(response, Task)
@@ -332,11 +332,11 @@ class TestCancelTask:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = CancelTaskRequest(name=f'tasks/{task_id}')
+        request = CancelTaskRequest(id=f'tasks/{task_id}')
         response = await transport.cancel_task(request)
 
         assert isinstance(response, Task)
-        assert response.status.state == TaskState.TASK_STATE_CANCELLED
+        assert response.status.state == TaskState.TASK_STATE_CANCELED
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'CancelTask'
@@ -356,14 +356,16 @@ class TestTaskCallback:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'name': f'tasks/{task_id}/pushNotificationConfig',
+                'task_id': f'tasks/{task_id}',
+                'id': 'config-1',
             },
         }
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
         request = GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{task_id}/pushNotificationConfig'
+            task_id=f'tasks/{task_id}',
+            id='config-1',
         )
         response = await transport.get_task_callback(request)
 

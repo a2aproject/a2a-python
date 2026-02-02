@@ -111,7 +111,7 @@ async def test_get_task_success(
     mock_grpc_context: AsyncMock,
 ) -> None:
     """Test successful GetTask call."""
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
+    request_proto = a2a_pb2.GetTaskRequest(id='tasks/task-1')
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
@@ -133,7 +133,7 @@ async def test_get_task_not_found(
     mock_grpc_context: AsyncMock,
 ) -> None:
     """Test GetTask call when task is not found."""
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
+    request_proto = a2a_pb2.GetTaskRequest(id='tasks/task-1')
     mock_request_handler.on_get_task.return_value = None
 
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
@@ -150,7 +150,7 @@ async def test_cancel_task_server_error(
     mock_grpc_context: AsyncMock,
 ) -> None:
     """Test CancelTask call when handler raises ServerError."""
-    request_proto = a2a_pb2.CancelTaskRequest(name='tasks/task-1')
+    request_proto = a2a_pb2.CancelTaskRequest(id='tasks/task-1')
     error = ServerError(error=types.TaskNotCancelableError())
     mock_request_handler.on_cancel_task.side_effect = error
 
@@ -313,7 +313,7 @@ async def test_abort_context_error_mapping(  # noqa: PLR0913
     error_message_part: str,
 ) -> None:
     mock_request_handler.on_get_task.side_effect = server_error
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/any')
+    request_proto = a2a_pb2.GetTaskRequest(id='tasks/any')
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once()

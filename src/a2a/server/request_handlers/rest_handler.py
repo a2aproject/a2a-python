@@ -132,7 +132,7 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         task = await self.request_handler.on_cancel_task(
-            CancelTaskRequest(name=f'tasks/{task_id}'), context
+            CancelTaskRequest(id=task_id), context
         )
         if task:
             return MessageToDict(task)
@@ -160,7 +160,7 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         async for event in self.request_handler.on_subscribe_to_task(
-            SubscribeToTaskRequest(name=task_id), context
+            SubscribeToTaskRequest(id=task_id), context
         ):
             yield MessageToJson(proto_utils.to_stream_response(event))
 
@@ -181,7 +181,8 @@ class RESTHandler:
         task_id = request.path_params['id']
         push_id = request.path_params['push_id']
         params = GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{task_id}/pushNotificationConfigs/{push_id}'
+            task_id=f'tasks/{task_id}',
+            id=push_id,
         )
         config = (
             await self.request_handler.on_get_task_push_notification_config(
@@ -217,10 +218,10 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         body = await request.body()
-        params = a2a_pb2.SetTaskPushNotificationConfigRequest()
+        params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
         Parse(body, params)
         # Set the parent to the task resource name format
-        params.parent = f'tasks/{task_id}'
+        params.task_id = f'tasks/{task_id}'
         config = (
             await self.request_handler.on_set_task_push_notification_config(
                 params, context
@@ -245,7 +246,7 @@ class RESTHandler:
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
         history_length = int(history_length_str) if history_length_str else None
-        params = GetTaskRequest(name=task_id, history_length=history_length)
+        params = GetTaskRequest(id=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(task)

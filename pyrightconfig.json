@@ -1,0 +1,13 @@
+{
+    "venvPath": ".",
+    "venv": ".venv",
+    "include": [
+        "src"
+    ],
+    "exclude": [
+        "**/__pycache__",
+        "src/a2a/types"
+    ],
+    "reportMissingImports": false,
+    "reportMissingModuleSource": false
+}

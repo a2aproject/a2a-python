@@ -5,11 +5,11 @@ from a2a.client.middleware import ClientCallContext
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -65,7 +65,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def set_task_callback(
         self,
-        request: SetTaskPushNotificationConfigRequest,
+        request: CreateTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,

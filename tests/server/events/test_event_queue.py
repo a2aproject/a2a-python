@@ -112,7 +112,6 @@ async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
         task_id='task_123',
         context_id='session-xyz',
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-        final=True,
     )
     await event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event()

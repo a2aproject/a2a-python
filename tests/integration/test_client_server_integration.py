@@ -40,7 +40,7 @@ from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
     Role,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -73,11 +73,12 @@ GET_TASK_RESPONSE = Task(
 CANCEL_TASK_RESPONSE = Task(
     id='task-cancel-789',
     context_id='ctx-cancel-101',
-    status=TaskStatus(state=TaskState.TASK_STATE_CANCELLED),
+    status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
 )
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
-    name='tasks/task-callback-123/pushNotificationConfigs/pnc-abc',
+    task_id='tasks/task-callback-123',
+    id='pnc-abc',
     push_notification_config=PushNotificationConfig(
         id='pnc-abc', url='http://callback.example.com', token=''
     ),
@@ -87,7 +88,6 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     task_id='task-resub-456',
     context_id='ctx-resub-789',
     status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-    final=False,
 )
 
 
@@ -414,7 +414,7 @@ async def test_http_transport_get_task(
     handler = transport_setup.handler
 
     # Use GetTaskRequest with name (AIP resource format)
-    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
+    params = GetTaskRequest(id=f'tasks/{GET_TASK_RESPONSE.id}')
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
@@ -438,7 +438,7 @@ async def test_grpc_transport_get_task(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use GetTaskRequest with name (AIP resource format)
-    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
+    params = GetTaskRequest(id=f'tasks/{GET_TASK_RESPONSE.id}')
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
@@ -465,7 +465,7 @@ async def test_http_transport_cancel_task(
     handler = transport_setup.handler
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=f'tasks/{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -489,7 +489,7 @@ async def test_grpc_transport_cancel_task(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=f'tasks/{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -515,16 +515,16 @@ async def test_http_transport_set_task_callback(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    # Create SetTaskPushNotificationConfigRequest with required fields
-    params = SetTaskPushNotificationConfigRequest(
-        parent='tasks/task-callback-123',
+    # Create CreateTaskPushNotificationConfigRequest with required fields
+    params = CreateTaskPushNotificationConfigRequest(
+        task_id='tasks/task-callback-123',
         config_id='pnc-abc',
-        config=CALLBACK_CONFIG,
+        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.set_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.id == CALLBACK_CONFIG.id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -552,16 +552,16 @@ async def test_grpc_transport_set_task_callback(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # Create SetTaskPushNotificationConfigRequest with required fields
-    params = SetTaskPushNotificationConfigRequest(
-        parent='tasks/task-callback-123',
+    # Create CreateTaskPushNotificationConfigRequest with required fields
+    params = CreateTaskPushNotificationConfigRequest(
+        task_id='tasks/task-callback-123',
         config_id='pnc-abc',
-        config=CALLBACK_CONFIG,
+        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.set_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.id == CALLBACK_CONFIG.id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -593,11 +593,13 @@ async def test_http_transport_get_task_callback(
     handler = transport_setup.handler
 
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
-    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
+    params = GetTaskPushNotificationConfigRequest(
+        task_id=CALLBACK_CONFIG.task_id, id=CALLBACK_CONFIG.id
+    )
     result = await transport.get_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.task_id == CALLBACK_CONFIG.task_id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -626,11 +628,13 @@ async def test_grpc_transport_get_task_callback(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
-    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
+    params = GetTaskPushNotificationConfigRequest(
+        task_id=CALLBACK_CONFIG.task_id, id=CALLBACK_CONFIG.id
+    )
     result = await transport.get_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.task_id == CALLBACK_CONFIG.task_id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -662,7 +666,7 @@ async def test_http_transport_resubscribe(
     handler = transport_setup.handler
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
@@ -688,7 +692,7 @@ async def test_grpc_transport_resubscribe(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 

@@ -17,11 +17,11 @@ from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -229,10 +229,11 @@ class RestTransport(ClientTransport):
             context,
         )
 
-        del params['name']  # name is part of the URL path, not query params
+        if 'id' in params:
+            del params['id']  # id is part of the URL path, not query params
 
         response_data = await self._send_get_request(
-            f'/v1/{request.name}',
+            f'/v1/{request.id}',
             params,
             modified_kwargs,
         )
@@ -258,14 +259,14 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_post_request(
-            f'/v1/{request.name}:cancel', payload, modified_kwargs
+            f'/v1/{request.id}:cancel', payload, modified_kwargs
         )
         response: Task = ParseDict(response_data, Task())
         return response
 
     async def set_task_callback(
         self,
-        request: SetTaskPushNotificationConfigRequest,
+        request: CreateTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -280,7 +281,7 @@ class RestTransport(ClientTransport):
             payload, modified_kwargs, context
         )
         response_data = await self._send_post_request(
-            f'/v1/{request.parent}/pushNotificationConfigs',
+            f'/v1/{request.task_id}/pushNotificationConfigs',
             payload,
             modified_kwargs,
         )
@@ -307,9 +308,12 @@ class RestTransport(ClientTransport):
             modified_kwargs,
             context,
         )
-        del params['name']  # name is part of the URL path, not query params
+        if 'id' in params:
+            del params['id']
+        if 'task_id' in params:
+            del params['task_id']
         response_data = await self._send_get_request(
-            f'/v1/{request.name}',
+            f'/v1/{request.task_id}/pushNotificationConfigs/{request.id}',
             params,
             modified_kwargs,
         )
@@ -335,7 +339,7 @@ class RestTransport(ClientTransport):
         async with aconnect_sse(
             self.httpx_client,
             'GET',
-            f'{self.url}/v1/{request.name}:subscribe',
+            f'{self.url}/v1/{request.id}:subscribe',
             **modified_kwargs,
         ) as event_source:
             try:
