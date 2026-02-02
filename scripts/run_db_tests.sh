@@ -96,7 +96,7 @@ trap cleanup EXIT
 echo "Running integration tests..."
 cd "$PROJECT_ROOT"
 
-uv run --extra all pytest -v \
+uv run pytest -v \
     tests/server/tasks/test_database_task_store.py \
     tests/server/tasks/test_database_push_notification_config_store.py \
     "${PYTEST_ARGS[@]}"
