@@ -147,6 +147,18 @@ def sample_agent_card() -> types.AgentCard:
                 )
             ),
         },
+        signatures=[
+            types.AgentCardSignature(
+                protected='protected_test',
+                signature='signature_test',
+                header={'alg': 'ES256'},
+            ),
+            types.AgentCardSignature(
+                protected='protected_val',
+                signature='signature_val',
+                header={'alg': 'ES256', 'kid': 'unique-key-identifier-123'},
+            ),
+        ],
     )
 
 
@@ -615,7 +627,7 @@ class TestProtoUtils:
         assert roundtrip_task.status == types.TaskStatus(
             state=types.TaskState.working, message=sample_message
         )
-        assert roundtrip_task.history == [sample_message]
+        assert roundtrip_task.history == sample_task.history
         assert roundtrip_task.artifacts == [
             types.Artifact(
                 artifact_id='art-1',
@@ -628,3 +640,142 @@ class TestProtoUtils:
             )
         ]
         assert roundtrip_task.metadata == {'source': 'test'}
+
+    def test_agent_card_conversion_roundtrip(
+        self, sample_agent_card: types.AgentCard
+    ):
+        """Test conversion of AgentCard to proto and back."""
+        proto_card = proto_utils.ToProto.agent_card(sample_agent_card)
+        assert isinstance(proto_card, a2a_pb2.AgentCard)
+
+        roundtrip_card = proto_utils.FromProto.agent_card(proto_card)
+        assert roundtrip_card.name == 'Test Agent'
+        assert roundtrip_card.description == 'A test agent'
+        assert roundtrip_card.url == 'http://localhost'
+        assert roundtrip_card.version == '1.0.0'
+        assert roundtrip_card.capabilities == types.AgentCapabilities(
+            extensions=[], streaming=True, push_notifications=True
+        )
+        assert roundtrip_card.default_input_modes == ['text/plain']
+        assert roundtrip_card.default_output_modes == ['text/plain']
+        assert roundtrip_card.skills == [
+            types.AgentSkill(
+                id='skill1',
+                name='Test Skill',
+                description='A test skill',
+                tags=['test'],
+                examples=[],
+                input_modes=[],
+                output_modes=[],
+            )
+        ]
+        assert roundtrip_card.provider == types.AgentProvider(
+            organization='Test Org', url='http://test.org'
+        )
+        assert roundtrip_card.security == [{'oauth_scheme': ['read', 'write']}]
+
+        # Normalized version of security_schemes. None fields are filled with defaults.
+        expected_security_schemes = {
+            'oauth_scheme': types.SecurityScheme(
+                root=types.OAuth2SecurityScheme(
+                    description='',
+                    flows=types.OAuthFlows(
+                        client_credentials=types.ClientCredentialsOAuthFlow(
+                            refresh_url='',
+                            scopes={
+                                'write': 'Write access',
+                                'read': 'Read access',
+                            },
+                            token_url='http://token.url',
+                        ),
+                    ),
+                )
+            ),
+            'apiKey': types.SecurityScheme(
+                root=types.APIKeySecurityScheme(
+                    description='',
+                    in_=types.In.header,
+                    name='X-API-KEY',
+                )
+            ),
+            'httpAuth': types.SecurityScheme(
+                root=types.HTTPAuthSecurityScheme(
+                    bearer_format='',
+                    description='',
+                    scheme='bearer',
+                )
+            ),
+            'oidc': types.SecurityScheme(
+                root=types.OpenIdConnectSecurityScheme(
+                    description='',
+                    open_id_connect_url='http://oidc.url',
+                )
+            ),
+        }
+        assert roundtrip_card.security_schemes == expected_security_schemes
+        assert roundtrip_card.signatures == [
+            types.AgentCardSignature(
+                protected='protected_test',
+                signature='signature_test',
+                header={'alg': 'ES256'},
+            ),
+            types.AgentCardSignature(
+                protected='protected_val',
+                signature='signature_val',
+                header={'alg': 'ES256', 'kid': 'unique-key-identifier-123'},
+            ),
+        ]
+
+    @pytest.mark.parametrize(
+        'signature_data, expected_data',
+        [
+            (
+                types.AgentCardSignature(
+                    protected='protected_val',
+                    signature='signature_val',
+                    header={'alg': 'ES256'},
+                ),
+                types.AgentCardSignature(
+                    protected='protected_val',
+                    signature='signature_val',
+                    header={'alg': 'ES256'},
+                ),
+            ),
+            (
+                types.AgentCardSignature(
+                    protected='protected_val',
+                    signature='signature_val',
+                    header=None,
+                ),
+                types.AgentCardSignature(
+                    protected='protected_val',
+                    signature='signature_val',
+                    header={},
+                ),
+            ),
+            (
+                types.AgentCardSignature(
+                    protected='',
+                    signature='',
+                    header={},
+                ),
+                types.AgentCardSignature(
+                    protected='',
+                    signature='',
+                    header={},
+                ),
+            ),
+        ],
+    )
+    def test_agent_card_signature_conversion_roundtrip(
+        self, signature_data, expected_data
+    ):
+        """Test conversion of AgentCardSignature to proto and back."""
+        proto_signature = proto_utils.ToProto.agent_card_signature(
+            signature_data
+        )
+        assert isinstance(proto_signature, a2a_pb2.AgentCardSignature)
+        roundtrip_signature = proto_utils.FromProto.agent_card_signature(
+            proto_signature
+        )
+        assert roundtrip_signature == expected_data

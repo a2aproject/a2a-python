@@ -35,7 +35,7 @@ from a2a.types import (
 @pytest.fixture(scope='module')
 def notifications_server():
     """
-    Starts a simple push notifications injesting server and yields its URL.
+    Starts a simple push notifications ingesting server and yields its URL.
     """
     host = '127.0.0.1'
     port = find_free_port()
@@ -148,7 +148,7 @@ async def test_notification_triggering_after_config_change_e2e(
     notifications_server: str, agent_server: str, http_client: httpx.AsyncClient
 ):
     """
-    Tests notification triggering after setting the push notificaiton config in a seperate call.
+    Tests notification triggering after setting the push notification config in a separate call.
     """
     # Configure an A2A client without a push notification config.
     a2a_client = ClientFactory(
