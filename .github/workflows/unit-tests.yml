@@ -2,7 +2,7 @@
 name: Run Unit Tests
 on:
   pull_request:
-    branches: [main, "ishymko/tests-base"]
+    branches: [main, 1.0-dev]
 permissions:
   contents: read
 jobs:
