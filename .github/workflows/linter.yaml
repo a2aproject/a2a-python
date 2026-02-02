@@ -2,7 +2,7 @@
 name: Lint Code Base
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 1.0-dev]
 permissions:
   contents: read
 jobs:
