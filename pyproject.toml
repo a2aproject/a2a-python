@@ -89,7 +89,6 @@ style = "pep440"
 dev = [
   "datamodel-code-generator>=0.30.0",
   "mypy>=1.15.0",
-  "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
@@ -101,14 +100,12 @@ dev = [
   "types-protobuf",
   "types-requests",
   "pre-commit",
-  "fastapi>=0.115.2",
-  "sse-starlette",
-  "starlette",
   "pyupgrade",
   "autoflake",
   "no_implicit_optional",
   "trio",
   "uvicorn>=0.35.0",
+  "a2a-sdk[all]",
 ]
 
 [[tool.uv.index]]
@@ -116,6 +113,9 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
+[tool.uv.sources]
+a2a-sdk = { workspace = true }
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
