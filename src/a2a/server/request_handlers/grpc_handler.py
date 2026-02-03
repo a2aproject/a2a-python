@@ -3,7 +3,7 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import AsyncIterable, Awaitable, Sequence
 
 
 try:
@@ -34,7 +34,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import AgentCard, TaskNotFoundError
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
-from a2a.utils.helpers import validate, validate_async_generator
+from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 
 
 logger = logging.getLogger(__name__)
@@ -89,7 +89,8 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         agent_card: AgentCard,
         request_handler: RequestHandler,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
     ):
         """Initializes the GrpcHandler.
 
@@ -339,7 +340,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """Get the agent card for the agent served."""
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = self.card_modifier(card_to_serve)
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
         return proto_utils.ToProto.agent_card(card_to_serve)
 
     async def abort_context(

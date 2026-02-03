@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 
@@ -72,9 +72,10 @@ class A2AFastAPIApplication(JSONRPCApplication):
         http_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB

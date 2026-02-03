@@ -5,8 +5,8 @@ import inspect
 import json
 import logging
 
-from collections.abc import Callable
-from typing import Any
+from collections.abc import Awaitable, Callable
+from typing import Any, TypeVar
 from uuid import uuid4
 
 from a2a.types import (
@@ -22,6 +22,9 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError, UnsupportedOperationError
 from a2a.utils.telemetry import trace_function
+
+
+T = TypeVar('T')
 
 
 logger = logging.getLogger(__name__)
@@ -368,3 +371,10 @@ def canonicalize_agent_card(agent_card: AgentCard) -> str:
     # Recursively remove empty values
     cleaned_dict = _clean_empty(card_dict)
     return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)
+
+
+async def maybe_await(value: T | Awaitable[T]) -> T:
+    """Awaits a value if it's awaitable, otherwise simply provides it back."""
+    if inspect.isawaitable(value):
+        return await value
+    return value
