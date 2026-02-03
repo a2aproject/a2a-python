@@ -1,6 +1,6 @@
 ## Running the tests
 
-1. Run all tests (including those requiring optional dependencies like grpc):
+1. Run all tests (excluding those requiring real DBs, see item 3):
     ```bash
     uv run pytest
     ```
