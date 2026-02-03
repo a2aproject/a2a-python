@@ -66,13 +66,12 @@ telemetry = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "a2a-sdk", extra = ["all"] },
     { name = "autoflake" },
     { name = "datamodel-code-generator" },
-    { name = "fastapi" },
     { name = "mypy" },
     { name = "no-implicit-optional" },
     { name = "pre-commit" },
-    { name = "pyjwt" },
     { name = "pytest" },
     { name = "pytest-asyncio" },
     { name = "pytest-cov" },
@@ -81,8 +80,6 @@ dev = [
     { name = "pyupgrade" },
     { name = "respx" },
     { name = "ruff" },
-    { name = "sse-starlette" },
-    { name = "starlette" },
     { name = "trio" },
     { name = "types-protobuf" },
     { name = "types-requests" },
@@ -131,13 +128,12 @@ provides-extras = ["all", "encryption", "grpc", "http-server", "mysql", "postgre
 
 [package.metadata.requires-dev]
 dev = [
+    { name = "a2a-sdk", extras = ["all"], editable = "." },
     { name = "autoflake" },
     { name = "datamodel-code-generator", specifier = ">=0.30.0" },
-    { name = "fastapi", specifier = ">=0.115.2" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "no-implicit-optional" },
     { name = "pre-commit" },
-    { name = "pyjwt", specifier = ">=2.0.0" },
     { name = "pytest", specifier = ">=8.3.5" },
     { name = "pytest-asyncio", specifier = ">=0.26.0" },
     { name = "pytest-cov", specifier = ">=6.1.1" },
@@ -146,8 +142,6 @@ dev = [
     { name = "pyupgrade" },
     { name = "respx", specifier = ">=0.20.2" },
     { name = "ruff", specifier = ">=0.12.8" },
-    { name = "sse-starlette" },
-    { name = "starlette" },
     { name = "trio" },
     { name = "types-protobuf" },
     { name = "types-requests" },
