@@ -339,7 +339,7 @@ class RestTransport(ClientTransport):
         async with aconnect_sse(
             self.httpx_client,
             'GET',
-            f'{self.url}/v1/{request.id}:subscribe',
+            f'{self.url}/v1/tasks/{request.id}:subscribe',
             **modified_kwargs,
         ) as event_source:
             try:
