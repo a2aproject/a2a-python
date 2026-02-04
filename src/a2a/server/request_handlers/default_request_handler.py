@@ -486,7 +486,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = params.task_id
+        task_id = _extract_task_id(params.task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -514,7 +514,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = params.task_id
+        task_id = _extract_task_id(params.task_id)
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -546,7 +546,7 @@ class DefaultRequestHandler(RequestHandler):
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        task_id = params.id
+        task_id = _extract_task_id(params.id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -588,7 +588,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = params.task_id
+        task_id = _extract_task_id(params.task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())

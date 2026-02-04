@@ -1853,7 +1853,7 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
 
 @pytest.mark.asyncio
 async def test_set_task_push_notification_config_no_notifier():
-    """Test on_set_task_push_notification_config when _push_config_store is None."""
+    """Test on_create_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
@@ -1867,7 +1867,7 @@ async def test_set_task_push_notification_config_no_notifier():
     from a2a.utils.errors import ServerError  # Local import
 
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_set_task_push_notification_config(
+        await request_handler.on_create_task_push_notification_config(
             params, create_server_call_context()
         )
     assert isinstance(exc_info.value.error, UnsupportedOperationError)
@@ -1875,7 +1875,7 @@ async def test_set_task_push_notification_config_no_notifier():
 
 @pytest.mark.asyncio
 async def test_set_task_push_notification_config_task_not_found():
-    """Test on_set_task_push_notification_config when task is not found."""
+    """Test on_create_task_push_notification_config when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
     mock_push_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -1896,7 +1896,7 @@ async def test_set_task_push_notification_config_task_not_found():
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_set_task_push_notification_config(
+        await request_handler.on_create_task_push_notification_config(
             params, context
         )
 
@@ -2010,7 +2010,7 @@ async def test_get_task_push_notification_config_info_with_config():
         ),
     )
     context = create_server_call_context()
-    await request_handler.on_set_task_push_notification_config(
+    await request_handler.on_create_task_push_notification_config(
         set_config_params, context
     )
 
@@ -2049,7 +2049,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
-    await request_handler.on_set_task_push_notification_config(
+    await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
     )
 
@@ -2292,7 +2292,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
-    await request_handler.on_set_task_push_notification_config(
+    await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
     )
 
@@ -2301,7 +2301,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         config_id='default',
         config=PushNotificationConfig(url='http://2.example.com'),
     )
-    await request_handler.on_set_task_push_notification_config(
+    await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
     )
 

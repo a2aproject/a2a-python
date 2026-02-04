@@ -533,7 +533,9 @@ def test_set_push_notification_config(
             url='https://example.com', token='secret-token'
         ),
     )
-    handler.on_set_task_push_notification_config.return_value = task_push_config
+    handler.on_create_task_push_notification_config.return_value = (
+        task_push_config
+    )
 
     # Send request
     response = client.post(
@@ -559,7 +561,7 @@ def test_set_push_notification_config(
     assert data['result']['pushNotificationConfig']['token'] == 'secret-token'
 
     # Verify handler was called
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
 
 def test_get_push_notification_config(
