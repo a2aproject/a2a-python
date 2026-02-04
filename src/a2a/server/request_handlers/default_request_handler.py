@@ -329,13 +329,7 @@ class DefaultRequestHandler(RequestHandler):
             )
 
         except Exception:
-            logger.exception('Agent execution failed')
-            # If the consumer fails, we must cancel the producer to prevent it from hanging
-            # on queue operations (e.g., waiting for the queue to drain).
-            producer_task.cancel()
-            # Force the queue to close immediately, discarding any pending events.
-            # This ensures that any producers waiting on the queue are unblocked.
-            await queue.close(immediate=True)
+            await self._handle_execution_failure(producer_task, queue)
             raise
         finally:
             if interrupted_or_non_blocking:
@@ -400,9 +394,7 @@ class DefaultRequestHandler(RequestHandler):
             raise
         except Exception:
             # If the consumer fails (e.g. database error), we must cleanup.
-            logger.exception('Agent execution failed during streaming')
-            producer_task.cancel()
-            await queue.close(immediate=True)
+            await self._handle_execution_failure(producer_task, queue)
             raise
         finally:
             cleanup_task = asyncio.create_task(
@@ -440,6 +432,18 @@ class DefaultRequestHandler(RequestHandler):
                 self._background_tasks.discard(completed)
 
         task.add_done_callback(_on_done)
+
+    async def _handle_execution_failure(
+        self, producer_task: asyncio.Task, queue: EventQueue
+    ) -> None:
+        """Cancels the producer and closes the queue immediately on failure."""
+        logger.exception('Agent execution failed')
+        # If the consumer fails, we must cancel the producer to prevent it from hanging
+        # on queue operations (e.g., waiting for the queue to drain).
+        producer_task.cancel()
+        # Force the queue to close immediately, discarding any pending events.
+        # This ensures that any producers waiting on the queue are unblocked.
+        await queue.close(immediate=True)
 
     async def _cleanup_producer(
         self,
