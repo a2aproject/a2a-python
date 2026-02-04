@@ -24,7 +24,11 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
     TextPart,
+    FilePart,
+    DataPart,
+    InvalidParamsError,
 )
+from a2a.utils.errors import ServerError
 
 
 JSONRPC_URL = '/a2a/jsonrpc'
@@ -66,6 +70,41 @@ class SUTAgentExecutor(AgentExecutor):
         user_message = context.message
         task_id = context.task_id
         context_id = context.context_id
+
+        # Validate message parts
+        if not user_message.parts:
+            # Empty parts array is invalid
+            raise ServerError(
+                error=InvalidParamsError(message='Message must contain at least one part')
+            )
+
+        for part in user_message.parts:
+            # Unwrap RootModel if present to get the actual part
+            actual_part = part
+            if hasattr(part, 'root'):
+                 actual_part = part.root
+
+            # Check if it's a known part type
+            if not isinstance(actual_part, (TextPart, FilePart, DataPart)):
+                # If we received something that isn't a known part, treating it as unsupported.
+                # Enqueue a failed status event.
+                await event_queue.enqueue_event(TaskStatusUpdateEvent(
+                    task_id=task_id,
+                    context_id=context_id,
+                    status=TaskStatus(
+                        state=TaskState.failed,
+                        message=Message(
+                            role='agent',
+                            message_id=str(uuid.uuid4()),
+                            parts=[TextPart(text='Unsupported message part type')],
+                            task_id=task_id,
+                            context_id=context_id,
+                        ),
+                        timestamp=datetime.now(timezone.utc).isoformat(),
+                    ),
+                    final=True,
+                ))
+                return
 
         self.running_tasks.add(task_id)
 
