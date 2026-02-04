@@ -2733,6 +2733,7 @@ async def test_on_message_send_stream_consumer_error_cancels_producer_and_closes
     # Verify queue closed immediately
     mock_queue.close.assert_awaited_with(immediate=True)
 
+
 @pytest.mark.asyncio
 async def test_on_message_send_consumer_error_cancels_producer_and_closes_queue():
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled."""
@@ -2769,7 +2770,9 @@ async def test_on_message_send_consumer_error_cancels_producer_and_closes_queue(
 
     # Mock ResultAggregator to raise exception
     mock_result_aggregator_instance = MagicMock(spec=ResultAggregator)
-    mock_result_aggregator_instance.consume_and_break_on_interrupt.side_effect = ValueError('Consumer failed!')
+    mock_result_aggregator_instance.consume_and_break_on_interrupt.side_effect = ValueError(
+        'Consumer failed!'
+    )
 
     # Capture the producer task to verify cancellation
     captured_producer_task = None
