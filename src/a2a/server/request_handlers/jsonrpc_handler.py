@@ -341,10 +341,8 @@ class JSONRPCHandler:
         request_id = self._get_request_id(context)
         try:
             # Pass the full request to the handler
-            result_config = (
-                await self.request_handler.on_set_task_push_notification_config(
-                    request, context
-                )
+            result_config = await self.request_handler.on_create_task_push_notification_config(
+                request, context
             )
             result = MessageToDict(
                 result_config, preserving_proto_field_name=False

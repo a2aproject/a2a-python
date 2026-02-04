@@ -65,7 +65,7 @@ class PydanticType(TypeDecorator[T], Generic[T]):
         if isinstance(value, ProtoMessage):
             return MessageToDict(value, preserving_proto_field_name=False)
         if isinstance(value, BaseModel):
-            return cast('BaseModel', value).model_dump(mode='json')
+            return value.model_dump(mode='json')
         return value  # type: ignore[return-value]
 
     def process_result_value(

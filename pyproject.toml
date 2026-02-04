@@ -148,7 +148,6 @@ follow_imports = "skip"
 
 [tool.pyright]
 include = ["src"]
-ignore = ["src/a2a/types"]
 exclude = [
   "**/__pycache__",
   "**/dist",
@@ -156,6 +155,7 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
+  "src/a2a/types",
 ]
 venvPath = "."
 venv = ".venv"

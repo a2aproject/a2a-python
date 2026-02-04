@@ -177,7 +177,7 @@ def sample_task_push_notification_config(
 ) -> TaskPushNotificationConfig:
     """Provides a sample TaskPushNotificationConfig object."""
     return TaskPushNotificationConfig(
-        task_id='tasks/task-1',
+        task_id='task-1',
         id=sample_push_notification_config.id,
         push_notification_config=sample_push_notification_config,
     )

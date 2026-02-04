@@ -77,7 +77,7 @@ CANCEL_TASK_RESPONSE = Task(
 )
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
-    task_id='tasks/task-callback-123',
+    task_id='task-callback-123',
     id='pnc-abc',
     push_notification_config=PushNotificationConfig(
         id='pnc-abc', url='http://callback.example.com', token=''
@@ -120,7 +120,9 @@ def mock_request_handler() -> AsyncMock:
     # Configure other methods
     handler.on_get_task.return_value = GET_TASK_RESPONSE
     handler.on_cancel_task.return_value = CANCEL_TASK_RESPONSE
-    handler.on_set_task_push_notification_config.return_value = CALLBACK_CONFIG
+    handler.on_create_task_push_notification_config.return_value = (
+        CALLBACK_CONFIG
+    )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
 
     async def resubscribe_side_effect(*args, **kwargs):
@@ -414,7 +416,7 @@ async def test_http_transport_get_task(
     handler = transport_setup.handler
 
     # Use GetTaskRequest with name (AIP resource format)
-    params = GetTaskRequest(id=f'tasks/{GET_TASK_RESPONSE.id}')
+    params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
@@ -465,7 +467,7 @@ async def test_http_transport_cancel_task(
     handler = transport_setup.handler
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(id=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=CANCEL_TASK_RESPONSE.id)
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -489,7 +491,7 @@ async def test_grpc_transport_cancel_task(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(id=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=CANCEL_TASK_RESPONSE.id)
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -517,7 +519,7 @@ async def test_http_transport_set_task_callback(
 
     # Create CreateTaskPushNotificationConfigRequest with required fields
     params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task-callback-123',
+        task_id='task-callback-123',
         config_id='pnc-abc',
         config=CALLBACK_CONFIG.push_notification_config,
     )
@@ -533,7 +535,7 @@ async def test_http_transport_set_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -554,7 +556,7 @@ async def test_grpc_transport_set_task_callback(
 
     # Create CreateTaskPushNotificationConfigRequest with required fields
     params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task-callback-123',
+        task_id='task-callback-123',
         config_id='pnc-abc',
         config=CALLBACK_CONFIG.push_notification_config,
     )
@@ -570,7 +572,7 @@ async def test_grpc_transport_set_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
 
@@ -666,7 +668,7 @@ async def test_http_transport_resubscribe(
     handler = transport_setup.handler
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(id=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=RESUBSCRIBE_EVENT.task_id)
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
@@ -692,7 +694,7 @@ async def test_grpc_transport_resubscribe(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(id=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=RESUBSCRIBE_EVENT.task_id)
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 

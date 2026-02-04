@@ -22,7 +22,7 @@ def get_text_parts(parts: Sequence[Part]) -> list[str]:
     return [part.text for part in parts if part.HasField('text')]
 
 
-def get_data_parts(parts: Sequence[Part]) -> list[dict[str, Any]]:
+def get_data_parts(parts: Sequence[Part]) -> list[Any]:
     """Extracts dictionary data from all data Parts in a list of Parts.
 
     Args:

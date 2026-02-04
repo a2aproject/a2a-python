@@ -233,7 +233,7 @@ class RestTransport(ClientTransport):
             del params['id']  # id is part of the URL path, not query params
 
         response_data = await self._send_get_request(
-            f'/v1/{request.id}',
+            f'/v1/tasks/{request.id}',
             params,
             modified_kwargs,
         )
@@ -259,7 +259,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_post_request(
-            f'/v1/{request.id}:cancel', payload, modified_kwargs
+            f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -281,7 +281,7 @@ class RestTransport(ClientTransport):
             payload, modified_kwargs, context
         )
         response_data = await self._send_post_request(
-            f'/v1/{request.task_id}/pushNotificationConfigs',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
             payload,
             modified_kwargs,
         )
@@ -313,7 +313,7 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
         response_data = await self._send_get_request(
-            f'/v1/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             params,
             modified_kwargs,
         )
@@ -339,7 +339,7 @@ class RestTransport(ClientTransport):
         async with aconnect_sse(
             self.httpx_client,
             'GET',
-            f'{self.url}/v1/{request.id}:subscribe',
+            f'{self.url}/v1/tasks/{request.id}:subscribe',
             **modified_kwargs,
         ) as event_source:
             try:

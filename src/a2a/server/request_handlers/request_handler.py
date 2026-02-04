@@ -107,12 +107,12 @@ class RequestHandler(ABC):
         yield
 
     @abstractmethod
-    async def on_set_task_push_notification_config(
+    async def on_create_task_push_notification_config(
         self,
         params: CreateTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
-        """Handles the 'tasks/pushNotificationConfig/set' method.
+        """Handles the 'tasks/pushNotificationConfig/create' method.
 
         Sets or updates the push notification configuration for a task.
 

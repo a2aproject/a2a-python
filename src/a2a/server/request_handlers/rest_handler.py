@@ -181,7 +181,7 @@ class RESTHandler:
         task_id = request.path_params['id']
         push_id = request.path_params['push_id']
         params = GetTaskPushNotificationConfigRequest(
-            task_id=f'tasks/{task_id}',
+            task_id=task_id,
             id=push_id,
         )
         config = (
@@ -221,9 +221,9 @@ class RESTHandler:
         params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
         Parse(body, params)
         # Set the parent to the task resource name format
-        params.task_id = f'tasks/{task_id}'
+        params.task_id = task_id
         config = (
-            await self.request_handler.on_set_task_push_notification_config(
+            await self.request_handler.on_create_task_push_notification_config(
                 params, context
             )
         )

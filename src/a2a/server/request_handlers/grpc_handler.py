@@ -284,11 +284,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            return (
-                await self.request_handler.on_set_task_push_notification_config(
-                    request,
-                    server_context,
-                )
+            return await self.request_handler.on_create_task_push_notification_config(
+                request,
+                server_context,
             )
         except ServerError as e:
             await self.abort_context(e, context)
