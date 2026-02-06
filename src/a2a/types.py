@@ -1394,7 +1394,7 @@ class Artifact(A2ABaseModel):
     """
     An optional, human-readable name for the artifact.
     """
-    parts: list[Part]
+    parts: list[Part] = Field(min_length=1)
     """
     An array of content parts that make up the artifact.
     """
