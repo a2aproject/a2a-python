@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import Field, RootModel
+from pydantic import Field, RootModel, field_validator
 
 from a2a._base import A2ABaseModel
 
@@ -962,6 +962,13 @@ class TaskQueryParams(A2ABaseModel):
     Optional metadata associated with the request.
     """
 
+    @field_validator('history_length')
+    @classmethod
+    def validate_history_length(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError('history_length must be non-negative')
+        return v
+
 
 class TaskResubscriptionRequest(A2ABaseModel):
     """
@@ -1288,10 +1295,16 @@ class MessageSendConfiguration(A2ABaseModel):
     """
     The number of most recent messages from the task's history to retrieve in the response.
     """
-    push_notification_config: PushNotificationConfig | None = None
     """
     Configuration for the agent to send push notifications for updates after the initial response.
     """
+
+    @field_validator('history_length')
+    @classmethod
+    def validate_history_length(cls, v: int | None) -> int | None:
+        if v is not None and v < 0:
+            raise ValueError('history_length must be non-negative')
+        return v
 
 
 class OAuthFlows(A2ABaseModel):
@@ -1475,6 +1488,13 @@ class Message(A2ABaseModel):
     """
     The ID of the task this message is part of. Can be omitted for the first message of a new task.
     """
+
+    @field_validator('parts')
+    @classmethod
+    def validate_parts(cls, v: list[Part]) -> list[Part]:
+        if not v:
+            raise ValueError('Message must have at least one part')
+        return v
 
 
 class MessageSendParams(A2ABaseModel):
