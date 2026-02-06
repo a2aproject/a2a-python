@@ -1,4 +1,4 @@
-from typing import TYPE_CHECKING, Any, Generic, TypeVar, cast
+from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 
 if TYPE_CHECKING:
@@ -112,7 +112,7 @@ class PydanticListType(TypeDecorator, Generic[T]):
                     MessageToDict(item, preserving_proto_field_name=False)
                 )
             elif isinstance(item, BaseModel):
-                result.append(cast('BaseModel', item).model_dump(mode='json'))
+                result.append(item.model_dump(mode='json'))
             else:
                 result.append(item)  # type: ignore[arg-type]
         return result

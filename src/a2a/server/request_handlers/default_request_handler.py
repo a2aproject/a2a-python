@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import re
 
 from collections.abc import AsyncGenerator
 from typing import cast
@@ -53,26 +52,6 @@ from a2a.utils.errors import (
 )
 from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
-
-
-def _extract_task_id(resource_name: str) -> str:
-    """Extract task ID from a resource name like 'tasks/{task_id}' or just returns '{task_id}'."""
-    match = re.match(r'^tasks/([^/]+)', resource_name)
-    if match:
-        return match.group(1)
-    return resource_name
-    # Fall back to the raw value if no match (for backwards compatibility)
-    return resource_name
-
-
-def _extract_config_id(resource_name: str) -> str | None:
-    """Extract push notification config ID from resource name like 'tasks/{task_id}/pushNotificationConfigs/{config_id}'."""
-    match = re.match(
-        r'^tasks/[^/]+/pushNotificationConfigs/([^/]+)$', resource_name
-    )
-    if match:
-        return match.group(1)
-    return None
 
 
 logger = logging.getLogger(__name__)
@@ -141,7 +120,7 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
-        task_id = _extract_task_id(params.id)
+        task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -158,7 +137,7 @@ class DefaultRequestHandler(RequestHandler):
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
-        task_id = _extract_task_id(params.id)
+        task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -486,7 +465,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.task_id)
+        task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -514,7 +493,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.task_id)
+        task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -546,7 +525,7 @@ class DefaultRequestHandler(RequestHandler):
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        task_id = _extract_task_id(params.id)
+        task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -588,7 +567,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.task_id)
+        task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -620,7 +599,7 @@ class DefaultRequestHandler(RequestHandler):
         if not self._push_config_store:
             raise ServerError(error=UnsupportedOperationError())
 
-        task_id = _extract_task_id(params.task_id)
+        task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:

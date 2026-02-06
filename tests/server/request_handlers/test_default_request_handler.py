@@ -147,7 +147,9 @@ async def test_on_get_task_not_found():
         await request_handler.on_get_task(params, context)
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
 
 
 @pytest.mark.asyncio
@@ -169,7 +171,7 @@ async def test_on_cancel_task_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'task_not_found_for_cancel', context
+        'tasks/task_not_found_for_cancel', context
     )
 
 
@@ -212,7 +214,7 @@ async def test_on_cancel_task_queue_tap_returns_none():
         params = CancelTaskRequest(id='tasks/tap_none_task')
         result_task = await request_handler.on_cancel_task(params, context)
 
-    mock_task_store.get.assert_awaited_once_with('tap_none_task', context)
+    mock_task_store.get.assert_awaited_once_with('tasks/tap_none_task', context)
     mock_queue_manager.tap.assert_awaited_once_with('tap_none_task')
     # agent_executor.cancel should be called with a new EventQueue if tap returned None
     mock_agent_executor.cancel.assert_awaited_once()
@@ -932,7 +934,7 @@ async def test_on_get_task_limit_history():
     assert isinstance(result, Task)
 
     get_task_result = await request_handler.on_get_task(
-        GetTaskRequest(id=f'tasks/{result.id}', history_length=1),
+        GetTaskRequest(id=result.id, history_length=1),
         create_server_call_context(),
     )
     assert get_task_result is not None
@@ -1901,7 +1903,9 @@ async def test_set_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
     mock_push_store.set_info.assert_not_awaited()
 
 
@@ -1950,7 +1954,9 @@ async def test_get_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -1984,8 +1990,10 @@ async def test_get_task_push_notification_config_info_not_found():
     assert isinstance(
         exc_info.value.error, InternalError
     )  # Current code raises InternalError
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
-    mock_push_store.get_info.assert_awaited_once_with('non_existent_task')
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
+    mock_push_store.get_info.assert_awaited_once_with('tasks/non_existent_task')
 
 
 @pytest.mark.asyncio
@@ -2025,7 +2033,7 @@ async def test_get_task_push_notification_config_info_with_config():
     )
 
     assert result is not None
-    assert result.task_id == 'task_1'
+    assert result.task_id == 'tasks/task_1'
     assert result.push_notification_config.url == set_config_params.config.url
     assert result.push_notification_config.id == 'config_id'
 
@@ -2054,7 +2062,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     )
 
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1', id='task_1'
+        task_id='tasks/task_1', id='tasks/task_1'
     )
 
     result: TaskPushNotificationConfig = (
@@ -2064,9 +2072,9 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     )
 
     assert result is not None
-    assert result.task_id == 'task_1'
+    assert result.task_id == 'tasks/task_1'
     assert result.push_notification_config.url == set_config_params.config.url
-    assert result.push_notification_config.id == 'task_1'
+    assert result.push_notification_config.id == 'tasks/task_1'
 
 
 @pytest.mark.asyncio
@@ -2090,7 +2098,7 @@ async def test_on_subscribe_to_task_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'resub_task_not_found', context
+        'tasks/resub_task_not_found', context
     )
 
 
@@ -2122,7 +2130,7 @@ async def test_on_subscribe_to_task_queue_not_found():
         exc_info.value.error, TaskNotFoundError
     )  # Should be TaskNotFoundError as per spec
     mock_task_store.get.assert_awaited_once_with(
-        'resub_queue_not_found', context
+        'tasks/resub_queue_not_found', context
     )
     mock_queue_manager.tap.assert_awaited_once_with('resub_queue_not_found')
 
@@ -2206,7 +2214,9 @@ async def test_list_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -2251,8 +2261,8 @@ async def test_list_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('task_1', push_config1)
-    await push_store.set_info('task_1', push_config2)
+    await push_store.set_info('tasks/task_1', push_config1)
+    await push_store.set_info('tasks/task_1', push_config2)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
@@ -2266,9 +2276,9 @@ async def test_list_task_push_notification_config_info_with_config():
     )
 
     assert len(result.configs) == 2
-    assert result.configs[0].task_id == 'task_1'
+    assert result.configs[0].task_id == 'tasks/task_1'
     assert result.configs[0].push_notification_config == push_config1
-    assert result.configs[1].task_id == 'task_1'
+    assert result.configs[1].task_id == 'tasks/task_1'
     assert result.configs[1].push_notification_config == push_config2
 
 
@@ -2312,12 +2322,12 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     )
 
     assert len(result.configs) == 1
-    assert result.configs[0].task_id == 'task_1'
+    assert result.configs[0].task_id == 'tasks/task_1'
     assert (
         result.configs[0].push_notification_config.url
         == set_config_params2.config.url
     )
-    assert result.configs[0].push_notification_config.id == 'task_1'
+    assert result.configs[0].push_notification_config.id == 'tasks/task_1'
 
 
 @pytest.mark.asyncio
@@ -2364,7 +2374,9 @@ async def test_delete_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
+    mock_task_store.get.assert_awaited_once_with(
+        'tasks/non_existent_task', context
+    )
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -2422,9 +2434,9 @@ async def test_delete_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('task_1', push_config1)
-    await push_store.set_info('task_1', push_config2)
-    await push_store.set_info('task_2', push_config1)
+    await push_store.set_info('tasks/task_1', push_config1)
+    await push_store.set_info('tasks/task_1', push_config2)
+    await push_store.set_info('tasks/task_2', push_config1)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
@@ -2447,7 +2459,7 @@ async def test_delete_task_push_notification_config_info_with_config():
     )
 
     assert len(result2.configs) == 1
-    assert result2.configs[0].task_id == 'task_1'
+    assert result2.configs[0].task_id == 'tasks/task_1'
     assert result2.configs[0].push_notification_config == push_config2
 
 
@@ -2623,7 +2635,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.error.message
     )
-    mock_task_store.get.assert_awaited_once_with(task_id, context)
+    mock_task_store.get.assert_awaited_once_with(f'tasks/{task_id}', context)
 
 
 @pytest.mark.asyncio

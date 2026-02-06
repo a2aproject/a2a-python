@@ -5,7 +5,9 @@
         "src"
     ],
     "exclude": [
-        "**/__pycache__",
+        "**/__pycache__"
+    ],
+    "ignore": [
         "src/a2a/types"
     ],
     "reportMissingImports": false,

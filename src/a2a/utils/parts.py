@@ -23,13 +23,13 @@ def get_text_parts(parts: Sequence[Part]) -> list[str]:
 
 
 def get_data_parts(parts: Sequence[Part]) -> list[Any]:
-    """Extracts dictionary data from all data Parts in a list of Parts.
+    """Extracts data from all data Parts in a list of Parts.
 
     Args:
         parts: A sequence of `Part` objects.
 
     Returns:
-        A list of dictionaries containing the data from any data Parts found.
+        A list of values containing the data from any data Parts found.
     """
     return [MessageToDict(part.data) for part in parts if part.HasField('data')]
 
