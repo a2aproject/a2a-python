@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from collections.abc import AsyncGenerator
@@ -435,7 +436,8 @@ class DefaultRequestHandler(RequestHandler):
         task_id: str,
     ) -> None:
         """Cleans up the agent execution task and queue manager entry."""
-        await producer_task
+        with contextlib.suppress(asyncio.CancelledError):
+            await producer_task
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)

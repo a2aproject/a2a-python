@@ -1795,6 +1795,32 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
 
 
 @pytest.mark.asyncio
+async def test_cleanup_producer_swallows_cancelled_error():
+    """Test _cleanup_producer suppresses CancelledError from producer_task."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_queue_manager = AsyncMock(spec=QueueManager)
+    request_handler = DefaultRequestHandler(
+        agent_executor=DummyAgentExecutor(),
+        task_store=mock_task_store,
+        queue_manager=mock_queue_manager,
+    )
+
+    task_id = 'task_cancelled'
+
+    async def cancelled_coro():
+        raise asyncio.CancelledError
+
+    producer_task = asyncio.create_task(cancelled_coro())
+    request_handler._running_agents[task_id] = producer_task
+    await asyncio.sleep(0)
+
+    await request_handler._cleanup_producer(producer_task, task_id)
+
+    mock_queue_manager.close.assert_awaited_once_with(task_id)
+    assert task_id not in request_handler._running_agents
+
+
+@pytest.mark.asyncio
 async def test_set_task_push_notification_config_no_notifier():
     """Test on_set_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
