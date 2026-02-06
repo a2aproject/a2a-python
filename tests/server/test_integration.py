@@ -480,7 +480,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'CancelTask',
-            'params': {'id': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
 
@@ -508,7 +508,7 @@ def test_get_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'id': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
 
@@ -545,7 +545,7 @@ def test_set_push_notification_config(
             'id': '123',
             'method': 'CreateTaskPushNotificationConfig',
             'params': {
-                'task_id': 'tasks/t2',
+                'task_id': 't2',
                 'config_id': 'pushNotificationConfig',
                 'config': {
                     'url': 'https://example.com',
@@ -587,7 +587,7 @@ def test_get_push_notification_config(
             'id': '123',
             'method': 'GetTaskPushNotificationConfig',
             'params': {
-                'task_id': 'tasks/task1',
+                'task_id': 'task1',
                 'id': 'pushNotificationConfig',
             },
         },
@@ -777,7 +777,7 @@ async def test_task_resubscription(
                 'jsonrpc': '2.0',
                 'id': '123',  # This ID is used in the success_event above
                 'method': 'SubscribeToTask',
-                'params': {'id': 'tasks/task1'},
+                'params': {'id': 'task1'},
             },
         ) as response:
             # Verify response is a stream
@@ -949,7 +949,7 @@ def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'id': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -1009,7 +1009,7 @@ def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'id': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200

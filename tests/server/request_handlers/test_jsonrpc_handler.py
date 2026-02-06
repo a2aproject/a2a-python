@@ -142,14 +142,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         task_id = 'test_task_id'
         mock_task = create_task(task_id=task_id)
         mock_task_store.get.return_value = mock_task
-        request = GetTaskRequest(id=f'tasks/{task_id}')
+        request = GetTaskRequest(id=f'{task_id}')
         response = await handler.on_get_task(request, call_context)
         # Response is now a dict with 'result' key for success
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
         assert response['result']['id'] == task_id
         mock_task_store.get.assert_called_once_with(
-            f'tasks/{task_id}', unittest.mock.ANY
+            f'{task_id}', unittest.mock.ANY
         )
 
     async def test_on_get_task_not_found(self) -> None:
@@ -160,7 +160,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = GetTaskRequest(id='tasks/nonexistent_id')
+        request = GetTaskRequest(id='nonexistent_id')
         call_context = ServerCallContext(
             state={'foo': 'bar', 'request_id': '1'}
         )
@@ -192,7 +192,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
         ):
-            request = CancelTaskRequest(id=f'tasks/{task_id}')
+            request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
@@ -227,7 +227,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
         ):
-            request = CancelTaskRequest(id=f'tasks/{task_id}')
+            request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
@@ -243,14 +243,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = CancelTaskRequest(id='tasks/nonexistent_id')
+        request = CancelTaskRequest(id='nonexistent_id')
         call_context = ServerCallContext(state={'request_id': '1'})
         response = await handler.on_cancel_task(request, call_context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         assert response['error']['code'] == -32001
         mock_task_store.get.assert_called_once_with(
-            'tasks/nonexistent_id', unittest.mock.ANY
+            'nonexistent_id', unittest.mock.ANY
         )
         mock_agent_executor.cancel.assert_not_called()
 
@@ -651,7 +651,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         ):
             mock_task_store.get.return_value = mock_task
             mock_queue_manager.tap.return_value = EventQueue()
-            request = SubscribeToTaskRequest(id=f'tasks/{mock_task.id}')
+            request = SubscribeToTaskRequest(id=f'{mock_task.id}')
             response = handler.on_subscribe_to_task(request)
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
@@ -668,7 +668,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = SubscribeToTaskRequest(id='tasks/nonexistent_id')
+        request = SubscribeToTaskRequest(id='nonexistent_id')
         response = handler.on_subscribe_to_task(request)
         assert isinstance(response, AsyncGenerator)
         collected_events: list[Any] = []
@@ -1110,7 +1110,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         delete_request = DeleteTaskPushNotificationConfigRequest(
-            task_id='tasks/task1',
+            task_id='task1',
             id='config1',
         )
         response = await handler.delete_push_notification_config(delete_request)
@@ -1134,7 +1134,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         delete_request = DeleteTaskPushNotificationConfigRequest(
-            task_id='tasks/task1',
+            task_id='task1',
             id='config1',
         )
         response = await handler.delete_push_notification_config(delete_request)

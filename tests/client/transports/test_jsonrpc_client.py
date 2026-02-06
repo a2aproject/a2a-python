@@ -276,7 +276,7 @@ class TestGetTask:
         mock_httpx_client.post.return_value = mock_response
 
         # Proto uses 'name' field for task identifier in request
-        request = GetTaskRequest(id=f'tasks/{task_id}')
+        request = GetTaskRequest(id=f'{task_id}')
         response = await transport.get_task(request)
 
         assert isinstance(response, Task)
@@ -303,7 +303,7 @@ class TestGetTask:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = GetTaskRequest(id=f'tasks/{task_id}', history_length=10)
+        request = GetTaskRequest(id=f'{task_id}', history_length=10)
         response = await transport.get_task(request)
 
         assert isinstance(response, Task)
@@ -332,7 +332,7 @@ class TestCancelTask:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = CancelTaskRequest(id=f'tasks/{task_id}')
+        request = CancelTaskRequest(id=f'{task_id}')
         response = await transport.cancel_task(request)
 
         assert isinstance(response, Task)
@@ -356,7 +356,7 @@ class TestTaskCallback:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'task_id': f'tasks/{task_id}',
+                'task_id': f'{task_id}',
                 'id': 'config-1',
             },
         }
@@ -364,7 +364,7 @@ class TestTaskCallback:
         mock_httpx_client.post.return_value = mock_response
 
         request = GetTaskPushNotificationConfigRequest(
-            task_id=f'tasks/{task_id}',
+            task_id=f'{task_id}',
             id='config-1',
         )
         response = await transport.get_task_callback(request)

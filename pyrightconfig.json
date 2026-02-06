@@ -5,11 +5,10 @@
         "src"
     ],
     "exclude": [
-        "**/__pycache__"
-    ],
-    "ignore": [
+        "**/__pycache__",
         "src/a2a/types"
     ],
+    "ignore": [],
     "reportMissingImports": false,
     "reportMissingModuleSource": false
 }

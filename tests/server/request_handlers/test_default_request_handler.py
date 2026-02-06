@@ -138,7 +138,7 @@ async def test_on_get_task_not_found():
         agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
 
-    params = GetTaskRequest(id='tasks/non_existent_task')
+    params = GetTaskRequest(id='non_existent_task')
 
     from a2a.utils.errors import ServerError  # Local import for ServerError
 
@@ -148,7 +148,7 @@ async def test_on_get_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
 
 
@@ -161,7 +161,7 @@ async def test_on_cancel_task_task_not_found():
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
-    params = CancelTaskRequest(id='tasks/task_not_found_for_cancel')
+    params = CancelTaskRequest(id='task_not_found_for_cancel')
 
     from a2a.utils.errors import ServerError  # Local import
 
@@ -171,7 +171,7 @@ async def test_on_cancel_task_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/task_not_found_for_cancel', context
+        'task_not_found_for_cancel', context
     )
 
 
@@ -211,10 +211,10 @@ async def test_on_cancel_task_queue_tap_returns_none():
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id='tasks/tap_none_task')
+        params = CancelTaskRequest(id='tap_none_task')
         result_task = await request_handler.on_cancel_task(params, context)
 
-    mock_task_store.get.assert_awaited_once_with('tasks/tap_none_task', context)
+    mock_task_store.get.assert_awaited_once_with('tap_none_task', context)
     mock_queue_manager.tap.assert_awaited_once_with('tap_none_task')
     # agent_executor.cancel should be called with a new EventQueue if tap returned None
     mock_agent_executor.cancel.assert_awaited_once()
@@ -267,7 +267,7 @@ async def test_on_cancel_task_cancels_running_agent():
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'tasks/{task_id}')
+        params = CancelTaskRequest(id=f'{task_id}')
         await request_handler.on_cancel_task(params, context)
 
     mock_producer_task.cancel.assert_called_once()
@@ -315,7 +315,7 @@ async def test_on_cancel_task_completes_during_cancellation():
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'tasks/{task_id}')
+        params = CancelTaskRequest(id=f'{task_id}')
         with pytest.raises(ServerError) as exc_info:
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
@@ -358,7 +358,7 @@ async def test_on_cancel_task_invalid_result_type():
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
     ):
-        params = CancelTaskRequest(id=f'tasks/{task_id}')
+        params = CancelTaskRequest(id=f'{task_id}')
         with pytest.raises(ServerError) as exc_info:
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
@@ -1393,7 +1393,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
 
     # Resubscribe and start consuming future events
     resub_gen = request_handler.on_subscribe_to_task(
-        SubscribeToTaskRequest(id=f'tasks/{task_id}'),
+        SubscribeToTaskRequest(id=f'{task_id}'),
         create_server_call_context(),
     )
 
@@ -1862,7 +1862,7 @@ async def test_set_task_push_notification_config_no_notifier():
         push_config_store=None,  # Explicitly None
     )
     params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task1',
+        task_id='task1',
         config_id='config1',
         config=PushNotificationConfig(url='http://example.com'),
     )
@@ -1890,7 +1890,7 @@ async def test_set_task_push_notification_config_task_not_found():
         push_sender=mock_push_sender,
     )
     params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task',
+        task_id='non_existent_task',
         config_id='config1',
         config=PushNotificationConfig(url='http://example.com'),
     )
@@ -1904,7 +1904,7 @@ async def test_set_task_push_notification_config_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
     mock_push_store.set_info.assert_not_awaited()
 
@@ -1918,7 +1918,7 @@ async def test_get_task_push_notification_config_no_store():
         push_config_store=None,  # Explicitly None
     )
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/task1',
+        task_id='task1',
         id='push_notification_config',
     )
     from a2a.utils.errors import ServerError  # Local import
@@ -1943,7 +1943,7 @@ async def test_get_task_push_notification_config_task_not_found():
         push_config_store=mock_push_store,
     )
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task', id='push_notification_config'
+        task_id='non_existent_task', id='push_notification_config'
     )
     from a2a.utils.errors import ServerError  # Local import
 
@@ -1955,7 +1955,7 @@ async def test_get_task_push_notification_config_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
     mock_push_store.get_info.assert_not_awaited()
 
@@ -1977,7 +1977,7 @@ async def test_get_task_push_notification_config_info_not_found():
         push_config_store=mock_push_store,
     )
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task', id='push_notification_config'
+        task_id='non_existent_task', id='push_notification_config'
     )
     from a2a.utils.errors import ServerError  # Local import
 
@@ -1991,9 +1991,9 @@ async def test_get_task_push_notification_config_info_not_found():
         exc_info.value.error, InternalError
     )  # Current code raises InternalError
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
-    mock_push_store.get_info.assert_awaited_once_with('tasks/non_existent_task')
+    mock_push_store.get_info.assert_awaited_once_with('non_existent_task')
 
 
 @pytest.mark.asyncio
@@ -2011,7 +2011,7 @@ async def test_get_task_push_notification_config_info_with_config():
     )
 
     set_config_params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1',
+        task_id='task_1',
         config_id='config_id',
         config=PushNotificationConfig(
             id='config_id', url='http://1.example.com'
@@ -2023,7 +2023,7 @@ async def test_get_task_push_notification_config_info_with_config():
     )
 
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1', id='config_id'
+        task_id='task_1', id='config_id'
     )
 
     result: TaskPushNotificationConfig = (
@@ -2033,7 +2033,7 @@ async def test_get_task_push_notification_config_info_with_config():
     )
 
     assert result is not None
-    assert result.task_id == 'tasks/task_1'
+    assert result.task_id == 'task_1'
     assert result.push_notification_config.url == set_config_params.config.url
     assert result.push_notification_config.id == 'config_id'
 
@@ -2053,7 +2053,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     )
 
     set_config_params = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1',
+        task_id='task_1',
         config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
@@ -2062,7 +2062,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     )
 
     params = GetTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1', id='tasks/task_1'
+        task_id='task_1', id='task_1'
     )
 
     result: TaskPushNotificationConfig = (
@@ -2072,9 +2072,9 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
     )
 
     assert result is not None
-    assert result.task_id == 'tasks/task_1'
+    assert result.task_id == 'task_1'
     assert result.push_notification_config.url == set_config_params.config.url
-    assert result.push_notification_config.id == 'tasks/task_1'
+    assert result.push_notification_config.id == 'task_1'
 
 
 @pytest.mark.asyncio
@@ -2086,7 +2086,7 @@ async def test_on_subscribe_to_task_task_not_found():
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
-    params = SubscribeToTaskRequest(id='tasks/resub_task_not_found')
+    params = SubscribeToTaskRequest(id='resub_task_not_found')
 
     from a2a.utils.errors import ServerError  # Local import
 
@@ -2098,7 +2098,7 @@ async def test_on_subscribe_to_task_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/resub_task_not_found', context
+        'resub_task_not_found', context
     )
 
 
@@ -2117,7 +2117,7 @@ async def test_on_subscribe_to_task_queue_not_found():
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
     )
-    params = SubscribeToTaskRequest(id='tasks/resub_queue_not_found')
+    params = SubscribeToTaskRequest(id='resub_queue_not_found')
 
     from a2a.utils.errors import ServerError  # Local import
 
@@ -2130,7 +2130,7 @@ async def test_on_subscribe_to_task_queue_not_found():
         exc_info.value.error, TaskNotFoundError
     )  # Should be TaskNotFoundError as per spec
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/resub_queue_not_found', context
+        'resub_queue_not_found', context
     )
     mock_queue_manager.tap.assert_awaited_once_with('resub_queue_not_found')
 
@@ -2180,7 +2180,7 @@ async def test_list_task_push_notification_config_no_store():
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='tasks/task1')
+    params = ListTaskPushNotificationConfigRequest(task_id='task1')
     from a2a.utils.errors import ServerError  # Local import
 
     with pytest.raises(ServerError) as exc_info:
@@ -2203,7 +2203,7 @@ async def test_list_task_push_notification_config_task_not_found():
         push_config_store=mock_push_store,
     )
     params = ListTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task'
+        task_id='non_existent_task'
     )
     from a2a.utils.errors import ServerError  # Local import
 
@@ -2215,7 +2215,7 @@ async def test_list_task_push_notification_config_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
     mock_push_store.get_info.assert_not_awaited()
 
@@ -2236,7 +2236,7 @@ async def test_list_no_task_push_notification_config_info():
         push_config_store=push_store,
     )
     params = ListTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task'
+        task_id='non_existent_task'
     )
 
     result = await request_handler.on_list_task_push_notification_config(
@@ -2261,24 +2261,24 @@ async def test_list_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('tasks/task_1', push_config1)
-    await push_store.set_info('tasks/task_1', push_config2)
+    await push_store.set_info('task_1', push_config1)
+    await push_store.set_info('task_1', push_config2)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='tasks/task_1')
+    params = ListTaskPushNotificationConfigRequest(task_id='task_1')
 
     result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
     )
 
     assert len(result.configs) == 2
-    assert result.configs[0].task_id == 'tasks/task_1'
+    assert result.configs[0].task_id == 'task_1'
     assert result.configs[0].push_notification_config == push_config1
-    assert result.configs[1].task_id == 'tasks/task_1'
+    assert result.configs[1].task_id == 'task_1'
     assert result.configs[1].push_notification_config == push_config2
 
 
@@ -2298,7 +2298,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
     # multiple calls without config id should replace the existing
     set_config_params1 = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1',
+        task_id='task_1',
         config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
@@ -2307,7 +2307,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     )
 
     set_config_params2 = CreateTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1',
+        task_id='task_1',
         config_id='default',
         config=PushNotificationConfig(url='http://2.example.com'),
     )
@@ -2315,19 +2315,19 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         set_config_params2, create_server_call_context()
     )
 
-    params = ListTaskPushNotificationConfigRequest(task_id='tasks/task_1')
+    params = ListTaskPushNotificationConfigRequest(task_id='task_1')
 
     result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
     )
 
     assert len(result.configs) == 1
-    assert result.configs[0].task_id == 'tasks/task_1'
+    assert result.configs[0].task_id == 'task_1'
     assert (
         result.configs[0].push_notification_config.url
         == set_config_params2.config.url
     )
-    assert result.configs[0].push_notification_config.id == 'tasks/task_1'
+    assert result.configs[0].push_notification_config.id == 'task_1'
 
 
 @pytest.mark.asyncio
@@ -2339,7 +2339,7 @@ async def test_delete_task_push_notification_config_no_store():
         push_config_store=None,  # Explicitly None
     )
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/task1', id='config1'
+        task_id='task1', id='config1'
     )
     from a2a.utils.errors import ServerError  # Local import
 
@@ -2363,7 +2363,7 @@ async def test_delete_task_push_notification_config_task_not_found():
         push_config_store=mock_push_store,
     )
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/non_existent_task', id='config1'
+        task_id='non_existent_task', id='config1'
     )
     from a2a.utils.errors import ServerError  # Local import
 
@@ -2375,7 +2375,7 @@ async def test_delete_task_push_notification_config_task_not_found():
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
-        'tasks/non_existent_task', context
+        'non_existent_task', context
     )
     mock_push_store.get_info.assert_not_awaited()
 
@@ -2400,7 +2400,7 @@ async def test_delete_no_task_push_notification_config_info():
         push_config_store=push_store,
     )
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/task1', id='config_non_existant'
+        task_id='task1', id='config_non_existant'
     )
 
     result = await request_handler.on_delete_task_push_notification_config(
@@ -2409,7 +2409,7 @@ async def test_delete_no_task_push_notification_config_info():
     assert result is None
 
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/task2', id='config_non_existant'
+        task_id='task2', id='config_non_existant'
     )
 
     result = await request_handler.on_delete_task_push_notification_config(
@@ -2434,9 +2434,9 @@ async def test_delete_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('tasks/task_1', push_config1)
-    await push_store.set_info('tasks/task_1', push_config2)
-    await push_store.set_info('tasks/task_2', push_config1)
+    await push_store.set_info('task_1', push_config1)
+    await push_store.set_info('task_1', push_config2)
+    await push_store.set_info('task_2', push_config1)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
@@ -2444,7 +2444,7 @@ async def test_delete_task_push_notification_config_info_with_config():
         push_config_store=push_store,
     )
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1', id='config_1'
+        task_id='task_1', id='config_1'
     )
 
     result1 = await request_handler.on_delete_task_push_notification_config(
@@ -2454,12 +2454,12 @@ async def test_delete_task_push_notification_config_info_with_config():
     assert result1 is None
 
     result2 = await request_handler.on_list_task_push_notification_config(
-        ListTaskPushNotificationConfigRequest(task_id='tasks/task_1'),
+        ListTaskPushNotificationConfigRequest(task_id='task_1'),
         create_server_call_context(),
     )
 
     assert len(result2.configs) == 1
-    assert result2.configs[0].task_id == 'tasks/task_1'
+    assert result2.configs[0].task_id == 'task_1'
     assert result2.configs[0].push_notification_config == push_config2
 
 
@@ -2484,7 +2484,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         push_config_store=push_store,
     )
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id='tasks/task_1', id='task_1'
+        task_id='task_1', id='task_1'
     )
 
     result = await request_handler.on_delete_task_push_notification_config(
@@ -2494,7 +2494,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
     assert result is None
 
     result2 = await request_handler.on_list_task_push_notification_config(
-        ListTaskPushNotificationConfigRequest(task_id='tasks/task_1'),
+        ListTaskPushNotificationConfigRequest(task_id='task_1'),
         create_server_call_context(),
     )
 
@@ -2620,7 +2620,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
         task_store=mock_task_store,
         queue_manager=AsyncMock(spec=QueueManager),
     )
-    params = SubscribeToTaskRequest(id=f'tasks/{task_id}')
+    params = SubscribeToTaskRequest(id=f'{task_id}')
 
     from a2a.utils.errors import ServerError
 
@@ -2635,7 +2635,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.error.message
     )
-    mock_task_store.get.assert_awaited_once_with(f'tasks/{task_id}', context)
+    mock_task_store.get.assert_awaited_once_with(f'{task_id}', context)
 
 
 @pytest.mark.asyncio
