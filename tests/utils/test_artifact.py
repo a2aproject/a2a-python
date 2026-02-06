@@ -3,6 +3,10 @@ import uuid
 
 from unittest.mock import patch
 
+import pytest
+
+from pydantic import ValidationError
+
 from a2a.types import (
     Artifact,
     DataPart,
@@ -22,7 +26,8 @@ class TestArtifact(unittest.TestCase):
     def test_new_artifact_generates_id(self, mock_uuid4):
         mock_uuid = uuid.UUID('abcdef12-1234-5678-1234-567812345678')
         mock_uuid4.return_value = mock_uuid
-        artifact = new_artifact(parts=[], name='test_artifact')
+        parts = [Part(root=TextPart(text='test'))]
+        artifact = new_artifact(parts=parts, name='test_artifact')
         self.assertEqual(artifact.artifact_id, str(mock_uuid))
 
     def test_new_artifact_assigns_parts_name_description(self):
@@ -140,19 +145,13 @@ class TestGetArtifactText(unittest.TestCase):
         # Verify
         assert result == 'First part | Second part | Third part'
 
-    def test_get_artifact_text_empty_parts(self):
-        # Setup
-        artifact = Artifact(
-            name='test-artifact',
-            parts=[],
-            artifact_id='test-artifact-id',
-        )
-
-        # Exercise
-        result = get_artifact_text(artifact)
-
-        # Verify
-        assert result == ''
+    def test_artifact_rejects_empty_parts(self):
+        with pytest.raises(ValidationError, match='too_short'):
+            Artifact(
+                name='test-artifact',
+                parts=[],
+                artifact_id='test-artifact-id',
+            )
 
 
 if __name__ == '__main__':

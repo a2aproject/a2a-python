@@ -706,6 +706,19 @@ def test_send_message_streaming_status_update_response() -> None:
     assert isinstance(resp_err.root.error, JSONRPCError)
 
 
+def test_artifact_requires_non_empty_parts() -> None:
+    """Tests that Artifact rejects an empty parts list (min_length=1)."""
+    with pytest.raises(ValidationError, match='too_short'):
+        Artifact(artifact_id='a-1', parts=[])
+
+    # Valid: single part
+    artifact = Artifact(
+        artifact_id='a-2',
+        parts=[Part(root=TextPart(text='hello'))],
+    )
+    assert len(artifact.parts) == 1
+
+
 def test_send_message_streaming_artifact_update_response() -> None:
     text_part = TextPart(**TEXT_PART_DATA)
     data_part = DataPart(**DATA_PART_DATA)
