@@ -49,6 +49,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from cryptography.hazmat.primitives import asymmetric
+from cryptography.hazmat.primitives.asymmetric import ec
 
 # --- Test Constants ---
 
@@ -727,7 +728,7 @@ async def test_http_transport_get_card(
     assert transport.agent_card.name == agent_card.name  # type: ignore[attr-defined]
     # Only check _needs_extended_card if the transport supports it
     if hasattr(transport, '_needs_extended_card'):
-        assert transport._needs_extended_card is False
+        assert transport._needs_extended_card is False  # type: ignore[attr-defined]
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -920,7 +921,7 @@ async def test_json_transport_get_signed_extended_card(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -983,7 +984,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -1047,7 +1048,7 @@ async def test_rest_transport_get_signed_card(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -1103,7 +1104,7 @@ async def test_grpc_transport_get_signed_card(
     # Setup signing on the server side
     agent_card.capabilities.extended_agent_card = True
 
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,

@@ -97,7 +97,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
 
             IncompleteJSONRPCApp(
                 agent_card=mock_agent_card, http_handler=mock_handler
-            )
+            )  # type: ignore[abstract]
 
 
 class TestJSONRPCApplicationOptionalDeps:
@@ -141,13 +141,13 @@ class TestJSONRPCApplicationOptionalDeps:
         self, mock_app_params: dict
     ):
         class MockJSONRPCApp(JSONRPCApplication):
-            def build(
+            def build(  # type: ignore[override]
                 self,
                 agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):
-                return object()
+                return object()  # type: ignore[return-value]
 
         try:
             _app = MockJSONRPCApp(**mock_app_params)
@@ -162,13 +162,13 @@ class TestJSONRPCApplicationOptionalDeps:
         self, mock_app_params: dict, mark_pkg_starlette_not_installed: Any
     ):
         class MockJSONRPCApp(JSONRPCApplication):
-            def build(
+            def build(  # type: ignore[override]
                 self,
                 agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):
-                return object()
+                return object()  # type: ignore[return-value]
 
         with pytest.raises(
             ImportError,

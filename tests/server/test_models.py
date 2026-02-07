@@ -22,6 +22,7 @@ class TestPydanticType:
         dialect = MagicMock()
 
         result = pydantic_type.process_bind_param(status, dialect)
+        assert result is not None
         assert result['state'] == 'TASK_STATE_WORKING'
         # message field is optional and not set
 
@@ -55,6 +56,7 @@ class TestPydanticListType:
         dialect = MagicMock()
 
         result = pydantic_list_type.process_bind_param(artifacts, dialect)
+        assert result is not None
         assert len(result) == 2
         assert result[0]['artifactId'] == '1'  # JSON mode uses camelCase
         assert result[1]['artifactId'] == '2'
@@ -68,6 +70,7 @@ class TestPydanticListType:
         ]
 
         result = pydantic_list_type.process_result_value(data, dialect)
+        assert result is not None
         assert len(result) == 2
         assert all(isinstance(art, Artifact) for art in result)
         assert result[0].artifact_id == '1'

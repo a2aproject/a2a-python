@@ -2,7 +2,7 @@ import asyncio
 import unittest
 
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from typing_extensions import override
 
@@ -212,7 +212,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Ensure process was called for the event before the exception
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 
@@ -392,7 +392,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             )
 
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 

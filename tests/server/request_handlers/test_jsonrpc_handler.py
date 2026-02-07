@@ -4,7 +4,7 @@ import unittest.async_case
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
@@ -148,9 +148,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
         assert response['result']['id'] == task_id
-        mock_task_store.get.assert_called_once_with(
-            f'{task_id}', unittest.mock.ANY
-        )
+        mock_task_store.get.assert_called_once_with(f'{task_id}', ANY)
 
     async def test_on_get_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -249,9 +247,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         assert response['error']['code'] == -32001
-        mock_task_store.get.assert_called_once_with(
-            'nonexistent_id', unittest.mock.ANY
-        )
+        mock_task_store.get.assert_called_once_with('nonexistent_id', ANY)
         mock_agent_executor.cancel.assert_not_called()
 
     @patch(

@@ -1,11 +1,13 @@
 """Tests for the ClientFactory."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+import typing
 
 import httpx
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
+from a2a.client.client_factory import TransportProducer
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -255,7 +257,9 @@ async def test_client_factory_connect_with_extra_transports(
     client = await ClientFactory.connect(
         base_agent_card,
         client_config=config,
-        extra_transports={'custom': custom_transport_producer},
+        extra_transports=typing.cast(
+            dict[str, TransportProducer], {'custom': custom_transport_producer}
+        ),
     )
 
     assert isinstance(client._transport, CustomTransport)  # type: ignore[attr-defined]

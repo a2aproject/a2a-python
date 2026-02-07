@@ -263,7 +263,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
             a2a_pb2.StreamResponse(
                 artifact_update=sample_task_artifact_update_event
             ),
-            grpc.aio.EOF,
+            grpc.aio.EOF,  # type: ignore[attr-defined]
         ]
     )
     mock_grpc_stub.SendStreamingMessage.return_value = stream
@@ -311,9 +311,7 @@ async def test_get_task(
     response = await grpc_transport.get_task(params)
 
     mock_grpc_stub.GetTask.assert_awaited_once_with(
-        a2a_pb2.GetTaskRequest(
-            id=f'{sample_task.id}', history_length=None
-        ),
+        a2a_pb2.GetTaskRequest(id=f'{sample_task.id}', history_length=None),
         metadata=[
             (
                 HTTP_EXTENSION_HEADER,
@@ -331,9 +329,7 @@ async def test_get_task_with_history(
     """Test retrieving a task with history."""
     mock_grpc_stub.GetTask.return_value = sample_task
     history_len = 10
-    params = GetTaskRequest(
-        id=f'{sample_task.id}', history_length=history_len
-    )
+    params = GetTaskRequest(id=f'{sample_task.id}', history_length=history_len)
 
     await grpc_transport.get_task(params)
 
