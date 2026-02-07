@@ -3,7 +3,7 @@ from typing import TYPE_CHECKING
 
 # Attempt to import the optional module
 try:
-    from grpc.aio import Channel  # pyright: ignore[reportAssignmentType]
+    from grpc.aio import Channel  # type: ignore[reportMissingModuleSource]
 except ImportError:
     # If grpc.aio is not available, define a stub type for type checking.
     # This stub type will only be used by type checkers.
