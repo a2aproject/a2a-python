@@ -8,18 +8,18 @@ from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import (  # type: ignore[reportMissingImports]
+    from sqlalchemy import (
         Table,
         delete,
         select,
     )
-    from sqlalchemy.ext.asyncio import (  # type: ignore[reportMissingImports]
+    from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
     from sqlalchemy.orm import (
-        class_mapper,  # type: ignore[reportMissingImports]
+        class_mapper,
     )
 except ImportError as e:
     raise ImportError(
@@ -43,7 +43,7 @@ from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 if TYPE_CHECKING:
-    from cryptography.fernet import Fernet  # type: ignore[reportMissingImports]
+    from cryptography.fernet import Fernet
 
 
 logger = logging.getLogger(__name__)
@@ -98,7 +98,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         if encryption_key:
             try:
-                from cryptography.fernet import Fernet
+                from cryptography.fernet import (
+                    Fernet,
+                )
             except ImportError as e:
                 raise ImportError(
                     "DatabasePushNotificationConfigStore with encryption requires the 'cryptography' "
@@ -170,7 +172,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         payload = model_instance.config_data
 
         if self._fernet:
-            from cryptography.fernet import InvalidToken
+            from cryptography.fernet import (
+                InvalidToken,
+            )
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)

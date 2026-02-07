@@ -4,18 +4,18 @@ from typing import Any, cast
 
 
 try:
-    from sqlalchemy import (  # type: ignore[reportMissingImports]
+    from sqlalchemy import (
         Table,
         delete,
         select,
     )
-    from sqlalchemy.ext.asyncio import (  # type: ignore[reportMissingImports]
+    from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
     from sqlalchemy.orm import (
-        class_mapper,  # type: ignore[reportMissingImports]
+        class_mapper,
     )
 except ImportError as e:
     raise ImportError(

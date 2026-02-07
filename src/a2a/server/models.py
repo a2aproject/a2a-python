@@ -18,20 +18,20 @@ from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import (  # type: ignore[reportMissingImports]
+    from sqlalchemy import (
         JSON,
         Dialect,
         LargeBinary,
         String,
     )
-    from sqlalchemy.orm import (  # type: ignore[reportMissingImports]
+    from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
         declared_attr,
         mapped_column,
     )
     from sqlalchemy.types import (
-        TypeDecorator,  # type: ignore[reportMissingImports]
+        TypeDecorator,
     )
 except ImportError as e:
     raise ImportError(
