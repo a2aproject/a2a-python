@@ -13,7 +13,7 @@ import pytest
 from cryptography.hazmat.primitives import asymmetric
 
 
-def create_key_provider(verification_key: str | bytes | dict[str, Any]):
+def create_key_provider(verification_key: Any):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):

@@ -104,6 +104,7 @@ async def test_process_with_status_update(
     status_event = StreamResponse(status_update=status_update)
     updated_task = await task_manager.process(status_event)
 
+    assert updated_task is not None
     assert updated_task.status.state == TaskState.TASK_STATE_COMPLETED
     assert len(updated_task.history) == 1
     assert updated_task.history[0].message_id == sample_message.message_id

@@ -92,7 +92,7 @@ def test_find_extension_by_uri_no_extensions():
         (
             [],  # extensions
             'ext1',  # header
-            {},  # expected_extensions
+            set(),  # expected_extensions
         ),  # Case 3: New extensions is empty list, existing header extensions.
         (
             ['ext1', 'ext2'],  # extensions
@@ -113,7 +113,7 @@ def test_update_extension_header_merge_with_existing_extensions(
     result_kwargs = update_extension_header(http_kwargs, extensions)
     header_value = result_kwargs['headers'][HTTP_EXTENSION_HEADER]
     if not header_value:
-        actual_extensions = {}
+        actual_extensions: set[str] = set()
     else:
         actual_extensions_list = [e.strip() for e in header_value.split(',')]
         actual_extensions = set(actual_extensions_list)

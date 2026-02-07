@@ -64,7 +64,9 @@ from a2a.utils import (
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task_updater = TaskUpdater(
-            event_queue, context.task_id, context.context_id
+            event_queue,
+            context.task_id,  # type: ignore[arg-type]
+            context.context_id,  # type: ignore[arg-type]
         )
         async for i in self._run():
             parts = [Part(text=f'Event {i}')]
@@ -147,9 +149,7 @@ async def test_on_get_task_not_found():
         await request_handler.on_get_task(params, context)
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
 
 
 @pytest.mark.asyncio
@@ -1903,9 +1903,7 @@ async def test_set_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.set_info.assert_not_awaited()
 
 
@@ -1954,9 +1952,7 @@ async def test_get_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -1990,9 +1986,7 @@ async def test_get_task_push_notification_config_info_not_found():
     assert isinstance(
         exc_info.value.error, InternalError
     )  # Current code raises InternalError
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_awaited_once_with('non_existent_task')
 
 
@@ -2061,9 +2055,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         set_config_params, create_server_call_context()
     )
 
-    params = GetTaskPushNotificationConfigRequest(
-        task_id='task_1', id='task_1'
-    )
+    params = GetTaskPushNotificationConfigRequest(task_id='task_1', id='task_1')
 
     result: TaskPushNotificationConfig = (
         await request_handler.on_get_task_push_notification_config(
@@ -2202,9 +2194,7 @@ async def test_list_task_push_notification_config_task_not_found():
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(
-        task_id='non_existent_task'
-    )
+    params = ListTaskPushNotificationConfigRequest(task_id='non_existent_task')
     from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
@@ -2214,9 +2204,7 @@ async def test_list_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 
@@ -2235,9 +2223,7 @@ async def test_list_no_task_push_notification_config_info():
         task_store=mock_task_store,
         push_config_store=push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(
-        task_id='non_existent_task'
-    )
+    params = ListTaskPushNotificationConfigRequest(task_id='non_existent_task')
 
     result = await request_handler.on_list_task_push_notification_config(
         params, create_server_call_context()
@@ -2374,9 +2360,7 @@ async def test_delete_task_push_notification_config_task_not_found():
         )
 
     assert isinstance(exc_info.value.error, TaskNotFoundError)
-    mock_task_store.get.assert_awaited_once_with(
-        'non_existent_task', context
-    )
+    mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
 

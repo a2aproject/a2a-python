@@ -207,7 +207,7 @@ class TestRequestContext:
             RequestContext(
                 request=mock_params, task_id='wrong-task-id', task=mock_task
             )
-        assert 'bad task id' in str(exc_info.value.error.message)
+        assert 'bad task id' in str(exc_info.value.error)  # type: ignore[attr-defined]
 
     def test_init_raises_error_on_context_id_mismatch(
         self, mock_params: Mock, mock_task: Mock
@@ -224,12 +224,12 @@ class TestRequestContext:
                 task=mock_task,
             )
 
-        assert 'bad context id' in str(exc_info.value.error.message)
+        assert 'bad context id' in str(exc_info.value.error)  # type: ignore[attr-defined]
 
     def test_with_related_tasks_provided(self, mock_task: Mock) -> None:
         """Test initialization with related tasks provided."""
         related_tasks = [mock_task, Mock(spec=Task)]
-        context = RequestContext(related_tasks=related_tasks)
+        context = RequestContext(related_tasks=related_tasks)  # type: ignore[arg-type]
 
         assert context.related_tasks == related_tasks
         assert len(context.related_tasks) == 2

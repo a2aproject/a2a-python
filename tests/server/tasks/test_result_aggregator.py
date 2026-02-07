@@ -262,7 +262,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         )
 
         # Mock _continue_consuming to check if it's called by create_task
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -316,7 +316,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.get_task.return_value = (
             current_task_state_after_update
         )
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -412,9 +412,9 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             mock_consume_generator()
         )
         # After processing `first_event`, the current result will be that task.
-        self.aggregator.task_manager.get_task.return_value = first_event
+        self.mock_task_manager.get_task.return_value = first_event
 
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (

@@ -91,7 +91,7 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
 )
 
 
-def create_key_provider(verification_key: PyJWK | str | bytes):
+def create_key_provider(verification_key: Any):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):
@@ -169,7 +169,7 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
     """A base fixture to patch the sse-starlette event loop issue."""
     from sse_starlette import sse
 
-    sse.AppStatus.should_exit_event = asyncio.Event()
+    sse.AppStatus.should_exit_event = asyncio.Event()  # type: ignore[attr-defined]
     yield mock_request_handler, agent_card
 
 
@@ -721,10 +721,10 @@ async def test_http_transport_get_card(
     )
     transport = transport_setup.transport
     # Access the base card from the agent_card property.
-    result = transport.agent_card
+    result = transport.agent_card  # type: ignore[attr-defined]
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name
+    assert transport.agent_card.name == agent_card.name  # type: ignore[attr-defined]
     # Only check _needs_extended_card if the transport supports it
     if hasattr(transport, '_needs_extended_card'):
         assert transport._needs_extended_card is False

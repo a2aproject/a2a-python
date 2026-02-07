@@ -4,6 +4,8 @@ This module contains A2A-specific error codes,
 as well as server exception classes.
 """
 
+from typing import Any
+
 
 class A2AError(Exception):
     """Base exception for A2A errors."""
@@ -137,7 +139,7 @@ class ServerError(Exception):
 
     def __init__(
         self,
-        error: Exception | None,
+        error: Exception | Any | None,
     ):
         """Initializes the ServerError.
 
