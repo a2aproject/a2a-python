@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 
 
 try:
-    import grpc
+    import grpc  # type: ignore[reportMissingModuleSource, reportMissingImports]
 except ImportError as e:
     raise ImportError(
         'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '

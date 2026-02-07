@@ -65,16 +65,22 @@ from typing_extensions import Self
 
 
 if TYPE_CHECKING:
-    from opentelemetry.trace import SpanKind as SpanKindType
+    from opentelemetry.trace import (
+        SpanKind as SpanKindType,  # type: ignore[reportMissingImports]
+    )
 else:
     SpanKindType = object
 
 logger = logging.getLogger(__name__)
 
 try:
-    from opentelemetry import trace
-    from opentelemetry.trace import SpanKind as _SpanKind
-    from opentelemetry.trace import StatusCode
+    from opentelemetry import trace  # type: ignore[reportMissingImports]
+    from opentelemetry.trace import (  # type: ignore[reportMissingImports]
+        SpanKind as _SpanKind,
+    )
+    from opentelemetry.trace import (  # type: ignore[reportMissingImports]
+        StatusCode,
+    )
 
 except ImportError:
     logger.debug(

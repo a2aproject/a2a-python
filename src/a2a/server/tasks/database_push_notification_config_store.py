@@ -8,17 +8,19 @@ from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import (
+    from sqlalchemy import (  # type: ignore[reportMissingImports]
         Table,
         delete,
         select,
     )
-    from sqlalchemy.ext.asyncio import (
+    from sqlalchemy.ext.asyncio import (  # type: ignore[reportMissingImports]
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import class_mapper
+    from sqlalchemy.orm import (
+        class_mapper,  # type: ignore[reportMissingImports]
+    )
 except ImportError as e:
     raise ImportError(
         'DatabasePushNotificationConfigStore requires SQLAlchemy and a database driver. '
@@ -41,7 +43,7 @@ from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 if TYPE_CHECKING:
-    from cryptography.fernet import Fernet
+    from cryptography.fernet import Fernet  # type: ignore[reportMissingImports]
 
 
 logger = logging.getLogger(__name__)

@@ -7,10 +7,10 @@ from collections.abc import AsyncIterable, Sequence
 
 
 try:
-    import grpc
-    import grpc.aio
+    import grpc  # type: ignore[reportMissingModuleSource]
+    import grpc.aio  # type: ignore[reportMissingModuleSource]
 
-    from grpc.aio import Metadata
+    from grpc.aio import Metadata  # type: ignore[reportMissingModuleSource]
 except ImportError as e:
     raise ImportError(
         'GrpcHandler requires grpcio and grpcio-tools to be installed. '

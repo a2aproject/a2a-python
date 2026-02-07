@@ -4,13 +4,19 @@ from typing import Any, cast
 
 
 try:
-    from sqlalchemy import Table, delete, select
-    from sqlalchemy.ext.asyncio import (
+    from sqlalchemy import (  # type: ignore[reportMissingImports]
+        Table,
+        delete,
+        select,
+    )
+    from sqlalchemy.ext.asyncio import (  # type: ignore[reportMissingImports]
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import class_mapper
+    from sqlalchemy.orm import (
+        class_mapper,  # type: ignore[reportMissingImports]
+    )
 except ImportError as e:
     raise ImportError(
         'DatabaseTaskStore requires SQLAlchemy and a database driver. '
