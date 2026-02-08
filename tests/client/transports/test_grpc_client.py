@@ -363,7 +363,9 @@ async def test_cancel_task(
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
-        metadata=[(HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')],
+        metadata=[
+            (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')
+        ],
     )
     assert response.status.state == TaskState.canceled
 
@@ -540,6 +542,7 @@ def test_get_grpc_metadata(
     grpc_transport.extensions = initial_extensions
     metadata = grpc_transport._get_grpc_metadata(input_extensions)
     assert metadata == expected_metadata
+
 
 def test_get_grpc_metadata_uses_lowercase_header_key(
     grpc_transport: GrpcTransport,
