@@ -548,7 +548,7 @@ def test_get_grpc_metadata(
     'test_extensions',
     [
         (['ext1']),  # Test with explicit extensions
-        (None),      # Test with transport's default extensions
+        (None),  # Test with transport's default extensions
     ],
 )
 def test_get_grpc_metadata_uses_lowercase_header_key(
