@@ -56,7 +56,7 @@ def _get_metadata_value(
     md = context.invocation_metadata
     raw_values: list[str | bytes] = []
     if isinstance(md, Metadata):
-        raw_values = md.get_all(key)
+        raw_values = md.get_all(key.lower())
     elif isinstance(md, Sequence):
         lower_key = key.lower()
         raw_values = [e for (k, e) in md if k.lower() == lower_key]
@@ -417,7 +417,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         if server_context.activated_extensions:
             context.set_trailing_metadata(
                 [
-                    (HTTP_EXTENSION_HEADER, e)
+                    (HTTP_EXTENSION_HEADER.lower(), e)
                     for e in sorted(server_context.activated_extensions)
                 ]
             )

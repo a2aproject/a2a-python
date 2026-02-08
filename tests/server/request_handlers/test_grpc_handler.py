@@ -350,8 +350,8 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'bar'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
 
         def side_effect(request, context: ServerCallContext):
@@ -379,8 +379,8 @@ class TestGrpcExtensions:
             mock_grpc_context.set_trailing_metadata.call_args.args[0]
         )
         assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'baz'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
         }
 
     async def test_send_message_with_comma_separated_extensions(
@@ -390,8 +390,8 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo ,, bar,'),
-            (HTTP_EXTENSION_HEADER, 'baz  , bar'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo ,, bar,'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz  , bar'),
         )
         mock_request_handler.on_message_send.return_value = types.Message(
             message_id='1',
@@ -415,8 +415,8 @@ class TestGrpcExtensions:
         mock_grpc_context: AsyncMock,
     ) -> None:
         mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'bar'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
 
         async def side_effect(request, context: ServerCallContext):
@@ -450,6 +450,6 @@ class TestGrpcExtensions:
             mock_grpc_context.set_trailing_metadata.call_args.args[0]
         )
         assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'baz'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
         }

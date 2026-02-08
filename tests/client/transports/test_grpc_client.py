@@ -202,7 +202,7 @@ async def test_send_message_task_response(
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
         (
-            HTTP_EXTENSION_HEADER,
+            HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v3',
         )
     ]
@@ -228,7 +228,7 @@ async def test_send_message_message_response(
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
         (
-            HTTP_EXTENSION_HEADER,
+            HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
         )
     ]
@@ -283,7 +283,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
     _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
     assert kwargs['metadata'] == [
         (
-            HTTP_EXTENSION_HEADER,
+            HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
         )
     ]
@@ -313,7 +313,7 @@ async def test_get_task(
         ),
         metadata=[
             (
-                HTTP_EXTENSION_HEADER,
+                HTTP_EXTENSION_HEADER.lower(),
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
@@ -338,7 +338,7 @@ async def test_get_task_with_history(
         ),
         metadata=[
             (
-                HTTP_EXTENSION_HEADER,
+                HTTP_EXTENSION_HEADER.lower(),
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
@@ -363,7 +363,7 @@ async def test_cancel_task(
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
-        metadata=[(HTTP_EXTENSION_HEADER, 'https://example.com/test-ext/v3')],
+        metadata=[(HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')],
     )
     assert response.status.state == TaskState.canceled
 
@@ -395,7 +395,7 @@ async def test_set_task_callback_with_valid_task(
         ),
         metadata=[
             (
-                HTTP_EXTENSION_HEADER,
+                HTTP_EXTENSION_HEADER.lower(),
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
@@ -458,7 +458,7 @@ async def test_get_task_callback_with_valid_task(
         ),
         metadata=[
             (
-                HTTP_EXTENSION_HEADER,
+                HTTP_EXTENSION_HEADER.lower(),
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             )
         ],
@@ -506,27 +506,27 @@ async def test_get_task_callback_with_invalid_task(
         (
             ['ext1'],
             None,
-            [(HTTP_EXTENSION_HEADER, 'ext1')],
+            [(HTTP_EXTENSION_HEADER.lower(), 'ext1')],
         ),  # Case 2: Initial, No input
         (
             None,
             ['ext2'],
-            [(HTTP_EXTENSION_HEADER, 'ext2')],
+            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
         ),  # Case 3: No initial, Input
         (
             ['ext1'],
             ['ext2'],
-            [(HTTP_EXTENSION_HEADER, 'ext2')],
+            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
         ),  # Case 4: Initial, Input (override)
         (
             ['ext1'],
             ['ext2', 'ext3'],
-            [(HTTP_EXTENSION_HEADER, 'ext2,ext3')],
+            [(HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3')],
         ),  # Case 5: Initial, Multiple inputs (override)
         (
             ['ext1', 'ext2'],
             ['ext3'],
-            [(HTTP_EXTENSION_HEADER, 'ext3')],
+            [(HTTP_EXTENSION_HEADER.lower(), 'ext3')],
         ),  # Case 6: Multiple initial, Single input (override)
     ],
 )
@@ -540,3 +540,18 @@ def test_get_grpc_metadata(
     grpc_transport.extensions = initial_extensions
     metadata = grpc_transport._get_grpc_metadata(input_extensions)
     assert metadata == expected_metadata
+
+def test_get_grpc_metadata_uses_lowercase_header_key(
+    grpc_transport: GrpcTransport,
+) -> None:
+    """Test gRPC metadata header key is always lowercase."""
+    # Regression: gRPC rejects non-lowercase metadata keys
+    metadata = grpc_transport._get_grpc_metadata(['ext1'])
+    assert metadata is not None
+    key, _ = metadata[0]
+    assert key == key.lower()
+
+    metadata = grpc_transport._get_grpc_metadata()
+    assert metadata is not None
+    key, _ = metadata[0]
+    assert key == key.lower()
