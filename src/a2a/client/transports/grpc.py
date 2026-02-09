@@ -67,7 +67,7 @@ class GrpcTransport(ClientTransport):
         extensions_to_use = (
             extensions if extensions is not None else self.extensions
         )
-        if extensions_to_use is not None:
+        if extensions_to_use:
             return [
                 (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
             ]
