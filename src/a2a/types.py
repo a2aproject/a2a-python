@@ -6,7 +6,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Any, Literal
 
-from pydantic import Field, RootModel, field_validator
+from pydantic import Field, RootModel, field_validator, model_validator
 
 from a2a._base import A2ABaseModel
 
@@ -1337,6 +1337,13 @@ class Part(RootModel[TextPart | FilePart | DataPart]):
     A discriminated union representing a part of a message or artifact, which can
     be text, a file, or structured data.
     """
+
+    @model_validator(mode='before')
+    @classmethod
+    def validate_kind_present(cls, data: Any) -> Any:
+        if isinstance(data, dict) and 'kind' not in data:
+            raise ValueError("Message part must have a 'kind' field")
+        return data
 
 
 class SetTaskPushNotificationConfigRequest(A2ABaseModel):
