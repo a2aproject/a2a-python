@@ -11,6 +11,7 @@ try:
     import grpc.aio
 
     from grpc.aio import Metadata
+    from grpc.aio._typing import MetadataType
 except ImportError as e:
     raise ImportError(
         'GrpcHandler requires grpcio and grpcio-tools to be installed. '
@@ -53,7 +54,7 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md = context.invocation_metadata()
+    md: MetadataType | None = context.invocation_metadata()
     raw_values: list[str | bytes] = []
     lower_key = key.lower()
     if isinstance(md, Metadata):
