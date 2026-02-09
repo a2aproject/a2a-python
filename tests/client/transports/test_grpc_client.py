@@ -363,7 +363,9 @@ async def test_cancel_task(
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
-        metadata=[(HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')],
+        metadata=[
+            (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')
+        ],
     )
     assert response.status.state == TaskState.canceled
 
