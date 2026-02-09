@@ -1295,6 +1295,7 @@ class MessageSendConfiguration(A2ABaseModel):
     """
     The number of most recent messages from the task's history to retrieve in the response.
     """
+    push_notification_config: PushNotificationConfig | None = None
     """
     Configuration for the agent to send push notifications for updates after the initial response.
     """
@@ -1411,6 +1412,13 @@ class Artifact(A2ABaseModel):
     """
     An array of content parts that make up the artifact.
     """
+
+    @field_validator('parts')
+    @classmethod
+    def validate_parts(cls, v: list[Part]) -> list[Part]:
+        if not v:
+            raise ValueError('Artifact must have at least one part')
+        return v
 
 
 class DeleteTaskPushNotificationConfigResponse(

@@ -35,5 +35,4 @@ class A2ABaseModel(BaseModel):
         validate_by_alias=True,
         serialize_by_alias=True,
         alias_generator=to_camel_custom,
-        extra='forbid',
     )
