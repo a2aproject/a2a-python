@@ -381,8 +381,9 @@ async def test_grpc_transport_sends_message_blocking(
         parts=[Part(root=TextPart(text='Hello, gRPC blocking test!'))],
     )
     params = MessageSendParams(message=message_to_send)
+    extensions = ['ext-1', 'ext-2']
 
-    result = await transport.send_message(request=params)
+    result = await transport.send_message(request=params, extensions=extensions)
 
     assert result.id == TASK_FROM_BLOCKING.id
     assert result.context_id == TASK_FROM_BLOCKING.context_id
@@ -390,12 +391,14 @@ async def test_grpc_transport_sends_message_blocking(
     handler.on_message_send.assert_awaited_once()
     call_args, _ = handler.on_message_send.call_args
     received_params: MessageSendParams = call_args[0]
+    received_context = call_args[1]
 
     assert received_params.message.message_id == message_to_send.message_id
     assert (
         received_params.message.parts[0].root.text
         == message_to_send.parts[0].root.text
     )
+    assert received_context.requested_extensions == set(extensions)
 
     await transport.close()
 
