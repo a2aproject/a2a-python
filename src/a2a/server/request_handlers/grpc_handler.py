@@ -4,12 +4,15 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Sequence
+from typing import TYPE_CHECKING
 
 
 try:
     import grpc
     import grpc.aio
 
+    if TYPE_CHECKING:
+        from grpc.aio._typing import MetadataType
     from grpc.aio import Metadata
 except ImportError as e:
     raise ImportError(
@@ -53,7 +56,7 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md = context.invocation_metadata()
+    md: MetadataType | None = context.invocation_metadata()
     raw_values: list[str | bytes] = []
     lower_key = key.lower()
     if isinstance(md, Metadata):
