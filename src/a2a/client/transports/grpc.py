@@ -64,10 +64,11 @@ class GrpcTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> list[tuple[str, str]] | None:
         """Creates gRPC metadata for extensions."""
-        if extensions is not None:
-            return [(HTTP_EXTENSION_HEADER, ','.join(extensions))]
-        if self.extensions is not None:
-            return [(HTTP_EXTENSION_HEADER, ','.join(self.extensions))]
+        extensions_to_use = extensions or self.extensions
+        if extensions_to_use:
+            return [
+                (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
+            ]
         return None
 
     @classmethod
