@@ -1,14 +1,8 @@
-from __future__ import annotations
-
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
-from typing import TYPE_CHECKING
+from types import TracebackType
 
 from typing_extensions import Self
-
-
-if TYPE_CHECKING:
-    from types import TracebackType
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types import (
