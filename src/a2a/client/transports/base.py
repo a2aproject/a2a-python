@@ -2,6 +2,13 @@ from __future__ import annotations
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
+from typing import TYPE_CHECKING
+
+from typing_extensions import Self
+
+
+if TYPE_CHECKING:
+    from types import TracebackType
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types import (
@@ -21,7 +28,7 @@ from a2a.types import (
 class ClientTransport(ABC):
     """Abstract base class for a client transport."""
 
-    async def __aenter__(self) -> ClientTransport:
+    async def __aenter__(self) -> Self:
         """Enter the async context manager, returning the transport itself."""
         return self
 
@@ -29,7 +36,7 @@ class ClientTransport(ABC):
         self,
         exc_type: type[BaseException] | None,
         exc_val: BaseException | None,
-        exc_tb: object | None,
+        exc_tb: TracebackType | None,
     ) -> None:
         """Exit the async context manager, ensuring close() is called."""
         await self.close()
