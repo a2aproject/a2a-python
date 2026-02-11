@@ -23,7 +23,7 @@ class ClientTransport(ABC):
     """Abstract base class for a client transport."""
 
     async def __aenter__(self) -> Self:
-        """Enter the async context manager, returning the transport itself."""
+        """Enters the async context manager, returning the transport itself."""
         return self
 
     async def __aexit__(
@@ -32,7 +32,7 @@ class ClientTransport(ABC):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exit the async context manager, ensuring close() is called."""
+        """Exits the async context manager, ensuring close() is called."""
         await self.close()
 
     @abstractmethod
