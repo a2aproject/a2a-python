@@ -4,12 +4,15 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Sequence
+from typing import TYPE_CHECKING
 
 
 try:
     import grpc
     import grpc.aio
 
+    if TYPE_CHECKING:
+        from grpc.aio._typing import MetadataType
     from grpc.aio import Metadata
 except ImportError as e:
     raise ImportError(
@@ -53,12 +56,12 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md = context.invocation_metadata
+    md: MetadataType | None = context.invocation_metadata()
     raw_values: list[str | bytes] = []
+    lower_key = key.lower()
     if isinstance(md, Metadata):
-        raw_values = md.get_all(key)
+        raw_values = md.get_all(lower_key)
     elif isinstance(md, Sequence):
-        lower_key = key.lower()
         raw_values = [e for (k, e) in md if k.lower() == lower_key]
     return [e if isinstance(e, str) else e.decode('utf-8') for e in raw_values]
 
@@ -417,7 +420,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         if server_context.activated_extensions:
             context.set_trailing_metadata(
                 [
-                    (HTTP_EXTENSION_HEADER, e)
+                    (HTTP_EXTENSION_HEADER.lower(), e)
                     for e in sorted(server_context.activated_extensions)
                 ]
             )
