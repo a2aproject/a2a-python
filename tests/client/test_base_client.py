@@ -62,6 +62,18 @@ def base_client(
 
 
 @pytest.mark.asyncio
+async def test_transport_aenter_returns_self(mock_transport: AsyncMock) -> None:
+    result = await ClientTransport.__aenter__(mock_transport)
+    assert result is mock_transport
+
+
+@pytest.mark.asyncio
+async def test_transport_aexit_calls_close(mock_transport: AsyncMock) -> None:
+    await ClientTransport.__aexit__(mock_transport, None, None, None)
+    mock_transport.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_send_message_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ) -> None:

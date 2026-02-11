@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 
@@ -18,6 +20,19 @@ from a2a.types import (
 
 class ClientTransport(ABC):
     """Abstract base class for a client transport."""
+
+    async def __aenter__(self) -> ClientTransport:
+        """Enter the async context manager, returning the transport itself."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: object | None,
+    ) -> None:
+        """Exit the async context manager, ensuring close() is called."""
+        await self.close()
 
     @abstractmethod
     async def send_message(
