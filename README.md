@@ -34,6 +34,18 @@
 
 ---
 
+## 🧩 Compatibility
+
+This SDK implements the A2A Protocol Specification [`v0.3.0`](https://a2a-protocol.org/v0.3.0/specification).
+
+| Transport | Client | Server |
+| :--- | :---: | :---: |
+| **JSON-RPC** | ✅ | ✅ |
+| **HTTP+JSON/REST** | ✅ | ✅ |
+| **GRPC** | ✅ | ✅ |
+
+---
+
 ## 🚀 Getting Started
 
 ### Prerequisites
