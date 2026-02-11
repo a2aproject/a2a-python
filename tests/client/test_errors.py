@@ -259,8 +259,7 @@ class TestA2AClientJSONRPCError:
         response = self._make_error_response(-32601, 'Method not found')
         error = A2AClientJSONRPCError(response)
         result = repr(error)
-        assert result.startswith('A2AClientJSONRPCError(')
-        assert result.endswith(')')
+        assert result == f'A2AClientJSONRPCError({response.error!r})'
 
     def test_inheritance(self) -> None:
         """Test that A2AClientJSONRPCError inherits from A2AClientError."""
