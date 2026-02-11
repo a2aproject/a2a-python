@@ -21,6 +21,14 @@ class A2AClientHTTPError(A2AClientError):
         self.message = message
         super().__init__(f'HTTP Error {status_code}: {message}')
 
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing structured attributes."""
+        return (
+            f'{self.__class__.__name__}('
+            f'status_code={self.status_code!r}, '
+            f'message={self.message!r})'
+        )
+
 
 class A2AClientJSONError(A2AClientError):
     """Client exception for JSON errors during response parsing or validation."""
@@ -33,6 +41,10 @@ class A2AClientJSONError(A2AClientError):
         """
         self.message = message
         super().__init__(f'JSON Error: {message}')
+
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing structured attributes."""
+        return f'{self.__class__.__name__}(message={self.message!r})'
 
 
 class A2AClientTimeoutError(A2AClientError):
@@ -47,6 +59,10 @@ class A2AClientTimeoutError(A2AClientError):
         self.message = message
         super().__init__(f'Timeout Error: {message}')
 
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing structured attributes."""
+        return f'{self.__class__.__name__}(message={self.message!r})'
+
 
 class A2AClientInvalidArgsError(A2AClientError):
     """Client exception for invalid arguments passed to a method."""
@@ -59,6 +75,10 @@ class A2AClientInvalidArgsError(A2AClientError):
         """
         self.message = message
         super().__init__(f'Invalid arguments error: {message}')
+
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing structured attributes."""
+        return f'{self.__class__.__name__}(message={self.message!r})'
 
 
 class A2AClientInvalidStateError(A2AClientError):
@@ -73,6 +93,10 @@ class A2AClientInvalidStateError(A2AClientError):
         self.message = message
         super().__init__(f'Invalid state error: {message}')
 
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing structured attributes."""
+        return f'{self.__class__.__name__}(message={self.message!r})'
+
 
 class A2AClientJSONRPCError(A2AClientError):
     """Client exception for JSON-RPC errors returned by the server."""
@@ -85,3 +109,7 @@ class A2AClientJSONRPCError(A2AClientError):
         """
         self.error = error.error
         super().__init__(f'JSON-RPC Error {error.error}')
+
+    def __repr__(self) -> str:
+        """Returns an unambiguous representation showing the JSON-RPC error object."""
+        return f'{self.__class__.__name__}({self.error!r})'

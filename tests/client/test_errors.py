@@ -1,8 +1,15 @@
 from typing import NoReturn
+from unittest.mock import MagicMock
 
 import pytest
 
 from a2a.client import A2AClientError, A2AClientHTTPError, A2AClientJSONError
+from a2a.client.errors import (
+    A2AClientInvalidArgsError,
+    A2AClientInvalidStateError,
+    A2AClientJSONRPCError,
+    A2AClientTimeoutError,
+)
 
 
 class TestA2AClientError:
@@ -34,6 +41,14 @@ class TestA2AClientHTTPError:
         """Test that the error message is formatted correctly."""
         error = A2AClientHTTPError(500, 'Internal Server Error')
         assert str(error) == 'HTTP Error 500: Internal Server Error'
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientHTTPError(404, 'Not Found')
+        assert (
+            repr(error)
+            == "A2AClientHTTPError(status_code=404, message='Not Found')"
+        )
 
     def test_inheritance(self) -> None:
         """Test that A2AClientHTTPError inherits from A2AClientError."""
@@ -81,6 +96,13 @@ class TestA2AClientJSONError:
         error = A2AClientJSONError('Missing required field')
         assert str(error) == 'JSON Error: Missing required field'
 
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientJSONError('Invalid JSON format')
+        assert (
+            repr(error) == "A2AClientJSONError(message='Invalid JSON format')"
+        )
+
     def test_inheritance(self) -> None:
         """Test that A2AClientJSONError inherits from A2AClientError."""
         error = A2AClientJSONError('Parsing error')
@@ -108,6 +130,152 @@ class TestA2AClientJSONError:
             assert str(error) == f'JSON Error: {message}'
 
 
+class TestA2AClientTimeoutError:
+    """Test cases for A2AClientTimeoutError class."""
+
+    def test_instantiation(self) -> None:
+        """Test that A2AClientTimeoutError can be instantiated with a message."""
+        error = A2AClientTimeoutError('Request timed out')
+        assert isinstance(error, A2AClientError)
+        assert error.message == 'Request timed out'
+
+    def test_message_formatting(self) -> None:
+        """Test that the error message is formatted correctly."""
+        error = A2AClientTimeoutError('Connection timed out after 30s')
+        assert str(error) == 'Timeout Error: Connection timed out after 30s'
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientTimeoutError('Request timed out')
+        assert (
+            repr(error) == "A2AClientTimeoutError(message='Request timed out')"
+        )
+
+    def test_inheritance(self) -> None:
+        """Test that A2AClientTimeoutError inherits from A2AClientError."""
+        error = A2AClientTimeoutError('timeout')
+        assert isinstance(error, A2AClientError)
+
+    def test_with_empty_message(self) -> None:
+        """Test behavior with an empty message."""
+        error = A2AClientTimeoutError('')
+        assert error.message == ''
+        assert str(error) == 'Timeout Error: '
+
+
+class TestA2AClientInvalidArgsError:
+    """Test cases for A2AClientInvalidArgsError class."""
+
+    def test_instantiation(self) -> None:
+        """Test that A2AClientInvalidArgsError can be instantiated."""
+        error = A2AClientInvalidArgsError('Missing required param')
+        assert isinstance(error, A2AClientError)
+        assert error.message == 'Missing required param'
+
+    def test_message_formatting(self) -> None:
+        """Test that the error message is formatted correctly."""
+        error = A2AClientInvalidArgsError('Invalid type for param X')
+        assert str(error) == 'Invalid arguments error: Invalid type for param X'
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientInvalidArgsError('Missing required param')
+        assert (
+            repr(error)
+            == "A2AClientInvalidArgsError(message='Missing required param')"
+        )
+
+    def test_inheritance(self) -> None:
+        """Test that A2AClientInvalidArgsError inherits from A2AClientError."""
+        error = A2AClientInvalidArgsError('bad args')
+        assert isinstance(error, A2AClientError)
+
+    def test_with_empty_message(self) -> None:
+        """Test behavior with an empty message."""
+        error = A2AClientInvalidArgsError('')
+        assert error.message == ''
+        assert str(error) == 'Invalid arguments error: '
+
+
+class TestA2AClientInvalidStateError:
+    """Test cases for A2AClientInvalidStateError class."""
+
+    def test_instantiation(self) -> None:
+        """Test that A2AClientInvalidStateError can be instantiated."""
+        error = A2AClientInvalidStateError('Client not initialized')
+        assert isinstance(error, A2AClientError)
+        assert error.message == 'Client not initialized'
+
+    def test_message_formatting(self) -> None:
+        """Test that the error message is formatted correctly."""
+        error = A2AClientInvalidStateError('Already closed')
+        assert str(error) == 'Invalid state error: Already closed'
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientInvalidStateError('Client not initialized')
+        assert (
+            repr(error)
+            == "A2AClientInvalidStateError(message='Client not initialized')"
+        )
+
+    def test_inheritance(self) -> None:
+        """Test that A2AClientInvalidStateError inherits from A2AClientError."""
+        error = A2AClientInvalidStateError('bad state')
+        assert isinstance(error, A2AClientError)
+
+    def test_with_empty_message(self) -> None:
+        """Test behavior with an empty message."""
+        error = A2AClientInvalidStateError('')
+        assert error.message == ''
+        assert str(error) == 'Invalid state error: '
+
+
+class TestA2AClientJSONRPCError:
+    """Test cases for A2AClientJSONRPCError class."""
+
+    def _make_error_response(
+        self, code: int = -32600, message: str = 'Invalid Request', data=None
+    ):
+        """Helper to create a mock JSONRPCErrorResponse."""
+        inner_error = MagicMock()
+        inner_error.code = code
+        inner_error.message = message
+        inner_error.data = data
+
+        response = MagicMock()
+        response.error = inner_error
+        return response
+
+    def test_instantiation(self) -> None:
+        """Test that A2AClientJSONRPCError can be instantiated."""
+        response = self._make_error_response()
+        error = A2AClientJSONRPCError(response)
+        assert isinstance(error, A2AClientError)
+        assert error.error == response.error
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows the JSON-RPC error object."""
+        response = self._make_error_response(-32601, 'Method not found')
+        error = A2AClientJSONRPCError(response)
+        result = repr(error)
+        assert result.startswith('A2AClientJSONRPCError(')
+        assert result.endswith(')')
+
+    def test_inheritance(self) -> None:
+        """Test that A2AClientJSONRPCError inherits from A2AClientError."""
+        response = self._make_error_response()
+        error = A2AClientJSONRPCError(response)
+        assert isinstance(error, A2AClientError)
+
+    def test_with_empty_message(self) -> None:
+        """Test behavior with an empty message."""
+        response = self._make_error_response(message='')
+        error = A2AClientJSONRPCError(response)
+        assert error.error.message == ''
+        assert str(error) == f'JSON-RPC Error {response.error}'
+
+
 class TestExceptionHierarchy:
     """Test the exception hierarchy and relationships."""
 
@@ -116,6 +284,10 @@ class TestExceptionHierarchy:
         assert issubclass(A2AClientError, Exception)
         assert issubclass(A2AClientHTTPError, A2AClientError)
         assert issubclass(A2AClientJSONError, A2AClientError)
+        assert issubclass(A2AClientTimeoutError, A2AClientError)
+        assert issubclass(A2AClientInvalidArgsError, A2AClientError)
+        assert issubclass(A2AClientInvalidStateError, A2AClientError)
+        assert issubclass(A2AClientJSONRPCError, A2AClientError)
 
     def test_catch_specific_exception(self) -> None:
         """Test that specific exceptions can be caught."""
@@ -130,6 +302,9 @@ class TestExceptionHierarchy:
         exceptions = [
             A2AClientHTTPError(404, 'Not Found'),
             A2AClientJSONError('Invalid JSON'),
+            A2AClientTimeoutError('Timed out'),
+            A2AClientInvalidArgsError('Bad args'),
+            A2AClientInvalidStateError('Bad state'),
         ]
 
         for raised_error in exceptions:
@@ -168,38 +343,78 @@ class TestExceptionRaising:
 
         assert str(excinfo.value) == 'Generic client error'
 
+    def test_raising_timeout_error(self) -> NoReturn:
+        """Test raising a timeout error and checking its properties."""
+        with pytest.raises(A2AClientTimeoutError) as excinfo:
+            raise A2AClientTimeoutError('Connection timed out')
+
+        error = excinfo.value
+        assert error.message == 'Connection timed out'
+        assert str(error) == 'Timeout Error: Connection timed out'
+
 
 # Additional parametrized tests for more comprehensive coverage
 
 
 @pytest.mark.parametrize(
-    'status_code,message,expected',
+    'status_code,message,expected_str,expected_repr',
     [
-        (400, 'Bad Request', 'HTTP Error 400: Bad Request'),
-        (404, 'Not Found', 'HTTP Error 404: Not Found'),
-        (500, 'Server Error', 'HTTP Error 500: Server Error'),
+        (
+            400,
+            'Bad Request',
+            'HTTP Error 400: Bad Request',
+            "A2AClientHTTPError(status_code=400, message='Bad Request')",
+        ),
+        (
+            404,
+            'Not Found',
+            'HTTP Error 404: Not Found',
+            "A2AClientHTTPError(status_code=404, message='Not Found')",
+        ),
+        (
+            500,
+            'Server Error',
+            'HTTP Error 500: Server Error',
+            "A2AClientHTTPError(status_code=500, message='Server Error')",
+        ),
     ],
 )
 def test_http_error_parametrized(
-    status_code: int, message: str, expected: str
+    status_code: int, message: str, expected_str: str, expected_repr: str
 ) -> None:
     """Parametrized test for HTTP errors with different status codes."""
     error = A2AClientHTTPError(status_code, message)
     assert error.status_code == status_code
     assert error.message == message
-    assert str(error) == expected
+    assert str(error) == expected_str
+    assert repr(error) == expected_repr
 
 
 @pytest.mark.parametrize(
-    'message,expected',
+    'message,expected_str,expected_repr',
     [
-        ('Missing field', 'JSON Error: Missing field'),
-        ('Invalid type', 'JSON Error: Invalid type'),
-        ('Parsing failed', 'JSON Error: Parsing failed'),
+        (
+            'Missing field',
+            'JSON Error: Missing field',
+            "A2AClientJSONError(message='Missing field')",
+        ),
+        (
+            'Invalid type',
+            'JSON Error: Invalid type',
+            "A2AClientJSONError(message='Invalid type')",
+        ),
+        (
+            'Parsing failed',
+            'JSON Error: Parsing failed',
+            "A2AClientJSONError(message='Parsing failed')",
+        ),
     ],
 )
-def test_json_error_parametrized(message: str, expected: str) -> None:
+def test_json_error_parametrized(
+    message: str, expected_str: str, expected_repr: str
+) -> None:
     """Parametrized test for JSON errors with different messages."""
     error = A2AClientJSONError(message)
     assert error.message == message
-    assert str(error) == expected
+    assert str(error) == expected_str
+    assert repr(error) == expected_repr
