@@ -5,7 +5,12 @@ from a2a.extensions.common import (
     get_requested_extensions,
     update_extension_header,
 )
-from a2a.types.a2a_pb2 import AgentCapabilities, AgentInterface, AgentCard, AgentExtension
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentInterface,
+    AgentCard,
+    AgentExtension,
+)
 
 
 def test_get_requested_extensions():
@@ -34,7 +39,9 @@ def test_find_extension_by_uri():
         name='Test Agent',
         description='Test Agent Description',
         version='1.0',
-        supported_interfaces=[AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')],
+        supported_interfaces=[
+            AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')
+        ],
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
@@ -51,7 +58,9 @@ def test_find_extension_by_uri_no_extensions():
         name='Test Agent',
         description='Test Agent Description',
         version='1.0',
-        supported_interfaces=[AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')],
+        supported_interfaces=[
+            AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')
+        ],
         skills=[],
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
@@ -83,7 +92,7 @@ def test_find_extension_by_uri_no_extensions():
         (
             [],  # extensions
             'ext1',  # header
-            {},  # expected_extensions
+            set(),  # expected_extensions
         ),  # Case 3: New extensions is empty list, existing header extensions.
         (
             ['ext1', 'ext2'],  # extensions
@@ -104,7 +113,7 @@ def test_update_extension_header_merge_with_existing_extensions(
     result_kwargs = update_extension_header(http_kwargs, extensions)
     header_value = result_kwargs['headers'][HTTP_EXTENSION_HEADER]
     if not header_value:
-        actual_extensions = {}
+        actual_extensions: set[str] = set()
     else:
         actual_extensions_list = [e.strip() for e in header_value.split(',')]
         actual_extensions = set(actual_extensions_list)

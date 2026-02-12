@@ -1,14 +1,22 @@
 import logging
 
+from typing import Any, cast
+
 
 try:
-    from sqlalchemy import Table, delete, select
+    from sqlalchemy import (
+        Table,
+        delete,
+        select,
+    )
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import class_mapper
+    from sqlalchemy.orm import (
+        class_mapper,
+    )
 except ImportError as e:
     raise ImportError(
         'DatabaseTaskStore requires SQLAlchemy and a database driver. '
@@ -126,7 +134,9 @@ class DatabaseTaskStore(TaskStore):
         if task_model.history:
             task.history.extend(task_model.history)
         if task_model.task_metadata:
-            task.metadata.update(task_model.task_metadata)
+            task.metadata.update(
+                cast('dict[str, Any]', task_model.task_metadata)
+            )
         return task
 
     async def save(

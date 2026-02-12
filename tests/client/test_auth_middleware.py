@@ -30,7 +30,7 @@ from a2a.types.a2a_pb2 import (
     OAuthFlows,
     OpenIdConnectSecurityScheme,
     Role,
-    Security,
+    SecurityRequirement,
     SecurityScheme,
     SendMessageResponse,
     StringList,
@@ -320,7 +320,9 @@ async def test_auth_interceptor_variants(
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        security=[Security(schemes={test_case.scheme_name: StringList()})],
+        security_requirements=[
+            SecurityRequirement(schemes={test_case.scheme_name: StringList()})
+        ],
         security_schemes={
             test_case.scheme_name: wrap_security_scheme(
                 test_case.security_scheme
@@ -370,7 +372,9 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        security=[Security(schemes={scheme_name: StringList()})],
+        security_requirements=[
+            SecurityRequirement(schemes={scheme_name: StringList()})
+        ],
         security_schemes={},
     )
 

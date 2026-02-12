@@ -3,7 +3,7 @@ version: v2
 inputs:
   - git_repo: https://github.com/a2aproject/A2A.git
     ref: main
-    subdir: specification/grpc
+    subdir: specification
 managed:
   enabled: true
 # Python Generation

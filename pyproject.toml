@@ -155,11 +155,10 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
-  "src/a2a/types/a2a_pb2.py",
-  "src/a2a/types/a2a_pb2_grpc.py",
+  "src/a2a/types",
 ]
-reportMissingImports = "none"
-reportMissingModuleSource = "none"
+venvPath = "."
+venv = ".venv"
 
 [tool.coverage.run]
 branch = true

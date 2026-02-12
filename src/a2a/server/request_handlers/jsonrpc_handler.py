@@ -19,6 +19,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -27,7 +28,6 @@ from a2a.types.a2a_pb2 import (
     Message,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
 )
@@ -320,7 +320,7 @@ class JSONRPCHandler:
     )
     async def set_push_notification_config(
         self,
-        request: SetTaskPushNotificationConfigRequest,
+        request: CreateTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/set' JSON-RPC method.
@@ -328,7 +328,7 @@ class JSONRPCHandler:
         Requires the agent to support push notifications.
 
         Args:
-            request: The incoming `SetTaskPushNotificationConfigRequest` object.
+            request: The incoming `CreateTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:
@@ -341,10 +341,8 @@ class JSONRPCHandler:
         request_id = self._get_request_id(context)
         try:
             # Pass the full request to the handler
-            result_config = (
-                await self.request_handler.on_set_task_push_notification_config(
-                    request, context
-                )
+            result_config = await self.request_handler.on_create_task_push_notification_config(
+                request, context
             )
             result = MessageToDict(
                 result_config, preserving_proto_field_name=False

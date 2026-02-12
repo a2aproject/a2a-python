@@ -19,3 +19,7 @@ class TransportProtocol:
     jsonrpc = TRANSPORT_JSONRPC
     http_json = TRANSPORT_HTTP_JSON
     grpc = TRANSPORT_GRPC
+
+
+DEFAULT_MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
+JSONRPC_PARSE_ERROR_CODE = -32700

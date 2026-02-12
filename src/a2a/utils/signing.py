@@ -9,7 +9,6 @@ from a2a.utils.helpers import canonicalize_agent_card
 try:
     import jwt
 
-    from jwt.api_jwk import PyJWK
     from jwt.exceptions import PyJWTError
     from jwt.utils import base64url_decode, base64url_encode
 except ImportError as e:
@@ -51,7 +50,7 @@ class ProtectedHeader(TypedDict):
 
 
 def create_agent_card_signer(
-    signing_key: PyJWK | str | bytes,
+    signing_key: Any,
     protected_header: ProtectedHeader,
     header: dict[str, Any] | None = None,
 ) -> Callable[[AgentCard], AgentCard]:
@@ -94,7 +93,7 @@ def create_agent_card_signer(
 
 
 def create_signature_verifier(
-    key_provider: Callable[[str | None, str | None], PyJWK | str | bytes],
+    key_provider: Callable[[str | None, str | None], Any],
     algorithms: list[str],
 ) -> Callable[[AgentCard], None]:
     """Creates a function that verifies the signatures on an AgentCard.

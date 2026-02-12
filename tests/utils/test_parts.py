@@ -1,8 +1,5 @@
-from google.protobuf.struct_pb2 import Struct
-
+from google.protobuf.struct_pb2 import Struct, Value
 from a2a.types.a2a_pb2 import (
-    DataPart,
-    FilePart,
     Part,
 )
 from a2a.utils.parts import (
@@ -53,7 +50,7 @@ class TestGetDataParts:
         # Setup
         data = Struct()
         data.update({'key': 'value'})
-        parts = [Part(data=DataPart(data=data))]
+        parts = [Part(data=Value(struct_value=data))]
 
         # Exercise
         result = get_data_parts(parts)
@@ -68,8 +65,8 @@ class TestGetDataParts:
         data2 = Struct()
         data2.update({'key2': 'value2'})
         parts = [
-            Part(data=DataPart(data=data1)),
-            Part(data=DataPart(data=data2)),
+            Part(data=Value(struct_value=data1)),
+            Part(data=Value(struct_value=data2)),
         ]
 
         # Exercise
@@ -86,8 +83,8 @@ class TestGetDataParts:
         data2.update({'key2': 'value2'})
         parts = [
             Part(text='some text'),
-            Part(data=DataPart(data=data1)),
-            Part(data=DataPart(data=data2)),
+            Part(data=Value(struct_value=data1)),
+            Part(data=Value(struct_value=data2)),
         ]
 
         # Exercise
@@ -122,31 +119,21 @@ class TestGetDataParts:
 class TestGetFileParts:
     def test_get_file_parts_single_file_part(self):
         # Setup
-        file_part = FilePart(
-            file_with_uri='file://path/to/file', media_type='text/plain'
-        )
-        parts = [Part(file=file_part)]
+        parts = [Part(url='file://path/to/file', media_type='text/plain')]
 
         # Exercise
         result = get_file_parts(parts)
 
         # Verify
         assert len(result) == 1
-        assert result[0].file_with_uri == 'file://path/to/file'
+        assert result[0].url == 'file://path/to/file'
         assert result[0].media_type == 'text/plain'
 
     def test_get_file_parts_multiple_file_parts(self):
         # Setup
-        file_part1 = FilePart(
-            file_with_uri='file://path/to/file1', media_type='text/plain'
-        )
-        file_part2 = FilePart(
-            file_with_bytes=b'file content',
-            media_type='application/octet-stream',
-        )
         parts = [
-            Part(file=file_part1),
-            Part(file=file_part2),
+            Part(url='file://path/to/file1', media_type='text/plain'),
+            Part(raw=b'file content', media_type='application/octet-stream'),
         ]
 
         # Exercise
@@ -154,17 +141,14 @@ class TestGetFileParts:
 
         # Verify
         assert len(result) == 2
-        assert result[0].file_with_uri == 'file://path/to/file1'
-        assert result[1].file_with_bytes == b'file content'
+        assert result[0].url == 'file://path/to/file1'
+        assert result[1].raw == b'file content'
 
     def test_get_file_parts_mixed_parts(self):
         # Setup
-        file_part = FilePart(
-            file_with_uri='file://path/to/file', media_type='text/plain'
-        )
         parts = [
             Part(text='some text'),
-            Part(file=file_part),
+            Part(url='file://path/to/file', media_type='text/plain'),
         ]
 
         # Exercise
@@ -172,7 +156,7 @@ class TestGetFileParts:
 
         # Verify
         assert len(result) == 1
-        assert result[0].file_with_uri == 'file://path/to/file'
+        assert result[0].url == 'file://path/to/file'
 
     def test_get_file_parts_no_file_parts(self):
         # Setup
@@ -180,7 +164,7 @@ class TestGetFileParts:
         data.update({'key': 'value'})
         parts = [
             Part(text='some text'),
-            Part(data=DataPart(data=data)),
+            Part(data=Value(struct_value=data)),
         ]
 
         # Exercise

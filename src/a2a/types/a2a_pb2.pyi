@@ -22,7 +22,7 @@ class TaskState(int, metaclass=_enum_type_wrapper.EnumTypeWrapper):
     TASK_STATE_WORKING: _ClassVar[TaskState]
     TASK_STATE_COMPLETED: _ClassVar[TaskState]
     TASK_STATE_FAILED: _ClassVar[TaskState]
-    TASK_STATE_CANCELLED: _ClassVar[TaskState]
+    TASK_STATE_CANCELED: _ClassVar[TaskState]
     TASK_STATE_INPUT_REQUIRED: _ClassVar[TaskState]
     TASK_STATE_REJECTED: _ClassVar[TaskState]
     TASK_STATE_AUTH_REQUIRED: _ClassVar[TaskState]
@@ -37,7 +37,7 @@ TASK_STATE_SUBMITTED: TaskState
 TASK_STATE_WORKING: TaskState
 TASK_STATE_COMPLETED: TaskState
 TASK_STATE_FAILED: TaskState
-TASK_STATE_CANCELLED: TaskState
+TASK_STATE_CANCELED: TaskState
 TASK_STATE_INPUT_REQUIRED: TaskState
 TASK_STATE_REJECTED: TaskState
 TASK_STATE_AUTH_REQUIRED: TaskState
@@ -84,34 +84,22 @@ class TaskStatus(_message.Message):
     def __init__(self, state: _Optional[_Union[TaskState, str]] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., timestamp: _Optional[_Union[datetime.datetime, _timestamp_pb2.Timestamp, _Mapping]] = ...) -> None: ...
 
 class Part(_message.Message):
-    __slots__ = ("text", "file", "data", "metadata")
+    __slots__ = ("text", "raw", "url", "data", "metadata", "filename", "media_type")
     TEXT_FIELD_NUMBER: _ClassVar[int]
-    FILE_FIELD_NUMBER: _ClassVar[int]
+    RAW_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
     DATA_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
-    text: str
-    file: FilePart
-    data: DataPart
-    metadata: _struct_pb2.Struct
-    def __init__(self, text: _Optional[str] = ..., file: _Optional[_Union[FilePart, _Mapping]] = ..., data: _Optional[_Union[DataPart, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
-
-class FilePart(_message.Message):
-    __slots__ = ("file_with_uri", "file_with_bytes", "media_type", "name")
-    FILE_WITH_URI_FIELD_NUMBER: _ClassVar[int]
-    FILE_WITH_BYTES_FIELD_NUMBER: _ClassVar[int]
+    FILENAME_FIELD_NUMBER: _ClassVar[int]
     MEDIA_TYPE_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
-    file_with_uri: str
-    file_with_bytes: bytes
+    text: str
+    raw: bytes
+    url: str
+    data: _struct_pb2.Value
+    metadata: _struct_pb2.Struct
+    filename: str
     media_type: str
-    name: str
-    def __init__(self, file_with_uri: _Optional[str] = ..., file_with_bytes: _Optional[bytes] = ..., media_type: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
-
-class DataPart(_message.Message):
-    __slots__ = ("data",)
-    DATA_FIELD_NUMBER: _ClassVar[int]
-    data: _struct_pb2.Struct
-    def __init__(self, data: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, text: _Optional[str] = ..., raw: _Optional[bytes] = ..., url: _Optional[str] = ..., data: _Optional[_Union[_struct_pb2.Value, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., filename: _Optional[str] = ..., media_type: _Optional[str] = ...) -> None: ...
 
 class Message(_message.Message):
     __slots__ = ("message_id", "context_id", "task_id", "role", "parts", "metadata", "extensions", "reference_task_ids")
@@ -150,18 +138,16 @@ class Artifact(_message.Message):
     def __init__(self, artifact_id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., parts: _Optional[_Iterable[_Union[Part, _Mapping]]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ..., extensions: _Optional[_Iterable[str]] = ...) -> None: ...
 
 class TaskStatusUpdateEvent(_message.Message):
-    __slots__ = ("task_id", "context_id", "status", "final", "metadata")
+    __slots__ = ("task_id", "context_id", "status", "metadata")
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     CONTEXT_ID_FIELD_NUMBER: _ClassVar[int]
     STATUS_FIELD_NUMBER: _ClassVar[int]
-    FINAL_FIELD_NUMBER: _ClassVar[int]
     METADATA_FIELD_NUMBER: _ClassVar[int]
     task_id: str
     context_id: str
     status: TaskStatus
-    final: bool
     metadata: _struct_pb2.Struct
-    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., final: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
+    def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., status: _Optional[_Union[TaskStatus, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskArtifactUpdateEvent(_message.Message):
     __slots__ = ("task_id", "context_id", "artifact", "append", "last_chunk", "metadata")
@@ -192,25 +178,27 @@ class PushNotificationConfig(_message.Message):
     def __init__(self, id: _Optional[str] = ..., url: _Optional[str] = ..., token: _Optional[str] = ..., authentication: _Optional[_Union[AuthenticationInfo, _Mapping]] = ...) -> None: ...
 
 class AuthenticationInfo(_message.Message):
-    __slots__ = ("schemes", "credentials")
-    SCHEMES_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("scheme", "credentials")
+    SCHEME_FIELD_NUMBER: _ClassVar[int]
     CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
-    schemes: _containers.RepeatedScalarFieldContainer[str]
+    scheme: str
     credentials: str
-    def __init__(self, schemes: _Optional[_Iterable[str]] = ..., credentials: _Optional[str] = ...) -> None: ...
+    def __init__(self, scheme: _Optional[str] = ..., credentials: _Optional[str] = ...) -> None: ...
 
 class AgentInterface(_message.Message):
-    __slots__ = ("url", "protocol_binding", "tenant")
+    __slots__ = ("url", "protocol_binding", "tenant", "protocol_version")
     URL_FIELD_NUMBER: _ClassVar[int]
     PROTOCOL_BINDING_FIELD_NUMBER: _ClassVar[int]
     TENANT_FIELD_NUMBER: _ClassVar[int]
+    PROTOCOL_VERSION_FIELD_NUMBER: _ClassVar[int]
     url: str
     protocol_binding: str
     tenant: str
-    def __init__(self, url: _Optional[str] = ..., protocol_binding: _Optional[str] = ..., tenant: _Optional[str] = ...) -> None: ...
+    protocol_version: str
+    def __init__(self, url: _Optional[str] = ..., protocol_binding: _Optional[str] = ..., tenant: _Optional[str] = ..., protocol_version: _Optional[str] = ...) -> None: ...
 
 class AgentCard(_message.Message):
-    __slots__ = ("protocol_versions", "name", "description", "supported_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security", "default_input_modes", "default_output_modes", "skills", "signatures", "icon_url")
+    __slots__ = ("name", "description", "supported_interfaces", "provider", "version", "documentation_url", "capabilities", "security_schemes", "security_requirements", "default_input_modes", "default_output_modes", "skills", "signatures", "icon_url")
     class SecuritySchemesEntry(_message.Message):
         __slots__ = ("key", "value")
         KEY_FIELD_NUMBER: _ClassVar[int]
@@ -218,7 +206,6 @@ class AgentCard(_message.Message):
         key: str
         value: SecurityScheme
         def __init__(self, key: _Optional[str] = ..., value: _Optional[_Union[SecurityScheme, _Mapping]] = ...) -> None: ...
-    PROTOCOL_VERSIONS_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
     SUPPORTED_INTERFACES_FIELD_NUMBER: _ClassVar[int]
@@ -227,13 +214,12 @@ class AgentCard(_message.Message):
     DOCUMENTATION_URL_FIELD_NUMBER: _ClassVar[int]
     CAPABILITIES_FIELD_NUMBER: _ClassVar[int]
     SECURITY_SCHEMES_FIELD_NUMBER: _ClassVar[int]
-    SECURITY_FIELD_NUMBER: _ClassVar[int]
+    SECURITY_REQUIREMENTS_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_INPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     DEFAULT_OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     SKILLS_FIELD_NUMBER: _ClassVar[int]
     SIGNATURES_FIELD_NUMBER: _ClassVar[int]
     ICON_URL_FIELD_NUMBER: _ClassVar[int]
-    protocol_versions: _containers.RepeatedScalarFieldContainer[str]
     name: str
     description: str
     supported_interfaces: _containers.RepeatedCompositeFieldContainer[AgentInterface]
@@ -242,13 +228,13 @@ class AgentCard(_message.Message):
     documentation_url: str
     capabilities: AgentCapabilities
     security_schemes: _containers.MessageMap[str, SecurityScheme]
-    security: _containers.RepeatedCompositeFieldContainer[Security]
+    security_requirements: _containers.RepeatedCompositeFieldContainer[SecurityRequirement]
     default_input_modes: _containers.RepeatedScalarFieldContainer[str]
     default_output_modes: _containers.RepeatedScalarFieldContainer[str]
     skills: _containers.RepeatedCompositeFieldContainer[AgentSkill]
     signatures: _containers.RepeatedCompositeFieldContainer[AgentCardSignature]
     icon_url: str
-    def __init__(self, protocol_versions: _Optional[_Iterable[str]] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., supported_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., signatures: _Optional[_Iterable[_Union[AgentCardSignature, _Mapping]]] = ..., icon_url: _Optional[str] = ...) -> None: ...
+    def __init__(self, name: _Optional[str] = ..., description: _Optional[str] = ..., supported_interfaces: _Optional[_Iterable[_Union[AgentInterface, _Mapping]]] = ..., provider: _Optional[_Union[AgentProvider, _Mapping]] = ..., version: _Optional[str] = ..., documentation_url: _Optional[str] = ..., capabilities: _Optional[_Union[AgentCapabilities, _Mapping]] = ..., security_schemes: _Optional[_Mapping[str, SecurityScheme]] = ..., security_requirements: _Optional[_Iterable[_Union[SecurityRequirement, _Mapping]]] = ..., default_input_modes: _Optional[_Iterable[str]] = ..., default_output_modes: _Optional[_Iterable[str]] = ..., skills: _Optional[_Iterable[_Union[AgentSkill, _Mapping]]] = ..., signatures: _Optional[_Iterable[_Union[AgentCardSignature, _Mapping]]] = ..., icon_url: _Optional[str] = ...) -> None: ...
 
 class AgentProvider(_message.Message):
     __slots__ = ("url", "organization")
@@ -259,18 +245,16 @@ class AgentProvider(_message.Message):
     def __init__(self, url: _Optional[str] = ..., organization: _Optional[str] = ...) -> None: ...
 
 class AgentCapabilities(_message.Message):
-    __slots__ = ("streaming", "push_notifications", "extensions", "state_transition_history", "extended_agent_card")
+    __slots__ = ("streaming", "push_notifications", "extensions", "extended_agent_card")
     STREAMING_FIELD_NUMBER: _ClassVar[int]
     PUSH_NOTIFICATIONS_FIELD_NUMBER: _ClassVar[int]
     EXTENSIONS_FIELD_NUMBER: _ClassVar[int]
-    STATE_TRANSITION_HISTORY_FIELD_NUMBER: _ClassVar[int]
     EXTENDED_AGENT_CARD_FIELD_NUMBER: _ClassVar[int]
     streaming: bool
     push_notifications: bool
     extensions: _containers.RepeatedCompositeFieldContainer[AgentExtension]
-    state_transition_history: bool
     extended_agent_card: bool
-    def __init__(self, streaming: _Optional[bool] = ..., push_notifications: _Optional[bool] = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ..., state_transition_history: _Optional[bool] = ..., extended_agent_card: _Optional[bool] = ...) -> None: ...
+    def __init__(self, streaming: _Optional[bool] = ..., push_notifications: _Optional[bool] = ..., extensions: _Optional[_Iterable[_Union[AgentExtension, _Mapping]]] = ..., extended_agent_card: _Optional[bool] = ...) -> None: ...
 
 class AgentExtension(_message.Message):
     __slots__ = ("uri", "description", "required", "params")
@@ -285,7 +269,7 @@ class AgentExtension(_message.Message):
     def __init__(self, uri: _Optional[str] = ..., description: _Optional[str] = ..., required: _Optional[bool] = ..., params: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class AgentSkill(_message.Message):
-    __slots__ = ("id", "name", "description", "tags", "examples", "input_modes", "output_modes", "security")
+    __slots__ = ("id", "name", "description", "tags", "examples", "input_modes", "output_modes", "security_requirements")
     ID_FIELD_NUMBER: _ClassVar[int]
     NAME_FIELD_NUMBER: _ClassVar[int]
     DESCRIPTION_FIELD_NUMBER: _ClassVar[int]
@@ -293,7 +277,7 @@ class AgentSkill(_message.Message):
     EXAMPLES_FIELD_NUMBER: _ClassVar[int]
     INPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
-    SECURITY_FIELD_NUMBER: _ClassVar[int]
+    SECURITY_REQUIREMENTS_FIELD_NUMBER: _ClassVar[int]
     id: str
     name: str
     description: str
@@ -301,8 +285,8 @@ class AgentSkill(_message.Message):
     examples: _containers.RepeatedScalarFieldContainer[str]
     input_modes: _containers.RepeatedScalarFieldContainer[str]
     output_modes: _containers.RepeatedScalarFieldContainer[str]
-    security: _containers.RepeatedCompositeFieldContainer[Security]
-    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., tags: _Optional[_Iterable[str]] = ..., examples: _Optional[_Iterable[str]] = ..., input_modes: _Optional[_Iterable[str]] = ..., output_modes: _Optional[_Iterable[str]] = ..., security: _Optional[_Iterable[_Union[Security, _Mapping]]] = ...) -> None: ...
+    security_requirements: _containers.RepeatedCompositeFieldContainer[SecurityRequirement]
+    def __init__(self, id: _Optional[str] = ..., name: _Optional[str] = ..., description: _Optional[str] = ..., tags: _Optional[_Iterable[str]] = ..., examples: _Optional[_Iterable[str]] = ..., input_modes: _Optional[_Iterable[str]] = ..., output_modes: _Optional[_Iterable[str]] = ..., security_requirements: _Optional[_Iterable[_Union[SecurityRequirement, _Mapping]]] = ...) -> None: ...
 
 class AgentCardSignature(_message.Message):
     __slots__ = ("protected", "signature", "header")
@@ -315,12 +299,16 @@ class AgentCardSignature(_message.Message):
     def __init__(self, protected: _Optional[str] = ..., signature: _Optional[str] = ..., header: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskPushNotificationConfig(_message.Message):
-    __slots__ = ("name", "push_notification_config")
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    __slots__ = ("tenant", "id", "task_id", "push_notification_config")
+    TENANT_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
     PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
-    name: str
+    tenant: str
+    id: str
+    task_id: str
     push_notification_config: PushNotificationConfig
-    def __init__(self, name: _Optional[str] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., task_id: _Optional[str] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ("list",)
@@ -328,7 +316,7 @@ class StringList(_message.Message):
     list: _containers.RepeatedScalarFieldContainer[str]
     def __init__(self, list: _Optional[_Iterable[str]] = ...) -> None: ...
 
-class Security(_message.Message):
+class SecurityRequirement(_message.Message):
     __slots__ = ("schemes",)
     class SchemesEntry(_message.Message):
         __slots__ = ("key", "value")
@@ -400,14 +388,18 @@ class MutualTlsSecurityScheme(_message.Message):
     def __init__(self, description: _Optional[str] = ...) -> None: ...
 
 class OAuthFlows(_message.Message):
-    __slots__ = ("authorization_code", "client_credentials", "device_code")
+    __slots__ = ("authorization_code", "client_credentials", "implicit", "password", "device_code")
     AUTHORIZATION_CODE_FIELD_NUMBER: _ClassVar[int]
     CLIENT_CREDENTIALS_FIELD_NUMBER: _ClassVar[int]
+    IMPLICIT_FIELD_NUMBER: _ClassVar[int]
+    PASSWORD_FIELD_NUMBER: _ClassVar[int]
     DEVICE_CODE_FIELD_NUMBER: _ClassVar[int]
     authorization_code: AuthorizationCodeOAuthFlow
     client_credentials: ClientCredentialsOAuthFlow
+    implicit: ImplicitOAuthFlow
+    password: PasswordOAuthFlow
     device_code: DeviceCodeOAuthFlow
-    def __init__(self, authorization_code: _Optional[_Union[AuthorizationCodeOAuthFlow, _Mapping]] = ..., client_credentials: _Optional[_Union[ClientCredentialsOAuthFlow, _Mapping]] = ..., device_code: _Optional[_Union[DeviceCodeOAuthFlow, _Mapping]] = ...) -> None: ...
+    def __init__(self, authorization_code: _Optional[_Union[AuthorizationCodeOAuthFlow, _Mapping]] = ..., client_credentials: _Optional[_Union[ClientCredentialsOAuthFlow, _Mapping]] = ..., implicit: _Optional[_Union[ImplicitOAuthFlow, _Mapping]] = ..., password: _Optional[_Union[PasswordOAuthFlow, _Mapping]] = ..., device_code: _Optional[_Union[DeviceCodeOAuthFlow, _Mapping]] = ...) -> None: ...
 
 class AuthorizationCodeOAuthFlow(_message.Message):
     __slots__ = ("authorization_url", "token_url", "refresh_url", "scopes", "pkce_required")
@@ -431,6 +423,40 @@ class AuthorizationCodeOAuthFlow(_message.Message):
     def __init__(self, authorization_url: _Optional[str] = ..., token_url: _Optional[str] = ..., refresh_url: _Optional[str] = ..., scopes: _Optional[_Mapping[str, str]] = ..., pkce_required: _Optional[bool] = ...) -> None: ...
 
 class ClientCredentialsOAuthFlow(_message.Message):
+    __slots__ = ("token_url", "refresh_url", "scopes")
+    class ScopesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    TOKEN_URL_FIELD_NUMBER: _ClassVar[int]
+    REFRESH_URL_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    token_url: str
+    refresh_url: str
+    scopes: _containers.ScalarMap[str, str]
+    def __init__(self, token_url: _Optional[str] = ..., refresh_url: _Optional[str] = ..., scopes: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class ImplicitOAuthFlow(_message.Message):
+    __slots__ = ("authorization_url", "refresh_url", "scopes")
+    class ScopesEntry(_message.Message):
+        __slots__ = ("key", "value")
+        KEY_FIELD_NUMBER: _ClassVar[int]
+        VALUE_FIELD_NUMBER: _ClassVar[int]
+        key: str
+        value: str
+        def __init__(self, key: _Optional[str] = ..., value: _Optional[str] = ...) -> None: ...
+    AUTHORIZATION_URL_FIELD_NUMBER: _ClassVar[int]
+    REFRESH_URL_FIELD_NUMBER: _ClassVar[int]
+    SCOPES_FIELD_NUMBER: _ClassVar[int]
+    authorization_url: str
+    refresh_url: str
+    scopes: _containers.ScalarMap[str, str]
+    def __init__(self, authorization_url: _Optional[str] = ..., refresh_url: _Optional[str] = ..., scopes: _Optional[_Mapping[str, str]] = ...) -> None: ...
+
+class PasswordOAuthFlow(_message.Message):
     __slots__ = ("token_url", "refresh_url", "scopes")
     class ScopesEntry(_message.Message):
         __slots__ = ("key", "value")
@@ -479,14 +505,14 @@ class SendMessageRequest(_message.Message):
     def __init__(self, tenant: _Optional[str] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., configuration: _Optional[_Union[SendMessageConfiguration, _Mapping]] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class GetTaskRequest(_message.Message):
-    __slots__ = ("tenant", "name", "history_length")
+    __slots__ = ("tenant", "id", "history_length")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    name: str
+    id: str
     history_length: int
-    def __init__(self, tenant: _Optional[str] = ..., name: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., history_length: _Optional[int] = ...) -> None: ...
 
 class ListTasksRequest(_message.Message):
     __slots__ = ("tenant", "context_id", "status", "page_size", "page_token", "history_length", "status_timestamp_after", "include_artifacts")
@@ -521,60 +547,64 @@ class ListTasksResponse(_message.Message):
     def __init__(self, tasks: _Optional[_Iterable[_Union[Task, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., page_size: _Optional[int] = ..., total_size: _Optional[int] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
-    __slots__ = ("tenant", "name")
+    __slots__ = ("tenant", "id")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    name: str
-    def __init__(self, tenant: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+    id: str
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
 class GetTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "name")
+    __slots__ = ("tenant", "task_id", "id")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    name: str
-    def __init__(self, tenant: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+    task_id: str
+    id: str
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
 class DeleteTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "name")
+    __slots__ = ("tenant", "task_id", "id")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    name: str
-    def __init__(self, tenant: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+    task_id: str
+    id: str
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
-class SetTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "parent", "config_id", "config")
+class CreateTaskPushNotificationConfigRequest(_message.Message):
+    __slots__ = ("tenant", "task_id", "config_id", "config")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    PARENT_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
     CONFIG_ID_FIELD_NUMBER: _ClassVar[int]
     CONFIG_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    parent: str
+    task_id: str
     config_id: str
-    config: TaskPushNotificationConfig
-    def __init__(self, tenant: _Optional[str] = ..., parent: _Optional[str] = ..., config_id: _Optional[str] = ..., config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ...) -> None: ...
+    config: PushNotificationConfig
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., config_id: _Optional[str] = ..., config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
 
 class SubscribeToTaskRequest(_message.Message):
-    __slots__ = ("tenant", "name")
+    __slots__ = ("tenant", "id")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    NAME_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    name: str
-    def __init__(self, tenant: _Optional[str] = ..., name: _Optional[str] = ...) -> None: ...
+    id: str
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
 class ListTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "parent", "page_size", "page_token")
+    __slots__ = ("tenant", "task_id", "page_size", "page_token")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    PARENT_FIELD_NUMBER: _ClassVar[int]
+    TASK_ID_FIELD_NUMBER: _ClassVar[int]
     PAGE_SIZE_FIELD_NUMBER: _ClassVar[int]
     PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    parent: str
+    task_id: str
     page_size: int
     page_token: str
-    def __init__(self, tenant: _Optional[str] = ..., parent: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., page_size: _Optional[int] = ..., page_token: _Optional[str] = ...) -> None: ...
 
 class GetExtendedAgentCardRequest(_message.Message):
     __slots__ = ("tenant",)

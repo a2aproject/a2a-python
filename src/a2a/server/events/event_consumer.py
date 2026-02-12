@@ -101,20 +101,16 @@ class EventConsumer:
                     'Marked task as done in event queue in consume_all'
                 )
 
-                is_final_event = (
-                    (isinstance(event, TaskStatusUpdateEvent) and event.final)
-                    or isinstance(event, Message)
-                    or (
-                        isinstance(event, Task)
-                        and event.status.state
-                        in (
-                            TaskState.TASK_STATE_COMPLETED,
-                            TaskState.TASK_STATE_CANCELLED,
-                            TaskState.TASK_STATE_FAILED,
-                            TaskState.TASK_STATE_REJECTED,
-                            TaskState.TASK_STATE_UNSPECIFIED,
-                            TaskState.TASK_STATE_INPUT_REQUIRED,
-                        )
+                is_final_event = isinstance(event, Message) or (
+                    isinstance(event, Task | TaskStatusUpdateEvent)
+                    and event.status.state
+                    in (
+                        TaskState.TASK_STATE_COMPLETED,
+                        TaskState.TASK_STATE_CANCELED,
+                        TaskState.TASK_STATE_FAILED,
+                        TaskState.TASK_STATE_REJECTED,
+                        TaskState.TASK_STATE_UNSPECIFIED,
+                        TaskState.TASK_STATE_INPUT_REQUIRED,
                     )
                 )
 

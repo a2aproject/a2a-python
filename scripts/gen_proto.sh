@@ -18,4 +18,4 @@ fi
 
 # Fix imports in generated grpc file
 echo "Fixing imports in src/a2a/types/a2a_pb2_grpc.py"
-sed -i '' 's/import a2a_pb2 as a2a__pb2/from . import a2a_pb2 as a2a__pb2/g' src/a2a/types/a2a_pb2_grpc.py
+sed 's/import a2a_pb2 as a2a__pb2/from . import a2a_pb2 as a2a__pb2/g' src/a2a/types/a2a_pb2_grpc.py > src/a2a/types/a2a_pb2_grpc.py.tmp && mv src/a2a/types/a2a_pb2_grpc.py.tmp src/a2a/types/a2a_pb2_grpc.py

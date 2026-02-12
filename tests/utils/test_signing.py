@@ -11,9 +11,10 @@ from jwt.utils import base64url_encode
 
 import pytest
 from cryptography.hazmat.primitives import asymmetric
+from cryptography.hazmat.primitives.asymmetric import ec
 
 
-def create_key_provider(verification_key: str | bytes | dict[str, Any]):
+def create_key_provider(verification_key: Any):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):
@@ -148,12 +149,10 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
 def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     """Test the agent card signing and verification process with an asymmetric key encryption."""
     # Generate a sample EC private key for ES256
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     # Generate another key pair for negative test
-    private_key_error = asymmetric.ec.generate_private_key(
-        asymmetric.ec.SECP256R1()
-    )
+    private_key_error = ec.generate_private_key(ec.SECP256R1())
     public_key_error = private_key_error.public_key()
 
     agent_card_signer = signing.create_agent_card_signer(

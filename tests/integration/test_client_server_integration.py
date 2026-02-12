@@ -40,7 +40,7 @@ from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
     Role,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -49,6 +49,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from cryptography.hazmat.primitives import asymmetric
+from cryptography.hazmat.primitives.asymmetric import ec
 
 # --- Test Constants ---
 
@@ -73,11 +74,12 @@ GET_TASK_RESPONSE = Task(
 CANCEL_TASK_RESPONSE = Task(
     id='task-cancel-789',
     context_id='ctx-cancel-101',
-    status=TaskStatus(state=TaskState.TASK_STATE_CANCELLED),
+    status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
 )
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
-    name='tasks/task-callback-123/pushNotificationConfigs/pnc-abc',
+    task_id='task-callback-123',
+    id='pnc-abc',
     push_notification_config=PushNotificationConfig(
         id='pnc-abc', url='http://callback.example.com', token=''
     ),
@@ -87,11 +89,10 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     task_id='task-resub-456',
     context_id='ctx-resub-789',
     status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-    final=False,
 )
 
 
-def create_key_provider(verification_key: PyJWK | str | bytes):
+def create_key_provider(verification_key: Any):
     """Creates a key provider function for testing."""
 
     def key_provider(kid: str | None, jku: str | None):
@@ -120,7 +121,9 @@ def mock_request_handler() -> AsyncMock:
     # Configure other methods
     handler.on_get_task.return_value = GET_TASK_RESPONSE
     handler.on_cancel_task.return_value = CANCEL_TASK_RESPONSE
-    handler.on_set_task_push_notification_config.return_value = CALLBACK_CONFIG
+    handler.on_create_task_push_notification_config.return_value = (
+        CALLBACK_CONFIG
+    )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
 
     async def resubscribe_side_effect(*args, **kwargs):
@@ -167,7 +170,7 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
     """A base fixture to patch the sse-starlette event loop issue."""
     from sse_starlette import sse
 
-    sse.AppStatus.should_exit_event = asyncio.Event()
+    sse.AppStatus.should_exit_event = asyncio.Event()  # type: ignore[attr-defined]
     yield mock_request_handler, agent_card
 
 
@@ -414,7 +417,7 @@ async def test_http_transport_get_task(
     handler = transport_setup.handler
 
     # Use GetTaskRequest with name (AIP resource format)
-    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
+    params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
@@ -438,7 +441,7 @@ async def test_grpc_transport_get_task(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use GetTaskRequest with name (AIP resource format)
-    params = GetTaskRequest(name=f'tasks/{GET_TASK_RESPONSE.id}')
+    params = GetTaskRequest(id=f'{GET_TASK_RESPONSE.id}')
     result = await transport.get_task(request=params)
 
     assert result.id == GET_TASK_RESPONSE.id
@@ -465,7 +468,7 @@ async def test_http_transport_cancel_task(
     handler = transport_setup.handler
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=f'{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -489,7 +492,7 @@ async def test_grpc_transport_cancel_task(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use CancelTaskRequest with name (AIP resource format)
-    params = CancelTaskRequest(name=f'tasks/{CANCEL_TASK_RESPONSE.id}')
+    params = CancelTaskRequest(id=f'{CANCEL_TASK_RESPONSE.id}')
     result = await transport.cancel_task(request=params)
 
     assert result.id == CANCEL_TASK_RESPONSE.id
@@ -515,16 +518,16 @@ async def test_http_transport_set_task_callback(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    # Create SetTaskPushNotificationConfigRequest with required fields
-    params = SetTaskPushNotificationConfigRequest(
-        parent='tasks/task-callback-123',
+    # Create CreateTaskPushNotificationConfigRequest with required fields
+    params = CreateTaskPushNotificationConfigRequest(
+        task_id='task-callback-123',
         config_id='pnc-abc',
-        config=CALLBACK_CONFIG,
+        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.set_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.id == CALLBACK_CONFIG.id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -533,7 +536,7 @@ async def test_http_transport_set_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -552,16 +555,16 @@ async def test_grpc_transport_set_task_callback(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # Create SetTaskPushNotificationConfigRequest with required fields
-    params = SetTaskPushNotificationConfigRequest(
-        parent='tasks/task-callback-123',
+    # Create CreateTaskPushNotificationConfigRequest with required fields
+    params = CreateTaskPushNotificationConfigRequest(
+        task_id='task-callback-123',
         config_id='pnc-abc',
-        config=CALLBACK_CONFIG,
+        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.set_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.id == CALLBACK_CONFIG.id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -570,7 +573,7 @@ async def test_grpc_transport_set_task_callback(
         result.push_notification_config.url
         == CALLBACK_CONFIG.push_notification_config.url
     )
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
 
@@ -593,11 +596,13 @@ async def test_http_transport_get_task_callback(
     handler = transport_setup.handler
 
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
-    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
+    params = GetTaskPushNotificationConfigRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}', id=CALLBACK_CONFIG.id
+    )
     result = await transport.get_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.task_id == CALLBACK_CONFIG.task_id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -626,11 +631,13 @@ async def test_grpc_transport_get_task_callback(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
-    params = GetTaskPushNotificationConfigRequest(name=CALLBACK_CONFIG.name)
+    params = GetTaskPushNotificationConfigRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}', id=CALLBACK_CONFIG.id
+    )
     result = await transport.get_task_callback(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
-    assert result.name == CALLBACK_CONFIG.name
+    assert result.task_id == CALLBACK_CONFIG.task_id
     assert (
         result.push_notification_config.id
         == CALLBACK_CONFIG.push_notification_config.id
@@ -662,7 +669,7 @@ async def test_http_transport_resubscribe(
     handler = transport_setup.handler
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=RESUBSCRIBE_EVENT.task_id)
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
@@ -688,7 +695,7 @@ async def test_grpc_transport_resubscribe(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     # Use SubscribeToTaskRequest with name (AIP resource format)
-    params = SubscribeToTaskRequest(name=f'tasks/{RESUBSCRIBE_EVENT.task_id}')
+    params = SubscribeToTaskRequest(id=RESUBSCRIBE_EVENT.task_id)
     stream = transport.subscribe(request=params)
     first_event = await anext(stream)
 
@@ -715,13 +722,13 @@ async def test_http_transport_get_card(
     )
     transport = transport_setup.transport
     # Access the base card from the agent_card property.
-    result = transport.agent_card
+    result = transport.agent_card  # type: ignore[attr-defined]
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name
+    assert transport.agent_card.name == agent_card.name  # type: ignore[attr-defined]
     # Only check _needs_extended_card if the transport supports it
     if hasattr(transport, '_needs_extended_card'):
-        assert transport._needs_extended_card is False
+        assert transport._needs_extended_card is False  # type: ignore[attr-defined]
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -914,7 +921,7 @@ async def test_json_transport_get_signed_extended_card(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -977,7 +984,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -1041,7 +1048,7 @@ async def test_rest_transport_get_signed_card(
     extended_agent_card.name = 'Extended Agent Card'
 
     # Setup signing on the server side
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,
@@ -1097,7 +1104,7 @@ async def test_grpc_transport_get_signed_card(
     # Setup signing on the server side
     agent_card.capabilities.extended_agent_card = True
 
-    private_key = asymmetric.ec.generate_private_key(asymmetric.ec.SECP256R1())
+    private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
         signing_key=private_key,

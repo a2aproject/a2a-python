@@ -8,6 +8,7 @@ from typing import Any
 
 import pytest
 from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.struct_pb2 import Struct, Value
 
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -18,8 +19,7 @@ from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     Artifact,
     CancelTaskRequest,
-    DataPart,
-    FilePart,
+    CreateTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     Message,
@@ -28,7 +28,7 @@ from a2a.types.a2a_pb2 import (
     Role,
     SecurityScheme,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -78,17 +78,14 @@ def test_agent_capabilities():
     # Empty capabilities
     caps = AgentCapabilities()
     assert caps.streaming is False  # Proto default
-    assert caps.state_transition_history is False
     assert caps.push_notifications is False
 
     # Full capabilities
     caps_full = AgentCapabilities(
         push_notifications=True,
-        state_transition_history=False,
         streaming=True,
     )
     assert caps_full.push_notifications is True
-    assert caps_full.state_transition_history is False
     assert caps_full.streaming is True
 
 
@@ -155,44 +152,35 @@ def test_text_part():
     part = Part(text='Hello')
     assert part.text == 'Hello'
     # Check oneof
-    assert part.WhichOneof('part') == 'text'
+    assert part.WhichOneof('content') == 'text'
 
 
-def test_file_part_with_uri():
-    """Test FilePart with file_with_uri."""
-    file_part = FilePart(
-        file_with_uri='file:///path/to/file.txt',
+def test_part_with_url():
+    """Test Part with url."""
+    part = Part(
+        url='file:///path/to/file.txt',
         media_type='text/plain',
     )
-    assert file_part.file_with_uri == 'file:///path/to/file.txt'
-    assert file_part.media_type == 'text/plain'
-
-    # Part with file
-    part = Part(file=file_part)
-    assert part.HasField('file')
-    assert part.WhichOneof('part') == 'file'
+    assert part.url == 'file:///path/to/file.txt'
+    assert part.media_type == 'text/plain'
 
 
-def test_file_part_with_bytes():
-    """Test FilePart with file_with_bytes."""
-    file_part = FilePart(
-        file_with_bytes=b'hello',
-        name='hello.txt',
+def test_part_with_raw():
+    """Test Part with raw bytes."""
+    part = Part(
+        raw=b'hello',
+        filename='hello.txt',
     )
-    assert file_part.file_with_bytes == b'hello'
-    assert file_part.name == 'hello.txt'
+    assert part.raw == b'hello'
+    assert part.filename == 'hello.txt'
 
 
-def test_data_part():
-    """Test DataPart proto construction."""
-    data_part = DataPart()
-    data_part.data.update({'key': 'value'})
-    assert dict(data_part.data) == {'key': 'value'}
-
-    # Part with data
-    part = Part(data=data_part)
+def test_part_with_data():
+    """Test Part with data."""
+    s = Struct()
+    s.update({'key': 'value'})
+    part = Part(data=Value(struct_value=s))
     assert part.HasField('data')
-    assert part.WhichOneof('part') == 'data'
 
 
 # --- Test Message and Task ---
@@ -292,9 +280,10 @@ def test_task_with_artifacts():
 
     # Add artifact
     artifact = Artifact(artifact_id='artifact-123', name='result')
-    data_part = DataPart()
-    data_part.data.update({'result': 42})
-    artifact.parts.append(Part(data=data_part))
+    s = Struct()
+    s.update({'result': 42})
+    v = Value(struct_value=s)
+    artifact.parts.append(Part(data=v))
     task.artifacts.append(artifact)
 
     assert len(task.artifacts) == 1
@@ -317,45 +306,42 @@ def test_send_message_request():
 
 def test_get_task_request():
     """Test GetTaskRequest proto construction."""
-    request = GetTaskRequest(name='task-123')
-    assert request.name == 'task-123'
+    request = GetTaskRequest(id='task-123')
+    assert request.id == 'task-123'
 
 
 def test_cancel_task_request():
     """Test CancelTaskRequest proto construction."""
-    request = CancelTaskRequest(name='task-123')
-    assert request.name == 'task-123'
+    request = CancelTaskRequest(id='task-123')
+    assert request.id == 'task-123'
 
 
 def test_subscribe_to_task_request():
     """Test SubscribeToTaskRequest proto construction."""
-    request = SubscribeToTaskRequest(name='task-123')
-    assert request.name == 'task-123'
+    request = SubscribeToTaskRequest(id='task-123')
+    assert request.id == 'task-123'
 
 
 def test_set_task_push_notification_config_request():
-    """Test SetTaskPushNotificationConfigRequest proto construction."""
-    config = TaskPushNotificationConfig(
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com/webhook',
-        ),
+    """Test CreateTaskPushNotificationConfigRequest proto construction."""
+    config = PushNotificationConfig(
+        url='https://example.com/webhook',
     )
-    request = SetTaskPushNotificationConfigRequest(
-        parent='tasks/task-123',
+    request = CreateTaskPushNotificationConfigRequest(
+        task_id='task-123',
         config_id='config-1',
         config=config,
     )
-    assert request.parent == 'tasks/task-123'
-    assert (
-        request.config.push_notification_config.url
-        == 'https://example.com/webhook'
-    )
+    assert request.task_id == 'task-123'
+    assert request.config.url == 'https://example.com/webhook'
 
 
 def test_get_task_push_notification_config_request():
     """Test GetTaskPushNotificationConfigRequest proto construction."""
-    request = GetTaskPushNotificationConfigRequest(name='task-123')
-    assert request.name == 'task-123'
+    request = GetTaskPushNotificationConfigRequest(
+        task_id='task-123', id='config-1'
+    )
+    assert request.task_id == 'task-123'
 
 
 # --- Test Enum Values ---
@@ -375,7 +361,7 @@ def test_task_state_enum():
     assert TaskState.TASK_STATE_WORKING == 2
     assert TaskState.TASK_STATE_COMPLETED == 3
     assert TaskState.TASK_STATE_FAILED == 4
-    assert TaskState.TASK_STATE_CANCELLED == 5
+    assert TaskState.TASK_STATE_CANCELED == 5
     assert TaskState.TASK_STATE_INPUT_REQUIRED == 6
     assert TaskState.TASK_STATE_REJECTED == 7
     assert TaskState.TASK_STATE_AUTH_REQUIRED == 8
@@ -495,11 +481,11 @@ def test_has_field_oneof():
     """Test HasField for oneof fields."""
     part = Part(text='Hello')
     assert part.HasField('text')
-    assert not part.HasField('file')
+    assert not part.HasField('url')
     assert not part.HasField('data')
 
     # WhichOneof for checking which oneof is set
-    assert part.WhichOneof('part') == 'text'
+    assert part.WhichOneof('content') == 'text'
 
 
 # --- Test Repeated Fields ---

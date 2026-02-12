@@ -1,11 +1,13 @@
 """Tests for the ClientFactory."""
 
 from unittest.mock import AsyncMock, MagicMock, patch
+import typing
 
 import httpx
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
+from a2a.client.client_factory import TransportProducer
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -32,7 +34,6 @@ def base_agent_card() -> AgentCard:
         skills=[],
         default_input_modes=[],
         default_output_modes=[],
-        protocol_versions=['v1'],
     )
 
 
@@ -49,9 +50,9 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
-    assert isinstance(client._transport, JsonRpcTransport)
-    assert client._transport.url == 'http://primary-url.com'
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
+    assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
+    assert ['https://example.com/test-ext/v0'] == client._transport.extensions  # type: ignore[attr-defined]
 
 
 def test_client_factory_selects_secondary_transport_url(
@@ -77,9 +78,9 @@ def test_client_factory_selects_secondary_transport_url(
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
-    assert isinstance(client._transport, RestTransport)
-    assert client._transport.url == 'http://secondary-url.com'
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions
+    assert isinstance(client._transport, RestTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://secondary-url.com'  # type: ignore[attr-defined]
+    assert ['https://example.com/test-ext/v0'] == client._transport.extensions  # type: ignore[attr-defined]
 
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):
@@ -109,8 +110,8 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
-    assert isinstance(client._transport, RestTransport)
-    assert client._transport.url == 'http://primary-url.com'
+    assert isinstance(client._transport, RestTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
 def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
@@ -130,8 +131,8 @@ async def test_client_factory_connect_with_agent_card(
 ):
     """Verify that connect works correctly when provided with an AgentCard."""
     client = await ClientFactory.connect(base_agent_card)
-    assert isinstance(client._transport, JsonRpcTransport)
-    assert client._transport.url == 'http://primary-url.com'
+    assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -149,8 +150,8 @@ async def test_client_factory_connect_with_url(base_agent_card: AgentCard):
         assert mock_resolver.call_args[0][1] == agent_url
         mock_resolver.return_value.get_agent_card.assert_awaited_once()
 
-        assert isinstance(client._transport, JsonRpcTransport)
-        assert client._transport.url == 'http://primary-url.com'
+        assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+        assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -172,8 +173,8 @@ async def test_client_factory_connect_with_url_and_client_config(
         mock_resolver.assert_called_once_with(mock_httpx_client, agent_url)
         mock_resolver.return_value.get_agent_card.assert_awaited_once()
 
-        assert isinstance(client._transport, JsonRpcTransport)
-        assert client._transport.url == 'http://primary-url.com'
+        assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+        assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
@@ -256,10 +257,12 @@ async def test_client_factory_connect_with_extra_transports(
     client = await ClientFactory.connect(
         base_agent_card,
         client_config=config,
-        extra_transports={'custom': custom_transport_producer},
+        extra_transports=typing.cast(
+            dict[str, TransportProducer], {'custom': custom_transport_producer}
+        ),
     )
 
-    assert isinstance(client._transport, CustomTransport)
+    assert isinstance(client._transport, CustomTransport)  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio

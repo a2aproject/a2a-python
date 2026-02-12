@@ -118,7 +118,6 @@ async def test_save_task_event_status_update(
         task_id=MINIMAL_TASK_ID,
         context_id=MINIMAL_CONTEXT_ID,
         status=new_status,
-        final=False,
     )
     await task_manager.save_task_event(event)
     # Verify save was called and the task has updated status
@@ -168,7 +167,6 @@ async def test_save_task_event_metadata_update(
         context_id=MINIMAL_CONTEXT_ID,
         metadata=new_metadata,
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-        final=False,
     )
     await task_manager.save_task_event(event)
 
@@ -187,7 +185,6 @@ async def test_ensure_task_existing(
         task_id=MINIMAL_TASK_ID,
         context_id=MINIMAL_CONTEXT_ID,
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-        final=False,
     )
     retrieved_task = await task_manager.ensure_task(event)
     assert retrieved_task == expected_task
@@ -210,7 +207,6 @@ async def test_ensure_task_nonexistent(
         task_id='new-task',
         context_id='some-context',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
-        final=False,
     )
     new_task = await task_manager_without_id.ensure_task(event)
     assert new_task.id == 'new-task'
@@ -313,7 +309,6 @@ async def test_save_task_event_no_task_existing(
         task_id='event-task-id',
         context_id='some-context',
         status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-        final=True,
     )
     await task_manager_without_id.save_task_event(event)
     # Check if a new task was created and saved

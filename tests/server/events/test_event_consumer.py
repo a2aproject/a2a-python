@@ -141,7 +141,6 @@ async def test_consume_all_multiple_events(
             task_id='task_123',
             context_id='session-xyz',
             status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            final=True,
         ),
     ]
     cursor = 0
@@ -152,7 +151,8 @@ async def test_consume_all_multiple_events(
             event = events[cursor]
             cursor += 1
             return event
-        return None
+        mock_event_queue.is_closed.return_value = True
+        raise asyncio.QueueEmpty()
 
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []
@@ -182,7 +182,6 @@ async def test_consume_until_message(
             task_id='task_123',
             context_id='session-xyz',
             status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            final=True,
         ),
     ]
     cursor = 0
@@ -193,7 +192,8 @@ async def test_consume_until_message(
             event = events[cursor]
             cursor += 1
             return event
-        return None
+        mock_event_queue.is_closed.return_value = True
+        raise asyncio.QueueEmpty()
 
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []
@@ -225,7 +225,8 @@ async def test_consume_message_events(
             event = events[cursor]
             cursor += 1
             return event
-        return None
+        mock_event_queue.is_closed.return_value = True
+        raise asyncio.QueueEmpty()
 
     mock_event_queue.dequeue_event = mock_dequeue
     consumed_events: list[Any] = []

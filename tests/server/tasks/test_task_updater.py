@@ -78,7 +78,6 @@ async def test_update_status_without_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.task_id == 'test-task-id'
     assert event.context_id == 'test-context-id'
-    assert event.final is False
     assert event.status.state == TaskState.TASK_STATE_WORKING
     assert not event.status.HasField('message')
 
@@ -98,7 +97,6 @@ async def test_update_status_with_message(
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.task_id == 'test-task-id'
     assert event.context_id == 'test-context-id'
-    assert event.final is False
     assert event.status.state == TaskState.TASK_STATE_WORKING
     assert event.status.message == sample_message
 
@@ -107,14 +105,13 @@ async def test_update_status_with_message(
 async def test_update_status_final(
     task_updater: TaskUpdater, event_queue: AsyncMock
 ) -> None:
-    """Test updating status with final=True."""
-    await task_updater.update_status(TaskState.TASK_STATE_COMPLETED, final=True)
+    """Test updating status with ."""
+    await task_updater.update_status(TaskState.TASK_STATE_COMPLETED)
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.final is True
     assert event.status.state == TaskState.TASK_STATE_COMPLETED
 
 
@@ -226,7 +223,6 @@ async def test_complete_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_COMPLETED
-    assert event.final is True
     assert not event.status.HasField('message')
 
 
@@ -242,7 +238,6 @@ async def test_complete_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_COMPLETED
-    assert event.final is True
     assert event.status.message == sample_message
 
 
@@ -258,7 +253,6 @@ async def test_submit_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_SUBMITTED
-    assert event.final is False
     assert not event.status.HasField('message')
 
 
@@ -274,7 +268,6 @@ async def test_submit_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_SUBMITTED
-    assert event.final is False
     assert event.status.message == sample_message
 
 
@@ -290,7 +283,6 @@ async def test_start_work_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_WORKING
-    assert event.final is False
     assert not event.status.HasField('message')
 
 
@@ -306,7 +298,6 @@ async def test_start_work_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_WORKING
-    assert event.final is False
     assert event.status.message == sample_message
 
 
@@ -331,7 +322,7 @@ def test_new_agent_message(
 def test_new_agent_message_with_metadata(
     task_updater: TaskUpdater, sample_parts: list[Part]
 ) -> None:
-    """Test creating a new agent message with metadata and final=True."""
+    """Test creating a new agent message with metadata and ."""
     metadata = {'key': 'value'}
 
     with patch(
@@ -380,7 +371,6 @@ async def test_failed_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_FAILED
-    assert event.final is True
     assert not event.status.HasField('message')
 
 
@@ -396,7 +386,6 @@ async def test_failed_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_FAILED
-    assert event.final is True
     assert event.status.message == sample_message
 
 
@@ -412,7 +401,6 @@ async def test_reject_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_REJECTED
-    assert event.final is True
     assert not event.status.HasField('message')
 
 
@@ -428,7 +416,6 @@ async def test_reject_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_REJECTED
-    assert event.final is True
     assert event.status.message == sample_message
 
 
@@ -444,7 +431,6 @@ async def test_requires_input_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
-    assert event.final is False
     assert not event.status.HasField('message')
 
 
@@ -460,7 +446,6 @@ async def test_requires_input_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
-    assert event.final is False
     assert event.status.message == sample_message
 
 
@@ -468,15 +453,14 @@ async def test_requires_input_with_message(
 async def test_requires_input_final_true(
     task_updater: TaskUpdater, event_queue: AsyncMock
 ) -> None:
-    """Test marking a task as input required with final=True."""
-    await task_updater.requires_input(final=True)
+    """Test marking a task as input required with ."""
+    await task_updater.requires_input()
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
-    assert event.final is True
     assert not event.status.HasField('message')
 
 
@@ -484,15 +468,14 @@ async def test_requires_input_final_true(
 async def test_requires_input_with_message_and_final(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
 ) -> None:
-    """Test marking a task as input required with message and final=True."""
-    await task_updater.requires_input(message=sample_message, final=True)
+    """Test marking a task as input required with message and ."""
+    await task_updater.requires_input(message=sample_message)
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
-    assert event.final is True
     assert event.status.message == sample_message
 
 
@@ -508,7 +491,6 @@ async def test_requires_auth_without_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-    assert event.final is False
     assert not event.status.HasField('message')
 
 
@@ -524,7 +506,6 @@ async def test_requires_auth_with_message(
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-    assert event.final is False
     assert event.status.message == sample_message
 
 
@@ -532,15 +513,14 @@ async def test_requires_auth_with_message(
 async def test_requires_auth_final_true(
     task_updater: TaskUpdater, event_queue: AsyncMock
 ) -> None:
-    """Test marking a task as auth required with final=True."""
-    await task_updater.requires_auth(final=True)
+    """Test marking a task as auth required with ."""
+    await task_updater.requires_auth()
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-    assert event.final is True
     assert not event.status.HasField('message')
 
 
@@ -548,15 +528,14 @@ async def test_requires_auth_final_true(
 async def test_requires_auth_with_message_and_final(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_message: Message
 ) -> None:
-    """Test marking a task as auth required with message and final=True."""
-    await task_updater.requires_auth(message=sample_message, final=True)
+    """Test marking a task as auth required with message and ."""
+    await task_updater.requires_auth(message=sample_message)
 
     event_queue.enqueue_event.assert_called_once()
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
     assert event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-    assert event.final is True
     assert event.status.message == sample_message
 
 
@@ -571,8 +550,7 @@ async def test_cancel_without_message(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.status.state == TaskState.TASK_STATE_CANCELLED
-    assert event.final is True
+    assert event.status.state == TaskState.TASK_STATE_CANCELED
     assert not event.status.HasField('message')
 
 
@@ -587,8 +565,7 @@ async def test_cancel_with_message(
     event = event_queue.enqueue_event.call_args[0][0]
 
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.status.state == TaskState.TASK_STATE_CANCELLED
-    assert event.final is True
+    assert event.status.state == TaskState.TASK_STATE_CANCELED
     assert event.status.message == sample_message
 
 
@@ -652,7 +629,6 @@ async def test_reject_concurrently_with_complete(
 
     event = event_queue.enqueue_event.call_args[0][0]
     assert isinstance(event, TaskStatusUpdateEvent)
-    assert event.final is True
     assert event.status.state in [
         TaskState.TASK_STATE_REJECTED,
         TaskState.TASK_STATE_COMPLETED,

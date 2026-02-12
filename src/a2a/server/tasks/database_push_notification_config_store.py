@@ -18,7 +18,9 @@ try:
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import class_mapper
+    from sqlalchemy.orm import (
+        class_mapper,
+    )
 except ImportError as e:
     raise ImportError(
         'DatabasePushNotificationConfigStore requires SQLAlchemy and a database driver. '
@@ -96,7 +98,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         if encryption_key:
             try:
-                from cryptography.fernet import Fernet
+                from cryptography.fernet import (
+                    Fernet,
+                )
             except ImportError as e:
                 raise ImportError(
                     "DatabasePushNotificationConfigStore with encryption requires the 'cryptography' "
@@ -168,7 +172,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         payload = model_instance.config_data
 
         if self._fernet:
-            from cryptography.fernet import InvalidToken
+            from cryptography.fernet import (
+                InvalidToken,
+            )
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)

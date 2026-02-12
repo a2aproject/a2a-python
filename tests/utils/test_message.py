@@ -2,10 +2,9 @@ import uuid
 
 from unittest.mock import patch
 
-from google.protobuf.struct_pb2 import Struct
+from google.protobuf.struct_pb2 import Struct, Value
 
 from a2a.types.a2a_pb2 import (
-    DataPart,
     Message,
     Part,
     Role,
@@ -122,7 +121,7 @@ class TestNewAgentPartsMessage:
         data.update({'product_id': 123, 'quantity': 2})
         parts = [
             Part(text='Here is some text.'),
-            Part(data=DataPart(data=data)),
+            Part(data=Value(struct_value=data)),
         ]
         context_id = 'ctx-multi-part'
         task_id = 'task-multi-part'

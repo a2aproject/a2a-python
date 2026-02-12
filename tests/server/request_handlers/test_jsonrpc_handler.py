@@ -4,7 +4,7 @@ import unittest.async_case
 
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, call, patch
 
 import httpx
 import pytest
@@ -47,7 +47,7 @@ from a2a.types.a2a_pb2 import (
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskArtifactUpdateEvent,
@@ -142,13 +142,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         task_id = 'test_task_id'
         mock_task = create_task(task_id=task_id)
         mock_task_store.get.return_value = mock_task
-        request = GetTaskRequest(name=f'tasks/{task_id}')
+        request = GetTaskRequest(id=f'{task_id}')
         response = await handler.on_get_task(request, call_context)
         # Response is now a dict with 'result' key for success
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
         assert response['result']['id'] == task_id
-        mock_task_store.get.assert_called_once_with(task_id, unittest.mock.ANY)
+        mock_task_store.get.assert_called_once_with(f'{task_id}', ANY)
 
     async def test_on_get_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -158,7 +158,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = GetTaskRequest(name='tasks/nonexistent_id')
+        request = GetTaskRequest(id='nonexistent_id')
         call_context = ServerCallContext(
             state={'foo': 'bar', 'request_id': '1'}
         )
@@ -183,14 +183,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
 
         async def streaming_coro():
-            mock_task.status.state = TaskState.TASK_STATE_CANCELLED
+            mock_task.status.state = TaskState.TASK_STATE_CANCELED
             yield mock_task
 
         with patch(
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
         ):
-            request = CancelTaskRequest(name=f'tasks/{task_id}')
+            request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
@@ -198,7 +198,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             # Result is converted to dict for JSON serialization
             assert response['result']['id'] == task_id  # type: ignore
             assert (
-                response['result']['status']['state'] == 'TASK_STATE_CANCELLED'
+                response['result']['status']['state'] == 'TASK_STATE_CANCELED'
             )  # type: ignore
             mock_agent_executor.cancel.assert_called_once()
 
@@ -225,7 +225,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
             return_value=streaming_coro(),
         ):
-            request = CancelTaskRequest(name=f'tasks/{task_id}')
+            request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
             assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
@@ -241,15 +241,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = CancelTaskRequest(name='tasks/nonexistent_id')
+        request = CancelTaskRequest(id='nonexistent_id')
         call_context = ServerCallContext(state={'request_id': '1'})
         response = await handler.on_cancel_task(request, call_context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
         assert response['error']['code'] == -32001
-        mock_task_store.get.assert_called_once_with(
-            'nonexistent_id', unittest.mock.ANY
-        )
+        mock_task_store.get.assert_called_once_with('nonexistent_id', ANY)
         mock_agent_executor.cancel.assert_not_called()
 
     @patch(
@@ -383,7 +381,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 task_id='task_123',
                 context_id='session-xyz',
                 status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                final=True,
             ),
         ]
 
@@ -443,7 +440,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 task_id='task_123',
                 context_id='session-xyz',
                 status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                final=True,
             ),
         ]
 
@@ -498,13 +494,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task = create_task()
         mock_task_store.get.return_value = mock_task
         push_config = PushNotificationConfig(url='http://example.com')
-        task_config = TaskPushNotificationConfig(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
-            push_notification_config=push_config,
-        )
-        request = SetTaskPushNotificationConfigRequest(
-            parent=f'tasks/{mock_task.id}',
-            config=task_config,
+        request = CreateTaskPushNotificationConfigRequest(
+            task_id=mock_task.id,
+            config_id='default',
+            config=push_config,
         )
         response = await handler.set_push_notification_config(request)
         self.assertIsInstance(response, dict)
@@ -531,20 +524,17 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         push_config = PushNotificationConfig(
             id='default', url='http://example.com'
         )
-        task_config = TaskPushNotificationConfig(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
-            push_notification_config=push_config,
-        )
         # Set up the config first
-        request = SetTaskPushNotificationConfigRequest(
-            parent=f'tasks/{mock_task.id}',
+        request = CreateTaskPushNotificationConfigRequest(
+            task_id=mock_task.id,
             config_id='default',
-            config=task_config,
+            config=push_config,
         )
         await handler.set_push_notification_config(request)
 
         get_request = GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
+            task_id=mock_task.id,
+            id='default',
         )
         get_response = await handler.get_push_notification_config(get_request)
         self.assertIsInstance(get_response, dict)
@@ -593,7 +583,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 task_id='task_123',
                 context_id='session-xyz',
                 status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                final=True,
             ),
         ]
 
@@ -645,7 +634,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 task_id='task_123',
                 context_id='session-xyz',
                 status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                final=True,
             ),
         ]
 
@@ -659,7 +647,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         ):
             mock_task_store.get.return_value = mock_task
             mock_queue_manager.tap.return_value = EventQueue()
-            request = SubscribeToTaskRequest(name=f'tasks/{mock_task.id}')
+            request = SubscribeToTaskRequest(id=f'{mock_task.id}')
             response = handler.on_subscribe_to_task(request)
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
@@ -676,7 +664,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
-        request = SubscribeToTaskRequest(name='tasks/nonexistent_id')
+        request = SubscribeToTaskRequest(id='nonexistent_id')
         response = handler.on_subscribe_to_task(request)
         assert isinstance(response, AsyncGenerator)
         collected_events: list[Any] = []
@@ -732,13 +720,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Act & Assert
         push_config = PushNotificationConfig(url='http://example.com')
-        task_config = TaskPushNotificationConfig(
-            name='tasks/task_123/pushNotificationConfigs/default',
-            push_notification_config=push_config,
-        )
-        request = SetTaskPushNotificationConfigRequest(
-            parent='tasks/task_123',
-            config=task_config,
+        request = CreateTaskPushNotificationConfigRequest(
+            task_id='task_123',
+            config_id='default',
+            config=push_config,
         )
 
         # Should raise ServerError about push notifications not supported
@@ -769,7 +754,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Act
         get_request = GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
+            task_id=mock_task.id,
+            id='default',
         )
         response = await handler.get_push_notification_config(get_request)
 
@@ -797,13 +783,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Act
         push_config = PushNotificationConfig(url='http://example.com')
-        task_config = TaskPushNotificationConfig(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
-            push_notification_config=push_config,
-        )
-        request = SetTaskPushNotificationConfigRequest(
-            parent=f'tasks/{mock_task.id}',
-            config=task_config,
+        request = CreateTaskPushNotificationConfigRequest(
+            task_id=mock_task.id,
+            config_id='default',
+            config=push_config,
         )
         response = await handler.set_push_notification_config(request)
 
@@ -1016,7 +999,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Create request handler without a push notifier
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         task_push_config = TaskPushNotificationConfig(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/config1',
+            task_id=mock_task.id,
+            id='config1',
             push_notification_config=PushNotificationConfig(
                 id='config1', url='http://example.com'
             ),
@@ -1030,7 +1014,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         get_request = GetTaskPushNotificationConfigRequest(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/config1',
+            task_id=mock_task.id,
+            id='config1',
         )
         response = await handler.get_push_notification_config(get_request)
         # Assert
@@ -1038,8 +1023,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertTrue(is_success_response(response))
         # Result is converted to dict for JSON serialization
         self.assertEqual(
-            response['result']['name'],
-            f'tasks/{mock_task.id}/pushNotificationConfigs/config1',
+            response['result']['id'],
+            'config1',
+        )
+        self.assertEqual(
+            response['result']['taskId'],
+            mock_task.id,
         )
 
     async def test_on_list_push_notification(self) -> None:
@@ -1052,7 +1041,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Create request handler without a push notifier
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         task_push_config = TaskPushNotificationConfig(
-            name=f'tasks/{mock_task.id}/pushNotificationConfigs/default',
+            task_id=mock_task.id,
+            id='default',
             push_notification_config=PushNotificationConfig(
                 url='http://example.com'
             ),
@@ -1066,7 +1056,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         list_request = ListTaskPushNotificationConfigRequest(
-            parent=f'tasks/{mock_task.id}',
+            task_id=mock_task.id,
         )
         response = await handler.list_push_notification_config(list_request)
         # Assert
@@ -1094,7 +1084,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         list_request = ListTaskPushNotificationConfigRequest(
-            parent=f'tasks/{mock_task.id}',
+            task_id=mock_task.id,
         )
         response = await handler.list_push_notification_config(list_request)
         # Assert
@@ -1116,7 +1106,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         delete_request = DeleteTaskPushNotificationConfigRequest(
-            name='tasks/task1/pushNotificationConfigs/config1',
+            task_id='task1',
+            id='config1',
         )
         response = await handler.delete_push_notification_config(delete_request)
         # Assert
@@ -1139,7 +1130,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         delete_request = DeleteTaskPushNotificationConfigRequest(
-            name='tasks/task1/pushNotificationConfigs/config1',
+            task_id='task1',
+            id='config1',
         )
         response = await handler.delete_push_notification_config(delete_request)
         # Assert
@@ -1160,7 +1152,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                     url='http://agent.example.com/api',
                 )
             ],
-            protocol_versions=['v1'],
             version='1.1',
             capabilities=AgentCapabilities(),
             default_input_modes=['text/plain'],
@@ -1232,7 +1223,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                     url='http://agent.example.com/api',
                 )
             ],
-            protocol_versions=['v1'],
             version='1.0',
             capabilities=AgentCapabilities(),
             default_input_modes=['text/plain'],

@@ -7,10 +7,10 @@ from collections.abc import AsyncIterable, Sequence
 
 
 try:
-    import grpc
-    import grpc.aio
+    import grpc  # type: ignore[reportMissingModuleSource]
+    import grpc.aio  # type: ignore[reportMissingModuleSource]
 
-    from grpc.aio import Metadata
+    from grpc.aio import Metadata  # type: ignore[reportMissingModuleSource]
 except ImportError as e:
     raise ImportError(
         'GrpcHandler requires grpcio and grpcio-tools to be installed. '
@@ -262,17 +262,17 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
     )
-    async def SetTaskPushNotificationConfig(
+    async def CreateTaskPushNotificationConfig(
         self,
-        request: a2a_pb2.SetTaskPushNotificationConfigRequest,
+        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.TaskPushNotificationConfig:
-        """Handles the 'SetTaskPushNotificationConfig' gRPC method.
+        """Handles the 'CreateTaskPushNotificationConfig' gRPC method.
 
         Requires the agent to support push notifications.
 
         Args:
-            request: The incoming `SetTaskPushNotificationConfigRequest` object.
+            request: The incoming `CreateTaskPushNotificationConfigRequest` object.
             context: Context provided by the server.
 
         Returns:
@@ -284,11 +284,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             server_context = self.context_builder.build(context)
-            return (
-                await self.request_handler.on_set_task_push_notification_config(
-                    request,
-                    server_context,
-                )
+            return await self.request_handler.on_create_task_push_notification_config(
+                request,
+                server_context,
             )
         except ServerError as e:
             await self.abort_context(e, context)

@@ -282,5 +282,4 @@ def minimal_agent_card(
         skills=[],
         version='',
         name='',
-        protocol_versions=['v1'],
     )

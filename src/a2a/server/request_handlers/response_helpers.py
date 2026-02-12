@@ -143,7 +143,7 @@ def prepare_response_object(
             result = MessageToDict(response, preserving_proto_field_name=False)
         return JSONRPC20Response(result=result, _id=request_id).data
 
-    if isinstance(response, _A2A_ERROR_TYPES):
+    if isinstance(response, A2AException | JSONRPCError):
         return build_error_response(request_id, response)
 
     # If response is not an expected success type and not an error,

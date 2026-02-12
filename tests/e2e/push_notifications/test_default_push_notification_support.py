@@ -25,7 +25,7 @@ from a2a.types.a2a_pb2 import (
     Part,
     PushNotificationConfig,
     Role,
-    SetTaskPushNotificationConfigRequest,
+    CreateTaskPushNotificationConfigRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -138,7 +138,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
     # Verify a single notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task.id}/notifications',
+        f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
     assert notifications[0].token == token
@@ -182,7 +182,7 @@ async def test_notification_triggering_after_config_change_e2e(
 
     # Verify that no notification has been sent yet.
     response = await http_client.get(
-        f'{notifications_server}/tasks/{task.id}/notifications'
+        f'{notifications_server}/{task.id}/notifications'
     )
     assert response.status_code == 200
     assert len(response.json().get('notifications', [])) == 0
@@ -190,15 +190,13 @@ async def test_notification_triggering_after_config_change_e2e(
     # Set the push notification config.
     token = uuid.uuid4().hex
     await a2a_client.set_task_callback(
-        SetTaskPushNotificationConfigRequest(
-            parent=f'tasks/{task.id}',
+        CreateTaskPushNotificationConfigRequest(
+            task_id=f'{task.id}',
             config_id='after-config-change',
-            config=TaskPushNotificationConfig(
-                push_notification_config=PushNotificationConfig(
-                    id='after-config-change',
-                    url=f'{notifications_server}/notifications',
-                    token=token,
-                ),
+            config=PushNotificationConfig(
+                id='after-config-change',
+                url=f'{notifications_server}/notifications',
+                token=token,
             ),
         )
     )
@@ -220,7 +218,7 @@ async def test_notification_triggering_after_config_change_e2e(
     # Verify that the push notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task.id}/notifications',
+        f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
     # Notification.task is a dict from proto serialization

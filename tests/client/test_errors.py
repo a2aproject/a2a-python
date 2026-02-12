@@ -142,7 +142,7 @@ class TestExceptionHierarchy:
 class TestExceptionRaising:
     """Test cases for raising and handling the exceptions."""
 
-    def test_raising_http_error(self) -> NoReturn:
+    def test_raising_http_error(self) -> None:
         """Test raising an HTTP error and checking its properties."""
         with pytest.raises(A2AClientHTTPError) as excinfo:
             raise A2AClientHTTPError(429, 'Too Many Requests')
@@ -152,7 +152,7 @@ class TestExceptionRaising:
         assert error.message == 'Too Many Requests'
         assert str(error) == 'HTTP Error 429: Too Many Requests'
 
-    def test_raising_json_error(self) -> NoReturn:
+    def test_raising_json_error(self) -> None:
         """Test raising a JSON error and checking its properties."""
         with pytest.raises(A2AClientJSONError) as excinfo:
             raise A2AClientJSONError('Invalid format')
@@ -161,7 +161,7 @@ class TestExceptionRaising:
         assert error.message == 'Invalid format'
         assert str(error) == 'JSON Error: Invalid format'
 
-    def test_raising_base_error(self) -> NoReturn:
+    def test_raising_base_error(self) -> None:
         """Test raising the base error."""
         with pytest.raises(A2AClientError) as excinfo:
             raise A2AClientError('Generic client error')

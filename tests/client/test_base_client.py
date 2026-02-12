@@ -94,6 +94,7 @@ async def test_send_message_streaming(
     # events[0] is (StreamResponse, Task) tuple
     stream_response, tracked_task = events[0]
     assert stream_response.task.id == 'task-123'
+    assert tracked_task is not None
     assert tracked_task.id == 'task-123'
 
 
@@ -121,6 +122,7 @@ async def test_send_message_non_streaming(
     assert len(events) == 1
     stream_response, tracked_task = events[0]
     assert stream_response.task.id == 'task-456'
+    assert tracked_task is not None
     assert tracked_task.id == 'task-456'
 
 
@@ -144,7 +146,8 @@ async def test_send_message_non_streaming_agent_capability_false(
     assert not mock_transport.send_message_streaming.called
     assert len(events) == 1
     stream_response, tracked_task = events[0]
-    assert stream_response.task.id == 'task-789'
+    assert stream_response is not None
+    assert tracked_task is not None
     assert tracked_task.id == 'task-789'
 
 

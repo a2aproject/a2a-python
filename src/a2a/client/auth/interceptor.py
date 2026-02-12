@@ -31,12 +31,12 @@ class AuthInterceptor(ClientCallInterceptor):
         # We check for truthiness to see if they are non-empty.
         if (
             agent_card is None
-            or not agent_card.security
+            or not agent_card.security_requirements
             or not agent_card.security_schemes
         ):
             return request_payload, http_kwargs
 
-        for requirement in agent_card.security:
+        for requirement in agent_card.security_requirements:
             for scheme_name in requirement.schemes:
                 credential = await self._credential_service.get_credentials(
                     scheme_name, context

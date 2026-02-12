@@ -18,14 +18,21 @@ from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, Dialect, LargeBinary, String
+    from sqlalchemy import (
+        JSON,
+        Dialect,
+        LargeBinary,
+        String,
+    )
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
         declared_attr,
         mapped_column,
     )
-    from sqlalchemy.types import TypeDecorator
+    from sqlalchemy.types import (
+        TypeDecorator,
+    )
 except ImportError as e:
     raise ImportError(
         'Database models require SQLAlchemy. '

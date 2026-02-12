@@ -2,7 +2,7 @@ import asyncio
 import unittest
 
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from typing_extensions import override
 
@@ -56,7 +56,7 @@ def create_sample_status_update(
         task_id=task_id,
         context_id=context_id,
         status=TaskStatus(state=status_state),
-        final=False,  # Typically false unless it's the very last update
+        # Typically false unless it's the very last update
     )
 
 
@@ -212,7 +212,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Ensure process was called for the event before the exception
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 
@@ -262,7 +262,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         )
 
         # Mock _continue_consuming to check if it's called by create_task
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -316,7 +316,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.get_task.return_value = (
             current_task_state_after_update
         )
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -392,7 +392,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             )
 
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 
@@ -412,9 +412,9 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             mock_consume_generator()
         )
         # After processing `first_event`, the current result will be that task.
-        self.aggregator.task_manager.get_task.return_value = first_event
+        self.mock_task_manager.get_task.return_value = first_event
 
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (

@@ -36,7 +36,7 @@ def wait_for_server_ready(url: str, timeout: int = 10) -> None:
         time.sleep(0.1)
 
 
-def create_app_process(app, host, port) -> multiprocessing.Process:
+def create_app_process(app, host, port) -> 'Any':  # type: ignore[name-defined]
     """Creates a separate process for a given application.
 
     Uses 'fork' context on non-Windows platforms to avoid pickle issues

@@ -57,7 +57,7 @@ def create_notifications_app() -> FastAPI:
             'status': 'received',
         }
 
-    @app.get('/tasks/{task_id}/notifications')
+    @app.get('/{task_id}/notifications')
     async def list_notifications_by_task(
         task_id: Annotated[
             str, Path(title='The ID of the task to list the notifications for.')

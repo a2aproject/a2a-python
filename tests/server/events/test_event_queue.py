@@ -112,7 +112,6 @@ async def test_dequeue_event_wait(event_queue: EventQueue) -> None:
         task_id='task_123',
         context_id='session-xyz',
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-        final=True,
     )
     await event_queue.enqueue_event(event)
     dequeued_event = await event_queue.dequeue_event()
@@ -283,7 +282,7 @@ async def test_close_sets_flag_and_handles_internal_queue_old_python(
     """Test close behavior on Python < 3.13 (using queue.join)."""
     with patch('sys.version_info', (3, 12, 0)):  # Simulate older Python
         # Mock queue.join as it's called in older versions
-        event_queue.queue.join = AsyncMock()
+        event_queue.queue.join = AsyncMock()  # type: ignore[method-assign]
 
         await event_queue.close()
 
@@ -318,10 +317,10 @@ async def test_close_graceful_py313_waits_for_join_and_children(
 
         q_any = cast('Any', event_queue.queue)
         q_any.shutdown = MagicMock()  # type: ignore[attr-defined]
-        event_queue.queue.join = AsyncMock()
+        event_queue.queue.join = AsyncMock()  # type: ignore[method-assign]
 
         child = event_queue.tap()
-        child.close = AsyncMock()
+        child.close = AsyncMock()  # type: ignore[method-assign]
 
         # Act
         await event_queue.close(immediate=False)
@@ -338,8 +337,8 @@ async def test_close_propagates_to_children(event_queue: EventQueue) -> None:
     child_queue2 = event_queue.tap()
 
     # Mock the close method of children to verify they are called
-    child_queue1.close = AsyncMock()
-    child_queue2.close = AsyncMock()
+    child_queue1.close = AsyncMock()  # type: ignore[method-assign]
+    child_queue2.close = AsyncMock()  # type: ignore[method-assign]
 
     await event_queue.close()
 
@@ -354,7 +353,7 @@ async def test_close_idempotent(event_queue: EventQueue) -> None:
     with patch(
         'sys.version_info', (3, 12, 0)
     ):  # Test with older version logic first
-        event_queue.queue.join = AsyncMock()
+        event_queue.queue.join = AsyncMock()  # type: ignore[method-assign]
         await event_queue.close()
         assert event_queue.is_closed() is True
         event_queue.queue.join.assert_called_once()  # Called first time
@@ -497,7 +496,7 @@ async def test_clear_events_closed_queue(event_queue: EventQueue) -> None:
 
     with patch('sys.version_info', (3, 12, 0)):  # Simulate older Python
         # Mock queue.join as it's called in older versions
-        event_queue.queue.join = AsyncMock()
+        event_queue.queue.join = AsyncMock()  # type: ignore[method-assign]
 
     event = create_sample_message()
     await event_queue.enqueue_event(event)

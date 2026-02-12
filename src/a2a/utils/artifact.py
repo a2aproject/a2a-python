@@ -4,9 +4,9 @@ import uuid
 
 from typing import Any
 
-from google.protobuf.struct_pb2 import Struct
+from google.protobuf.struct_pb2 import Struct, Value
 
-from a2a.types.a2a_pb2 import Artifact, DataPart, Part
+from a2a.types.a2a_pb2 import Artifact, Part
 from a2a.utils.parts import get_text_parts
 
 
@@ -60,7 +60,7 @@ def new_data_artifact(
     data: dict[str, Any],
     description: str | None = None,
 ) -> Artifact:
-    """Creates a new Artifact object containing only a single DataPart.
+    """Creates a new Artifact object containing only a single data Part.
 
     Args:
         name: The human-readable name of the artifact.
@@ -73,7 +73,7 @@ def new_data_artifact(
     struct_data = Struct()
     struct_data.update(data)
     return new_artifact(
-        [Part(data=DataPart(data=struct_data))],
+        [Part(data=Value(struct_value=struct_data))],
         name,
         description,
     )

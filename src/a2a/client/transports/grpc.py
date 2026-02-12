@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 
 
 try:
-    import grpc
+    import grpc  # type: ignore[reportMissingModuleSource]
 except ImportError as e:
     raise ImportError(
         'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
@@ -22,11 +22,11 @@ from a2a.types import a2a_pb2, a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     SendMessageRequest,
     SendMessageResponse,
-    SetTaskPushNotificationConfigRequest,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -158,13 +158,13 @@ class GrpcTransport(ClientTransport):
 
     async def set_task_callback(
         self,
-        request: SetTaskPushNotificationConfigRequest,
+        request: CreateTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        return await self.stub.SetTaskPushNotificationConfig(
+        return await self.stub.CreateTaskPushNotificationConfig(
             request,
             metadata=self._get_grpc_metadata(extensions),
         )

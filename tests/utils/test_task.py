@@ -186,7 +186,7 @@ class TestTask(unittest.TestCase):
             completed_task(
                 task_id='task-123',
                 context_id='ctx-456',
-                artifacts=['not an artifact'],
+                artifacts=['not an artifact'],  # type: ignore[arg-type]
                 history=[],
             )
 

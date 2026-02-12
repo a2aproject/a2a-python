@@ -39,7 +39,6 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     AgentSkill,
     Artifact,
-    DataPart,
     Message,
     Part,
     PushNotificationConfig,
@@ -68,9 +67,7 @@ MINIMAL_AGENT_SKILL = AgentSkill(
     tags=['cooking'],
 )
 
-AGENT_CAPS = AgentCapabilities(
-    push_notifications=True, state_transition_history=False, streaming=True
-)
+AGENT_CAPS = AgentCapabilities(push_notifications=True, streaming=True)
 
 MINIMAL_AGENT_CARD_DATA = AgentCard(
     capabilities=AGENT_CAPS,
@@ -108,14 +105,14 @@ EXTENDED_AGENT_CARD_DATA = AgentCard(
     ],
     version='1.0',
 )
-from google.protobuf.struct_pb2 import Struct
+from google.protobuf.struct_pb2 import Struct, Value
 
 TEXT_PART_DATA = Part(text='Hello')
 
-# For proto, Part.data takes a DataPart, and DataPart.data takes a Struct
+# For proto, Part.data takes a Value(struct_value=Struct)
 _struct = Struct()
 _struct.update({'key': 'value'})
-DATA_PART = Part(data=DataPart(data=_struct))
+DATA_PART = Part(data=Value(struct_value=_struct))
 
 MINIMAL_MESSAGE_USER = Message(
     role=Role.ROLE_USER,
@@ -315,7 +312,7 @@ def test_starlette_rpc_endpoint_custom_url(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'name': 'task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -338,7 +335,7 @@ def test_fastapi_rpc_endpoint_custom_url(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'name': 'task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -472,7 +469,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     """Test cancelling a task."""
     # Setup mock response
     task_status = MINIMAL_TASK_STATUS
-    task_status.state = TaskState.TASK_STATE_CANCELLED  # 'cancelled' #
+    task_status.state = TaskState.TASK_STATE_CANCELED  # 'cancelled' #
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_cancel_task.return_value = task
 
@@ -483,7 +480,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'CancelTask',
-            'params': {'name': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
 
@@ -491,7 +488,7 @@ def test_cancel_task(client: TestClient, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert data['result']['id'] == 'task1'
-    assert data['result']['status']['state'] == 'TASK_STATE_CANCELLED'
+    assert data['result']['status']['state'] == 'TASK_STATE_CANCELED'
 
     # Verify handler was called
     handler.on_cancel_task.assert_awaited_once()
@@ -511,7 +508,7 @@ def test_get_task(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'name': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
 
@@ -530,12 +527,15 @@ def test_set_push_notification_config(
     """Test setting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        name='tasks/t2/pushNotificationConfig',
+        task_id='t2',
+        id='pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
     )
-    handler.on_set_task_push_notification_config.return_value = task_push_config
+    handler.on_create_task_push_notification_config.return_value = (
+        task_push_config
+    )
 
     # Send request
     response = client.post(
@@ -543,14 +543,13 @@ def test_set_push_notification_config(
         json={
             'jsonrpc': '2.0',
             'id': '123',
-            'method': 'SetTaskPushNotificationConfig',
+            'method': 'CreateTaskPushNotificationConfig',
             'params': {
-                'parent': 'tasks/t2',
+                'task_id': 't2',
+                'config_id': 'pushNotificationConfig',
                 'config': {
-                    'pushNotificationConfig': {
-                        'url': 'https://example.com',
-                        'token': 'secret-token',
-                    },
+                    'url': 'https://example.com',
+                    'token': 'secret-token',
                 },
             },
         },
@@ -562,7 +561,7 @@ def test_set_push_notification_config(
     assert data['result']['pushNotificationConfig']['token'] == 'secret-token'
 
     # Verify handler was called
-    handler.on_set_task_push_notification_config.assert_awaited_once()
+    handler.on_create_task_push_notification_config.assert_awaited_once()
 
 
 def test_get_push_notification_config(
@@ -571,7 +570,8 @@ def test_get_push_notification_config(
     """Test getting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        name='tasks/task1/pushNotificationConfig',
+        task_id='task1',
+        id='pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
@@ -586,7 +586,10 @@ def test_get_push_notification_config(
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTaskPushNotificationConfig',
-            'params': {'name': 'tasks/task1/pushNotificationConfig'},
+            'params': {
+                'task_id': 'task1',
+                'id': 'pushNotificationConfig',
+            },
         },
     )
 
@@ -774,7 +777,7 @@ async def test_task_resubscription(
                 'jsonrpc': '2.0',
                 'id': '123',  # This ID is used in the success_event above
                 'method': 'SubscribeToTask',
-                'params': {'name': 'tasks/task1'},
+                'params': {'id': 'task1'},
             },
         ) as response:
             # Verify response is a stream
@@ -946,7 +949,7 @@ def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'name': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200
@@ -1006,7 +1009,7 @@ def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'GetTask',
-            'params': {'name': 'tasks/task1'},
+            'params': {'id': 'task1'},
         },
     )
     assert response.status_code == 200

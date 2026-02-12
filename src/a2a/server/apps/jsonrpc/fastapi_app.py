@@ -51,15 +51,16 @@ class A2AFastAPI(FastAPI):
         # Try to use the a2a.json schema generated from the proto file
         # if available, instead of generating one from the python types.
         try:
-            from a2a import types
+            from a2a import types  # noqa: PLC0415
 
             schema_file = importlib.resources.files(types).joinpath('a2a.json')
             if schema_file.is_file():
                 self.openapi_schema = json.loads(
                     schema_file.read_text(encoding='utf-8')
                 )
-                return self.openapi_schema
-        except Exception:  # pylint: disable=broad-except
+                if self.openapi_schema:
+                    return self.openapi_schema
+        except Exception:  # noqa: BLE001
             logger.warning(
                 "Could not load 'a2a.json' from 'a2a.types'. Falling back to auto-generation."
             )
