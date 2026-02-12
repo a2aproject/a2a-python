@@ -329,7 +329,8 @@ class DefaultRequestHandler(RequestHandler):
             )
 
         except Exception:
-            await self._handle_execution_failure(producer_task, queue)
+            logger.exception('Agent execution failed')
+            producer_task.cancel()
             raise
         finally:
             if interrupted_or_non_blocking:
@@ -392,10 +393,6 @@ class DefaultRequestHandler(RequestHandler):
             bg_task.set_name(f'background_consume:{task_id}')
             self._track_background_task(bg_task)
             raise
-        except Exception:
-            # If the consumer fails (e.g. database error), we must cleanup.
-            await self._handle_execution_failure(producer_task, queue)
-            raise
         finally:
             cleanup_task = asyncio.create_task(
                 self._cleanup_producer(producer_task, task_id)
@@ -433,18 +430,6 @@ class DefaultRequestHandler(RequestHandler):
 
         task.add_done_callback(_on_done)
 
-    async def _handle_execution_failure(
-        self, producer_task: asyncio.Task, queue: EventQueue
-    ) -> None:
-        """Cancels the producer and closes the queue immediately on failure."""
-        logger.exception('Agent execution failed')
-        # If the consumer fails, we must cancel the producer to prevent it from hanging
-        # on queue operations (e.g., waiting for the queue to drain).
-        producer_task.cancel()
-        # Force the queue to close immediately, discarding any pending events.
-        # This ensures that any producers waiting on the queue are unblocked.
-        await queue.close(immediate=True)
-
     async def _cleanup_producer(
         self,
         producer_task: asyncio.Task,
@@ -457,8 +442,6 @@ class DefaultRequestHandler(RequestHandler):
             logger.debug(
                 'Producer task %s was cancelled during cleanup', task_id
             )
-        except Exception:
-            logger.exception('Producer task %s failed during cleanup', task_id)
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)

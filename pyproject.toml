@@ -109,6 +109,7 @@ dev = [
   "no_implicit_optional",
   "trio",
   "uvicorn>=0.35.0",
+  "pytest-timeout>=2.4.0",
 ]
 
 [[tool.uv.index]]

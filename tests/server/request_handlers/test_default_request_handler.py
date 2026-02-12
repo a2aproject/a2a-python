@@ -2646,169 +2646,53 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
     )
 
 
-@pytest.mark.asyncio
-async def test_on_message_send_stream_consumer_error_cancels_producer_and_closes_queue():
-    """Test that if the consumer (result aggregator) raises an exception, the producer is cancelled and queue is closed immediately."""
-    mock_task_store = AsyncMock(spec=TaskStore)
-    mock_queue_manager = AsyncMock(spec=QueueManager)
-    mock_agent_executor = AsyncMock(spec=AgentExecutor)
-    mock_request_context_builder = AsyncMock(spec=RequestContextBuilder)
+class HelloWorldAgentExecutor(AgentExecutor):
+    """Test Agent Implementation."""
 
-    task_id = 'error_cleanup_task'
-    context_id = 'error_cleanup_ctx'
-
-    mock_request_context = MagicMock(spec=RequestContext)
-    mock_request_context.task_id = task_id
-    mock_request_context.context_id = context_id
-    mock_request_context_builder.build.return_value = mock_request_context
-
-    mock_queue = AsyncMock(spec=EventQueue)
-    mock_queue_manager.create_or_tap.return_value = mock_queue
-
-    request_handler = DefaultRequestHandler(
-        agent_executor=mock_agent_executor,
-        task_store=mock_task_store,
-        queue_manager=mock_queue_manager,
-        request_context_builder=mock_request_context_builder,
-    )
-
-    params = MessageSendParams(
-        message=Message(
-            role=Role.user,
-            message_id='msg_error_cleanup',
-            parts=[],
-            # Do NOT provide task_id here to avoid "Task ... was specified but does not exist" error
+    async def execute(
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+    ) -> None:
+        updater = TaskUpdater(
+            event_queue,
+            task_id=context.task_id or str(uuid.uuid4()),
+            context_id=context.context_id or str(uuid.uuid4()),
         )
-    )
+        await updater.update_status(TaskState.working)
+        await updater.complete()
 
-    # Mock ResultAggregator to raise exception
-    mock_result_aggregator_instance = MagicMock(spec=ResultAggregator)
-
-    async def raise_error_gen(_consumer):
-        # Raise an exception to simulate consumer failure
-        raise ValueError('Consumer failed!')
-        yield  # unreachable
-
-    mock_result_aggregator_instance.consume_and_emit.side_effect = (
-        raise_error_gen
-    )
-
-    # Capture the producer task to verify cancellation
-    captured_producer_task = None
-    original_register = request_handler._register_producer
-
-    async def spy_register_producer(tid, task):
-        nonlocal captured_producer_task
-        captured_producer_task = task
-        # Wrap the cancel method to spy on it
-        task.cancel = MagicMock(wraps=task.cancel)
-        await original_register(tid, task)
-
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.ResultAggregator',
-            return_value=mock_result_aggregator_instance,
-        ),
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=None,
-        ),
-        patch.object(
-            request_handler,
-            '_register_producer',
-            side_effect=spy_register_producer,
-        ),
-    ):
-        # Act
-        with pytest.raises(ValueError, match='Consumer failed!'):
-            async for _ in request_handler.on_message_send_stream(
-                params, create_server_call_context()
-            ):
-                pass
-
-    assert captured_producer_task is not None
-    # Verify producer was cancelled
-    captured_producer_task.cancel.assert_called()
-
-    # Verify queue closed immediately
-    mock_queue.close.assert_awaited_with(immediate=True)
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        raise NotImplementedError('cancel not supported')
 
 
+# Repro is straight from the https://github.com/a2aproject/a2a-python/issues/609.
+# It uses timeout to test against infinite wait, if it's going to be flaky,
+# we should reconsider the approach.
 @pytest.mark.asyncio
-async def test_on_message_send_consumer_error_cancels_producer_and_closes_queue():
-    """Test that if the consumer raises an exception during blocking wait, the producer is cancelled."""
-    mock_task_store = AsyncMock(spec=TaskStore)
-    mock_queue_manager = AsyncMock(spec=QueueManager)
-    mock_agent_executor = AsyncMock(spec=AgentExecutor)
-    mock_request_context_builder = AsyncMock(spec=RequestContextBuilder)
-
-    task_id = 'error_cleanup_blocking_task'
-    context_id = 'error_cleanup_blocking_ctx'
-
-    mock_request_context = MagicMock(spec=RequestContext)
-    mock_request_context.task_id = task_id
-    mock_request_context.context_id = context_id
-    mock_request_context_builder.build.return_value = mock_request_context
-
-    mock_queue = AsyncMock(spec=EventQueue)
-    mock_queue_manager.create_or_tap.return_value = mock_queue
+@pytest.mark.timeout(1)
+async def test_on_message_send_error_should_not_hang():
+    """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
+    agent = HelloWorldAgentExecutor()
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(
-        agent_executor=mock_agent_executor,
-        task_store=mock_task_store,
-        queue_manager=mock_queue_manager,
-        request_context_builder=mock_request_context_builder,
+        agent_executor=agent, task_store=task_store
     )
 
     params = MessageSendParams(
         message=Message(
             role=Role.user,
             message_id='msg_error_blocking',
-            parts=[],
+            parts=[Part(root=TextPart(text='Test message'))],
         )
     )
 
-    # Mock ResultAggregator to raise exception
-    mock_result_aggregator_instance = MagicMock(spec=ResultAggregator)
-    mock_result_aggregator_instance.consume_and_break_on_interrupt.side_effect = ValueError(
-        'Consumer failed!'
-    )
-
-    # Capture the producer task to verify cancellation
-    captured_producer_task = None
-    original_register = request_handler._register_producer
-
-    async def spy_register_producer(tid, task):
-        nonlocal captured_producer_task
-        captured_producer_task = task
-        # Wrap the cancel method to spy on it
-        task.cancel = MagicMock(wraps=task.cancel)
-        await original_register(tid, task)
-
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.ResultAggregator',
-            return_value=mock_result_aggregator_instance,
-        ),
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=None,
-        ),
-        patch.object(
-            request_handler,
-            '_register_producer',
-            side_effect=spy_register_producer,
-        ),
-    ):
-        # Act
-        with pytest.raises(ValueError, match='Consumer failed!'):
-            await request_handler.on_message_send(
-                params, create_server_call_context()
-            )
-
-    assert captured_producer_task is not None
-    # Verify producer was cancelled
-    captured_producer_task.cancel.assert_called()
-
-    # Verify queue closed immediately
-    mock_queue.close.assert_awaited_with(immediate=True)
+    with pytest.raises(RuntimeError, match='This is an Error!'):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
