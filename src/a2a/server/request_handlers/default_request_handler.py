@@ -330,6 +330,7 @@ class DefaultRequestHandler(RequestHandler):
 
         except Exception:
             logger.exception('Agent execution failed')
+            producer_task.cancel()
             raise
         finally:
             if interrupted_or_non_blocking:
@@ -435,7 +436,12 @@ class DefaultRequestHandler(RequestHandler):
         task_id: str,
     ) -> None:
         """Cleans up the agent execution task and queue manager entry."""
-        await producer_task
+        try:
+            await producer_task
+        except asyncio.CancelledError:
+            logger.debug(
+                'Producer task %s was cancelled during cleanup', task_id
+            )
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
