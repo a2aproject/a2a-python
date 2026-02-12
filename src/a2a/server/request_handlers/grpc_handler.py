@@ -3,17 +3,12 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, Awaitable, Sequence
-from typing import TYPE_CHECKING
+from collections.abc import AsyncIterable, Awaitable
 
 
 try:
     import grpc
     import grpc.aio
-
-    if TYPE_CHECKING:
-        from grpc.aio._typing import MetadataType
-    from grpc.aio import Metadata
 except ImportError as e:
     raise ImportError(
         'GrpcHandler requires grpcio and grpcio-tools to be installed. '
@@ -56,14 +51,16 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md: MetadataType | None = context.invocation_metadata()
-    raw_values: list[str | bytes] = []
+    md = context.invocation_metadata()
+    if md is None:
+        return []
+
     lower_key = key.lower()
-    if isinstance(md, Metadata):
-        raw_values = md.get_all(lower_key)
-    elif isinstance(md, Sequence):
-        raw_values = [e for (k, e) in md if k.lower() == lower_key]
-    return [e if isinstance(e, str) else e.decode('utf-8') for e in raw_values]
+    return [
+        e if isinstance(e, str) else e.decode('utf-8')
+        for k, e in md
+        if k.lower() == lower_key
+    ]
 
 
 class DefaultCallContextBuilder(CallContextBuilder):
