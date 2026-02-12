@@ -3,6 +3,13 @@ from typing import NoReturn
 import pytest
 
 from a2a.client import A2AClientError, A2AClientHTTPError, A2AClientJSONError
+from a2a.client.errors import (
+    A2AClientInvalidArgsError,
+    A2AClientInvalidStateError,
+    A2AClientJSONRPCError,
+    A2AClientTimeoutError,
+)
+from a2a.types import JSONRPCError, JSONRPCErrorResponse
 
 
 class TestA2AClientError:
@@ -34,6 +41,14 @@ class TestA2AClientHTTPError:
         """Test that the error message is formatted correctly."""
         error = A2AClientHTTPError(500, 'Internal Server Error')
         assert str(error) == 'HTTP Error 500: Internal Server Error'
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientHTTPError(404, 'Not Found')
+        assert (
+            repr(error)
+            == "A2AClientHTTPError(status_code=404, message='Not Found')"
+        )
 
     def test_inheritance(self) -> None:
         """Test that A2AClientHTTPError inherits from A2AClientError."""
@@ -81,6 +96,13 @@ class TestA2AClientJSONError:
         error = A2AClientJSONError('Missing required field')
         assert str(error) == 'JSON Error: Missing required field'
 
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientJSONError('Invalid JSON format')
+        assert (
+            repr(error) == "A2AClientJSONError(message='Invalid JSON format')"
+        )
+
     def test_inheritance(self) -> None:
         """Test that A2AClientJSONError inherits from A2AClientError."""
         error = A2AClientJSONError('Parsing error')
@@ -106,6 +128,57 @@ class TestA2AClientJSONError:
             error = A2AClientJSONError(message)
             assert error.message == message
             assert str(error) == f'JSON Error: {message}'
+
+
+class TestA2AClientTimeoutErrorRepr:
+    """Test __repr__ for A2AClientTimeoutError."""
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientTimeoutError('Request timed out')
+        assert (
+            repr(error) == "A2AClientTimeoutError(message='Request timed out')"
+        )
+
+
+class TestA2AClientInvalidArgsErrorRepr:
+    """Test __repr__ for A2AClientInvalidArgsError."""
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientInvalidArgsError('Missing required param')
+        assert (
+            repr(error)
+            == "A2AClientInvalidArgsError(message='Missing required param')"
+        )
+
+
+class TestA2AClientInvalidStateErrorRepr:
+    """Test __repr__ for A2AClientInvalidStateError."""
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows structured attributes."""
+        error = A2AClientInvalidStateError('Client not initialized')
+        assert (
+            repr(error)
+            == "A2AClientInvalidStateError(message='Client not initialized')"
+        )
+
+
+class TestA2AClientJSONRPCErrorRepr:
+    """Test __repr__ for A2AClientJSONRPCError."""
+
+    def test_repr(self) -> None:
+        """Test that __repr__ shows the JSON-RPC error object."""
+        response = JSONRPCErrorResponse(
+            id='test-1',
+            error=JSONRPCError(code=-32601, message='Method not found'),
+        )
+        error = A2AClientJSONRPCError(response)
+        assert (
+            repr(error)
+            == "A2AClientJSONRPCError(JSONRPCError(code=-32601, data=None, message='Method not found'))"
+        )
 
 
 class TestExceptionHierarchy:
