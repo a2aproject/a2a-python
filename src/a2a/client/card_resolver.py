@@ -1,7 +1,6 @@
 import json
 import logging
 
-from collections.abc import Callable
 from typing import Any
 
 import httpx
@@ -45,7 +44,6 @@ class A2ACardResolver:
         self,
         relative_card_path: str | None = None,
         http_kwargs: dict[str, Any] | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Fetches an agent card from a specified path relative to the base_url.
 
@@ -58,7 +56,6 @@ class A2ACardResolver:
                 agent card path. Use `'/'` for an empty path.
             http_kwargs: Optional dictionary of keyword arguments to pass to the
                 underlying httpx.get request.
-            signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             An `AgentCard` object representing the agent's capabilities.
@@ -89,8 +86,6 @@ class A2ACardResolver:
                 agent_card_data,
             )
             agent_card = AgentCard.model_validate(agent_card_data)
-            if signature_verifier:
-                signature_verifier(agent_card)
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(
                 e.response.status_code,

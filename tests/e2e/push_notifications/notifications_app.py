@@ -23,7 +23,7 @@ def create_notifications_app() -> FastAPI:
 
     @app.post('/notifications')
     async def add_notification(request: Request):
-        """Endpoint for ingesting notifications from agents. It receives a JSON
+        """Endpoint for injesting notifications from agents. It receives a JSON
         payload and stores it in-memory.
         """
         token = request.headers.get('x-a2a-notification-token')
@@ -56,7 +56,7 @@ def create_notifications_app() -> FastAPI:
             str, Path(title='The ID of the task to list the notifications for.')
         ],
     ):
-        """Helper endpoint for retrieving ingested notifications for a given task."""
+        """Helper endpoint for retrieving injested notifications for a given task."""
         async with store_lock:
             notifications = store.get(task_id, [])
         return {'notifications': notifications}

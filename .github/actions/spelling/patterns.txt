@@ -1,2 +1,0 @@
-# Ignore URLs
-https?://\S+

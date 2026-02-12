@@ -35,7 +35,6 @@ grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
-signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
@@ -46,7 +45,6 @@ all = [
   "a2a-sdk[encryption]",
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
-  "a2a-sdk[signing]",
 ]
 
 [project.urls]
@@ -72,10 +70,9 @@ exclude = ["tests/"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-ra --strict-markers --dist loadgroup"
+addopts = "-ra --strict-markers"
 markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
-  "xdist_group: mark a test to run in a specific sequential group for isolation",
 ]
 
 [tool.pytest-asyncio]
@@ -89,12 +86,10 @@ style = "pep440"
 dev = [
   "datamodel-code-generator>=0.30.0",
   "mypy>=1.15.0",
-  "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
   "pytest-mock>=3.14.0",
-  "pytest-xdist>=3.6.1",
   "respx>=0.20.2",
   "ruff>=0.12.8",
   "uv-dynamic-versioning>=0.8.2",

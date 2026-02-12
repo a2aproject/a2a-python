@@ -47,14 +47,9 @@ initdb
 inmemory
 INR
 isready
-jku
 JPY
 JSONRPCt
-jwk
-jwks
-jws
 JWS
-kid
 kwarg
 langgraph
 lifecycles
@@ -63,7 +58,6 @@ Llm
 lstrips
 mikeas
 mockurl
-mysqladmin
 notif
 oauthoidc
 oidc
@@ -72,7 +66,6 @@ otherurl
 postgres
 POSTGRES
 postgresql
-proot
 protoc
 pyi
 pypistats
@@ -85,8 +78,6 @@ RUF
 SLF
 socio
 sse
-sut
-SUT
 tagwords
 taskupdate
 testuuid

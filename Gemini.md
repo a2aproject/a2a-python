@@ -4,7 +4,7 @@
 - uv as package manager
 
 ## How to run all tests
-1. If dependencies are not installed, install them using the following command
+1. If dependencies are not installed install them using following command
    ```
    uv sync --all-extras 
    ```

@@ -196,7 +196,6 @@ class Client(ABC):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
 
