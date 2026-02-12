@@ -1,5 +1,4 @@
 from typing import NoReturn
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -10,6 +9,7 @@ from a2a.client.errors import (
     A2AClientJSONRPCError,
     A2AClientTimeoutError,
 )
+from a2a.types import JSONRPCError, JSONRPCErrorResponse
 
 
 class TestA2AClientError:
@@ -170,9 +170,15 @@ class TestA2AClientJSONRPCErrorRepr:
 
     def test_repr(self) -> None:
         """Test that __repr__ shows the JSON-RPC error object."""
-        response = MagicMock()
+        response = JSONRPCErrorResponse(
+            id='test-1',
+            error=JSONRPCError(code=-32601, message='Method not found'),
+        )
         error = A2AClientJSONRPCError(response)
-        assert repr(error) == f'A2AClientJSONRPCError({response.error!r})'
+        assert (
+            repr(error)
+            == "A2AClientJSONRPCError(JSONRPCError(code=-32601, data=None, message='Method not found'))"
+        )
 
 
 class TestExceptionHierarchy:
