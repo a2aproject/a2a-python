@@ -2744,3 +2744,54 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
         f'Task {task_id} was specified but does not exist'
         in exc_info.value.error.message
     )
+
+
+class HelloWorldAgentExecutor(AgentExecutor):
+    """Test Agent Implementation."""
+
+    async def execute(
+        self,
+        context: RequestContext,
+        event_queue: EventQueue,
+    ) -> None:
+        updater = TaskUpdater(
+            event_queue,
+            task_id=context.task_id or str(uuid.uuid4()),
+            context_id=context.context_id or str(uuid.uuid4()),
+        )
+        await updater.update_status(TaskState.working)
+        await updater.complete()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        raise NotImplementedError('cancel not supported')
+
+
+# Repro is straight from the https://github.com/a2aproject/a2a-python/issues/609.
+# It uses timeout to test against infinite wait, if it's going to be flaky,
+# we should reconsider the approach.
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_on_message_send_error_does_not_hang():
+    """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
+    agent = HelloWorldAgentExecutor()
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.save.side_effect = RuntimeError('This is an Error!')
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=agent, task_store=task_store
+    )
+
+    params = MessageSendParams(
+        message=Message(
+            role=Role.user,
+            message_id='msg_error_blocking',
+            parts=[Part(root=TextPart(text='Test message'))],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='This is an Error!'):
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )

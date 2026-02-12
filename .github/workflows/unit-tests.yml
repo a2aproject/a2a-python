@@ -53,7 +53,7 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: uv sync --locked --dev --extra all
+        run: uv sync --locked
       - name: Run tests and check coverage
         run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=88
       - name: Show coverage summary in log

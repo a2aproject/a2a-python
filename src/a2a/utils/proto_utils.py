@@ -231,6 +231,8 @@ class ToProto:
                 return a2a_pb2.TaskState.TASK_STATE_INPUT_REQUIRED
             case types.TaskState.auth_required:
                 return a2a_pb2.TaskState.TASK_STATE_AUTH_REQUIRED
+            case types.TaskState.rejected:
+                return a2a_pb2.TaskState.TASK_STATE_REJECTED
             case _:
                 return a2a_pb2.TaskState.TASK_STATE_UNSPECIFIED
 
@@ -732,6 +734,8 @@ class FromProto:
                 return types.TaskState.input_required
             case a2a_pb2.TaskState.TASK_STATE_AUTH_REQUIRED:
                 return types.TaskState.auth_required
+            case a2a_pb2.TaskState.TASK_STATE_REJECTED:
+                return types.TaskState.rejected
             case _:
                 return types.TaskState.unknown
 

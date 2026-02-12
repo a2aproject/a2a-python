@@ -209,6 +209,34 @@ async def test_get_agent_card_with_modifier(
 ) -> None:
     """Test GetAgentCard call with a card_modifier."""
 
+    async def modifier(card: types.AgentCard) -> types.AgentCard:
+        modified_card = card.model_copy(deep=True)
+        modified_card.name = 'Modified gRPC Agent'
+        return modified_card
+
+    grpc_handler_modified = GrpcHandler(
+        agent_card=sample_agent_card,
+        request_handler=mock_request_handler,
+        card_modifier=modifier,
+    )
+
+    request_proto = a2a_pb2.GetAgentCardRequest()
+    response = await grpc_handler_modified.GetAgentCard(
+        request_proto, mock_grpc_context
+    )
+
+    assert response.name == 'Modified gRPC Agent'
+    assert response.version == sample_agent_card.version
+
+
+@pytest.mark.asyncio
+async def test_get_agent_card_with_modifier_sync(
+    mock_request_handler: AsyncMock,
+    sample_agent_card: types.AgentCard,
+    mock_grpc_context: AsyncMock,
+) -> None:
+    """Test GetAgentCard call with a synchronous card_modifier."""
+
     def modifier(card: types.AgentCard) -> types.AgentCard:
         modified_card = card.model_copy(deep=True)
         modified_card.name = 'Modified gRPC Agent'
@@ -357,9 +385,9 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'bar'),
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
 
         def side_effect(request, context: ServerCallContext):
@@ -387,8 +415,8 @@ class TestGrpcExtensions:
             mock_grpc_context.set_trailing_metadata.call_args.args[0]
         )
         assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'baz'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
         }
 
     async def test_send_message_with_comma_separated_extensions(
@@ -397,9 +425,9 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo ,, bar,'),
-            (HTTP_EXTENSION_HEADER, 'baz  , bar'),
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER.lower(), 'foo ,, bar,'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz  , bar'),
         )
         mock_request_handler.on_message_send.return_value = types.Message(
             message_id='1',
@@ -422,9 +450,9 @@ class TestGrpcExtensions:
         mock_request_handler: AsyncMock,
         mock_grpc_context: AsyncMock,
     ) -> None:
-        mock_grpc_context.invocation_metadata = grpc.aio.Metadata(
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'bar'),
+        mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
 
         async def side_effect(request, context: ServerCallContext):
@@ -458,6 +486,6 @@ class TestGrpcExtensions:
             mock_grpc_context.set_trailing_metadata.call_args.args[0]
         )
         assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER, 'foo'),
-            (HTTP_EXTENSION_HEADER, 'baz'),
+            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
+            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
         }

@@ -352,5 +352,52 @@ async def test_streaming_endpoint_with_invalid_content_type(
     assert response.status_code == 200
 
 
+@pytest.mark.anyio
+async def test_send_message_rejected_task(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    expected_response = a2a_pb2.SendMessageResponse(
+        task=a2a_pb2.Task(
+            id='test_task_id',
+            context_id='test_context_id',
+            status=a2a_pb2.TaskStatus(
+                state=a2a_pb2.TaskState.TASK_STATE_REJECTED,
+                update=a2a_pb2.Message(
+                    message_id='test',
+                    role=a2a_pb2.ROLE_AGENT,
+                    content=[
+                        a2a_pb2.Part(text="I don't want to work"),
+                    ],
+                ),
+            ),
+        ),
+    )
+    request_handler.on_message_send.return_value = Task(
+        id='test_task_id',
+        context_id='test_context_id',
+        status=TaskStatus(
+            state=TaskState.rejected,
+            message=Message(
+                message_id='test',
+                role=Role.agent,
+                parts=[Part(TextPart(text="I don't want to work"))],
+            ),
+        ),
+    )
+    request = a2a_pb2.SendMessageRequest(
+        request=a2a_pb2.Message(),
+        configuration=a2a_pb2.SendMessageConfiguration(),
+    )
+
+    response = await client.post(
+        '/v1/message:send', json=json_format.MessageToDict(request)
+    )
+
+    response.raise_for_status()
+    actual_response = a2a_pb2.SendMessageResponse()
+    json_format.Parse(response.text, actual_response)
+    assert expected_response == actual_response
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
