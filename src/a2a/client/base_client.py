@@ -1,5 +1,8 @@
 from collections.abc import AsyncIterator, Callable
+from types import TracebackType
 from typing import Any
+
+from typing_extensions import Self
 
 from a2a.client.client import (
     Client,
@@ -42,6 +45,19 @@ class BaseClient(Client):
         self._card = card
         self._config = config
         self._transport = transport
+
+    async def __aenter__(self) -> Self:
+        """Enters the async context manager, returning the client itself."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exits the async context manager, ensuring close() is called."""
+        await self.close()
 
     async def send_message(
         self,
