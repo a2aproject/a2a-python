@@ -16,6 +16,7 @@ from a2a.server.events import (
     EventConsumer,
     EventQueue,
     InMemoryQueueManager,
+    NoTaskQueue,
     QueueManager,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -50,12 +51,12 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 logger = logging.getLogger(__name__)
 
-TERMINAL_TASK_STATES = {
+TERMINAL_TASK_STATES = (
     TaskState.completed,
     TaskState.canceled,
     TaskState.failed,
     TaskState.rejected,
-}
+)
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -236,7 +237,8 @@ class DefaultRequestHandler(RequestHandler):
         request_context = await self._request_context_builder.build(
             params=params,
             task_id=task.id if task else None,
-            context_id=params.message.context_id,
+            context_id=params.message.context_id
+            or (task.context_id if task else None),
             task=task,
             context=context,
         )
@@ -342,7 +344,11 @@ class DefaultRequestHandler(RequestHandler):
                 await self._cleanup_producer(producer_task, task_id)
 
         if not result:
-            raise ServerError(error=InternalError())
+            raise ServerError(
+                error=InternalError(
+                    message='Agent execution completed without producing a result.'
+                )
+            )
 
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
@@ -435,8 +441,18 @@ class DefaultRequestHandler(RequestHandler):
         task_id: str,
     ) -> None:
         """Cleans up the agent execution task and queue manager entry."""
-        await producer_task
-        await self._queue_manager.close(task_id)
+        try:
+            await producer_task
+        except Exception:
+            # Task exceptions are already handled via logger and _track_background_task
+            pass
+
+        try:
+            await self._queue_manager.close(task_id)
+        except NoTaskQueue:
+            # Already closed by another request handler for the same task.
+            pass
+
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 

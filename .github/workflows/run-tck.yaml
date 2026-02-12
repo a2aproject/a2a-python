@@ -99,6 +99,18 @@ jobs:
           uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category capabilities --transports jsonrpc
         working-directory: tck/a2a-tck
 
+      - name: Run TCK (quality)
+        id: run-tck-quality
+        run: |
+          uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category quality --transports jsonrpc
+        working-directory: tck/a2a-tck
+
+      - name: Run TCK (features)
+        id: run-tck-features
+        run: |
+          uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category features --transports jsonrpc
+        working-directory: tck/a2a-tck
+
       - name: Stop SUT
         if: always()
         run: |
