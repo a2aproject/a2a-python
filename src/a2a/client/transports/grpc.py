@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
@@ -240,7 +240,6 @@ class GrpcTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
@@ -254,9 +253,6 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
         card = proto_utils.FromProto.agent_card(card_pb)
-        if signature_verifier:
-            signature_verifier(card)
-
         self.agent_card = card
         self._needs_extended_card = False
         return card

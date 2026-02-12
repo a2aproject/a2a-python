@@ -398,21 +398,6 @@ class ToProto:
             ]
             if card.additional_interfaces
             else None,
-            signatures=[cls.agent_card_signature(x) for x in card.signatures]
-            if card.signatures
-            else None,
-        )
-
-    @classmethod
-    def agent_card_signature(
-        cls, signature: types.AgentCardSignature
-    ) -> a2a_pb2.AgentCardSignature:
-        return a2a_pb2.AgentCardSignature(
-            protected=signature.protected,
-            signature=signature.signature,
-            header=dict_to_struct(signature.header)
-            if signature.header is not None
-            else None,
         )
 
     @classmethod
@@ -931,19 +916,6 @@ class FromProto:
             ]
             if card.additional_interfaces
             else None,
-            signatures=[cls.agent_card_signature(x) for x in card.signatures]
-            if card.signatures
-            else None,
-        )
-
-    @classmethod
-    def agent_card_signature(
-        cls, signature: a2a_pb2.AgentCardSignature
-    ) -> types.AgentCardSignature:
-        return types.AgentCardSignature(
-            protected=signature.protected,
-            signature=signature.signature,
-            header=json_format.MessageToDict(signature.header),
         )
 
     @classmethod

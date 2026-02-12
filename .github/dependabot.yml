@@ -5,7 +5,7 @@ updates:
     schedule:
       interval: 'monthly'
     groups:
-      all:
+      uv-dependencies:
         patterns:
           - '*'
   - package-ecosystem: 'github-actions'
