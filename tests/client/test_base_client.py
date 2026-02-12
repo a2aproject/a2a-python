@@ -88,6 +88,26 @@ async def test_transport_async_context_manager_on_exception() -> None:
 
 
 @pytest.mark.asyncio
+async def test_base_client_async_context_manager(
+    base_client: BaseClient, mock_transport: AsyncMock
+) -> None:
+    async with base_client as client:
+        assert client is base_client
+        mock_transport.close.assert_not_awaited()
+    mock_transport.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_base_client_async_context_manager_on_exception(
+    base_client: BaseClient, mock_transport: AsyncMock
+) -> None:
+    with pytest.raises(RuntimeError, match='boom'):
+        async with base_client:
+            raise RuntimeError('boom')
+    mock_transport.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
 async def test_send_message_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ) -> None:
