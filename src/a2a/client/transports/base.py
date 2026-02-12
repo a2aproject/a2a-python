@@ -1,5 +1,8 @@
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
+from types import TracebackType
+
+from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types import (
@@ -18,6 +21,19 @@ from a2a.types import (
 
 class ClientTransport(ABC):
     """Abstract base class for a client transport."""
+
+    async def __aenter__(self) -> Self:
+        """Enters the async context manager, returning the transport itself."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exits the async context manager, ensuring close() is called."""
+        await self.close()
 
     @abstractmethod
     async def send_message(

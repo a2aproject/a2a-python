@@ -3,14 +3,12 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, Sequence
+from collections.abc import AsyncIterable, Awaitable
 
 
 try:
     import grpc
     import grpc.aio
-
-    from grpc.aio import Metadata
 except ImportError as e:
     raise ImportError(
         'GrpcHandler requires grpcio and grpcio-tools to be installed. '
@@ -34,7 +32,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import AgentCard, TaskNotFoundError
 from a2a.utils import proto_utils
 from a2a.utils.errors import ServerError
-from a2a.utils.helpers import validate, validate_async_generator
+from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 
 
 logger = logging.getLogger(__name__)
@@ -53,14 +51,16 @@ class CallContextBuilder(ABC):
 def _get_metadata_value(
     context: grpc.aio.ServicerContext, key: str
 ) -> list[str]:
-    md = context.invocation_metadata
-    raw_values: list[str | bytes] = []
-    if isinstance(md, Metadata):
-        raw_values = md.get_all(key)
-    elif isinstance(md, Sequence):
-        lower_key = key.lower()
-        raw_values = [e for (k, e) in md if k.lower() == lower_key]
-    return [e if isinstance(e, str) else e.decode('utf-8') for e in raw_values]
+    md = context.invocation_metadata()
+    if md is None:
+        return []
+
+    lower_key = key.lower()
+    return [
+        e if isinstance(e, str) else e.decode('utf-8')
+        for k, e in md
+        if k.lower() == lower_key
+    ]
 
 
 class DefaultCallContextBuilder(CallContextBuilder):
@@ -89,7 +89,8 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         agent_card: AgentCard,
         request_handler: RequestHandler,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
     ):
         """Initializes the GrpcHandler.
 
@@ -339,7 +340,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """Get the agent card for the agent served."""
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = self.card_modifier(card_to_serve)
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
         return proto_utils.ToProto.agent_card(card_to_serve)
 
     async def abort_context(
@@ -416,7 +417,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         if server_context.activated_extensions:
             context.set_trailing_metadata(
                 [
-                    (HTTP_EXTENSION_HEADER, e)
+                    (HTTP_EXTENSION_HEADER.lower(), e)
                     for e in sorted(server_context.activated_extensions)
                 ]
             )

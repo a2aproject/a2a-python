@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
@@ -59,6 +59,32 @@ def base_client(
         consumers=[],
         middleware=[],
     )
+
+
+@pytest.mark.asyncio
+async def test_transport_async_context_manager() -> None:
+    with (
+        patch.object(ClientTransport, '__abstractmethods__', set()),
+        patch.object(ClientTransport, 'close', new_callable=AsyncMock),
+    ):
+        transport = ClientTransport()
+        async with transport as t:
+            assert t is transport
+            transport.close.assert_not_awaited()
+        transport.close.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_transport_async_context_manager_on_exception() -> None:
+    with (
+        patch.object(ClientTransport, '__abstractmethods__', set()),
+        patch.object(ClientTransport, 'close', new_callable=AsyncMock),
+    ):
+        transport = ClientTransport()
+        with pytest.raises(RuntimeError, match='boom'):
+            async with transport:
+                raise RuntimeError('boom')
+        transport.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

@@ -2673,7 +2673,7 @@ class HelloWorldAgentExecutor(AgentExecutor):
 # we should reconsider the approach.
 @pytest.mark.asyncio
 @pytest.mark.timeout(1)
-async def test_on_message_send_error_should_not_hang():
+async def test_on_message_send_error_does_not_hang():
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
@@ -2692,7 +2692,6 @@ async def test_on_message_send_error_should_not_hang():
     )
 
     with pytest.raises(RuntimeError, match='This is an Error!'):
-        async for _ in request_handler.on_message_send_stream(
+        await request_handler.on_message_send(
             params, create_server_call_context()
-        ):
-            pass
+        )
