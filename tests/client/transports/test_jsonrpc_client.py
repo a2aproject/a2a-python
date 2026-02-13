@@ -602,6 +602,38 @@ class TestJsonRpcTransport:
         assert 'Client Request timed out' in str(exc_info.value)
 
     @pytest.mark.asyncio
+    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    async def test_send_message_streaming_timeout(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        client = JsonRpcTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = MessageSendParams(
+            message=create_text_message_object(content='Hello stream')
+        )
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.raise_for_status.return_value = None
+        mock_event_source.aiter_sse.side_effect = httpx.TimeoutException(
+            'Read timed out'
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientTimeoutError) as exc_info:
+            _ = [
+                item
+                async for item in client.send_message_streaming(request=params)
+            ]
+
+        assert 'Client Request timed out' in str(exc_info.value)
+
+    @pytest.mark.asyncio
     async def test_get_task_success(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
