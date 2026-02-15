@@ -122,8 +122,8 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
     { name = "sse-starlette", marker = "extra == 'all'" },
     { name = "sse-starlette", marker = "extra == 'http-server'" },
-    { name = "starlette", marker = "extra == 'all'" },
-    { name = "starlette", marker = "extra == 'http-server'" },
+    { name = "starlette", marker = "extra == 'all'", specifier = ">=0.48.0" },
+    { name = "starlette", marker = "extra == 'http-server'", specifier = ">=0.48.0" },
 ]
 provides-extras = ["all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
