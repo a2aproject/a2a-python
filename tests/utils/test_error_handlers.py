@@ -6,9 +6,11 @@ import pytest
 
 from a2a.types import (
     InternalError,
+    TaskNotFoundError,
+)
+from a2a.utils.errors import (
     InvalidRequestError,
     MethodNotFoundError,
-    TaskNotFoundError,
 )
 from a2a.utils.error_handlers import (
     A2AErrorToHttpStatus,

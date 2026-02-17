@@ -3,21 +3,23 @@ from collections.abc import AsyncGenerator
 
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
-from a2a.types import (
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
-    ListTaskPushNotificationConfigParams,
-    ListTasksParams,
-    ListTasksResult,
+from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
+    ListTasksRequest,
+    ListTasksResponse,
     Message,
-    MessageSendParams,
+    SendMessageRequest,
+    SubscribeToTaskRequest,
     Task,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import ServerError, UnsupportedOperationError
 
 
 class RequestHandler(ABC):
@@ -30,7 +32,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_get_task(
         self,
-        params: TaskQueryParams,
+        params: GetTaskRequest,
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Handles the 'tasks/get' method.
@@ -47,8 +49,8 @@ class RequestHandler(ABC):
 
     @abstractmethod
     async def on_list_tasks(
-        self, params: ListTasksParams, context: ServerCallContext | None = None
-    ) -> ListTasksResult:
+        self, params: ListTasksRequest, context: ServerCallContext | None = None
+    ) -> ListTasksResponse:
         """Handles the tasks/list method.
 
         Retrieves all task for an agent. Supports filtering, pagination,
@@ -59,13 +61,13 @@ class RequestHandler(ABC):
             context: Context provided by the server.
 
         Returns:
-            The `ListTasksResult` containing the tasks.
+            The `ListTasksResponse` containing the tasks.
         """
 
     @abstractmethod
     async def on_cancel_task(
         self,
-        params: TaskIdParams,
+        params: CancelTaskRequest,
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Handles the 'tasks/cancel' method.
@@ -83,7 +85,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_message_send(
         self,
-        params: MessageSendParams,
+        params: SendMessageRequest,
         context: ServerCallContext | None = None,
     ) -> Task | Message:
         """Handles the 'message/send' method (non-streaming).
@@ -102,7 +104,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_message_send_stream(
         self,
-        params: MessageSendParams,
+        params: SendMessageRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
         """Handles the 'message/stream' method (streaming).
@@ -124,12 +126,12 @@ class RequestHandler(ABC):
         yield
 
     @abstractmethod
-    async def on_set_task_push_notification_config(
+    async def on_create_task_push_notification_config(
         self,
-        params: TaskPushNotificationConfig,
+        params: CreateTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
-        """Handles the 'tasks/pushNotificationConfig/set' method.
+        """Handles the 'tasks/pushNotificationConfig/create' method.
 
         Sets or updates the push notification configuration for a task.
 
@@ -144,7 +146,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_get_task_push_notification_config(
         self,
-        params: TaskIdParams | GetTaskPushNotificationConfigParams,
+        params: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/get' method.
@@ -160,14 +162,14 @@ class RequestHandler(ABC):
         """
 
     @abstractmethod
-    async def on_resubscribe_to_task(
+    async def on_subscribe_to_task(
         self,
-        params: TaskIdParams,
+        params: SubscribeToTaskRequest,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
-        """Handles the 'tasks/resubscribe' method.
+        """Handles the 'SubscribeToTask' method.
 
-        Allows a client to re-subscribe to a running streaming task's event stream.
+        Allows a client to subscribe to a running streaming task's event stream.
 
         Args:
             params: Parameters including the task ID.
@@ -185,10 +187,10 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_list_task_push_notification_config(
         self,
-        params: ListTaskPushNotificationConfigParams,
+        params: ListTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Handles the 'tasks/pushNotificationConfig/list' method.
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Handles the 'ListTaskPushNotificationConfig' method.
 
         Retrieves the current push notification configurations for a task.
 
@@ -203,7 +205,7 @@ class RequestHandler(ABC):
     @abstractmethod
     async def on_delete_task_push_notification_config(
         self,
-        params: DeleteTaskPushNotificationConfigParams,
+        params: DeleteTaskPushNotificationConfigRequest,
         context: ServerCallContext | None = None,
     ) -> None:
         """Handles the 'tasks/pushNotificationConfig/delete' method.

@@ -1,17 +1,17 @@
 import uuid
+
 from typing import Any
 from unittest.mock import patch
 
 import pytest
-from google.protobuf.json_format import MessageToDict
 
 from a2a.types.a2a_pb2 import (
-    Artifact,
+    AgentCapabilities,
     AgentCard,
     AgentCardSignature,
-    AgentCapabilities,
     AgentInterface,
     AgentSkill,
+    Artifact,
     Message,
     Part,
     Role,
@@ -26,9 +26,9 @@ from a2a.utils.helpers import (
     append_artifact_to_task,
     are_modalities_compatible,
     build_text_artifact,
+    canonicalize_agent_card,
     create_task_obj,
     validate,
-    canonicalize_agent_card,
 )
 
 

@@ -6,9 +6,9 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from agent_app import create_agent_app
-from notifications_app import Notification, create_notifications_app
-from utils import (
+from .agent_app import create_agent_app
+from .notifications_app import Notification, create_notifications_app
+from .utils import (
     create_app_process,
     find_free_port,
     wait_for_server_ready,
@@ -19,16 +19,16 @@ from a2a.client import (
     ClientFactory,
     minimal_agent_card,
 )
-from a2a.types import (
+from a2a.utils.constants import TransportProtocol
+from a2a.types.a2a_pb2 import (
     Message,
     Part,
     PushNotificationConfig,
     Role,
+    CreateTaskPushNotificationConfigRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
-    TextPart,
-    TransportProtocol,
 )
 
 
@@ -105,7 +105,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
     token = uuid.uuid4().hex
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_transports=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.http_json],
             push_notification_configs=[
                 PushNotificationConfig(
                     id='in-message-config',
@@ -122,25 +122,29 @@ async def test_notification_triggering_with_in_message_config_e2e(
         async for response in a2a_client.send_message(
             Message(
                 message_id='hello-agent',
-                parts=[Part(root=TextPart(text='Hello Agent!'))],
-                role=Role.user,
+                parts=[Part(text='Hello Agent!')],
+                role=Role.ROLE_USER,
             )
         )
     ]
     assert len(responses) == 1
     assert isinstance(responses[0], tuple)
-    assert isinstance(responses[0][0], Task)
-    task = responses[0][0]
+    # ClientEvent is tuple[StreamResponse, Task | None]
+    # responses[0][0] is StreamResponse with task field
+    stream_response = responses[0][0]
+    assert stream_response.HasField('task')
+    task = stream_response.task
 
     # Verify a single notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task.id}/notifications',
+        f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
     assert notifications[0].token == token
-    assert notifications[0].task.id == task.id
-    assert notifications[0].task.status.state == 'completed'
+    # Notification.task is a dict from proto serialization
+    assert notifications[0].task['id'] == task.id
+    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
 
 
 @pytest.mark.asyncio
@@ -153,7 +157,7 @@ async def test_notification_triggering_after_config_change_e2e(
     # Configure an A2A client without a push notification config.
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_transports=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.http_json],
         )
     ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
 
@@ -163,20 +167,22 @@ async def test_notification_triggering_after_config_change_e2e(
         async for response in a2a_client.send_message(
             Message(
                 message_id='how-are-you',
-                parts=[Part(root=TextPart(text='How are you?'))],
-                role=Role.user,
+                parts=[Part(text='How are you?')],
+                role=Role.ROLE_USER,
             )
         )
     ]
     assert len(responses) == 1
     assert isinstance(responses[0], tuple)
-    assert isinstance(responses[0][0], Task)
-    task = responses[0][0]
-    assert task.status.state == TaskState.input_required
+    # ClientEvent is tuple[StreamResponse, Task | None]
+    stream_response = responses[0][0]
+    assert stream_response.HasField('task')
+    task = stream_response.task
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
     # Verify that no notification has been sent yet.
     response = await http_client.get(
-        f'{notifications_server}/tasks/{task.id}/notifications'
+        f'{notifications_server}/{task.id}/notifications'
     )
     assert response.status_code == 200
     assert len(response.json().get('notifications', [])) == 0
@@ -184,9 +190,10 @@ async def test_notification_triggering_after_config_change_e2e(
     # Set the push notification config.
     token = uuid.uuid4().hex
     await a2a_client.set_task_callback(
-        TaskPushNotificationConfig(
-            task_id=task.id,
-            push_notification_config=PushNotificationConfig(
+        CreateTaskPushNotificationConfigRequest(
+            task_id=f'{task.id}',
+            config_id='after-config-change',
+            config=PushNotificationConfig(
                 id='after-config-change',
                 url=f'{notifications_server}/notifications',
                 token=token,
@@ -201,8 +208,8 @@ async def test_notification_triggering_after_config_change_e2e(
             Message(
                 task_id=task.id,
                 message_id='good',
-                parts=[Part(root=TextPart(text='Good'))],
-                role=Role.user,
+                parts=[Part(text='Good')],
+                role=Role.ROLE_USER,
             )
         )
     ]
@@ -211,11 +218,12 @@ async def test_notification_triggering_after_config_change_e2e(
     # Verify that the push notification was sent.
     notifications = await wait_for_n_notifications(
         http_client,
-        f'{notifications_server}/tasks/{task.id}/notifications',
+        f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
-    assert notifications[0].task.id == task.id
-    assert notifications[0].task.status.state == 'completed'
+    # Notification.task is a dict from proto serialization
+    assert notifications[0].task['id'] == task.id
+    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
     assert notifications[0].token == token
 
 

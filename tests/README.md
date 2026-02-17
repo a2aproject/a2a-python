@@ -53,7 +53,7 @@
     ```
     (Follow the onscreen instructions to export DSNs and run pytest manually).
 
-In case of failures, you can clean up the cache:
+In case of failures, you can clean  up the cache:
 
 1. `uv clean`
 2. `rm -fR .pytest_cache .venv __pycache__`

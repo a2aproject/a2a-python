@@ -5,17 +5,19 @@ import pytest
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.transports.base import ClientTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
+    AgentInterface,
     AgentCard,
     Message,
-    MessageSendConfiguration,
     Part,
     Role,
+    SendMessageConfiguration,
+    SendMessageResponse,
+    StreamResponse,
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
@@ -29,7 +31,9 @@ def sample_agent_card() -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='An agent for testing',
-        url='http://test.com',
+        supported_interfaces=[
+            AgentInterface(url='http://test.com', protocol_binding='HTTP+JSON')
+        ],
         version='1.0',
         capabilities=AgentCapabilities(streaming=True),
         default_input_modes=['text/plain'],
@@ -41,9 +45,9 @@ def sample_agent_card() -> AgentCard:
 @pytest.fixture
 def sample_message() -> Message:
     return Message(
-        role=Role.user,
+        role=Role.ROLE_USER,
         message_id='msg-1',
-        parts=[Part(root=TextPart(text='Hello'))],
+        parts=[Part(text='Hello')],
     )
 
 
@@ -112,11 +116,14 @@ async def test_send_message_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ) -> None:
     async def create_stream(*args, **kwargs):
-        yield Task(
+        task = Task(
             id='task-123',
             context_id='ctx-456',
-            status=TaskStatus(state=TaskState.completed),
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         )
+        stream_response = StreamResponse()
+        stream_response.task.CopyFrom(task)
+        yield stream_response
 
     mock_transport.send_message_streaming.return_value = create_stream()
 
@@ -130,7 +137,11 @@ async def test_send_message_streaming(
     )
     assert not mock_transport.send_message.called
     assert len(events) == 1
-    assert events[0][0].id == 'task-123'
+    # events[0] is (StreamResponse, Task) tuple
+    stream_response, tracked_task = events[0]
+    assert stream_response.task.id == 'task-123'
+    assert tracked_task is not None
+    assert tracked_task.id == 'task-123'
 
 
 @pytest.mark.asyncio
@@ -138,11 +149,14 @@ async def test_send_message_non_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ) -> None:
     base_client._config.streaming = False
-    mock_transport.send_message.return_value = Task(
+    task = Task(
         id='task-456',
         context_id='ctx-789',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
+    response = SendMessageResponse()
+    response.task.CopyFrom(task)
+    mock_transport.send_message.return_value = response
 
     meta = {'test': 1}
     stream = base_client.send_message(sample_message, request_metadata=meta)
@@ -152,7 +166,10 @@ async def test_send_message_non_streaming(
     assert mock_transport.send_message.call_args[0][0].metadata == meta
     assert not mock_transport.send_message_streaming.called
     assert len(events) == 1
-    assert events[0][0].id == 'task-456'
+    stream_response, tracked_task = events[0]
+    assert stream_response.task.id == 'task-456'
+    assert tracked_task is not None
+    assert tracked_task.id == 'task-456'
 
 
 @pytest.mark.asyncio
@@ -160,18 +177,24 @@ async def test_send_message_non_streaming_agent_capability_false(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ) -> None:
     base_client._card.capabilities.streaming = False
-    mock_transport.send_message.return_value = Task(
+    task = Task(
         id='task-789',
         context_id='ctx-101',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
+    response = SendMessageResponse()
+    response.task.CopyFrom(task)
+    mock_transport.send_message.return_value = response
 
     events = [event async for event in base_client.send_message(sample_message)]
 
     mock_transport.send_message.assert_called_once()
     assert not mock_transport.send_message_streaming.called
     assert len(events) == 1
-    assert events[0][0].id == 'task-789'
+    stream_response, tracked_task = events[0]
+    assert stream_response is not None
+    assert tracked_task is not None
+    assert tracked_task.id == 'task-789'
 
 
 @pytest.mark.asyncio
@@ -179,13 +202,16 @@ async def test_send_message_callsite_config_overrides_non_streaming(
     base_client: BaseClient, mock_transport: MagicMock, sample_message: Message
 ):
     base_client._config.streaming = False
-    mock_transport.send_message.return_value = Task(
+    task = Task(
         id='task-cfg-ns-1',
         context_id='ctx-cfg-ns-1',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
     )
+    response = SendMessageResponse()
+    response.task.CopyFrom(task)
+    mock_transport.send_message.return_value = response
 
-    cfg = MessageSendConfiguration(
+    cfg = SendMessageConfiguration(
         history_length=2,
         blocking=False,
         accepted_output_modes=['application/json'],
@@ -200,8 +226,8 @@ async def test_send_message_callsite_config_overrides_non_streaming(
     mock_transport.send_message.assert_called_once()
     assert not mock_transport.send_message_streaming.called
     assert len(events) == 1
-    task, _ = events[0]
-    assert task.id == 'task-cfg-ns-1'
+    stream_response, _ = events[0]
+    assert stream_response.task.id == 'task-cfg-ns-1'
 
     params = mock_transport.send_message.call_args[0][0]
     assert params.configuration.history_length == 2
@@ -217,15 +243,18 @@ async def test_send_message_callsite_config_overrides_streaming(
     base_client._card.capabilities.streaming = True
 
     async def create_stream(*args, **kwargs):
-        yield Task(
+        task = Task(
             id='task-cfg-s-1',
             context_id='ctx-cfg-s-1',
-            status=TaskStatus(state=TaskState.completed),
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         )
+        stream_response = StreamResponse()
+        stream_response.task.CopyFrom(task)
+        yield stream_response
 
     mock_transport.send_message_streaming.return_value = create_stream()
 
-    cfg = MessageSendConfiguration(
+    cfg = SendMessageConfiguration(
         history_length=0,
         blocking=True,
         accepted_output_modes=['text/plain'],
@@ -240,8 +269,8 @@ async def test_send_message_callsite_config_overrides_streaming(
     mock_transport.send_message_streaming.assert_called_once()
     assert not mock_transport.send_message.called
     assert len(events) == 1
-    task, _ = events[0]
-    assert task.id == 'task-cfg-s-1'
+    stream_response, _ = events[0]
+    assert stream_response.task.id == 'task-cfg-s-1'
 
     params = mock_transport.send_message_streaming.call_args[0][0]
     assert params.configuration.history_length == 0
