@@ -1,26 +1,28 @@
-from typing import Any
-
 import pytest
+from datetime import datetime, timezone
 
 from a2a.server.tasks import InMemoryTaskStore
-from a2a.types import ListTasksParams, Task, TaskState, TaskStatus
+from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus, ListTasksRequest
 
 
-MINIMAL_TASK: dict[str, Any] = {
-    'id': 'task-abc',
-    'context_id': 'session-xyz',
-    'status': {'state': 'submitted'},
-    'kind': 'task',
-}
+def create_minimal_task(
+    task_id: str = 'task-abc', context_id: str = 'session-xyz'
+) -> Task:
+    """Create a minimal task for testing."""
+    return Task(
+        id=task_id,
+        context_id=context_id,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
 
 
 @pytest.mark.asyncio
 async def test_in_memory_task_store_save_and_get() -> None:
     """Test saving and retrieving a task from the in-memory store."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
+    task = create_minimal_task()
     await store.save(task)
-    retrieved_task = await store.get(MINIMAL_TASK['id'])
+    retrieved_task = await store.get('task-abc')
     assert retrieved_task == task
 
 
@@ -38,28 +40,28 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
     [
         # No parameters, should return all tasks
         (
-            ListTasksParams(),
+            ListTasksRequest(),
             ['task-2', 'task-1', 'task-0', 'task-4', 'task-3'],
             5,
             None,
         ),
         # Unknown context
         (
-            ListTasksParams(context_id='nonexistent'),
+            ListTasksRequest(context_id='nonexistent'),
             [],
             0,
             None,
         ),
         # Pagination (first page)
         (
-            ListTasksParams(page_size=2),
+            ListTasksRequest(page_size=2),
             ['task-2', 'task-1'],
             5,
             'dGFzay0w',  # base64 for 'task-0'
         ),
         # Pagination (same timestamp)
         (
-            ListTasksParams(
+            ListTasksRequest(
                 page_size=2,
                 page_token='dGFzay0x',  # base64 for 'task-1'
             ),
@@ -69,7 +71,7 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
         ),
         # Pagination (final page)
         (
-            ListTasksParams(
+            ListTasksRequest(
                 page_size=2,
                 page_token='dGFzay0z',  # base64 for 'task-3'
             ),
@@ -79,28 +81,30 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
         ),
         # Filtering by context_id
         (
-            ListTasksParams(context_id='context-1'),
+            ListTasksRequest(context_id='context-1'),
             ['task-1', 'task-3'],
             2,
             None,
         ),
         # Filtering by status
         (
-            ListTasksParams(status=TaskState.working),
+            ListTasksRequest(status=TaskState.TASK_STATE_WORKING),
             ['task-1', 'task-3'],
             2,
             None,
         ),
         # Combined filtering (context_id and status)
         (
-            ListTasksParams(context_id='context-0', status=TaskState.submitted),
+            ListTasksRequest(
+                context_id='context-0', status=TaskState.TASK_STATE_SUBMITTED
+            ),
             ['task-2', 'task-0'],
             2,
             None,
         ),
         # Combined filtering and pagination
         (
-            ListTasksParams(
+            ListTasksRequest(
                 context_id='context-0',
                 page_size=1,
             ),
@@ -111,60 +115,47 @@ async def test_in_memory_task_store_get_nonexistent() -> None:
     ],
 )
 async def test_list_tasks(
-    params: ListTasksParams,
+    params: ListTasksRequest,
     expected_ids: list[str],
     total_count: int,
     next_page_token: str,
 ) -> None:
     """Test listing tasks with various filters and pagination."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
     tasks_to_create = [
-        task.model_copy(
-            update={
-                'id': 'task-0',
-                'context_id': 'context-0',
-                'status': TaskStatus(
-                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
-                ),
-                'kind': 'task',
-            }
+        Task(
+            id='task-0',
+            context_id='context-0',
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_SUBMITTED,
+                timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ),
         ),
-        task.model_copy(
-            update={
-                'id': 'task-1',
-                'context_id': 'context-1',
-                'status': TaskStatus(
-                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
-                ),
-                'kind': 'task',
-            }
+        Task(
+            id='task-1',
+            context_id='context-1',
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_WORKING,
+                timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ),
         ),
-        task.model_copy(
-            update={
-                'id': 'task-2',
-                'context_id': 'context-0',
-                'status': TaskStatus(
-                    state=TaskState.submitted, timestamp='2025-01-02T00:00:00Z'
-                ),
-                'kind': 'task',
-            }
+        Task(
+            id='task-2',
+            context_id='context-0',
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_SUBMITTED,
+                timestamp=datetime(2025, 1, 2, tzinfo=timezone.utc),
+            ),
         ),
-        task.model_copy(
-            update={
-                'id': 'task-3',
-                'context_id': 'context-1',
-                'status': TaskStatus(state=TaskState.working),
-                'kind': 'task',
-            }
+        Task(
+            id='task-3',
+            context_id='context-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         ),
-        task.model_copy(
-            update={
-                'id': 'task-4',
-                'context_id': 'context-0',
-                'status': TaskStatus(state=TaskState.completed),
-                'kind': 'task',
-            }
+        Task(
+            id='task-4',
+            context_id='context-0',
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
         ),
     ]
     for task in tasks_to_create:
@@ -175,7 +166,7 @@ async def test_list_tasks(
     retrieved_ids = [task.id for task in page.tasks]
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
-    assert page.next_page_token == next_page_token
+    assert page.next_page_token == (next_page_token or '')
 
     # Cleanup
     for task in tasks_to_create:
@@ -187,14 +178,14 @@ async def test_list_tasks(
     'params, expected_error_message',
     [
         (
-            ListTasksParams(
+            ListTasksRequest(
                 page_size=2,
                 page_token='invalid',
             ),
             'Token is not a valid base64-encoded cursor.',
         ),
         (
-            ListTasksParams(
+            ListTasksRequest(
                 page_size=2,
                 page_token='dGFzay0xMDA=',  # base64 for 'task-100'
             ),
@@ -203,31 +194,26 @@ async def test_list_tasks(
     ],
 )
 async def test_list_tasks_fails(
-    params: ListTasksParams, expected_error_message: str
+    params: ListTasksRequest, expected_error_message: str
 ) -> None:
     """Test listing tasks with invalid parameters that should fail."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
     tasks_to_create = [
-        task.model_copy(
-            update={
-                'id': 'task-0',
-                'context_id': 'context-0',
-                'status': TaskStatus(
-                    state=TaskState.submitted, timestamp='2025-01-01T00:00:00Z'
-                ),
-                'kind': 'task',
-            }
+        Task(
+            id='task-0',
+            context_id='context-0',
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_SUBMITTED,
+                timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ),
         ),
-        task.model_copy(
-            update={
-                'id': 'task-1',
-                'context_id': 'context-1',
-                'status': TaskStatus(
-                    state=TaskState.working, timestamp='2025-01-01T00:00:00Z'
-                ),
-                'kind': 'task',
-            }
+        Task(
+            id='task-1',
+            context_id='context-1',
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_WORKING,
+                timestamp=datetime(2025, 1, 1, tzinfo=timezone.utc),
+            ),
         ),
     ]
     for task in tasks_to_create:
@@ -247,10 +233,10 @@ async def test_list_tasks_fails(
 async def test_in_memory_task_store_delete() -> None:
     """Test deleting a task from the store."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
+    task = create_minimal_task()
     await store.save(task)
-    await store.delete(MINIMAL_TASK['id'])
-    retrieved_task = await store.get(MINIMAL_TASK['id'])
+    await store.delete('task-abc')
+    retrieved_task = await store.get('task-abc')
     assert retrieved_task is None
 
 

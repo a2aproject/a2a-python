@@ -1,17 +1,18 @@
 import asyncio
 
-from typing import Annotated
+from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Path, Request
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, ValidationError
 
-from a2a.types import Task
+from a2a.types.a2a_pb2 import StreamResponse, Task
+from google.protobuf.json_format import ParseDict, MessageToDict
 
 
 class Notification(BaseModel):
     """Encapsulates default push notification data."""
 
-    task: Task
+    task: dict[str, Any]
     token: str
 
 
@@ -33,8 +34,14 @@ def create_notifications_app() -> FastAPI:
                 detail='Missing "x-a2a-notification-token" header.',
             )
         try:
-            task = Task.model_validate(await request.json())
-        except ValidationError as e:
+            json_data = await request.json()
+            stream_response = ParseDict(json_data, StreamResponse())
+            if not stream_response.HasField('task'):
+                raise HTTPException(
+                    status_code=400, detail='Missing task in StreamResponse'
+                )
+            task = stream_response.task
+        except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
         async with store_lock:
@@ -42,7 +49,7 @@ def create_notifications_app() -> FastAPI:
                 store[task.id] = []
             store[task.id].append(
                 Notification(
-                    task=task,
+                    task=MessageToDict(task, preserving_proto_field_name=True),
                     token=token,
                 )
             )
@@ -50,7 +57,7 @@ def create_notifications_app() -> FastAPI:
             'status': 'received',
         }
 
-    @app.get('/tasks/{task_id}/notifications')
+    @app.get('/{task_id}/notifications')
     async def list_notifications_by_task(
         task_id: Annotated[
             str, Path(title='The ID of the task to list the notifications for.')

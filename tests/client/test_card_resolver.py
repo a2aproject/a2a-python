@@ -47,7 +47,12 @@ def valid_agent_card_data():
         'name': 'TestAgent',
         'description': 'A test agent',
         'version': '1.0.0',
-        'url': 'https://example.com/a2a',
+        'supported_interfaces': [
+            {
+                'url': 'https://example.com/a2a',
+                'protocol_binding': 'HTTP+JSON',
+            }
+        ],
         'capabilities': {},
         'default_input_modes': ['text/plain'],
         'default_output_modes': ['text/plain'],
@@ -115,17 +120,14 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
 
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ) as mock_validate:
-            result = await resolver.get_agent_card()
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
-            )
-            mock_response.raise_for_status.assert_called_once()
-            mock_response.json.assert_called_once()
-            mock_validate.assert_called_once_with(valid_agent_card_data)
-            assert result is not None
+        result = await resolver.get_agent_card()
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
+        )
+        mock_response.raise_for_status.assert_called_once()
+        mock_response.json.assert_called_once()
+        assert result is not None
+        assert isinstance(result, AgentCard)
 
     @pytest.mark.asyncio
     async def test_get_agent_card_success_custom_path(
@@ -140,14 +142,11 @@ class TestGetAgentCard:
         custom_path = 'custom/path/card'
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(relative_card_path=custom_path)
+        await resolver.get_agent_card(relative_card_path=custom_path)
 
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{custom_path}',
-            )
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{custom_path}',
+        )
 
     @pytest.mark.asyncio
     async def test_get_agent_card_strips_leading_slash_from_relative_path(
@@ -162,14 +161,11 @@ class TestGetAgentCard:
         custom_path = '/custom/path/card'
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(relative_card_path=custom_path)
+        await resolver.get_agent_card(relative_card_path=custom_path)
 
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{custom_path[1:]}',
-            )
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{custom_path[1:]}',
+        )
 
     @pytest.mark.asyncio
     async def test_get_agent_card_with_http_kwargs(
@@ -187,15 +183,12 @@ class TestGetAgentCard:
             'timeout': 30,
             'headers': {'Authorization': 'Bearer token'},
         }
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(http_kwargs=http_kwargs)
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
-                timeout=30,
-                headers={'Authorization': 'Bearer token'},
-            )
+        await resolver.get_agent_card(http_kwargs=http_kwargs)
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
+            timeout=30,
+            headers={'Authorization': 'Bearer token'},
+        )
 
     @pytest.mark.asyncio
     async def test_get_agent_card_root_path(
@@ -209,11 +202,8 @@ class TestGetAgentCard:
         """Test fetching agent card from root path."""
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(relative_card_path='/')
-            mock_httpx_client.get.assert_called_once_with(f'{base_url}/')
+        await resolver.get_agent_card(relative_card_path='/')
+        mock_httpx_client.get.assert_called_once_with(f'{base_url}/')
 
     @pytest.mark.asyncio
     async def test_get_agent_card_http_status_error(
@@ -295,12 +285,7 @@ class TestGetAgentCard:
     ):
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        with (
-            patch.object(
-                AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-            ),
-            caplog.at_level(logging.INFO),
-        ):
+        with caplog.at_level(logging.INFO):
             await resolver.get_agent_card()
         assert (
             f'Successfully fetched agent card data from {base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}'
@@ -320,13 +305,10 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
 
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(relative_card_path=None)
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
-            )
+        await resolver.get_agent_card(relative_card_path=None)
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
+        )
 
     @pytest.mark.asyncio
     async def test_get_agent_card_empty_string_relative_path(
@@ -341,14 +323,11 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
 
-        with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
-        ):
-            await resolver.get_agent_card(relative_card_path='')
+        await resolver.get_agent_card(relative_card_path='')
 
-            mock_httpx_client.get.assert_called_once_with(
-                f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
-            )
+        mock_httpx_client.get.assert_called_once_with(
+            f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
+        )
 
     @pytest.mark.parametrize('status_code', [400, 401, 403, 500, 502])
     @pytest.mark.asyncio
@@ -373,14 +352,9 @@ class TestGetAgentCard:
         """Test that get_agent_card returns an AgentCard instance."""
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        mock_agent_card = Mock(spec=AgentCard)
-
-        with patch.object(
-            AgentCard, 'model_validate', return_value=mock_agent_card
-        ):
-            result = await resolver.get_agent_card()
-            assert result == mock_agent_card
-            mock_response.raise_for_status.assert_called_once()
+        result = await resolver.get_agent_card()
+        assert isinstance(result, AgentCard)
+        mock_response.raise_for_status.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_get_agent_card_with_signature_verifier(

@@ -36,7 +36,7 @@ class AgentExecutor(ABC):
 
         The agent should attempt to stop the task identified by the task_id
         in the context and publish a `TaskStatusUpdateEvent` with state
-        `TaskState.canceled` to the `event_queue`.
+        `TaskState.TASK_STATE_CANCELED` to the `event_queue`.
 
         Args:
             context: The request context containing the task ID to cancel.

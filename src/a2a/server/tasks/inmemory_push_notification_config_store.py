@@ -4,7 +4,7 @@ import logging
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig
+from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 logger = logging.getLogger(__name__)
@@ -31,7 +31,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
             if task_id not in self._push_notification_infos:
                 self._push_notification_infos[task_id] = []
 
-            if notification_config.id is None:
+            if not notification_config.id:
                 notification_config.id = task_id
 
             for config in self._push_notification_infos[task_id]:

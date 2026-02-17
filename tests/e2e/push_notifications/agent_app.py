@@ -12,11 +12,12 @@ from a2a.server.tasks import (
     InMemoryTaskStore,
     TaskUpdater,
 )
-from a2a.types import (
+from a2a.types import InvalidParamsError
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AgentSkill,
-    InvalidParamsError,
     Message,
     Task,
 )
@@ -32,11 +33,14 @@ def test_agent_card(url: str) -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='Just a test agent',
-        url=url,
         version='1.0.0',
         default_input_modes=['text'],
         default_output_modes=['text'],
-        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         skills=[
             AgentSkill(
                 id='greeting',
@@ -46,7 +50,12 @@ def test_agent_card(url: str) -> AgentCard:
                 examples=['Hello Agent!', 'How are you?'],
             )
         ],
-        supports_authenticated_extended_card=True,
+        supported_interfaces=[
+            AgentInterface(
+                url=url,
+                protocol_binding='HTTP+JSON',
+            )
+        ],
     )
 
 
@@ -60,7 +69,7 @@ class TestAgent:
         if (
             not msg.parts
             or len(msg.parts) != 1
-            or msg.parts[0].root.kind != 'text'
+            or not msg.parts[0].HasField('text')
         ):
             await updater.failed(
                 new_agent_text_message(
@@ -68,7 +77,7 @@ class TestAgent:
                 )
             )
             return
-        text_message = msg.parts[0].root.text
+        text_message = msg.parts[0].text
 
         # Simple request-response flow.
         if text_message == 'Hello Agent!':

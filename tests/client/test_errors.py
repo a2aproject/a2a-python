@@ -9,7 +9,7 @@ from a2a.client.errors import (
     A2AClientJSONRPCError,
     A2AClientTimeoutError,
 )
-from a2a.types import JSONRPCError, JSONRPCErrorResponse
+from jsonrpc.jsonrpc2 import JSONRPC20Response
 
 
 class TestA2AClientError:
@@ -170,14 +170,12 @@ class TestA2AClientJSONRPCErrorRepr:
 
     def test_repr(self) -> None:
         """Test that __repr__ shows the JSON-RPC error object."""
-        response = JSONRPCErrorResponse(
-            id='test-1',
-            error=JSONRPCError(code=-32601, message='Method not found'),
+        error = A2AClientJSONRPCError(
+            {'code': -32601, 'message': 'Method not found', 'data': None}
         )
-        error = A2AClientJSONRPCError(response)
         assert (
             repr(error)
-            == "A2AClientJSONRPCError(JSONRPCError(code=-32601, data=None, message='Method not found'))"
+            == "A2AClientJSONRPCError(\"JSON-RPC Error {'code': -32601, 'message': 'Method not found', 'data': None}\")"
         )
 
 
@@ -215,7 +213,7 @@ class TestExceptionHierarchy:
 class TestExceptionRaising:
     """Test cases for raising and handling the exceptions."""
 
-    def test_raising_http_error(self) -> NoReturn:
+    def test_raising_http_error(self) -> None:
         """Test raising an HTTP error and checking its properties."""
         with pytest.raises(A2AClientHTTPError) as excinfo:
             raise A2AClientHTTPError(429, 'Too Many Requests')
@@ -225,7 +223,7 @@ class TestExceptionRaising:
         assert error.message == 'Too Many Requests'
         assert str(error) == 'HTTP Error 429: Too Many Requests'
 
-    def test_raising_json_error(self) -> NoReturn:
+    def test_raising_json_error(self) -> None:
         """Test raising a JSON error and checking its properties."""
         with pytest.raises(A2AClientJSONError) as excinfo:
             raise A2AClientJSONError('Invalid format')
@@ -234,7 +232,7 @@ class TestExceptionRaising:
         assert error.message == 'Invalid format'
         assert str(error) == 'JSON Error: Invalid format'
 
-    def test_raising_base_error(self) -> NoReturn:
+    def test_raising_base_error(self) -> None:
         """Test raising the base error."""
         with pytest.raises(A2AClientError) as excinfo:
             raise A2AClientError('Generic client error')

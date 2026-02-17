@@ -22,17 +22,11 @@ jobs:
         uses: astral-sh/setup-uv@v7
       - name: Configure uv shell
         run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Install dependencies (datamodel-code-generator)
-        run: uv sync --locked
       - name: Define output file variable
         id: vars
         run: |
-          GENERATED_FILE="./src/a2a/types.py"
+          GENERATED_FILE="./src/a2a/types"
           echo "GENERATED_FILE=$GENERATED_FILE" >> "$GITHUB_OUTPUT"
-      - name: Generate types from schema
-        run: |
-          chmod +x scripts/generate_types.sh
-          ./scripts/generate_types.sh "${{ steps.vars.outputs.GENERATED_FILE }}"
       - name: Install Buf
         uses: bufbuild/buf-setup-action@v1
       - name: Run buf generate
@@ -40,7 +34,6 @@ jobs:
           set -euo pipefail  # Exit immediately if a command exits with a non-zero status
           echo "Running buf generate..."
           buf generate
-          uv run scripts/grpc_gen_post_processor.py
           echo "Buf generate finished."
       - name: Create Pull Request with Updates
         uses: peter-evans/create-pull-request@v8

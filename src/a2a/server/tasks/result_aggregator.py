@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 
 from a2a.server.events import Event, EventConsumer
 from a2a.server.tasks.task_manager import TaskManager
-from a2a.types import Message, Task, TaskState, TaskStatusUpdateEvent
+from a2a.types.a2a_pb2 import Message, Task, TaskState, TaskStatusUpdateEvent
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class ResultAggregator:
         blocking: bool = True,
         event_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> tuple[Task | Message | None, bool]:
-        """Processes the event stream until completion or an interruptable state is encountered.
+        """Processes the event stream until completion or an interruptible state is encountered.
 
         If `blocking` is False, it returns after the first event that creates a Task or Message.
         If `blocking` is True, it waits for completion unless an `auth_required`
@@ -134,7 +134,7 @@ class ResultAggregator:
             should_interrupt = False
             is_auth_required = (
                 isinstance(event, Task | TaskStatusUpdateEvent)
-                and event.status.state == TaskState.auth_required
+                and event.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
             )
 
             # Always interrupt on auth_required, as it needs external action.
@@ -173,7 +173,7 @@ class ResultAggregator:
     ) -> None:
         """Continues processing an event stream in a background task.
 
-        Used after an interruptable state (like auth_required) is encountered
+        Used after an interruptible state (like auth_required) is encountered
         in the synchronous consumption flow.
 
         Args:

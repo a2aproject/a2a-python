@@ -1,11 +1,10 @@
 import asyncio
 import logging
 
-from datetime import datetime, timezone
-
 from a2a.server.context import ServerCallContext
-from a2a.server.tasks.task_store import TaskStore, TasksPage
-from a2a.types import ListTasksParams, Task
+from a2a.server.tasks.task_store import TaskStore
+from a2a.types import a2a_pb2
+from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.task import decode_page_token, encode_page_token
 
@@ -49,9 +48,9 @@ class InMemoryTaskStore(TaskStore):
 
     async def list(
         self,
-        params: ListTasksParams,
+        params: a2a_pb2.ListTasksRequest,
         context: ServerCallContext | None = None,
-    ) -> TasksPage:
+    ) -> a2a_pb2.ListTasksResponse:
         """Retrieves a list of tasks from the store."""
         async with self.lock:
             tasks = list(self.tasks.values())
@@ -61,28 +60,34 @@ class InMemoryTaskStore(TaskStore):
             tasks = [
                 task for task in tasks if task.context_id == params.context_id
             ]
-        if params.status and params.status != 'unknown':
+        if params.status:
             tasks = [
                 task for task in tasks if task.status.state == params.status
             ]
-        if params.last_updated_after:
-            last_updated_after_iso = datetime.fromtimestamp(
-                params.last_updated_after / 1000, tz=timezone.utc
-            ).isoformat()
+        if params.HasField('status_timestamp_after'):
+            last_updated_after_iso = (
+                params.status_timestamp_after.ToJsonString()
+            )
             tasks = [
                 task
                 for task in tasks
                 if (
-                    task.status.timestamp
-                    and task.status.timestamp >= last_updated_after_iso
+                    task.HasField('status')
+                    and task.status.HasField('timestamp')
+                    and task.status.timestamp.ToJsonString()
+                    >= last_updated_after_iso
                 )
             ]
 
         # Order tasks by last update time. To ensure stable sorting, in cases where timestamps are null or not unique, do a second order comparison of IDs.
         tasks.sort(
             key=lambda task: (
-                task.status.timestamp is not None,
-                task.status.timestamp,
+                task.status.HasField('timestamp')
+                if task.HasField('status')
+                else False,
+                task.status.timestamp.ToJsonString()
+                if task.HasField('status') and task.status.HasField('timestamp')
+                else '',
                 task.id,
             ),
             reverse=True,
@@ -109,8 +114,8 @@ class InMemoryTaskStore(TaskStore):
         )
         tasks = tasks[start_idx:end_idx]
 
-        return TasksPage(
-            next_page_token=next_page_token,
+        return a2a_pb2.ListTasksResponse(
+            next_page_token=next_page_token or '',
             tasks=tasks,
             total_size=total_size,
         )
