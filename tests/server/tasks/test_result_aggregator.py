@@ -2,14 +2,14 @@ import asyncio
 import unittest
 
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
 from typing_extensions import override
 
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.tasks.result_aggregator import ResultAggregator
 from a2a.server.tasks.task_manager import TaskManager
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
     Part,
     Role,
@@ -17,25 +17,26 @@ from a2a.types import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
 
 
 # Helper to create a simple message
 def create_sample_message(
-    content: str = 'test message', msg_id: str = 'msg1', role: Role = Role.user
+    content: str = 'test message',
+    msg_id: str = 'msg1',
+    role: Role = Role.ROLE_USER,
 ) -> Message:
     return Message(
         message_id=msg_id,
         role=role,
-        parts=[Part(root=TextPart(text=content))],
+        parts=[Part(text=content)],
     )
 
 
 # Helper to create a simple task
 def create_sample_task(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.submitted,
+    status_state: TaskState = TaskState.TASK_STATE_SUBMITTED,
     context_id: str = 'ctx1',
 ) -> Task:
     return Task(
@@ -48,14 +49,14 @@ def create_sample_task(
 # Helper to create a TaskStatusUpdateEvent
 def create_sample_status_update(
     task_id: str = 'task1',
-    status_state: TaskState = TaskState.working,
+    status_state: TaskState = TaskState.TASK_STATE_WORKING,
     context_id: str = 'ctx1',
 ) -> TaskStatusUpdateEvent:
     return TaskStatusUpdateEvent(
         task_id=task_id,
         context_id=context_id,
         status=TaskStatus(state=status_state),
-        final=False,  # Typically false unless it's the very last update
+        # Typically false unless it's the very last update
     )
 
 
@@ -92,10 +93,10 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     async def test_consume_and_emit(self) -> None:
         event1 = create_sample_message(content='event one', msg_id='e1')
         event2 = create_sample_task(
-            task_id='task_event', status_state=TaskState.working
+            task_id='task_event', status_state=TaskState.TASK_STATE_WORKING
         )
         event3 = create_sample_status_update(
-            task_id='task_event', status_state=TaskState.completed
+            task_id='task_event', status_state=TaskState.TASK_STATE_COMPLETED
         )
 
         # Mock event_consumer.consume() to be an async generator
@@ -146,10 +147,12 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
     async def test_consume_all_other_event_types(self) -> None:
         task_event = create_sample_task(task_id='task_other_event')
         status_update_event = create_sample_status_update(
-            task_id='task_other_event', status_state=TaskState.completed
+            task_id='task_other_event',
+            status_state=TaskState.TASK_STATE_COMPLETED,
         )
         final_task_state = create_sample_task(
-            task_id='task_other_event', status_state=TaskState.completed
+            task_id='task_other_event',
+            status_state=TaskState.TASK_STATE_COMPLETED,
         )
 
         async def mock_consume_generator():
@@ -209,7 +212,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Ensure process was called for the event before the exception
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 
@@ -243,7 +246,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self, mock_create_task: MagicMock
     ) -> None:
         auth_task = create_sample_task(
-            task_id='auth_task', status_state=TaskState.auth_required
+            task_id='auth_task', status_state=TaskState.TASK_STATE_AUTH_REQUIRED
         )
         event_after_auth = create_sample_message('after auth')
 
@@ -259,7 +262,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         )
 
         # Mock _continue_consuming to check if it's called by create_task
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -295,10 +298,12 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self, mock_create_task: MagicMock
     ) -> None:
         auth_status_update = create_sample_status_update(
-            task_id='auth_status_task', status_state=TaskState.auth_required
+            task_id='auth_status_task',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
         current_task_state_after_update = create_sample_task(
-            task_id='auth_status_task', status_state=TaskState.auth_required
+            task_id='auth_status_task',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
 
         async def mock_consume_generator():
@@ -311,7 +316,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         self.mock_task_manager.get_task.return_value = (
             current_task_state_after_update
         )
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -336,7 +341,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         event1 = create_sample_message('event one normal', msg_id='n1')
         event2 = create_sample_task('normal_task')
         final_task_state = create_sample_task(
-            'normal_task', status_state=TaskState.completed
+            'normal_task', status_state=TaskState.TASK_STATE_COMPLETED
         )
 
         async def mock_consume_generator():
@@ -387,7 +392,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             )
 
         self.mock_task_manager.process.assert_called_once_with(
-            unittest.mock.ANY  # Check it was called, arg is the task
+            ANY  # Check it was called, arg is the task
         )
         self.mock_task_manager.get_task.assert_not_called()
 
@@ -407,9 +412,9 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
             mock_consume_generator()
         )
         # After processing `first_event`, the current result will be that task.
-        self.aggregator.task_manager.get_task.return_value = first_event
+        self.mock_task_manager.get_task.return_value = first_event
 
-        self.aggregator._continue_consuming = AsyncMock()
+        self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
@@ -437,7 +442,8 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         # the events *after* the interrupting one are processed by _continue_consuming.
 
         auth_event = create_sample_task(
-            'task_auth_for_continue', status_state=TaskState.auth_required
+            'task_auth_for_continue',
+            status_state=TaskState.TASK_STATE_AUTH_REQUIRED,
         )
         event_after_auth1 = create_sample_message(
             'after auth 1', msg_id='cont1'

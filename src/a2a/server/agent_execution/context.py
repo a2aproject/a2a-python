@@ -6,15 +6,14 @@ from a2a.server.id_generator import (
     IDGeneratorContext,
     UUIDGenerator,
 )
-from a2a.types import (
-    InvalidParamsError,
+from a2a.types.a2a_pb2 import (
     Message,
-    MessageSendConfiguration,
-    MessageSendParams,
+    SendMessageConfiguration,
+    SendMessageRequest,
     Task,
 )
 from a2a.utils import get_message_text
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError, ServerError
 
 
 class RequestContext:
@@ -27,7 +26,7 @@ class RequestContext:
 
     def __init__(  # noqa: PLR0913
         self,
-        request: MessageSendParams | None = None,
+        request: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
@@ -39,7 +38,7 @@ class RequestContext:
         """Initializes the RequestContext.
 
         Args:
-            request: The incoming `MessageSendParams` request payload.
+            request: The incoming `SendMessageRequest` request payload.
             task_id: The ID of the task explicitly provided in the request or path.
             context_id: The ID of the context explicitly provided in the request or path.
             task: The existing `Task` object retrieved from the store, if any.
@@ -138,8 +137,8 @@ class RequestContext:
         return self._context_id
 
     @property
-    def configuration(self) -> MessageSendConfiguration | None:
-        """The `MessageSendConfiguration` from the request, if available."""
+    def configuration(self) -> SendMessageConfiguration | None:
+        """The `SendMessageConfiguration` from the request, if available."""
         return self._params.configuration if self._params else None
 
     @property
@@ -150,7 +149,9 @@ class RequestContext:
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        return self._params.metadata or {} if self._params else {}
+        if self._params and self._params.metadata:
+            return dict(self._params.metadata)
+        return {}
 
     def add_activated_extension(self, uri: str) -> None:
         """Add an extension to the set of activated extensions for this request.

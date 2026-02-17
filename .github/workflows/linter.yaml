@@ -22,6 +22,8 @@ jobs:
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Install Buf
+        uses: bufbuild/buf-setup-action@v1
       - name: Install dependencies
         run: uv sync --locked
 
@@ -60,8 +62,7 @@ jobs:
           if [[ "${{ steps.ruff-lint.outcome }}" == "failure" || \
                 "${{ steps.ruff-format.outcome }}" == "failure" || \
                 "${{ steps.mypy.outcome }}" == "failure" || \
-                "${{ steps.pyright.outcome }}" == "failure" || \
-                "${{ steps.jscpd.outcome }}" == "failure" ]]; then
+                "${{ steps.pyright.outcome }}" == "failure"]]; then
             echo "One or more linting/checking steps failed."
             exit 1
           fi

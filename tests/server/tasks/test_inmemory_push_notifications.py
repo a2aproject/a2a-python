@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+from google.protobuf.json_format import MessageToDict
 
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
@@ -10,7 +11,13 @@ from a2a.server.tasks.base_push_notification_sender import (
 from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
+from a2a.types.a2a_pb2 import (
+    PushNotificationConfig,
+    StreamResponse,
+    Task,
+    TaskState,
+    TaskStatus,
+)
 
 
 # Suppress logging for cleaner test output, can be enabled for debugging
@@ -18,7 +25,8 @@ from a2a.types import PushNotificationConfig, Task, TaskState, TaskStatus
 
 
 def create_sample_task(
-    task_id: str = 'task123', status_state: TaskState = TaskState.completed
+    task_id: str = 'task123',
+    status_state: TaskState = TaskState.TASK_STATE_COMPLETED,
 ) -> Task:
     return Task(
         id=task_id,
@@ -155,7 +163,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            task_data.model_dump(mode='json', exclude_none=True),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertNotIn(
             'auth', called_kwargs
@@ -182,7 +190,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            task_data.model_dump(mode='json', exclude_none=True),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertEqual(
             called_kwargs['headers'],
@@ -256,23 +264,17 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     async def test_send_notification_with_auth(
         self, mock_logger: MagicMock
     ) -> None:
+        """Test that auth field is not used by current implementation.
+
+        The current BasePushNotificationSender only supports token-based auth,
+        not the authentication field. This test verifies that the notification
+        still works even if the config has an authentication field set.
+        """
         task_id = 'task_send_auth'
         task_data = create_sample_task(task_id=task_id)
-        auth_info = ('user', 'pass')
         config = create_sample_push_config(url='http://notify.me/auth')
-        config.authentication = MagicMock()  # Mocking the structure for auth
-        config.authentication.schemes = ['basic']  # Assume basic for simplicity
-        config.authentication.credentials = (
-            auth_info  # This might need to be a specific model
-        )
-        # For now, let's assume it's a tuple for basic auth
-        # The actual PushNotificationAuthenticationInfo is more complex
-        # For this test, we'll simplify and assume InMemoryPushNotifier
-        # directly uses tuple for httpx's `auth` param if basic.
-        # A more accurate test would construct the real auth model.
-        # Given the current implementation of InMemoryPushNotifier,
-        # it only supports basic auth via tuple.
-
+        # The current implementation doesn't use the authentication field
+        # It only supports token-based auth via the token field
         await self.config_store.set_info(task_id, config)
 
         mock_response = AsyncMock(spec=httpx.Response)
@@ -286,7 +288,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(called_args[0], config.url)
         self.assertEqual(
             called_kwargs['json'],
-            task_data.model_dump(mode='json', exclude_none=True),
+            MessageToDict(StreamResponse(task=task_data)),
         )
         self.assertNotIn(
             'auth', called_kwargs

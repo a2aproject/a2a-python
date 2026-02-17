@@ -1,6 +1,6 @@
 """Custom exceptions for the A2A client."""
 
-from a2a.types import JSONRPCErrorResponse
+from typing import Any
 
 
 class A2AClientError(Exception):
@@ -101,15 +101,13 @@ class A2AClientInvalidStateError(A2AClientError):
 class A2AClientJSONRPCError(A2AClientError):
     """Client exception for JSON-RPC errors returned by the server."""
 
-    def __init__(self, error: JSONRPCErrorResponse):
+    error: dict[str, Any]
+
+    def __init__(self, error: dict[str, Any]):
         """Initializes the A2AClientJsonRPCError.
 
         Args:
-            error: The JSON-RPC error object.
+            error: The JSON-RPC error dict from the jsonrpc library.
         """
-        self.error = error.error
-        super().__init__(f'JSON-RPC Error {error.error}')
-
-    def __repr__(self) -> str:
-        """Returns an unambiguous representation showing the JSON-RPC error object."""
-        return f'{self.__class__.__name__}({self.error!r})'
+        self.error = error
+        super().__init__(f'JSON-RPC Error {self.error}')

@@ -4,7 +4,7 @@ from a2a.server.agent_execution import RequestContext, RequestContextBuilder
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskStore
-from a2a.types import MessageSendParams, Task
+from a2a.types.a2a_pb2 import SendMessageRequest, Task
 
 
 class SimpleRequestContextBuilder(RequestContextBuilder):
@@ -35,7 +35,7 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
     async def build(
         self,
-        params: MessageSendParams | None = None,
+        params: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,

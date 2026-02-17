@@ -8,7 +8,7 @@ from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,  # For mock spec
 )
-from a2a.types import AgentCard  # For mock spec
+from a2a.types.a2a_pb2 import AgentCard  # For mock spec
 
 
 # --- A2AStarletteApplication Tests ---
@@ -40,8 +40,7 @@ class TestA2AStarletteApplicationOptionalDeps:
         # Ensure 'url' attribute exists on the mock_agent_card, as it's accessed
         # in __init__
         mock_agent_card.url = 'http://example.com'
-        # Ensure 'supports_authenticated_extended_card' attribute exists
-        mock_agent_card.supports_authenticated_extended_card = False
+        # Ensure 'capabilities.extended_agent_card' attribute exists
         return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
 
     @pytest.fixture(scope='class')

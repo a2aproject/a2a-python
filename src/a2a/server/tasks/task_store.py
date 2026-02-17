@@ -1,17 +1,7 @@
 from abc import ABC, abstractmethod
 
-from pydantic import BaseModel
-
 from a2a.server.context import ServerCallContext
-from a2a.types import ListTasksParams, Task
-
-
-class TasksPage(BaseModel):
-    """Page with tasks."""
-
-    next_page_token: str | None = None
-    tasks: list[Task]
-    total_size: int
+from a2a.types.a2a_pb2 import ListTasksRequest, ListTasksResponse, Task
 
 
 class TaskStore(ABC):
@@ -35,9 +25,9 @@ class TaskStore(ABC):
     @abstractmethod
     async def list(
         self,
-        params: ListTasksParams,
+        params: ListTasksRequest,
         context: ServerCallContext | None = None,
-    ) -> TasksPage:
+    ) -> ListTasksResponse:
         """Retrieves a list of tasks from the store."""
 
     @abstractmethod
