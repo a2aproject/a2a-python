@@ -430,6 +430,27 @@ class TestStreamingErrors:
             async for _ in transport.send_message_streaming(request):
                 pass
 
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    async def test_send_message_streaming_timeout(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        transport: JsonRpcTransport,
+    ):
+        request = create_send_message_request()
+        mock_event_source = AsyncMock()
+        mock_event_source.response.raise_for_status = MagicMock()
+        mock_event_source.aiter_sse = MagicMock(
+            side_effect=httpx.TimeoutException('Timeout')
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientTimeoutError, match='timed out'):
+            async for _ in transport.send_message_streaming(request):
+                pass
+
 
 class TestInterceptors:
     """Tests for interceptor functionality."""

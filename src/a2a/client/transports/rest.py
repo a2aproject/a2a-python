@@ -163,6 +163,8 @@ class RestTransport(ClientTransport):
                 async for sse in event_source.aiter_sse():
                     event: StreamResponse = Parse(sse.data, StreamResponse())
                     yield event
+            except httpx.TimeoutException as e:
+                raise A2AClientTimeoutError('Client Request timed out') from e
             except httpx.HTTPStatusError as e:
                 raise A2AClientHTTPError(e.response.status_code, str(e)) from e
             except SSEError as e:
@@ -383,8 +385,12 @@ class RestTransport(ClientTransport):
         ) as event_source:
             try:
                 async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
                     event: StreamResponse = Parse(sse.data, StreamResponse())
                     yield event
+            except httpx.TimeoutException as e:
+                raise A2AClientTimeoutError('Client Request timed out') from e
             except SSEError as e:
                 raise A2AClientHTTPError(
                     400, f'Invalid SSE response or protocol error: {e}'

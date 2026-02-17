@@ -170,11 +170,9 @@ class TestA2AClientJSONRPCErrorRepr:
 
     def test_repr(self) -> None:
         """Test that __repr__ shows the JSON-RPC error object."""
-        response = JSONRPC20Response(
-            _id='test-1',
-            error={'code': -32601, 'message': 'Method not found', 'data': None},
+        error = A2AClientJSONRPCError(
+            {'code': -32601, 'message': 'Method not found', 'data': None}
         )
-        error = A2AClientJSONRPCError(response.error)
         assert (
             repr(error)
             == "A2AClientJSONRPCError(\"JSON-RPC Error {'code': -32601, 'message': 'Method not found', 'data': None}\")"

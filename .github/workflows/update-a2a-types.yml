@@ -17,7 +17,7 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v6
         with:
-          python-version: "3.10"
+          python-version: '3.10'
       - name: Install uv
         uses: astral-sh/setup-uv@v7
       - name: Configure uv shell
@@ -41,8 +41,8 @@ jobs:
           token: ${{ secrets.A2A_BOT_PAT }}
           committer: a2a-bot <a2a-bot@google.com>
           author: a2a-bot <a2a-bot@google.com>
-          commit-message: "${{ github.event.client_payload.message }}"
-          title: "${{ github.event.client_payload.message }}"
+          commit-message: '${{ github.event.client_payload.message }}'
+          title: '${{ github.event.client_payload.message }}'
           body: |
             Commit: https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}
           branch: auto-update-a2a-types-${{ github.event.client_payload.sha }}

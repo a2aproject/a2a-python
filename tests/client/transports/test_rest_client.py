@@ -8,7 +8,7 @@ from google.protobuf import json_format
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
-from a2a.client.errors import A2AClientHTTPError
+from a2a.client.errors import A2AClientHTTPError, A2AClientTimeoutError
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types.a2a_pb2 import (
@@ -54,6 +54,40 @@ def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
     header_value = headers[HTTP_EXTENSION_HEADER]
     actual_extensions = {e.strip() for e in header_value.split(',')}
     assert actual_extensions == expected_extensions
+
+
+class TestRestTransport:
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.rest.aconnect_sse')
+    async def test_send_message_streaming_timeout(
+        self,
+        mock_aconnect_sse: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        params = SendMessageRequest(
+            message=create_text_message_object(content='Hello stream')
+        )
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.raise_for_status.return_value = None
+        mock_event_source.aiter_sse.side_effect = httpx.TimeoutException(
+            'Read timed out'
+        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        with pytest.raises(A2AClientTimeoutError) as exc_info:
+            _ = [
+                item
+                async for item in client.send_message_streaming(request=params)
+            ]
+
+        assert 'Client Request timed out' in str(exc_info.value)
 
 
 class TestRestTransportExtensions:
