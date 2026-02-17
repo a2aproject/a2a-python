@@ -400,11 +400,9 @@ class JSONRPCHandler:
         """
         try:
             result = await self.request_handler.on_list_tasks(request, context)
-        except ServerError:
-            return ListTasksResponse(
-                # This needs to be appropriately handled since error fields on proto messages
-                # might be different from the old pydantic models
-                # Ignoring proto error handling for now as it diverges from the current pattern
+        except ServerError as e:
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
             )
         return result
 
