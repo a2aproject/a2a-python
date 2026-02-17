@@ -14,7 +14,7 @@ permissions:
   contents: read
 
 env:
-  TCK_VERSION: 0.3.0.beta3
+  TCK_VERSION: d36f441b560ec09ba2357d3a51c45c5b4ab258f7
   SUT_BASE_URL: http://localhost:41241
   SUT_JSONRPC_URL: http://localhost:41241/a2a/jsonrpc
   UV_SYSTEM_PYTHON: 1
