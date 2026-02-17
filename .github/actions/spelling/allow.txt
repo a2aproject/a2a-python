@@ -28,6 +28,7 @@ autouse
 backticks
 base64url
 buf
+bufbuild
 cla
 cls
 coc
@@ -60,6 +61,7 @@ initdb
 inmemory
 INR
 isready
+jcs
 jku
 JOSE
 JPY
@@ -81,6 +83,7 @@ mikeas
 mockurl
 mysqladmin
 notif
+npx
 oauthoidc
 oidc
 OpenAPI
@@ -111,10 +114,10 @@ SECP256R1
 SLF
 socio
 sse
-sut
-SUT
 starlette
 Starlette
+sut
+SUT
 swagger
 tagwords
 taskupdate
