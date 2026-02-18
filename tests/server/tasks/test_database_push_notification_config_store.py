@@ -3,6 +3,8 @@ import os
 from collections.abc import AsyncGenerator
 
 import pytest
+from a2a.server.context import ServerCallContext
+from a2a.auth.user import User
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -92,6 +94,21 @@ MINIMAL_TASK_OBJ = Task(
     artifacts=[],
     history=[],
 )
+
+
+class TestUser(User):
+    """A test implementation of the User interface."""
+
+    def __init__(self, user_name: str):
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
 
 
 @pytest_asyncio.fixture(params=DB_CONFIGS)
@@ -547,6 +564,7 @@ async def test_parsing_error_after_successful_decryption(
             task_id=task_id,
             config_id=config_id,
             config_data=encrypted_data,
+            owner='test-owner',
         )
         session.add(db_model)
         await session.commit()
@@ -563,3 +581,74 @@ async def test_parsing_error_after_successful_decryption(
 
         with pytest.raises(ValueError):
             db_store_parameterized._from_orm(db_model_retrieved)  # type: ignore
+
+
+@pytest.mark.asyncio
+async def test_owner_resource_scoping(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test that operations are scoped to the correct owner."""
+    config_store = db_store_parameterized
+
+    context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
+    context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
+
+    # Create configs for different owners
+    task1_u1_config1 = PushNotificationConfig(
+        id='t1-u1-c1', url='http://u1.com/1'
+    )
+    task1_u1_config2 = PushNotificationConfig(
+        id='t1-u1-c2', url='http://u1.com/2'
+    )
+    task1_u2_config1 = PushNotificationConfig(
+        id='t1-u2-c1', url='http://u2.com/1'
+    )
+    task2_u1_config1 = PushNotificationConfig(
+        id='t2-u1-c1', url='http://u1.com/3'
+    )
+
+    await config_store.set_info('task1', task1_u1_config1, context_user1)
+    await config_store.set_info('task1', task1_u1_config2, context_user1)
+    await config_store.set_info('task1', task1_u2_config1, context_user2)
+    await config_store.set_info('task2', task2_u1_config1, context_user1)
+
+    # Test GET_INFO
+    # User 1 should get only their configs for task1
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 2
+    assert {c.id for c in u1_task1_configs} == {'t1-u1-c1', 't1-u1-c2'}
+
+    # User 2 should get only their configs for task1
+    u2_task1_configs = await config_store.get_info('task1', context_user2)
+    assert len(u2_task1_configs) == 1
+    assert u2_task1_configs[0].id == 't1-u2-c1'
+
+    # User 2 should get no configs for task2
+    u2_task2_configs = await config_store.get_info('task2', context_user2)
+    assert len(u2_task2_configs) == 0
+
+    # User 1 should get their config for task2
+    u1_task2_configs = await config_store.get_info('task2', context_user1)
+    assert len(u1_task2_configs) == 1
+    assert u1_task2_configs[0].id == 't2-u1-c1'
+
+    # Test DELETE_INFO
+    # User 2 deleting User 1's config should not work
+    await config_store.delete_info('task1', 't1-u1-c1', context_user2)
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 2
+
+    # User 1 deleting their own config
+    await config_store.delete_info('task1', 't1-u1-c1', context_user1)
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 1
+    assert u1_task1_configs[0].id == 't1-u1-c2'
+
+    # User 1 deleting all configs for task2
+    await config_store.delete_info('task2', context=context_user1)
+    u1_task2_configs = await config_store.get_info('task2', context_user1)
+    assert len(u1_task2_configs) == 0
+
+    # Cleanup remaining
+    await config_store.delete_info('task1', context=context_user1)
+    await config_store.delete_info('task1', context=context_user2)

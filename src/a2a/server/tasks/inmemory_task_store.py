@@ -1,9 +1,11 @@
 import asyncio
 import logging
 
+from collections import defaultdict
 from datetime import datetime, timezone
 
 from a2a.server.context import ServerCallContext
+from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.task_store import TaskStore, TasksPage
 from a2a.types import ListTasksParams, Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
@@ -16,45 +18,70 @@ logger = logging.getLogger(__name__)
 class InMemoryTaskStore(TaskStore):
     """In-memory implementation of TaskStore.
 
-    Stores task objects in a dictionary in memory. Task data is lost when the
-    server process stops.
+    Stores task objects in a nested dictionary in memory, keyed by owner then task_id.
+    Task data is lost when the server process stops.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+    ) -> None:
         """Initializes the InMemoryTaskStore."""
         logger.debug('Initializing InMemoryTaskStore')
-        self.tasks: dict[str, Task] = {}
+        self.tasks: dict[str, dict[str, Task]] = defaultdict(dict)
         self.lock = asyncio.Lock()
+        self.owner_resolver = owner_resolver
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
     ) -> None:
-        """Saves or updates a task in the in-memory store."""
+        """Saves or updates a task in the in-memory store for the resolved owner."""
+        owner = self.owner_resolver(context)
+
         async with self.lock:
-            self.tasks[task.id] = task
-            logger.debug('Task %s saved successfully.', task.id)
+            self.tasks[owner][task.id] = task
+            logger.debug(
+                'Task %s for owner %s saved successfully.', task.id, owner
+            )
 
     async def get(
         self, task_id: str, context: ServerCallContext | None = None
     ) -> Task | None:
-        """Retrieves a task from the in-memory store by ID."""
+        """Retrieves a task from the in-memory store by ID, for the given owner."""
+        owner = self.owner_resolver(context)
         async with self.lock:
-            logger.debug('Attempting to get task with id: %s', task_id)
-            task = self.tasks.get(task_id)
-            if task:
-                logger.debug('Task %s retrieved successfully.', task_id)
-            else:
-                logger.debug('Task %s not found in store.', task_id)
-            return task
+            logger.debug(
+                'Attempting to get task with id: %s for owner: %s',
+                task_id,
+                owner,
+            )
+            owner_tasks = self.tasks.get(owner)
+            if owner_tasks:
+                task = owner_tasks.get(task_id)
+                if task:
+                    logger.debug(
+                        'Task %s retrieved successfully for owner %s.',
+                        task_id,
+                        owner,
+                    )
+                    return task
+            logger.debug(
+                'Task %s not found in store for owner %s.', task_id, owner
+            )
+            return None
 
     async def list(
         self,
         params: ListTasksParams,
         context: ServerCallContext | None = None,
     ) -> TasksPage:
-        """Retrieves a list of tasks from the store."""
+        """Retrieves a list of tasks from the store, for the given owner."""
+        owner = self.owner_resolver(context)
+        logger.debug('Listing tasks for owner %s with params %s', owner, params)
+
         async with self.lock:
-            tasks = list(self.tasks.values())
+            owner_tasks = self.tasks.get(owner, {})
+            tasks = list(owner_tasks.values())
 
         # Filter tasks
         if params.context_id:
@@ -118,13 +145,25 @@ class InMemoryTaskStore(TaskStore):
     async def delete(
         self, task_id: str, context: ServerCallContext | None = None
     ) -> None:
-        """Deletes a task from the in-memory store by ID."""
+        """Deletes a task from the in-memory store by ID, for the given owner."""
+        owner = self.owner_resolver(context)
         async with self.lock:
-            logger.debug('Attempting to delete task with id: %s', task_id)
-            if task_id in self.tasks:
-                del self.tasks[task_id]
-                logger.debug('Task %s deleted successfully.', task_id)
+            logger.debug(
+                'Attempting to delete task with id: %s for owner %s',
+                task_id,
+                owner,
+            )
+            if owner in self.tasks and task_id in self.tasks[owner]:
+                del self.tasks[owner][task_id]
+                logger.debug(
+                    'Task %s deleted successfully for owner %s.', task_id, owner
+                )
+                if not self.tasks[owner]:
+                    del self.tasks[owner]
+                    logger.debug('Removed empty owner %s from store.', owner)
             else:
                 logger.warning(
-                    'Attempted to delete nonexistent task with id: %s', task_id
+                    'Attempted to delete nonexistent task with id: %s for owner %s',
+                    task_id,
+                    owner,
                 )

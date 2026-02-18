@@ -1,3 +1,5 @@
+import datetime
+
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 
@@ -16,7 +18,7 @@ from a2a.types import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, Dialect, LargeBinary, String
+    from sqlalchemy import JSON, Dialect, Index, LargeBinary, String
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
@@ -127,6 +129,8 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
+    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    last_updated: Mapped[datetime] = mapped_column(String(22), nullable=True)
 
     # Properly typed Pydantic fields with automatic serialization
     status: Mapped[TaskStatus] = mapped_column(PydanticType(TaskStatus))
@@ -150,6 +154,17 @@ class TaskMixin:
         return (
             f'<{self.__class__.__name__}(id="{self.id}", '
             f'context_id="{self.context_id}", status="{self.status}")>'
+        )
+
+    @declared_attr
+    @classmethod
+    def __table_args__(cls) -> tuple[Any, ...]:
+        """Define a unique index (owner, last_updated) for each table that uses the mixin."""
+        tablename = getattr(cls, '__tablename__', 'tasks')
+        return (
+            Index(
+                f'idx_{tablename}_owner_last_updated', 'owner', 'last_updated'
+            ),
         )
 
 
@@ -212,6 +227,7 @@ class PushNotificationConfigMixin:
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
 
     @override
     def __repr__(self) -> str:

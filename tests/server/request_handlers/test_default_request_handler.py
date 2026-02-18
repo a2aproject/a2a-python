@@ -915,9 +915,8 @@ async def test_on_message_send_non_blocking():
         ),
     )
 
-    result = await request_handler.on_message_send(
-        params, create_server_call_context()
-    )
+    context = create_server_call_context()
+    result = await request_handler.on_message_send(params, context)
 
     assert result is not None
     assert isinstance(result, Task)
@@ -927,7 +926,7 @@ async def test_on_message_send_non_blocking():
     task: Task | None = None
     for _ in range(5):
         await asyncio.sleep(0.1)
-        task = await task_store.get(result.id)
+        task = await task_store.get(result.id, context)
         assert task is not None
         if task.status.state == TaskState.completed:
             break
@@ -964,9 +963,8 @@ async def test_on_message_send_limit_history():
         ),
     )
 
-    result = await request_handler.on_message_send(
-        params, create_server_call_context()
-    )
+    context = create_server_call_context()
+    result = await request_handler.on_message_send(params, context)
 
     # verify that history_length is honored
     assert result is not None
@@ -975,7 +973,7 @@ async def test_on_message_send_limit_history():
     assert result.status.state == TaskState.completed
 
     # verify that history is still persisted to the store
-    task = await task_store.get(result.id)
+    task = await task_store.get(result.id, context)
     assert task is not None
     assert task.history is not None and len(task.history) > 1
 
