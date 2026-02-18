@@ -64,7 +64,14 @@ if TYPE_CHECKING:
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+
+    try:
+        # Starlette v0.48.0
+        from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+    except ImportError:
+        from starlette.status import (
+            HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
+        )
 
     _package_starlette_installed = True
 else:
@@ -76,7 +83,14 @@ else:
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+
+        try:
+            # Starlette v0.48.0
+            from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+        except ImportError:
+            from starlette.status import (
+                HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
+            )
 
         _package_starlette_installed = True
     except ImportError:
