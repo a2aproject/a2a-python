@@ -69,7 +69,7 @@ if TYPE_CHECKING:
         # Starlette v0.48.0
         from starlette.status import HTTP_413_CONTENT_TOO_LARGE
     except ImportError:
-        from starlette.status import (
+        from starlette.status import (  # type: ignore[no-redef]
             HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
         )
 
