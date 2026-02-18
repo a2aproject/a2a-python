@@ -47,6 +47,8 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+    ListTasksRequest,
+    ListTasksResponse,
 )
 from cryptography.hazmat.primitives import asymmetric
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -91,6 +93,11 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
     status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
 )
 
+LIST_TASKS_RESPONSE = ListTasksResponse(
+    tasks=[TASK_FROM_BLOCKING, GET_TASK_RESPONSE],
+    next_page_token='page-2',
+)
+
 
 def create_key_provider(verification_key: Any):
     """Creates a key provider function for testing."""
@@ -121,6 +128,7 @@ def mock_request_handler() -> AsyncMock:
     # Configure other methods
     handler.on_get_task.return_value = GET_TASK_RESPONSE
     handler.on_cancel_task.return_value = CANCEL_TASK_RESPONSE
+    handler.on_list_tasks.return_value = LIST_TASKS_RESPONSE
     handler.on_create_task_push_notification_config.return_value = (
         CALLBACK_CONFIG
     )
@@ -446,6 +454,57 @@ async def test_grpc_transport_get_task(
 
     assert result.id == GET_TASK_RESPONSE.id
     handler.on_get_task.assert_awaited_once()
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport_setup_fixture',
+    [
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ],
+)
+async def test_http_transport_list_tasks(
+    transport_setup_fixture: str, request
+) -> None:
+    transport_setup: TransportSetup = request.getfixturevalue(
+        transport_setup_fixture
+    )
+    transport = transport_setup.transport
+    handler = transport_setup.handler
+
+    params = ListTasksRequest(page_size=10, page_token='page-1')
+    result = await transport.list_tasks(request=params)
+
+    assert len(result.tasks) == 2
+    assert result.next_page_token == 'page-2'
+    handler.on_list_tasks.assert_awaited_once()
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_list_tasks(
+    grpc_server_and_handler: tuple[str, AsyncMock],
+    agent_card: AgentCard,
+) -> None:
+    server_address, handler = grpc_server_and_handler
+
+    def channel_factory(address: str) -> Channel:
+        return grpc.aio.insecure_channel(address)
+
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
+
+    params = ListTasksRequest(page_size=10, page_token='page-1')
+    result = await transport.list_tasks(request=params)
+
+    assert len(result.tasks) == 2
+    assert result.next_page_token == 'page-2'
+    handler.on_list_tasks.assert_awaited_once()
 
     await transport.close()
 
