@@ -1,0 +1,82 @@
+---
+repos:
+  # ===============================================
+  # Pre-commit standard hooks (general file cleanup)
+  # ===============================================
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v5.0.0
+    hooks:
+      - id: trailing-whitespace  # Removes extra whitespace at the end of lines
+      - id: end-of-file-fixer  # Ensures files end with a newline
+      - id: check-yaml  # Checks YAML file syntax (before formatting)
+      - id: check-toml  # Checks TOML file syntax (before formatting)
+      - id: check-added-large-files  # Prevents committing large files
+        args: [--maxkb=500]  # Example: Limit to 500KB
+      - id: check-merge-conflict  # Checks for merge conflict strings
+      - id: detect-private-key  # Detects accidental private key commits
+
+  # Formatter and linter for TOML files
+  - repo: https://github.com/ComPWA/taplo-pre-commit
+    rev: v0.9.3
+    hooks:
+      - id: taplo-format
+      - id: taplo-lint
+
+  # YAML files
+  - repo: https://github.com/lyz-code/yamlfix
+    rev: 1.17.0
+    hooks:
+      - id: yamlfix
+
+  # ===============================================
+  # Python Hooks
+  # ===============================================
+  # no_implicit_optional for ensuring explicit Optional types
+  - repo: https://github.com/hauntsaninja/no_implicit_optional
+    rev: '1.4'
+    hooks:
+      - id: no_implicit_optional
+        args: [--use-union-or]
+
+  # Pyupgrade for upgrading Python syntax to newer versions
+  - repo: https://github.com/asottile/pyupgrade
+    rev: v3.20.0
+    hooks:
+      - id: pyupgrade
+        args: [--py310-plus]  # Target Python 3.10+ syntax, matching project's target
+
+  # Autoflake for removing unused imports and variables
+  - repo: https://github.com/pycqa/autoflake
+    rev: v2.3.1
+    hooks:
+      - id: autoflake
+        args: [--in-place, --remove-all-unused-imports]
+
+  # Ruff for linting and formatting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.12.0
+    hooks:
+      - id: ruff
+        args: [--fix, --exit-zero]  # Apply fixes, and exit with 0 even if files were modified
+        exclude: ^src/a2a/grpc/
+      - id: ruff-format
+        exclude: ^src/a2a/grpc/
+
+  # Keep uv.lock in sync
+  - repo: https://github.com/astral-sh/uv-pre-commit
+    rev: 0.7.13
+    hooks:
+      - id: uv-lock
+
+  # Commitzen for conventional commit messages
+  - repo: https://github.com/commitizen-tools/commitizen
+    rev: v4.8.3
+    hooks:
+      - id: commitizen
+        stages: [commit-msg]
+
+  # Gitleaks
+  - repo: https://github.com/gitleaks/gitleaks
+    rev: v8.27.2
+    hooks:
+      - id: gitleaks

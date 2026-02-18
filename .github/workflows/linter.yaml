@@ -62,7 +62,8 @@ jobs:
           if [[ "${{ steps.ruff-lint.outcome }}" == "failure" || \
                 "${{ steps.ruff-format.outcome }}" == "failure" || \
                 "${{ steps.mypy.outcome }}" == "failure" || \
-                "${{ steps.pyright.outcome }}" == "failure" ]]; then
+                "${{ steps.pyright.outcome }}" == "failure" || \
+                "${{ steps.jscpd.outcome }}" == "failure" ]]; then
             echo "One or more linting/checking steps failed."
             exit 1
           fi
