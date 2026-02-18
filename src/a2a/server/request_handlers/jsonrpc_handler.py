@@ -26,7 +26,6 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
     ListTasksRequest,
-    ListTasksResponse,
     Message,
     SendMessageRequest,
     SendMessageResponse,
@@ -388,7 +387,7 @@ class JSONRPCHandler:
         self,
         request: ListTasksRequest,
         context: ServerCallContext | None = None,
-    ) -> ListTasksResponse:
+    ) -> dict[str, Any]:
         """Handles the 'tasks/list' JSON-RPC method.
 
         Args:
@@ -396,17 +395,19 @@ class JSONRPCHandler:
             context: Context provided by the server.
 
         Returns:
-            A `ListTasksResponse` object containing the Task or a JSON-RPC error.
+            A dict representing the JSON-RPC response.
         """
+        request_id = self._get_request_id(context)
         try:
-            result = await self.request_handler.on_list_tasks(request, context)
-        except ServerError:
-            return ListTasksResponse(
-                # This needs to be appropriately handled since error fields on proto messages
-                # might be different from the old pydantic models
-                # Ignoring proto error handling for now as it diverges from the current pattern
+            response = await self.request_handler.on_list_tasks(
+                request, context
             )
-        return result
+            result = MessageToDict(response, preserving_proto_field_name=False)
+            return _build_success_response(request_id, result)
+        except ServerError as e:
+            return _build_error_response(
+                request_id, e.error if e.error else InternalError()
+            )
 
     async def list_push_notification_config(
         self,

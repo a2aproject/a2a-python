@@ -190,8 +190,30 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         response = await handler.list_tasks(request, call_context)
 
         request_handler.on_list_tasks.assert_awaited_once()
-        self.assertIsInstance(response, ListTasksResponse)
-        self.assertEqual(response, mock_result)
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertIn('tasks', response['result'])
+        self.assertEqual(len(response['result']['tasks']), 2)
+        self.assertEqual(response['result']['nextPageToken'], '123')
+
+    async def test_on_list_tasks_error(self) -> None:
+        request_handler = AsyncMock(spec=DefaultRequestHandler)
+        handler = JSONRPCHandler(self.mock_agent_card, request_handler)
+
+        request_handler.on_list_tasks.side_effect = ServerError(
+            InternalError(message='DB down')
+        )
+        from a2a.types.a2a_pb2 import ListTasksRequest
+
+        request = ListTasksRequest(page_size=10)
+        call_context = ServerCallContext(state={'request_id': '2'})
+
+        response = await handler.list_tasks(request, call_context)
+
+        request_handler.on_list_tasks.assert_awaited_once()
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_error_response(response))
+        self.assertEqual(response['error']['message'], 'DB down')
 
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
