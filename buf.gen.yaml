@@ -2,7 +2,7 @@
 version: v2
 inputs:
   - git_repo: https://github.com/a2aproject/A2A.git
-    ref: main
+    ref: v1.0.0-rc
     subdir: specification
 managed:
   enabled: true
