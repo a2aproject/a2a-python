@@ -69,6 +69,7 @@ oauthoidc
 oidc
 opensource
 otherurl
+poolclass
 postgres
 POSTGRES
 postgresql
