@@ -132,7 +132,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 request, server_context
             )
             self._set_extension_metadata(context, server_context)
-            # Wrap in SendMessageResponse based on type
             if isinstance(task_or_message, a2a_pb2.Task):
                 return a2a_pb2.SendMessageResponse(task=task_or_message)
             return a2a_pb2.SendMessageResponse(message=task_or_message)
