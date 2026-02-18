@@ -18,6 +18,8 @@ except ImportError as e:
 
 from collections.abc import Callable
 
+from google.protobuf import empty_pb2
+
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
 from a2a import types
@@ -292,6 +294,55 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         except ServerError as e:
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
+
+    async def ListTaskPushNotificationConfig(
+        self,
+        request: a2a_pb2.ListTaskPushNotificationConfigRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> a2a_pb2.ListTaskPushNotificationConfigResponse:
+        """Handles the 'ListTaskPushNotificationConfig' gRPC method.
+
+        Args:
+            request: The incoming `ListTaskPushNotificationConfigRequest` object.
+            context: Context provided by the server.
+
+        Returns:
+            A `ListTaskPushNotificationConfigResponse` object containing the configs.
+        """
+        try:
+            server_context = self.context_builder.build(context)
+            return await self.request_handler.on_list_task_push_notification_config(
+                request,
+                server_context,
+            )
+        except ServerError as e:
+            await self.abort_context(e, context)
+        return a2a_pb2.ListTaskPushNotificationConfigResponse()
+
+    async def DeleteTaskPushNotificationConfig(
+        self,
+        request: a2a_pb2.DeleteTaskPushNotificationConfigRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> empty_pb2.Empty:
+        """Handles the 'DeleteTaskPushNotificationConfig' gRPC method.
+
+        Args:
+            request: The incoming `DeleteTaskPushNotificationConfigRequest` object.
+            context: Context provided by the server.
+
+        Returns:
+            An empty `Empty` object.
+        """
+        try:
+            server_context = self.context_builder.build(context)
+            await self.request_handler.on_delete_task_push_notification_config(
+                request,
+                server_context,
+            )
+            return empty_pb2.Empty()
+        except ServerError as e:
+            await self.abort_context(e, context)
+        return empty_pb2.Empty()
 
     async def GetTask(
         self,

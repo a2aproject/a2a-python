@@ -18,8 +18,11 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -244,6 +247,45 @@ class BaseClient(Client):
             A `TaskPushNotificationConfig` object containing the configuration.
         """
         return await self._transport.get_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def list_task_callback(
+        self,
+        request: ListTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Lists push notification configurations for a specific task.
+
+        Args:
+            request: The `ListTaskPushNotificationConfigRequest` object specifying the request.
+            context: The client call context.
+            extensions: List of extensions to be activated.
+
+        Returns:
+            A `ListTaskPushNotificationConfigResponse` object.
+        """
+        return await self._transport.list_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def delete_task_callback(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task.
+
+        Args:
+            request: The `DeleteTaskPushNotificationConfigRequest` object specifying the request.
+            context: The client call context.
+            extensions: List of extensions to be activated.
+        """
+        await self._transport.delete_task_callback(
             request, context=context, extensions=extensions
         )
 

@@ -15,8 +15,12 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    DeleteTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     Role,
     SendMessageRequest,
+    TaskPushNotificationConfig,
 )
 from a2a.utils.constants import TRANSPORT_HTTP_JSON
 
@@ -308,4 +312,93 @@ class TestRestTransportExtensions:
                 'https://example.com/test-ext/v1',
                 'https://example.com/test-ext/v2',
             },
+        )
+
+
+class TestTaskCallback:
+    """Tests for the task callback methods."""
+
+    @pytest.mark.asyncio
+    async def test_list_task_callback_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Test successful task multiple callbacks retrieval."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        task_id = 'task-1'
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'configs': [
+                {
+                    'taskId': task_id,
+                    'id': 'config-1',
+                    'pushNotificationConfig': {
+                        'id': 'config-1',
+                        'url': 'https://example.com',
+                    },
+                }
+            ]
+        }
+        mock_httpx_client.send.return_value = mock_response
+
+        # Mock the build_request method to capture its inputs
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        request = ListTaskPushNotificationConfigRequest(
+            task_id=task_id,
+        )
+        response = await client.list_task_callback(request)
+
+        assert len(response.configs) == 1
+        assert response.configs[0].task_id == task_id
+
+        mock_build_request.assert_called_once()
+        call_args = mock_build_request.call_args
+        assert call_args[0][0] == 'GET'
+        assert f'/v1/tasks/{task_id}/pushNotificationConfigs' in call_args[0][1]
+
+    @pytest.mark.asyncio
+    async def test_delete_task_callback_success(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Test successful task callback deletion."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+        )
+        task_id = 'task-1'
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_response.json.return_value = {
+            'taskId': task_id,
+            'id': 'config-1',
+            'pushNotificationConfig': {
+                'id': 'config-1',
+                'url': 'https://example.com',
+            },
+        }
+        mock_httpx_client.send.return_value = mock_response
+
+        # Mock the build_request method to capture its inputs
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        request = DeleteTaskPushNotificationConfigRequest(
+            task_id=task_id,
+            id='config-1',
+        )
+        await client.delete_task_callback(request)
+
+        mock_build_request.assert_called_once()
+        call_args = mock_build_request.call_args
+        assert call_args[0][0] == 'DELETE'
+        assert (
+            f'/v1/tasks/{task_id}/pushNotificationConfigs/config-1'
+            in call_args[0][1]
         )

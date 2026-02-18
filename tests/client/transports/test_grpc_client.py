@@ -12,14 +12,17 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     Artifact,
     AuthenticationInfo,
+    CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     GetTaskRequest,
     Message,
     Part,
     PushNotificationConfig,
     Role,
     SendMessageRequest,
-    CreateTaskPushNotificationConfigRequest,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
@@ -42,6 +45,8 @@ def mock_grpc_stub() -> AsyncMock:
     stub.CancelTask = AsyncMock()
     stub.CreateTaskPushNotificationConfig = AsyncMock()
     stub.GetTaskPushNotificationConfig = AsyncMock()
+    stub.ListTaskPushNotificationConfig = AsyncMock()
+    stub.DeleteTaskPushNotificationConfig = AsyncMock()
     return stub
 
 
@@ -529,6 +534,68 @@ async def test_get_task_callback_with_invalid_task(
     )
     # The transport doesn't validate the response name format
     assert response.task_id == 'invalid-path-to-task-1'
+
+
+@pytest.mark.asyncio
+async def test_list_task_callback(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
+) -> None:
+    """Test retrieving task push notification configs."""
+    mock_grpc_stub.ListTaskPushNotificationConfig.return_value = (
+        a2a_pb2.ListTaskPushNotificationConfigResponse(
+            configs=[sample_task_push_notification_config]
+        )
+    )
+
+    response = await grpc_transport.list_task_callback(
+        ListTaskPushNotificationConfigRequest(task_id='task-1')
+    )
+
+    mock_grpc_stub.ListTaskPushNotificationConfig.assert_awaited_once_with(
+        a2a_pb2.ListTaskPushNotificationConfigRequest(task_id='task-1'),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER.lower(),
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
+    )
+    assert len(response.configs) == 1
+    assert response.configs[0].task_id == 'task-1'
+
+
+@pytest.mark.asyncio
+async def test_delete_task_callback(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
+) -> None:
+    """Test deleting task push notification config."""
+    mock_grpc_stub.DeleteTaskPushNotificationConfig.return_value = (
+        sample_task_push_notification_config
+    )
+
+    await grpc_transport.delete_task_callback(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id='config-1',
+        )
+    )
+
+    mock_grpc_stub.DeleteTaskPushNotificationConfig.assert_awaited_once_with(
+        a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id='config-1',
+        ),
+        metadata=[
+            (
+                HTTP_EXTENSION_HEADER.lower(),
+                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
+            )
+        ],
+    )
 
 
 @pytest.mark.parametrize(

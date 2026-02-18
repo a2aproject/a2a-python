@@ -257,6 +257,30 @@ class RESTHandler:
             return MessageToDict(task)
         raise ServerError(error=TaskNotFoundError())
 
+    async def delete_push_notification(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the 'tasks/pushNotificationConfig/delete' REST method.
+
+        Args:
+            request: The incoming `Request` object.
+            context: Context provided by the server.
+
+        Returns:
+            An empty `dict` representing the empty response.
+        """
+        task_id = request.path_params['id']
+        push_id = request.path_params['push_id']
+        params = a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+            task_id=task_id, id=push_id
+        )
+        await self.request_handler.on_delete_task_push_notification_config(
+            params, context
+        )
+        return {}
+
     async def list_tasks(
         self,
         request: Request,
@@ -264,17 +288,12 @@ class RESTHandler:
     ) -> dict[str, Any]:
         """Handles the 'tasks/list' REST method.
 
-        This method is currently not implemented.
-
         Args:
             request: The incoming `Request` object.
             context: Context provided by the server.
 
         Returns:
             A list of `dict` representing the `Task` objects.
-
-        Raises:
-            NotImplementedError: This method is not yet implemented.
         """
         params = a2a_pb2.ListTasksRequest()
         # Parse query params, keeping arrays/repeated fields in mind if there are any
@@ -293,16 +312,24 @@ class RESTHandler:
     ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/list' REST method.
 
-        This method is currently not implemented.
-
         Args:
             request: The incoming `Request` object.
             context: Context provided by the server.
 
         Returns:
             A list of `dict` representing the `TaskPushNotificationConfig` objects.
-
-        Raises:
-            NotImplementedError: This method is not yet implemented.
         """
-        raise NotImplementedError('list notifications not implemented')
+        task_id = request.path_params['id']
+        params = a2a_pb2.ListTaskPushNotificationConfigRequest(task_id=task_id)
+
+        # Parse query params, keeping arrays/repeated fields in mind if there are any
+        ParseDict(
+            dict(request.query_params), params, ignore_unknown_fields=True
+        )
+
+        result = (
+            await self.request_handler.on_list_task_push_notification_config(
+                params, context
+            )
+        )
+        return MessageToDict(result)
