@@ -304,6 +304,8 @@ async def test_end_to_end_list_tasks(transport_setups):
 
         list_response = await transport.list_tasks(request=list_request)
         assert 0 < len(list_response.tasks) <= page_size
+        assert list_response.total_size == total_items
+        assert list_response.page_size == page_size
 
         for task in list_response.tasks:
             unique_task_ids.add(task.id)
