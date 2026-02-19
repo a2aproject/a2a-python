@@ -9,7 +9,7 @@ from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.auth.user import User
 
 
-class TestUser(User):
+class SampleUser(User):
     """A test implementation of the User interface."""
 
     def __init__(self, user_name: str):
@@ -273,8 +273,8 @@ async def test_owner_resource_scoping() -> None:
     store = InMemoryTaskStore()
     task = create_minimal_task()
 
-    context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
-    context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
+    context_user1 = ServerCallContext(user=SampleUser(user_name='user1'))
+    context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
 
     # Create tasks for different owners
     task1_user1 = Task()

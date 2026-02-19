@@ -1,6 +1,10 @@
 import asyncio
 import logging
 
+from collections import defaultdict
+
+from a2a.server.context import ServerCallContext
+from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
@@ -13,56 +17,117 @@ logger = logging.getLogger(__name__)
 class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     """In-memory implementation of PushNotificationConfigStore interface.
 
-    Stores push notification configurations in memory
+    Stores push notification configurations in a nested dictionary in memory,
+    keyed by owner then task_id.
     """
 
-    def __init__(self) -> None:
+    def __init__(
+        self,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+    ) -> None:
         """Initializes the InMemoryPushNotificationConfigStore."""
         self.lock = asyncio.Lock()
         self._push_notification_infos: dict[
-            str, list[PushNotificationConfig]
-        ] = {}
+            str, dict[str, list[PushNotificationConfig]]
+        ] = defaultdict(dict)
+        self.owner_resolver = owner_resolver
 
     async def set_info(
-        self, task_id: str, notification_config: PushNotificationConfig
+        self,
+        task_id: str,
+        notification_config: PushNotificationConfig,
+        context: ServerCallContext | None = None,
     ) -> None:
         """Sets or updates the push notification configuration for a task in memory."""
+        owner = self.owner_resolver(context)
         async with self.lock:
-            if task_id not in self._push_notification_infos:
-                self._push_notification_infos[task_id] = []
+            owner_infos = self._push_notification_infos[owner]
+            if task_id not in owner_infos:
+                owner_infos[task_id] = []
 
             if not notification_config.id:
                 notification_config.id = task_id
 
-            for config in self._push_notification_infos[task_id]:
+            # Remove existing config with the same ID
+            for config in owner_infos[task_id]:
                 if config.id == notification_config.id:
-                    self._push_notification_infos[task_id].remove(config)
+                    owner_infos[task_id].remove(config)
                     break
 
-            self._push_notification_infos[task_id].append(notification_config)
+            owner_infos[task_id].append(notification_config)
+            logger.debug(
+                'Push notification config for task %s with config id %s for owner %s saved/updated.',
+                task_id,
+                notification_config.id,
+                owner,
+            )
 
-    async def get_info(self, task_id: str) -> list[PushNotificationConfig]:
-        """Retrieves the push notification configuration for a task from memory."""
+    async def get_info(
+        self,
+        task_id: str,
+        context: ServerCallContext | None = None,
+    ) -> list[PushNotificationConfig]:
+        """Retrieves all push notification configurations for a task from memory, for the given owner."""
+        owner = self.owner_resolver(context)
         async with self.lock:
-            return self._push_notification_infos.get(task_id) or []
+            owner_infos = self._push_notification_infos.get(owner)
+            if owner_infos:
+                return list(owner_infos.get(task_id, []))
+            return []
 
     async def delete_info(
-        self, task_id: str, config_id: str | None = None
+        self,
+        task_id: str,
+        config_id: str | None = None,
+        context: ServerCallContext | None = None,
     ) -> None:
-        """Deletes the push notification configuration for a task from memory."""
+        """Deletes push notification configurations for a task from memory.
+
+        If config_id is provided, only that specific configuration is deleted.
+        If config_id is None, all configurations for the task for the owner are deleted.
+        """
+        owner = self.owner_resolver(context)
         async with self.lock:
+            owner_infos = self._push_notification_infos.get(owner)
+            if not owner_infos or task_id not in owner_infos:
+                logger.warning(
+                    'Attempted to delete push notification config for task %s, owner %s that does not exist.',
+                    task_id,
+                    owner,
+                )
+                return
+
             if config_id is None:
-                config_id = task_id
-
-            if task_id in self._push_notification_infos:
-                configurations = self._push_notification_infos[task_id]
-                if not configurations:
-                    return
-
+                del owner_infos[task_id]
+                logger.info(
+                    'Deleted all push notification configs for task %s, owner %s.',
+                    task_id,
+                    owner,
+                )
+            else:
+                configurations = owner_infos[task_id]
+                found = False
                 for config in configurations:
                     if config.id == config_id:
                         configurations.remove(config)
+                        found = True
                         break
+                if found:
+                    logger.info(
+                        'Deleted push notification config %s for task %s, owner %s.',
+                        config_id,
+                        task_id,
+                        owner,
+                    )
+                    if len(configurations) == 0:
+                        del owner_infos[task_id]
+                else:
+                    logger.warning(
+                        'Attempted to delete push notification config %s for task %s, owner %s that does not exist.',
+                        config_id,
+                        task_id,
+                        owner,
+                    )
 
-                if len(configurations) == 0:
-                    del self._push_notification_infos[task_id]
+            if not owner_infos:
+                del self._push_notification_infos[owner]

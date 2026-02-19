@@ -33,6 +33,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
 class TestUser(User):
@@ -48,7 +49,6 @@ class TestUser(User):
     @property
     def user_name(self) -> str:
         return self._user_name
-from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
 # DSNs for different databases

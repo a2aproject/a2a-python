@@ -148,7 +148,7 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=False)
     last_updated: Mapped[str] = mapped_column(String(22), nullable=True)
 
     # Properly typed Pydantic fields with automatic serialization
@@ -175,10 +175,10 @@ class TaskMixin:
             f'context_id="{self.context_id}", status="{self.status}")>'
         )
 
-    @declared_attr
+    @declared_attr.directive
     @classmethod
     def __table_args__(cls) -> tuple[Any, ...]:
-        """Define a unique index (owner, last_updated) for each table that uses the mixin."""
+        """Define a composite index (owner, last_updated) for each table that uses the mixin."""
         tablename = getattr(cls, '__tablename__', 'tasks')
         return (
             Index(
