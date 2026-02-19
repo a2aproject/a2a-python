@@ -39,7 +39,7 @@ from a2a.types.a2a_pb2 import (
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     SendMessageRequest,
     SubscribeToTaskRequest,
@@ -171,7 +171,7 @@ class JSONRPCApplication(ABC):
         'CancelTask': CancelTaskRequest,
         'CreateTaskPushNotificationConfig': CreateTaskPushNotificationConfigRequest,
         'GetTaskPushNotificationConfig': GetTaskPushNotificationConfigRequest,
-        'ListTaskPushNotificationConfig': ListTaskPushNotificationConfigRequest,
+        'ListTaskPushNotificationConfigs': ListTaskPushNotificationConfigsRequest,
         'DeleteTaskPushNotificationConfig': DeleteTaskPushNotificationConfigRequest,
         'SubscribeToTask': SubscribeToTaskRequest,
         'GetExtendedAgentCard': GetExtendedAgentCardRequest,
@@ -486,9 +486,9 @@ class JSONRPCApplication(ABC):
                         context,
                     )
                 )
-            case ListTaskPushNotificationConfigRequest():
+            case ListTaskPushNotificationConfigsRequest():
                 handler_result = (
-                    await self.handler.list_push_notification_config(
+                    await self.handler.list_push_notification_configs(
                         request_obj,
                         context,
                     )

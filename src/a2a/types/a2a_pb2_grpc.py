@@ -7,7 +7,7 @@ from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
 class A2AServiceStub(object):
-    """A2AService defines the operations of the A2A protocol.
+    """Provides operations for interacting with agents using the A2A protocol.
     """
 
     def __init__(self, channel):
@@ -17,124 +17,128 @@ class A2AServiceStub(object):
             channel: A grpc.Channel.
         """
         self.SendMessage = channel.unary_unary(
-                '/a2a.v1.A2AService/SendMessage',
+                '/lf.a2a.v1.A2AService/SendMessage',
                 request_serializer=a2a__pb2.SendMessageRequest.SerializeToString,
                 response_deserializer=a2a__pb2.SendMessageResponse.FromString,
                 _registered_method=True)
         self.SendStreamingMessage = channel.unary_stream(
-                '/a2a.v1.A2AService/SendStreamingMessage',
+                '/lf.a2a.v1.A2AService/SendStreamingMessage',
                 request_serializer=a2a__pb2.SendMessageRequest.SerializeToString,
                 response_deserializer=a2a__pb2.StreamResponse.FromString,
                 _registered_method=True)
         self.GetTask = channel.unary_unary(
-                '/a2a.v1.A2AService/GetTask',
+                '/lf.a2a.v1.A2AService/GetTask',
                 request_serializer=a2a__pb2.GetTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.Task.FromString,
                 _registered_method=True)
         self.ListTasks = channel.unary_unary(
-                '/a2a.v1.A2AService/ListTasks',
+                '/lf.a2a.v1.A2AService/ListTasks',
                 request_serializer=a2a__pb2.ListTasksRequest.SerializeToString,
                 response_deserializer=a2a__pb2.ListTasksResponse.FromString,
                 _registered_method=True)
         self.CancelTask = channel.unary_unary(
-                '/a2a.v1.A2AService/CancelTask',
+                '/lf.a2a.v1.A2AService/CancelTask',
                 request_serializer=a2a__pb2.CancelTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.Task.FromString,
                 _registered_method=True)
         self.SubscribeToTask = channel.unary_stream(
-                '/a2a.v1.A2AService/SubscribeToTask',
+                '/lf.a2a.v1.A2AService/SubscribeToTask',
                 request_serializer=a2a__pb2.SubscribeToTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.StreamResponse.FromString,
                 _registered_method=True)
         self.CreateTaskPushNotificationConfig = channel.unary_unary(
-                '/a2a.v1.A2AService/CreateTaskPushNotificationConfig',
+                '/lf.a2a.v1.A2AService/CreateTaskPushNotificationConfig',
                 request_serializer=a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
                 response_deserializer=a2a__pb2.TaskPushNotificationConfig.FromString,
                 _registered_method=True)
         self.GetTaskPushNotificationConfig = channel.unary_unary(
-                '/a2a.v1.A2AService/GetTaskPushNotificationConfig',
+                '/lf.a2a.v1.A2AService/GetTaskPushNotificationConfig',
                 request_serializer=a2a__pb2.GetTaskPushNotificationConfigRequest.SerializeToString,
                 response_deserializer=a2a__pb2.TaskPushNotificationConfig.FromString,
                 _registered_method=True)
-        self.ListTaskPushNotificationConfig = channel.unary_unary(
-                '/a2a.v1.A2AService/ListTaskPushNotificationConfig',
-                request_serializer=a2a__pb2.ListTaskPushNotificationConfigRequest.SerializeToString,
-                response_deserializer=a2a__pb2.ListTaskPushNotificationConfigResponse.FromString,
+        self.ListTaskPushNotificationConfigs = channel.unary_unary(
+                '/lf.a2a.v1.A2AService/ListTaskPushNotificationConfigs',
+                request_serializer=a2a__pb2.ListTaskPushNotificationConfigsRequest.SerializeToString,
+                response_deserializer=a2a__pb2.ListTaskPushNotificationConfigsResponse.FromString,
                 _registered_method=True)
         self.GetExtendedAgentCard = channel.unary_unary(
-                '/a2a.v1.A2AService/GetExtendedAgentCard',
+                '/lf.a2a.v1.A2AService/GetExtendedAgentCard',
                 request_serializer=a2a__pb2.GetExtendedAgentCardRequest.SerializeToString,
                 response_deserializer=a2a__pb2.AgentCard.FromString,
                 _registered_method=True)
         self.DeleteTaskPushNotificationConfig = channel.unary_unary(
-                '/a2a.v1.A2AService/DeleteTaskPushNotificationConfig',
+                '/lf.a2a.v1.A2AService/DeleteTaskPushNotificationConfig',
                 request_serializer=a2a__pb2.DeleteTaskPushNotificationConfigRequest.SerializeToString,
                 response_deserializer=google_dot_protobuf_dot_empty__pb2.Empty.FromString,
                 _registered_method=True)
 
 
 class A2AServiceServicer(object):
-    """A2AService defines the operations of the A2A protocol.
+    """Provides operations for interacting with agents using the A2A protocol.
     """
 
     def SendMessage(self, request, context):
-        """Send a message to the agent.
+        """Sends a message to an agent.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SendStreamingMessage(self, request, context):
-        """SendStreamingMessage is a streaming version of SendMessage.
+        """Sends a streaming message to an agent, allowing for real-time interaction and status updates.
+        Streaming version of `SendMessage`
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetTask(self, request, context):
-        """Get the current state of a task from the agent.
+        """Gets the latest state of a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def ListTasks(self, request, context):
-        """List tasks with optional filtering and pagination.
+        """Lists tasks that match the specified filter.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CancelTask(self, request, context):
-        """Cancel a task.
+        """Cancels a task in progress.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SubscribeToTask(self, request, context):
-        """SubscribeToTask allows subscribing to task updates for tasks not in terminal state.
-        Returns UnsupportedOperationError if task is in terminal state (completed, failed, canceled, rejected).
+        """Subscribes to task updates for tasks not in a terminal state.
+        Returns `UnsupportedOperationError` if the task is already in a terminal state (completed, failed, canceled, rejected).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CreateTaskPushNotificationConfig(self, request, context):
-        """Create a push notification config for a task.
+        """(-- api-linter: client-libraries::4232::required-fields=disabled
+        api-linter: core::0133::method-signature=disabled
+        aip.dev/not-precedent: method_signature preserved for backwards compatibility --)
+        Creates a push notification config for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def GetTaskPushNotificationConfig(self, request, context):
-        """Get a push notification config for a task.
+        """Gets a push notification config for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def ListTaskPushNotificationConfig(self, request, context):
+    def ListTaskPushNotificationConfigs(self, request, context):
         """Get a list of push notifications configured for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
@@ -142,14 +146,14 @@ class A2AServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def GetExtendedAgentCard(self, request, context):
-        """GetExtendedAgentCard returns the extended agent card for authenticated agents.
+        """Gets the extended agent card for the authenticated agent.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def DeleteTaskPushNotificationConfig(self, request, context):
-        """Delete a push notification config for a task.
+        """Deletes a push notification config for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -198,10 +202,10 @@ def add_A2AServiceServicer_to_server(servicer, server):
                     request_deserializer=a2a__pb2.GetTaskPushNotificationConfigRequest.FromString,
                     response_serializer=a2a__pb2.TaskPushNotificationConfig.SerializeToString,
             ),
-            'ListTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
-                    servicer.ListTaskPushNotificationConfig,
-                    request_deserializer=a2a__pb2.ListTaskPushNotificationConfigRequest.FromString,
-                    response_serializer=a2a__pb2.ListTaskPushNotificationConfigResponse.SerializeToString,
+            'ListTaskPushNotificationConfigs': grpc.unary_unary_rpc_method_handler(
+                    servicer.ListTaskPushNotificationConfigs,
+                    request_deserializer=a2a__pb2.ListTaskPushNotificationConfigsRequest.FromString,
+                    response_serializer=a2a__pb2.ListTaskPushNotificationConfigsResponse.SerializeToString,
             ),
             'GetExtendedAgentCard': grpc.unary_unary_rpc_method_handler(
                     servicer.GetExtendedAgentCard,
@@ -215,14 +219,14 @@ def add_A2AServiceServicer_to_server(servicer, server):
             ),
     }
     generic_handler = grpc.method_handlers_generic_handler(
-            'a2a.v1.A2AService', rpc_method_handlers)
+            'lf.a2a.v1.A2AService', rpc_method_handlers)
     server.add_generic_rpc_handlers((generic_handler,))
-    server.add_registered_method_handlers('a2a.v1.A2AService', rpc_method_handlers)
+    server.add_registered_method_handlers('lf.a2a.v1.A2AService', rpc_method_handlers)
 
 
  # This class is part of an EXPERIMENTAL API.
 class A2AService(object):
-    """A2AService defines the operations of the A2A protocol.
+    """Provides operations for interacting with agents using the A2A protocol.
     """
 
     @staticmethod
@@ -239,7 +243,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/SendMessage',
+            '/lf.a2a.v1.A2AService/SendMessage',
             a2a__pb2.SendMessageRequest.SerializeToString,
             a2a__pb2.SendMessageResponse.FromString,
             options,
@@ -266,7 +270,7 @@ class A2AService(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/a2a.v1.A2AService/SendStreamingMessage',
+            '/lf.a2a.v1.A2AService/SendStreamingMessage',
             a2a__pb2.SendMessageRequest.SerializeToString,
             a2a__pb2.StreamResponse.FromString,
             options,
@@ -293,7 +297,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/GetTask',
+            '/lf.a2a.v1.A2AService/GetTask',
             a2a__pb2.GetTaskRequest.SerializeToString,
             a2a__pb2.Task.FromString,
             options,
@@ -320,7 +324,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/ListTasks',
+            '/lf.a2a.v1.A2AService/ListTasks',
             a2a__pb2.ListTasksRequest.SerializeToString,
             a2a__pb2.ListTasksResponse.FromString,
             options,
@@ -347,7 +351,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/CancelTask',
+            '/lf.a2a.v1.A2AService/CancelTask',
             a2a__pb2.CancelTaskRequest.SerializeToString,
             a2a__pb2.Task.FromString,
             options,
@@ -374,7 +378,7 @@ class A2AService(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/a2a.v1.A2AService/SubscribeToTask',
+            '/lf.a2a.v1.A2AService/SubscribeToTask',
             a2a__pb2.SubscribeToTaskRequest.SerializeToString,
             a2a__pb2.StreamResponse.FromString,
             options,
@@ -401,7 +405,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/CreateTaskPushNotificationConfig',
+            '/lf.a2a.v1.A2AService/CreateTaskPushNotificationConfig',
             a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
             a2a__pb2.TaskPushNotificationConfig.FromString,
             options,
@@ -428,7 +432,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/GetTaskPushNotificationConfig',
+            '/lf.a2a.v1.A2AService/GetTaskPushNotificationConfig',
             a2a__pb2.GetTaskPushNotificationConfigRequest.SerializeToString,
             a2a__pb2.TaskPushNotificationConfig.FromString,
             options,
@@ -442,7 +446,7 @@ class A2AService(object):
             _registered_method=True)
 
     @staticmethod
-    def ListTaskPushNotificationConfig(request,
+    def ListTaskPushNotificationConfigs(request,
             target,
             options=(),
             channel_credentials=None,
@@ -455,9 +459,9 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/ListTaskPushNotificationConfig',
-            a2a__pb2.ListTaskPushNotificationConfigRequest.SerializeToString,
-            a2a__pb2.ListTaskPushNotificationConfigResponse.FromString,
+            '/lf.a2a.v1.A2AService/ListTaskPushNotificationConfigs',
+            a2a__pb2.ListTaskPushNotificationConfigsRequest.SerializeToString,
+            a2a__pb2.ListTaskPushNotificationConfigsResponse.FromString,
             options,
             channel_credentials,
             insecure,
@@ -482,7 +486,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/GetExtendedAgentCard',
+            '/lf.a2a.v1.A2AService/GetExtendedAgentCard',
             a2a__pb2.GetExtendedAgentCardRequest.SerializeToString,
             a2a__pb2.AgentCard.FromString,
             options,
@@ -509,7 +513,7 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/DeleteTaskPushNotificationConfig',
+            '/lf.a2a.v1.A2AService/DeleteTaskPushNotificationConfig',
             a2a__pb2.DeleteTaskPushNotificationConfigRequest.SerializeToString,
             google_dot_protobuf_dot_empty__pb2.Empty.FromString,
             options,

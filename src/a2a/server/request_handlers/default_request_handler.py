@@ -32,8 +32,8 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -502,7 +502,6 @@ class DefaultRequestHandler(RequestHandler):
 
         return TaskPushNotificationConfig(
             task_id=task_id,
-            id=params.config_id,
             push_notification_config=params.config,
         )
 
@@ -532,7 +531,6 @@ class DefaultRequestHandler(RequestHandler):
             if config.id == config_id:
                 return TaskPushNotificationConfig(
                     task_id=task_id,
-                    id=config.id,
                     push_notification_config=config,
                 )
 
@@ -580,12 +578,12 @@ class DefaultRequestHandler(RequestHandler):
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
-    async def on_list_task_push_notification_config(
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigRequest,
+        params: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
-        """Default handler for 'ListTaskPushNotificationConfig'.
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Default handler for 'ListTaskPushNotificationConfigs'.
 
         Requires a `PushConfigStore` to be configured.
         """
@@ -601,11 +599,10 @@ class DefaultRequestHandler(RequestHandler):
             task_id
         )
 
-        return ListTaskPushNotificationConfigResponse(
+        return ListTaskPushNotificationConfigsResponse(
             configs=[
                 TaskPushNotificationConfig(
                     task_id=task_id,
-                    id=config.id,
                     push_notification_config=config,
                 )
                 for config in push_notification_config_list

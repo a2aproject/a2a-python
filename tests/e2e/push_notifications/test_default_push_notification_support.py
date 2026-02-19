@@ -192,7 +192,6 @@ async def test_notification_triggering_after_config_change_e2e(
     await a2a_client.set_task_callback(
         CreateTaskPushNotificationConfigRequest(
             task_id=f'{task.id}',
-            config_id='after-config-change',
             config=PushNotificationConfig(
                 id='after-config-change',
                 url=f'{notifications_server}/notifications',
