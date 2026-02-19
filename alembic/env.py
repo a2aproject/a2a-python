@@ -2,7 +2,7 @@ import asyncio
 
 from logging.config import fileConfig
 
-from sqlalchemy import pool
+from sqlalchemy import pool, Connection
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from a2a.server.models import Base
@@ -51,7 +51,7 @@ def run_migrations_offline() -> None:
         context.run_migrations()
 
 
-def do_run_migrations(connection) -> None:
+def do_run_migrations(connection: Connection) -> None:
     """Run migrations in 'online' mode.
 
     This function is called within a synchronous context (via run_sync)
@@ -68,7 +68,9 @@ def do_run_migrations(connection) -> None:
 
 
 async def run_async_migrations() -> None:
-    """In this scenario we need to create an Engine
+    """Run migrations using an Engine.
+
+    In this scenario we need to create an Engine
     and associate a connection with the context.
     """
     connectable = async_engine_from_config(
