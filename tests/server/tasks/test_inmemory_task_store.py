@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus, ListTasksRequest
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 from a2a.auth.user import User
 
@@ -185,6 +186,7 @@ async def test_list_tasks(
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
     assert page.next_page_token == (next_page_token or '')
+    assert page.page_size == (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
 
     # Cleanup
     for task in tasks_to_create:

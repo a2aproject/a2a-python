@@ -96,6 +96,8 @@ RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
 LIST_TASKS_RESPONSE = ListTasksResponse(
     tasks=[TASK_FROM_BLOCKING, GET_TASK_RESPONSE],
     next_page_token='page-2',
+    total_size=12,
+    page_size=10,
 )
 
 
@@ -480,6 +482,8 @@ async def test_http_transport_list_tasks(
 
     assert len(result.tasks) == 2
     assert result.next_page_token == 'page-2'
+    assert result.total_size == 12
+    assert result.page_size == 10
     handler.on_list_tasks.assert_awaited_once()
 
     if hasattr(transport, 'close'):
