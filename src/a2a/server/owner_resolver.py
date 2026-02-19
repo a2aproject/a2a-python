@@ -8,7 +8,7 @@ OwnerResolver = Callable[[ServerCallContext], str]
 
 
 # Example Default Implementation
-def resolve_user_scope(context: ServerCallContext) -> str:
+def resolve_user_scope(context: ServerCallContext | None) -> str:
     """Resolves the owner scope based on the user in the context."""
     if not context:
         return 'unknown'

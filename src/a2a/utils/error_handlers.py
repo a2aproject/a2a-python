@@ -2,7 +2,7 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 
 if TYPE_CHECKING:
@@ -15,32 +15,56 @@ else:
         Response = Any
 
 
-from a2a._base import A2ABaseModel
-from a2a.types import (
+from a2a.server.jsonrpc_models import (
+    InternalError as JSONRPCInternalError,
+)
+from a2a.server.jsonrpc_models import (
+    JSONParseError,
+    JSONRPCError,
+)
+from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
     InvalidRequestError,
-    JSONParseError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
+    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
 
 
 logger = logging.getLogger(__name__)
 
-A2AErrorToHttpStatus: dict[type[A2ABaseModel], int] = {
+_A2AErrorType = (
+    type[JSONRPCError]
+    | type[JSONParseError]
+    | type[InvalidRequestError]
+    | type[MethodNotFoundError]
+    | type[InvalidParamsError]
+    | type[InternalError]
+    | type[JSONRPCInternalError]
+    | type[TaskNotFoundError]
+    | type[TaskNotCancelableError]
+    | type[PushNotificationNotSupportedError]
+    | type[UnsupportedOperationError]
+    | type[ContentTypeNotSupportedError]
+    | type[InvalidAgentResponseError]
+    | type[AuthenticatedExtendedCardNotConfiguredError]
+)
+
+A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
+    JSONRPCError: 500,
     JSONParseError: 400,
     InvalidRequestError: 400,
     MethodNotFoundError: 404,
     InvalidParamsError: 422,
     InternalError: 500,
+    JSONRPCInternalError: 500,
     TaskNotFoundError: 404,
     TaskNotCancelableError: 409,
     PushNotificationNotSupportedError: 501,
@@ -64,7 +88,9 @@ def rest_error_handler(
             error = e.error or InternalError(
                 message='Internal error due to unknown reason'
             )
-            http_code = A2AErrorToHttpStatus.get(type(error), 500)
+            http_code = A2AErrorToHttpStatus.get(
+                cast('_A2AErrorType', type(error)), 500
+            )
 
             log_level = (
                 logging.ERROR
@@ -74,12 +100,15 @@ def rest_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
-                error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                getattr(error, 'code', 'N/A'),
+                getattr(error, 'message', str(error)),
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             return JSONResponse(
-                content={'message': error.message}, status_code=http_code
+                content={'message': getattr(error, 'message', str(error))},
+                status_code=http_code,
             )
         except Exception:
             logger.exception('Unknown error occurred')
@@ -112,9 +141,11 @@ def rest_stream_error_handler(
             logger.log(
                 log_level,
                 "Request error: Code=%s, Message='%s'%s",
-                error.code,
-                error.message,
-                ', Data=' + str(error.data) if error.data else '',
+                getattr(error, 'code', 'N/A'),
+                getattr(error, 'message', str(error)),
+                ', Data=' + str(getattr(error, 'data', ''))
+                if getattr(error, 'data', None)
+                else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)

@@ -87,9 +87,7 @@ def create_agent_card_signer(
             signature=signature,
         )
 
-        agent_card.signatures = (agent_card.signatures or []) + [
-            agent_card_signature
-        ]
+        agent_card.signatures.append(agent_card_signature)
         return agent_card
 
     return agent_card_signer

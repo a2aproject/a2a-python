@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from a2a.server.context import ServerCallContext
-from a2a.types import PushNotificationConfig
+from a2a.types.a2a_pb2 import PushNotificationConfig
 
 
 class PushNotificationConfigStore(ABC):

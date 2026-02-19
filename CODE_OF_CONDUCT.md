@@ -93,4 +93,4 @@ available at
 https://www.contributor-covenant.org/version/1/4/code-of-conduct.html
 
 Note: A version of this file is also available in the
-[New Project repository](https://github.com/google/new-project/blob/master/docs/code-of-conduct.md).
+[New Project repository](https://github.com/google/new-project/blob/main/docs/code-of-conduct.md).

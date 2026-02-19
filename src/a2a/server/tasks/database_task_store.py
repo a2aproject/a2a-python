@@ -1,6 +1,6 @@
 import logging
 
-from datetime import datetime, timezone
+from typing import Any, cast
 
 
 try:
@@ -17,7 +17,9 @@ try:
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import class_mapper
+    from sqlalchemy.orm import (
+        class_mapper,
+    )
 except ImportError as e:
     raise ImportError(
         'DatabaseTaskStore requires SQLAlchemy and a database driver. '
@@ -28,11 +30,14 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from google.protobuf.json_format import MessageToDict
+
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
-from a2a.server.tasks.task_store import TaskStore, TasksPage
-from a2a.types import ListTasksParams, Task
+from a2a.server.tasks.task_store import TaskStore
+from a2a.types import a2a_pb2
+from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.task import decode_page_token, encode_page_token
 
@@ -110,34 +115,46 @@ class DatabaseTaskStore(TaskStore):
             await self.initialize()
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
-        """Maps a Pydantic Task to a SQLAlchemy TaskModel instance."""
+        """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
+        # Pass proto objects directly - PydanticType/PydanticListType
+        # handle serialization via process_bind_param
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
-            kind=task.kind,
+            kind='task',  # Default kind for tasks
             owner=owner,
-            last_updated=task.status.timestamp,
-            status=task.status,
-            artifacts=task.artifacts,
-            history=task.history,
-            task_metadata=task.metadata,
+            last_updated=(
+                task.status.timestamp.ToJsonString()
+                if task.HasField('status') and task.status.HasField('timestamp')
+                else None
+            ),
+            status=task.status if task.HasField('status') else None,
+            artifacts=list(task.artifacts) if task.artifacts else [],
+            history=list(task.history) if task.history else [],
+            task_metadata=(
+                MessageToDict(task.metadata) if task.metadata.fields else None
+            ),
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
-        """Maps a SQLAlchemy TaskModel to a Pydantic Task instance."""
-        # Map database columns to Pydantic model fields
-        task_data_from_db = {
-            'id': task_model.id,
-            'context_id': task_model.context_id,
-            'kind': task_model.kind,
-            'owner': task_model.owner,
-            'status': task_model.status,
-            'artifacts': task_model.artifacts,
-            'history': task_model.history,
-            'metadata': task_model.task_metadata,  # Map task_metadata column to metadata field
-        }
-        # Pydantic's model_validate will parse the nested dicts/lists from JSON
-        return Task.model_validate(task_data_from_db)
+        """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
+        # PydanticType/PydanticListType already deserialize to proto objects
+        # via process_result_value, so we can construct the Task directly
+        task = Task(
+            id=task_model.id,
+            context_id=task_model.context_id,
+        )
+        if task_model.status:
+            task.status.CopyFrom(task_model.status)
+        if task_model.artifacts:
+            task.artifacts.extend(task_model.artifacts)
+        if task_model.history:
+            task.history.extend(task_model.history)
+        if task_model.task_metadata:
+            task.metadata.update(
+                cast('dict[str, Any]', task_model.task_metadata)
+            )
+        return task
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
@@ -184,8 +201,10 @@ class DatabaseTaskStore(TaskStore):
             return None
 
     async def list(
-        self, params: ListTasksParams, context: ServerCallContext | None = None
-    ) -> TasksPage:
+        self,
+        params: a2a_pb2.ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> a2a_pb2.ListTasksResponse:
         """Retrieves tasks from the database based on provided parameters, for the given owner."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
@@ -202,15 +221,15 @@ class DatabaseTaskStore(TaskStore):
                 base_stmt = base_stmt.where(
                     self.task_model.context_id == params.context_id
                 )
-            if params.status and params.status != 'unknown':
+            if params.status:
                 base_stmt = base_stmt.where(
                     self.task_model.status['state'].as_string()
-                    == params.status.value
+                    == a2a_pb2.TaskState.Name(params.status)
                 )
-            if params.last_updated_after:
-                last_updated_after_iso = datetime.fromtimestamp(
-                    params.last_updated_after / 1000, tz=timezone.utc
-                ).isoformat()
+            if params.HasField('status_timestamp_after'):
+                last_updated_after_iso = (
+                    params.status_timestamp_after.ToJsonString()
+                )
                 base_stmt = base_stmt.where(
                     timestamp_col >= last_updated_after_iso
                 )
@@ -242,7 +261,7 @@ class DatabaseTaskStore(TaskStore):
                 if not start_task:
                     raise ValueError(f'Invalid page token: {params.page_token}')
 
-                start_task_timestamp = start_task.status.timestamp
+                start_task_timestamp = start_task.last_updated
                 where_clauses = []
                 if start_task_timestamp:
                     where_clauses.append(
@@ -275,10 +294,10 @@ class DatabaseTaskStore(TaskStore):
                 else None
             )
 
-            return TasksPage(
+            return a2a_pb2.ListTasksResponse(
                 tasks=tasks[:page_size],
                 total_size=total_count,
-                next_page_token=next_page_token,
+                next_page_token=next_page_token or '',
             )
 
     async def delete(
@@ -298,7 +317,7 @@ class DatabaseTaskStore(TaskStore):
             result = await session.execute(stmt)
             # Commit is automatic when using session.begin()
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info(
                     'Task %s deleted successfully for owner %s.', task_id, owner
                 )

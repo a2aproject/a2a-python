@@ -17,21 +17,23 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.types import (
+from a2a.utils.constants import TransportProtocol
+from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AuthorizationCodeOAuthFlow,
     HTTPAuthSecurityScheme,
-    In,
     Message,
     OAuth2SecurityScheme,
     OAuthFlows,
     OpenIdConnectSecurityScheme,
     Role,
+    SecurityRequirement,
     SecurityScheme,
-    SendMessageSuccessResponse,
-    TransportProtocol,
+    SendMessageResponse,
+    StringList,
 )
 
 
@@ -56,19 +58,25 @@ class HeaderInterceptor(ClientCallInterceptor):
         return request_payload, http_kwargs
 
 
+from google.protobuf import json_format
+
+
 def build_success_response(request: httpx.Request) -> httpx.Response:
     """Creates a valid JSON-RPC success response based on the request."""
+    from a2a.types.a2a_pb2 import SendMessageResponse
+
     request_payload = json.loads(request.content)
-    response_payload = SendMessageSuccessResponse(
-        id=request_payload['id'],
-        jsonrpc='2.0',
-        result=Message(
-            kind='message',
-            message_id='message-id',
-            role=Role.agent,
-            parts=[],
-        ),
-    ).model_dump(mode='json')
+    message = Message(
+        message_id='message-id',
+        role=Role.ROLE_AGENT,
+        parts=[],
+    )
+    response = SendMessageResponse(message=message)
+    response_payload = {
+        'id': request_payload['id'],
+        'jsonrpc': '2.0',
+        'result': json_format.MessageToDict(response),
+    }
     return httpx.Response(200, json=response_payload)
 
 
@@ -76,7 +84,7 @@ def build_message() -> Message:
     """Builds a minimal Message."""
     return Message(
         message_id='msg1',
-        role=Role.user,
+        role=Role.ROLE_USER,
         parts=[],
     )
 
@@ -115,7 +123,7 @@ async def test_auth_interceptor_skips_when_no_agent_card(
     auth_interceptor = AuthInterceptor(credential_service=store)
 
     new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='message/send',
+        method_name='SendMessage',
         request_payload=request_payload,
         http_kwargs=http_kwargs,
         agent_card=None,
@@ -169,7 +177,9 @@ async def test_client_with_simple_interceptor() -> None:
     url = 'http://agent.com/rpc'
     interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
     card = AgentCard(
-        url=url,
+        supported_interfaces=[
+            AgentInterface(url=url, protocol_binding=TransportProtocol.jsonrpc)
+        ],
         name='testbot',
         description='test bot',
         version='1.0',
@@ -177,19 +187,32 @@ async def test_client_with_simple_interceptor() -> None:
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        preferred_transport=TransportProtocol.jsonrpc,
     )
 
     async with httpx.AsyncClient() as http_client:
         config = ClientConfig(
             httpx_client=http_client,
-            supported_transports=[TransportProtocol.jsonrpc],
+            supported_protocol_bindings=[TransportProtocol.jsonrpc],
         )
         factory = ClientFactory(config)
         client = factory.create(card, interceptors=[interceptor])
 
         request = await send_message(client, url)
         assert request.headers['x-test-header'] == 'Test-Value-123'
+
+
+def wrap_security_scheme(scheme: Any) -> SecurityScheme:
+    """Wraps a security scheme in the correct SecurityScheme proto field."""
+    if isinstance(scheme, APIKeySecurityScheme):
+        return SecurityScheme(api_key_security_scheme=scheme)
+    elif isinstance(scheme, HTTPAuthSecurityScheme):
+        return SecurityScheme(http_auth_security_scheme=scheme)
+    elif isinstance(scheme, OAuth2SecurityScheme):
+        return SecurityScheme(oauth2_security_scheme=scheme)
+    elif isinstance(scheme, OpenIdConnectSecurityScheme):
+        return SecurityScheme(open_id_connect_security_scheme=scheme)
+    else:
+        raise ValueError(f'Unknown security scheme type: {type(scheme)}')
 
 
 @dataclass
@@ -218,9 +241,8 @@ api_key_test_case = AuthTestCase(
     scheme_name='apikey',
     credential='secret-api-key',
     security_scheme=APIKeySecurityScheme(
-        type='apiKey',
         name='X-API-Key',
-        in_=In.header,
+        location='header',
     ),
     expected_header_key='x-api-key',
     expected_header_value_func=lambda c: c,
@@ -233,12 +255,10 @@ oauth2_test_case = AuthTestCase(
     scheme_name='oauth2',
     credential='secret-oauth-access-token',
     security_scheme=OAuth2SecurityScheme(
-        type='oauth2',
         flows=OAuthFlows(
             authorization_code=AuthorizationCodeOAuthFlow(
                 authorization_url='http://provider.com/auth',
                 token_url='http://provider.com/token',
-                scopes={'read': 'Read scope'},
             )
         ),
     ),
@@ -253,7 +273,6 @@ oidc_test_case = AuthTestCase(
     scheme_name='oidc',
     credential='secret-oidc-id-token',
     security_scheme=OpenIdConnectSecurityScheme(
-        type='openIdConnect',
         open_id_connect_url='http://provider.com/.well-known/openid-configuration',
     ),
     expected_header_key='Authorization',
@@ -289,7 +308,11 @@ async def test_auth_interceptor_variants(
     )
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
-        url=test_case.url,
+        supported_interfaces=[
+            AgentInterface(
+                url=test_case.url, protocol_binding=TransportProtocol.jsonrpc
+            )
+        ],
         name=f'{test_case.scheme_name}bot',
         description=f'A bot that uses {test_case.scheme_name}',
         version='1.0',
@@ -297,19 +320,20 @@ async def test_auth_interceptor_variants(
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        security=[{test_case.scheme_name: []}],
+        security_requirements=[
+            SecurityRequirement(schemes={test_case.scheme_name: StringList()})
+        ],
         security_schemes={
-            test_case.scheme_name: SecurityScheme(
-                root=test_case.security_scheme
+            test_case.scheme_name: wrap_security_scheme(
+                test_case.security_scheme
             )
         },
-        preferred_transport=TransportProtocol.jsonrpc,
     )
 
     async with httpx.AsyncClient() as http_client:
         config = ClientConfig(
             httpx_client=http_client,
-            supported_transports=[TransportProtocol.jsonrpc],
+            supported_protocol_bindings=[TransportProtocol.jsonrpc],
         )
         factory = ClientFactory(config)
         client = factory.create(agent_card, interceptors=[auth_interceptor])
@@ -329,13 +353,18 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     """Tests that AuthInterceptor skips a scheme if it's listed in security requirements but not defined in security_schemes."""
     scheme_name = 'missing'
     session_id = 'session-id'
-    credential = 'dummy-token'
+    credential = 'test-token'
     request_payload = {'foo': 'bar'}
     http_kwargs = {'fizz': 'buzz'}
     await store.set_credentials(session_id, scheme_name, credential)
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
-        url='http://agent.com/rpc',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://agent.com/rpc',
+                protocol_binding=TransportProtocol.jsonrpc,
+            )
+        ],
         name='missingbot',
         description='A bot that uses missing scheme definition',
         version='1.0',
@@ -343,12 +372,14 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         default_output_modes=[],
         skills=[],
         capabilities=AgentCapabilities(),
-        security=[{scheme_name: []}],
+        security_requirements=[
+            SecurityRequirement(schemes={scheme_name: StringList()})
+        ],
         security_schemes={},
     )
 
     new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='message/send',
+        method_name='SendMessage',
         request_payload=request_payload,
         http_kwargs=http_kwargs,
         agent_card=agent_card,

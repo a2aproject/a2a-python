@@ -10,3 +10,5 @@ test_venv/
 coverage.xml
 .nox
 spec.json
+src/a2a/types/a2a.json
+docker-compose.yaml

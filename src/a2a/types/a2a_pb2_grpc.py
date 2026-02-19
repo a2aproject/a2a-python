@@ -7,16 +7,7 @@ from google.protobuf import empty_pb2 as google_dot_protobuf_dot_empty__pb2
 
 
 class A2AServiceStub(object):
-    """A2AService defines the gRPC version of the A2A protocol. This has a slightly
-    different shape than the JSONRPC version to better conform to AIP-127,
-    where appropriate. The nouns are AgentCard, Message, Task and
-    TaskPushNotificationConfig.
-    - Messages are not a standard resource so there is no get/delete/update/list
-    interface, only a send and stream custom methods.
-    - Tasks have a get interface and custom cancel and subscribe methods.
-    - TaskPushNotificationConfig are a resource whose parent is a task.
-    They have get, list and create methods.
-    - AgentCard is a static resource with only a get method.
+    """A2AService defines the operations of the A2A protocol.
     """
 
     def __init__(self, channel):
@@ -50,9 +41,9 @@ class A2AServiceStub(object):
                 request_serializer=a2a__pb2.CancelTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.Task.FromString,
                 _registered_method=True)
-        self.TaskSubscription = channel.unary_stream(
-                '/a2a.v1.A2AService/TaskSubscription',
-                request_serializer=a2a__pb2.TaskSubscriptionRequest.SerializeToString,
+        self.SubscribeToTask = channel.unary_stream(
+                '/a2a.v1.A2AService/SubscribeToTask',
+                request_serializer=a2a__pb2.SubscribeToTaskRequest.SerializeToString,
                 response_deserializer=a2a__pb2.StreamResponse.FromString,
                 _registered_method=True)
         self.CreateTaskPushNotificationConfig = channel.unary_unary(
@@ -70,9 +61,9 @@ class A2AServiceStub(object):
                 request_serializer=a2a__pb2.ListTaskPushNotificationConfigRequest.SerializeToString,
                 response_deserializer=a2a__pb2.ListTaskPushNotificationConfigResponse.FromString,
                 _registered_method=True)
-        self.GetAgentCard = channel.unary_unary(
-                '/a2a.v1.A2AService/GetAgentCard',
-                request_serializer=a2a__pb2.GetAgentCardRequest.SerializeToString,
+        self.GetExtendedAgentCard = channel.unary_unary(
+                '/a2a.v1.A2AService/GetExtendedAgentCard',
+                request_serializer=a2a__pb2.GetExtendedAgentCardRequest.SerializeToString,
                 response_deserializer=a2a__pb2.AgentCard.FromString,
                 _registered_method=True)
         self.DeleteTaskPushNotificationConfig = channel.unary_unary(
@@ -83,29 +74,18 @@ class A2AServiceStub(object):
 
 
 class A2AServiceServicer(object):
-    """A2AService defines the gRPC version of the A2A protocol. This has a slightly
-    different shape than the JSONRPC version to better conform to AIP-127,
-    where appropriate. The nouns are AgentCard, Message, Task and
-    TaskPushNotificationConfig.
-    - Messages are not a standard resource so there is no get/delete/update/list
-    interface, only a send and stream custom methods.
-    - Tasks have a get interface and custom cancel and subscribe methods.
-    - TaskPushNotificationConfig are a resource whose parent is a task.
-    They have get, list and create methods.
-    - AgentCard is a static resource with only a get method.
+    """A2AService defines the operations of the A2A protocol.
     """
 
     def SendMessage(self, request, context):
-        """Send a message to the agent. This is a blocking call that will return the
-        task once it is completed, or a LRO if requested.
+        """Send a message to the agent.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def SendStreamingMessage(self, request, context):
-        """SendStreamingMessage is a streaming call that will return a stream of
-        task update events until the Task is in an interrupted or terminal state.
+        """SendStreamingMessage is a streaming version of SendMessage.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -126,25 +106,22 @@ class A2AServiceServicer(object):
         raise NotImplementedError('Method not implemented!')
 
     def CancelTask(self, request, context):
-        """Cancel a task from the agent. If supported one should expect no
-        more task updates for the task.
+        """Cancel a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def TaskSubscription(self, request, context):
-        """TaskSubscription is a streaming call that will return a stream of task
-        update events. This attaches the stream to an existing in process task.
-        If the task is complete the stream will return the completed task (like
-        GetTask) and close the stream.
+    def SubscribeToTask(self, request, context):
+        """SubscribeToTask allows subscribing to task updates for tasks not in terminal state.
+        Returns UnsupportedOperationError if task is in terminal state (completed, failed, canceled, rejected).
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
     def CreateTaskPushNotificationConfig(self, request, context):
-        """Set a push notification config for a task.
+        """Create a push notification config for a task.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -164,8 +141,8 @@ class A2AServiceServicer(object):
         context.set_details('Method not implemented!')
         raise NotImplementedError('Method not implemented!')
 
-    def GetAgentCard(self, request, context):
-        """GetAgentCard returns the agent card for the agent.
+    def GetExtendedAgentCard(self, request, context):
+        """GetExtendedAgentCard returns the extended agent card for authenticated agents.
         """
         context.set_code(grpc.StatusCode.UNIMPLEMENTED)
         context.set_details('Method not implemented!')
@@ -206,9 +183,9 @@ def add_A2AServiceServicer_to_server(servicer, server):
                     request_deserializer=a2a__pb2.CancelTaskRequest.FromString,
                     response_serializer=a2a__pb2.Task.SerializeToString,
             ),
-            'TaskSubscription': grpc.unary_stream_rpc_method_handler(
-                    servicer.TaskSubscription,
-                    request_deserializer=a2a__pb2.TaskSubscriptionRequest.FromString,
+            'SubscribeToTask': grpc.unary_stream_rpc_method_handler(
+                    servicer.SubscribeToTask,
+                    request_deserializer=a2a__pb2.SubscribeToTaskRequest.FromString,
                     response_serializer=a2a__pb2.StreamResponse.SerializeToString,
             ),
             'CreateTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
@@ -226,9 +203,9 @@ def add_A2AServiceServicer_to_server(servicer, server):
                     request_deserializer=a2a__pb2.ListTaskPushNotificationConfigRequest.FromString,
                     response_serializer=a2a__pb2.ListTaskPushNotificationConfigResponse.SerializeToString,
             ),
-            'GetAgentCard': grpc.unary_unary_rpc_method_handler(
-                    servicer.GetAgentCard,
-                    request_deserializer=a2a__pb2.GetAgentCardRequest.FromString,
+            'GetExtendedAgentCard': grpc.unary_unary_rpc_method_handler(
+                    servicer.GetExtendedAgentCard,
+                    request_deserializer=a2a__pb2.GetExtendedAgentCardRequest.FromString,
                     response_serializer=a2a__pb2.AgentCard.SerializeToString,
             ),
             'DeleteTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
@@ -245,16 +222,7 @@ def add_A2AServiceServicer_to_server(servicer, server):
 
  # This class is part of an EXPERIMENTAL API.
 class A2AService(object):
-    """A2AService defines the gRPC version of the A2A protocol. This has a slightly
-    different shape than the JSONRPC version to better conform to AIP-127,
-    where appropriate. The nouns are AgentCard, Message, Task and
-    TaskPushNotificationConfig.
-    - Messages are not a standard resource so there is no get/delete/update/list
-    interface, only a send and stream custom methods.
-    - Tasks have a get interface and custom cancel and subscribe methods.
-    - TaskPushNotificationConfig are a resource whose parent is a task.
-    They have get, list and create methods.
-    - AgentCard is a static resource with only a get method.
+    """A2AService defines the operations of the A2A protocol.
     """
 
     @staticmethod
@@ -393,7 +361,7 @@ class A2AService(object):
             _registered_method=True)
 
     @staticmethod
-    def TaskSubscription(request,
+    def SubscribeToTask(request,
             target,
             options=(),
             channel_credentials=None,
@@ -406,8 +374,8 @@ class A2AService(object):
         return grpc.experimental.unary_stream(
             request,
             target,
-            '/a2a.v1.A2AService/TaskSubscription',
-            a2a__pb2.TaskSubscriptionRequest.SerializeToString,
+            '/a2a.v1.A2AService/SubscribeToTask',
+            a2a__pb2.SubscribeToTaskRequest.SerializeToString,
             a2a__pb2.StreamResponse.FromString,
             options,
             channel_credentials,
@@ -501,7 +469,7 @@ class A2AService(object):
             _registered_method=True)
 
     @staticmethod
-    def GetAgentCard(request,
+    def GetExtendedAgentCard(request,
             target,
             options=(),
             channel_credentials=None,
@@ -514,8 +482,8 @@ class A2AService(object):
         return grpc.experimental.unary_unary(
             request,
             target,
-            '/a2a.v1.A2AService/GetAgentCard',
-            a2a__pb2.GetAgentCardRequest.SerializeToString,
+            '/a2a.v1.A2AService/GetExtendedAgentCard',
+            a2a__pb2.GetExtendedAgentCardRequest.SerializeToString,
             a2a__pb2.AgentCard.FromString,
             options,
             channel_credentials,

@@ -6,13 +6,13 @@ from typing import Any
 
 import httpx
 
-from pydantic import ValidationError
+from google.protobuf.json_format import ParseDict, ParseError
 
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
 )
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
@@ -88,7 +88,7 @@ class A2ACardResolver:
                 target_url,
                 agent_card_data,
             )
-            agent_card = AgentCard.model_validate(agent_card_data)
+            agent_card = ParseDict(agent_card_data, AgentCard())
             if signature_verifier:
                 signature_verifier(agent_card)
         except httpx.HTTPStatusError as e:
@@ -105,9 +105,9 @@ class A2ACardResolver:
                 503,
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e
-        except ValidationError as e:  # Pydantic validation error
+        except ParseError as e:
             raise A2AClientJSONError(
-                f'Failed to validate agent card structure from {target_url}: {e.json()}'
+                f'Failed to validate agent card structure from {target_url}: {e}'
             ) from e
 
         return agent_card
