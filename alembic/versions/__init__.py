@@ -1,1 +1,1 @@
-"""Alembic versioned migrations for the A2A project."""
+"""Alembic migrations scripts for the A2A project."""

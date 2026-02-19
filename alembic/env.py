@@ -2,7 +2,7 @@ import asyncio
 
 from logging.config import fileConfig
 
-from sqlalchemy import pool, Connection
+from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from a2a.server.models import Base
