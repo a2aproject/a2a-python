@@ -269,15 +269,23 @@ async def test_in_memory_task_store_delete_nonexistent() -> None:
 async def test_owner_resource_scoping() -> None:
     """Test that operations are scoped to the correct owner."""
     store = InMemoryTaskStore()
-    task = Task(**MINIMAL_TASK)
+    task = create_minimal_task()
 
     context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
     context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
 
     # Create tasks for different owners
-    task1_user1 = task.model_copy(update={'id': 'u1-task1'})
-    task2_user1 = task.model_copy(update={'id': 'u1-task2'})
-    task1_user2 = task.model_copy(update={'id': 'u2-task1'})
+    task1_user1 = Task()
+    task1_user1.CopyFrom(task)
+    task1_user1.id = 'u1-task1'
+
+    task2_user1 = Task()
+    task2_user1.CopyFrom(task)
+    task2_user1.id = 'u1-task2'
+
+    task1_user2 = Task()
+    task1_user2.CopyFrom(task)
+    task1_user2.id = 'u2-task1'
 
     await store.save(task1_user1, context_user1)
     await store.save(task2_user1, context_user1)
