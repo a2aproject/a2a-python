@@ -528,7 +528,6 @@ def test_set_push_notification_config(
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
         task_id='t2',
-        id='pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
@@ -546,7 +545,6 @@ def test_set_push_notification_config(
             'method': 'CreateTaskPushNotificationConfig',
             'params': {
                 'task_id': 't2',
-                'config_id': 'pushNotificationConfig',
                 'config': {
                     'url': 'https://example.com',
                     'token': 'secret-token',
@@ -571,7 +569,6 @@ def test_get_push_notification_config(
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
         task_id='task1',
-        id='pushNotificationConfig',
         push_notification_config=PushNotificationConfig(
             url='https://example.com', token='secret-token'
         ),
