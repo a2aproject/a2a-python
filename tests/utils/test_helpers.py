@@ -467,7 +467,7 @@ def test_clean_empty_mixed(input_val, expected):
 def test_clean_empty_does_not_mutate_input():
     """_clean_empty should not mutate the original input object."""
     original = {'a': '', 'b': 1, 'c': {'d': ''}}
-    copy = {
+    original_copy = {
         'a': '',
         'b': 1,
         'c': {'d': ''},
@@ -475,4 +475,4 @@ def test_clean_empty_does_not_mutate_input():
 
     _clean_empty(original)
 
-    assert original == copy
+    assert original == original_copy
