@@ -106,6 +106,7 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
+  "alembic>=1.14.0",
   "mypy>=1.15.0",
   "PyJWT>=2.0.0",
   "pytest>=8.3.5",

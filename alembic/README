@@ -27,6 +27,9 @@ uv run alembic history --verbose
 uv run alembic upgrade head
 
 # Downgrade by one version
+uv run alembic downgrade -1
+
+# Revert all migrations
 uv run alembic downgrade base
 ```
 

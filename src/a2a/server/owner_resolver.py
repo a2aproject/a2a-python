@@ -4,7 +4,7 @@ from a2a.server.context import ServerCallContext
 
 
 # Definition
-OwnerResolver = Callable[[ServerCallContext], str]
+OwnerResolver = Callable[[ServerCallContext | None], str]
 
 
 # Example Default Implementation
