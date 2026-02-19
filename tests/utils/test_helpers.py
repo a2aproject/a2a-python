@@ -27,6 +27,7 @@ from a2a.utils.helpers import (
     build_text_artifact,
     create_task_obj,
     validate,
+    _clean_empty,
     canonicalize_agent_card,
 )
 
@@ -380,3 +381,96 @@ def test_canonicalize_agent_card():
     )
     result = canonicalize_agent_card(agent_card)
     assert result == expected_jcs
+
+
+def test_canonicalize_agent_card_preserves_false_capability():
+    """Regression #692: streaming=False must not be stripped from canonical JSON."""
+    card = AgentCard(**{
+        **SAMPLE_AGENT_CARD,
+        'capabilities': AgentCapabilities(
+            streaming=False,
+            push_notifications=True,
+        ),
+    })
+    result = canonicalize_agent_card(card)
+    assert '"streaming":false' in result
+
+
+@pytest.mark.parametrize(
+    'input_val',
+    [
+        pytest.param({'a': ''}, id='empty-string'),
+        pytest.param({'a': []}, id='empty-list'),
+        pytest.param({'a': {}}, id='empty-dict'),
+        pytest.param({'a': {'b': []}}, id='nested-empty'),
+        pytest.param({'a': '', 'b': [], 'c': {}}, id='all-empties'),
+        pytest.param({'a': {'b': {'c': ''}}}, id='deeply-nested'),
+    ],
+)
+def test_clean_empty_removes_empties(input_val):
+    """_clean_empty removes empty strings, lists, and dicts recursively."""
+    assert _clean_empty(input_val) is None
+
+
+def test_clean_empty_top_level_list_becomes_none():
+    """Top-level list that becomes empty after cleaning should return None."""
+    assert _clean_empty(['', {}, []]) is None
+
+
+@pytest.mark.parametrize(
+    'input_val,expected',
+    [
+        pytest.param({'retries': 0}, {'retries': 0}, id='int-zero'),
+        pytest.param({'enabled': False}, {'enabled': False}, id='bool-false'),
+        pytest.param({'score': 0.0}, {'score': 0.0}, id='float-zero'),
+        pytest.param([0, 1, 2], [0, 1, 2], id='zero-in-list'),
+        pytest.param([False, True], [False, True], id='false-in-list'),
+        pytest.param(
+            {'config': {'max_retries': 0, 'name': 'agent'}},
+            {'config': {'max_retries': 0, 'name': 'agent'}},
+            id='nested-zero',
+        ),
+    ],
+)
+def test_clean_empty_preserves_falsy_values(input_val, expected):
+    """_clean_empty preserves legitimate falsy values (0, False, 0.0)."""
+    assert _clean_empty(input_val) == expected
+
+
+@pytest.mark.parametrize(
+    'input_val,expected',
+    [
+        pytest.param(
+            {'count': 0, 'label': '', 'items': []},
+            {'count': 0},
+            id='falsy-with-empties',
+        ),
+        pytest.param(
+            {'a': 0, 'b': 'hello', 'c': False, 'd': ''},
+            {'a': 0, 'b': 'hello', 'c': False},
+            id='mixed-types',
+        ),
+        pytest.param(
+            {'name': 'agent', 'retries': 0, 'tags': [], 'desc': ''},
+            {'name': 'agent', 'retries': 0},
+            id='realistic-mixed',
+        ),
+    ],
+)
+def test_clean_empty_mixed(input_val, expected):
+    """_clean_empty handles mixed empty and falsy values correctly."""
+    assert _clean_empty(input_val) == expected
+
+
+def test_clean_empty_does_not_mutate_input():
+    """_clean_empty should not mutate the original input object."""
+    original = {'a': '', 'b': 1, 'c': {'d': ''}}
+    copy = {
+        'a': '',
+        'b': 1,
+        'c': {'d': ''},
+    }
+
+    _clean_empty(original)
+
+    assert original == copy
