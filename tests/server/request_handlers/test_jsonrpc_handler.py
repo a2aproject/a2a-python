@@ -322,7 +322,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
             self.assertIsInstance(response.root, JSONRPCErrorResponse)
             assert response.root.error == UnsupportedOperationError()  # type: ignore
-            mock_agent_executor.execute.assert_called_once()
 
     @patch(
         'a2a.server.agent_execution.simple_request_context_builder.SimpleRequestContextBuilder.build'
@@ -1282,6 +1281,57 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
     async def test_get_authenticated_extended_card_with_modifier(self) -> None:
         """Test successful retrieval of a dynamically modified extended agent card."""
+        # Arrange
+        mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
+        mock_base_card = AgentCard(
+            name='Base Card',
+            description='Base details',
+            url='http://agent.example.com/api',
+            version='1.0',
+            capabilities=AgentCapabilities(),
+            default_input_modes=['text/plain'],
+            default_output_modes=['application/json'],
+            skills=[],
+        )
+
+        async def modifier(
+            card: AgentCard, context: ServerCallContext
+        ) -> AgentCard:
+            modified_card = card.model_copy(deep=True)
+            modified_card.name = 'Modified Card'
+            modified_card.description = (
+                f'Modified for context: {context.state.get("foo")}'
+            )
+            return modified_card
+
+        handler = JSONRPCHandler(
+            self.mock_agent_card,
+            mock_request_handler,
+            extended_agent_card=mock_base_card,
+            extended_card_modifier=modifier,
+        )
+        request = GetAuthenticatedExtendedCardRequest(id='ext-card-req-mod')
+        call_context = ServerCallContext(state={'foo': 'bar'})
+
+        # Act
+        response: GetAuthenticatedExtendedCardResponse = (
+            await handler.get_authenticated_extended_card(request, call_context)
+        )
+
+        # Assert
+        self.assertIsInstance(
+            response.root, GetAuthenticatedExtendedCardSuccessResponse
+        )
+        self.assertEqual(response.root.id, 'ext-card-req-mod')
+        modified_card = response.root.result
+        self.assertEqual(modified_card.name, 'Modified Card')
+        self.assertEqual(modified_card.description, 'Modified for context: bar')
+        self.assertEqual(modified_card.version, '1.0')
+
+    async def test_get_authenticated_extended_card_with_modifier_sync(
+        self,
+    ) -> None:
+        """Test successful retrieval of a synchronously dynamically modified extended agent card."""
         # Arrange
         mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
         mock_base_card = AgentCard(

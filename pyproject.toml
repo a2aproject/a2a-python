@@ -72,9 +72,10 @@ exclude = ["tests/"]
 testpaths = ["tests"]
 python_files = "test_*.py"
 python_functions = "test_*"
-addopts = "-ra --strict-markers"
+addopts = "-ra --strict-markers --dist loadgroup"
 markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
+  "xdist_group: mark a test to run in a specific sequential group for isolation",
 ]
 
 [tool.pytest-asyncio]
@@ -88,25 +89,24 @@ style = "pep440"
 dev = [
   "datamodel-code-generator>=0.30.0",
   "mypy>=1.15.0",
-  "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
   "pytest-mock>=3.14.0",
+  "pytest-xdist>=3.6.1",
   "respx>=0.20.2",
   "ruff>=0.12.8",
   "uv-dynamic-versioning>=0.8.2",
   "types-protobuf",
   "types-requests",
   "pre-commit",
-  "fastapi>=0.115.2",
-  "sse-starlette",
-  "starlette",
   "pyupgrade",
   "autoflake",
   "no_implicit_optional",
   "trio",
   "uvicorn>=0.35.0",
+  "pytest-timeout>=2.4.0",
+  "a2a-sdk[all]",
 ]
 
 [[tool.uv.index]]
@@ -114,6 +114,9 @@ name = "testpypi"
 url = "https://test.pypi.org/simple/"
 publish-url = "https://test.pypi.org/legacy/"
 explicit = true
+
+[tool.uv.sources]
+a2a-sdk = { workspace = true }
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]

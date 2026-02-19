@@ -4,7 +4,7 @@ import logging
 import traceback
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from pydantic import ValidationError
@@ -51,6 +51,7 @@ from a2a.utils.constants import (
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
+from a2a.utils.helpers import maybe_await
 
 
 logger = logging.getLogger(__name__)
@@ -63,7 +64,14 @@ if TYPE_CHECKING:
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+    try:
+        # Starlette v0.48.0
+        from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+    except ImportError:
+        from starlette.status import (  # type: ignore[no-redef]
+            HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
+        )
 
     _package_starlette_installed = True
 else:
@@ -75,7 +83,14 @@ else:
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.status import HTTP_413_REQUEST_ENTITY_TOO_LARGE
+
+        try:
+            # Starlette v0.48.0
+            from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+        except ImportError:
+            from starlette.status import (
+                HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
+            )
 
         _package_starlette_installed = True
     except ImportError:
@@ -89,7 +104,7 @@ else:
         Request = Any
         JSONResponse = Any
         Response = Any
-        HTTP_413_REQUEST_ENTITY_TOO_LARGE = Any
+        HTTP_413_CONTENT_TOO_LARGE = Any
 
 
 class StarletteUserProxy(A2AUser):
@@ -178,9 +193,10 @@ class JSONRPCApplication(ABC):
         http_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], AgentCard] | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
@@ -379,7 +395,7 @@ class JSONRPCApplication(ABC):
                 None, A2AError(root=JSONParseError(message=str(e)))
             )
         except HTTPException as e:
-            if e.status_code == HTTP_413_REQUEST_ENTITY_TOO_LARGE:
+            if e.status_code == HTTP_413_CONTENT_TOO_LARGE:
                 return self._generate_error_response(
                     request_id,
                     A2AError(
@@ -576,7 +592,7 @@ class JSONRPCApplication(ABC):
 
         card_to_serve = self.agent_card
         if self.card_modifier:
-            card_to_serve = self.card_modifier(card_to_serve)
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return JSONResponse(
             card_to_serve.model_dump(
@@ -605,7 +621,9 @@ class JSONRPCApplication(ABC):
             context = self._context_builder.build(request)
             # If no base extended card is provided, pass the public card to the modifier
             base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = self.extended_card_modifier(base_card, context)
+            card_to_serve = await maybe_await(
+                self.extended_card_modifier(base_card, context)
+            )
 
         if card_to_serve:
             return JSONResponse(

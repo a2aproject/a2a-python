@@ -23,19 +23,17 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: uv sync --locked --dev
+        run: uv sync --locked
 
       - name: Run Ruff Linter
         id: ruff-lint
-        uses: astral-sh/ruff-action@v3
+        run: uv run ruff check --output-format=github
         continue-on-error: true
 
       - name: Run Ruff Formatter
         id: ruff-format
-        uses: astral-sh/ruff-action@v3
+        run: uv run ruff format --check
         continue-on-error: true
-        with:
-          args: "format --check"
 
       - name: Run MyPy Type Checker
         id: mypy
