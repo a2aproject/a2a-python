@@ -84,7 +84,6 @@ class RESTHandler:
         task_or_message = await self.request_handler.on_message_send(
             params, context
         )
-        # Wrap the result in a SendMessageResponse
         if isinstance(task_or_message, a2a_pb2.Task):
             response = a2a_pb2.SendMessageResponse(task=task_or_message)
         else:
