@@ -1,4 +1,4 @@
-"""add_owner_to_task
+"""add_owner_to_task.
 
 Revision ID: 6419d2d130f6
 Revises:
