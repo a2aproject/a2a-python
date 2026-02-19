@@ -353,8 +353,7 @@ def _clean_empty(d: Any) -> Any:
         cleaned_dict = {k: cleaned_v for k, v in d.items() if (cleaned_v := _clean_empty(v)) is not None}
         return cleaned_dict or None
     if isinstance(d, list):
-        cleaned_list = [_clean_empty(v) for v in d]
-        cleaned_list = [v for v in cleaned_list if v is not None]
+        cleaned_list = [cleaned_v for v in d if (cleaned_v := _clean_empty(v)) is not None]
         return cleaned_list or None
     if isinstance(d, str) and not d:
         return None
