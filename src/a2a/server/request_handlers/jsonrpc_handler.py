@@ -26,7 +26,6 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     ListTaskPushNotificationConfigRequest,
     ListTasksRequest,
-    Message,
     SendMessageRequest,
     SendMessageResponse,
     SubscribeToTaskRequest,
@@ -171,15 +170,10 @@ class JSONRPCHandler:
             task_or_message = await self.request_handler.on_message_send(
                 request, context
             )
-            # Build result based on return type
-            response = SendMessageResponse()
             if isinstance(task_or_message, Task):
-                response.task.CopyFrom(task_or_message)
-            elif isinstance(task_or_message, Message):
-                response.message.CopyFrom(task_or_message)
+                response = SendMessageResponse(task=task_or_message)
             else:
-                # Should we handle this fallthrough?
-                pass
+                response = SendMessageResponse(message=task_or_message)
 
             result = MessageToDict(response)
             return _build_success_response(request_id, result)
