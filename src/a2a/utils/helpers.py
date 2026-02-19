@@ -350,13 +350,13 @@ def are_modalities_compatible(
 def _clean_empty(d: Any) -> Any:
     """Recursively remove empty strings, lists and dicts from a dictionary."""
     if isinstance(d, dict):
-        cleaned = {k: _clean_empty(v) for k, v in d.items()}
-        cleaned = {k: v for k, v in cleaned.items() if v is not None}
-        return cleaned or None
+        cleaned_dict = {k: _clean_empty(v) for k, v in d.items()}
+        cleaned_dict = {k: v for k, v in cleaned_dict.items() if v is not None}
+        return cleaned_dict or None
     if isinstance(d, list):
-        cleaned = [_clean_empty(v) for v in d]
-        cleaned = [v for v in cleaned if v is not None]
-        return cleaned or None
+        cleaned_list = [_clean_empty(v) for v in d]
+        cleaned_list = [v for v in cleaned_list if v is not None]
+        return cleaned_list or None
     if isinstance(d, str) and not d:
         return None
     return d
