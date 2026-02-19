@@ -6,11 +6,11 @@ from unittest.mock import patch
 import pytest
 
 from a2a.types import (
-    Artifact,
+    AgentCapabilities,
     AgentCard,
     AgentCardSignature,
-    AgentCapabilities,
     AgentSkill,
+    Artifact,
     Message,
     MessageSendParams,
     Part,
@@ -22,13 +22,13 @@ from a2a.types import (
 )
 from a2a.utils.errors import ServerError
 from a2a.utils.helpers import (
+    _clean_empty,
     append_artifact_to_task,
     are_modalities_compatible,
     build_text_artifact,
+    canonicalize_agent_card,
     create_task_obj,
     validate,
-    _clean_empty,
-    canonicalize_agent_card,
 )
 
 
@@ -385,13 +385,15 @@ def test_canonicalize_agent_card():
 
 def test_canonicalize_agent_card_preserves_false_capability():
     """Regression #692: streaming=False must not be stripped from canonical JSON."""
-    card = AgentCard(**{
-        **SAMPLE_AGENT_CARD,
-        'capabilities': AgentCapabilities(
-            streaming=False,
-            push_notifications=True,
-        ),
-    })
+    card = AgentCard(
+        **{
+            **SAMPLE_AGENT_CARD,
+            'capabilities': AgentCapabilities(
+                streaming=False,
+                push_notifications=True,
+            ),
+        }
+    )
     result = canonicalize_agent_card(card)
     assert '"streaming":false' in result
 
