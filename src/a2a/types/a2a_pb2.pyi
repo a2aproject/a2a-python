@@ -299,16 +299,14 @@ class AgentCardSignature(_message.Message):
     def __init__(self, protected: _Optional[str] = ..., signature: _Optional[str] = ..., header: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskPushNotificationConfig(_message.Message):
-    __slots__ = ("tenant", "id", "task_id", "push_notification_config")
+    __slots__ = ("tenant", "task_id", "push_notification_config")
     TENANT_FIELD_NUMBER: _ClassVar[int]
-    ID_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
     PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     tenant: str
-    id: str
     task_id: str
     push_notification_config: PushNotificationConfig
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., task_id: _Optional[str] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ("list",)
@@ -547,12 +545,14 @@ class ListTasksResponse(_message.Message):
     def __init__(self, tasks: _Optional[_Iterable[_Union[Task, _Mapping]]] = ..., next_page_token: _Optional[str] = ..., page_size: _Optional[int] = ..., total_size: _Optional[int] = ...) -> None: ...
 
 class CancelTaskRequest(_message.Message):
-    __slots__ = ("tenant", "id")
+    __slots__ = ("tenant", "id", "metadata")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     ID_FIELD_NUMBER: _ClassVar[int]
+    METADATA_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     id: str
-    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
+    metadata: _struct_pb2.Struct
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class GetTaskPushNotificationConfigRequest(_message.Message):
     __slots__ = ("tenant", "task_id", "id")
@@ -575,16 +575,14 @@ class DeleteTaskPushNotificationConfigRequest(_message.Message):
     def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
 class CreateTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "task_id", "config_id", "config")
+    __slots__ = ("tenant", "task_id", "config")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
-    CONFIG_ID_FIELD_NUMBER: _ClassVar[int]
     CONFIG_FIELD_NUMBER: _ClassVar[int]
     tenant: str
     task_id: str
-    config_id: str
     config: PushNotificationConfig
-    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., config_id: _Optional[str] = ..., config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
+    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
 
 class SubscribeToTaskRequest(_message.Message):
     __slots__ = ("tenant", "id")
@@ -594,7 +592,7 @@ class SubscribeToTaskRequest(_message.Message):
     id: str
     def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
 
-class ListTaskPushNotificationConfigRequest(_message.Message):
+class ListTaskPushNotificationConfigsRequest(_message.Message):
     __slots__ = ("tenant", "task_id", "page_size", "page_token")
     TENANT_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
@@ -632,7 +630,7 @@ class StreamResponse(_message.Message):
     artifact_update: TaskArtifactUpdateEvent
     def __init__(self, task: _Optional[_Union[Task, _Mapping]] = ..., message: _Optional[_Union[Message, _Mapping]] = ..., status_update: _Optional[_Union[TaskStatusUpdateEvent, _Mapping]] = ..., artifact_update: _Optional[_Union[TaskArtifactUpdateEvent, _Mapping]] = ...) -> None: ...
 
-class ListTaskPushNotificationConfigResponse(_message.Message):
+class ListTaskPushNotificationConfigsResponse(_message.Message):
     __slots__ = ("configs", "next_page_token")
     CONFIGS_FIELD_NUMBER: _ClassVar[int]
     NEXT_PAGE_TOKEN_FIELD_NUMBER: _ClassVar[int]

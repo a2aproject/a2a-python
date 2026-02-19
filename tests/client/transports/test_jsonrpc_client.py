@@ -358,7 +358,6 @@ class TestTaskCallback:
             'id': '1',
             'result': {
                 'task_id': f'{task_id}',
-                'id': 'config-1',
             },
         }
         mock_response.raise_for_status = MagicMock()
