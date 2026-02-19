@@ -261,7 +261,8 @@ class DatabaseTaskStore(TaskStore):
             return a2a_pb2.ListTasksResponse(
                 tasks=tasks[:page_size],
                 total_size=total_count,
-                next_page_token=next_page_token or '',
+                next_page_token=next_page_token,
+                page_size=page_size,
             )
 
     async def delete(

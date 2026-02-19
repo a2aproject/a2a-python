@@ -137,25 +137,15 @@ class DefaultRequestHandler(RequestHandler):
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
         page = await self.task_store.list(params, context)
-        processed_tasks = []
         for task in page.tasks:
-            processed_task = task
-
             if not params.include_artifacts:
-                new_task = Task()
-                new_task.CopyFrom(processed_task)
-                new_task.ClearField('artifacts')
-                processed_task = new_task
+                task.ClearField('artifacts')
 
-            if params.history_length > 0:
-                processed_task = apply_history_length(
-                    processed_task, params.history_length
-                )
-            processed_tasks.append(processed_task)
-        return ListTasksResponse(
-            next_page_token=page.next_page_token or '',
-            tasks=processed_tasks,
-        )
+            updated_task = apply_history_length(task, params.history_length)
+            if updated_task is not task:
+                task.CopyFrom(updated_task)
+
+        return page
 
     async def on_cancel_task(
         self,

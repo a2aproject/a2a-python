@@ -106,7 +106,8 @@ class InMemoryTaskStore(TaskStore):
                     break
             if not valid_token:
                 raise ValueError(f'Invalid page token: {params.page_token}')
-        end_idx = start_idx + (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
+        page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
+        end_idx = start_idx + page_size
         next_page_token = (
             encode_page_token(tasks[end_idx].id)
             if end_idx < total_size
@@ -115,9 +116,10 @@ class InMemoryTaskStore(TaskStore):
         tasks = tasks[start_idx:end_idx]
 
         return a2a_pb2.ListTasksResponse(
-            next_page_token=next_page_token or '',
+            next_page_token=next_page_token,
             tasks=tasks,
             total_size=total_size,
+            page_size=page_size,
         )
 
     async def delete(

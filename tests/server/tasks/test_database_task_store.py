@@ -30,6 +30,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
 # DSNs for different databases
@@ -305,6 +306,7 @@ async def test_list_tasks(
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
     assert page.next_page_token == (next_page_token or '')
+    assert page.page_size == (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
 
     # Cleanup
     for task in tasks_to_create:
