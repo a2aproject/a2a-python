@@ -23,8 +23,8 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     HTTPAuthSecurityScheme,
     ImplicitOAuthFlow,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -78,6 +78,7 @@ A2ARequest = (
     | GetTaskPushNotificationConfigRequest
     | SubscribeToTaskRequest
     | GetExtendedAgentCardRequest
+    | ListTaskPushNotificationConfigsRequest
 )
 
 
@@ -113,8 +114,8 @@ __all__ = [
     'InvalidAgentResponseError',
     'InvalidParamsError',
     'InvalidRequestError',
-    'ListTaskPushNotificationConfigRequest',
-    'ListTaskPushNotificationConfigResponse',
+    'ListTaskPushNotificationConfigsRequest',
+    'ListTaskPushNotificationConfigsResponse',
     'ListTasksRequest',
     'ListTasksResponse',
     'Message',

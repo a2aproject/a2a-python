@@ -24,7 +24,7 @@ from a2a.types.a2a_pb2 import (
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     SendMessageRequest,
     SendMessageResponse,
@@ -403,15 +403,15 @@ class JSONRPCHandler:
                 request_id, e.error if e.error else InternalError()
             )
 
-    async def list_push_notification_config(
+    async def list_push_notification_configs(
         self,
-        request: ListTaskPushNotificationConfigRequest,
+        request: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext | None = None,
     ) -> dict[str, Any]:
-        """Handles the 'ListTaskPushNotificationConfig' JSON-RPC method.
+        """Handles the 'ListTaskPushNotificationConfigs' JSON-RPC method.
 
         Args:
-            request: The incoming `ListTaskPushNotificationConfigRequest` object.
+            request: The incoming `ListTaskPushNotificationConfigsRequest` object.
             context: Context provided by the server.
 
         Returns:
@@ -419,10 +419,10 @@ class JSONRPCHandler:
         """
         request_id = self._get_request_id(context)
         try:
-            response = await self.request_handler.on_list_task_push_notification_config(
+            response = await self.request_handler.on_list_task_push_notification_configs(
                 request, context
             )
-            # response is a ListTaskPushNotificationConfigResponse proto
+            # response is a ListTaskPushNotificationConfigsResponse proto
             result = MessageToDict(response, preserving_proto_field_name=False)
             return _build_success_response(request_id, result)
         except ServerError as e:

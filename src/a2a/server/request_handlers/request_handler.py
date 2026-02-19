@@ -9,8 +9,8 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -120,7 +120,7 @@ class RequestHandler(ABC):
             `Event` objects from the agent's execution.
 
         Raises:
-             ServerError(UnsupportedOperationError): By default, if not implemented.
+            ServerError(UnsupportedOperationError): By default, if not implemented.
         """
         raise ServerError(error=UnsupportedOperationError())
         yield
@@ -185,12 +185,12 @@ class RequestHandler(ABC):
         yield
 
     @abstractmethod
-    async def on_list_task_push_notification_config(
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigRequest,
+        params: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
-        """Handles the 'ListTaskPushNotificationConfig' method.
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Handles the 'ListTaskPushNotificationConfigs' method.
 
         Retrieves the current push notification configurations for a task.
 
