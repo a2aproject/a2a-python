@@ -1,5 +1,5 @@
 version = 1
-revision = 3
+revision = 2
 requires-python = ">=3.10"
 resolution-markers = [
     "python_full_version >= '3.13'",
@@ -15,6 +15,7 @@ dependencies = [
     { name = "httpx-sse" },
     { name = "protobuf" },
     { name = "pydantic" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -124,6 +125,7 @@ requires-dist = [
     { name = "sse-starlette", marker = "extra == 'http-server'" },
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
+    { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 provides-extras = ["all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
