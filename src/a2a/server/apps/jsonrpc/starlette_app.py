@@ -61,6 +61,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
+        stream_send_timeout: float | None = None,
     ) -> None:
         """Initializes the A2AStarletteApplication.
 
@@ -80,6 +81,10 @@ class A2AStarletteApplication(JSONRPCApplication):
               call context.
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
+            stream_send_timeout: The timeout in seconds for sending events in
+              streaming responses. Defaults to `None`, which disables the timeout.
+              This changes the default behavior from using Starlette's 5-second
+              default. Set a float value to specify a timeout.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -95,6 +100,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
             max_content_length=max_content_length,
+            stream_send_timeout=stream_send_timeout,
         )
 
     def routes(
