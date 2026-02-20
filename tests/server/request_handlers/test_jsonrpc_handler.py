@@ -703,7 +703,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             collected_events: list[Any] = []
             async for event in response:
                 collected_events.append(event)
-            assert len(collected_events) == len(events)
+            assert (
+                len(collected_events) == len(events) + 1
+            )  # First event is task itself
             assert mock_task.history is not None and len(mock_task.history) == 0
 
     async def test_on_subscribe_no_existing_task_error(self) -> None:

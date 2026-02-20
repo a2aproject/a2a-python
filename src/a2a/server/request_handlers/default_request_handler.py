@@ -552,10 +552,14 @@ class DefaultRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
-                error=InvalidParamsError(
+                error=UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
             )
+
+        # The operation MUST return a Task object as the first event in the stream
+        # https://a2a-protocol.org/latest/specification/#316-subscribe-to-task
+        yield task
 
         task_manager = TaskManager(
             task_id=task.id,
