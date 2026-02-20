@@ -160,17 +160,20 @@ class InMemoryTaskStore(TaskStore):
                 task_id,
                 owner,
             )
-            if owner in self.tasks and task_id in self.tasks[owner]:
-                del self.tasks[owner][task_id]
-                logger.debug(
-                    'Task %s deleted successfully for owner %s.', task_id, owner
-                )
-                if not self.tasks[owner]:
-                    del self.tasks[owner]
-                    logger.debug('Removed empty owner %s from store.', owner)
-            else:
+
+            owner_tasks = self.tasks.get(owner, {})
+            if task_id not in owner_tasks:
                 logger.warning(
                     'Attempted to delete nonexistent task with id: %s for owner %s',
                     task_id,
                     owner,
                 )
+                return
+
+            del owner_tasks[task_id]
+            logger.debug(
+                'Task %s deleted successfully for owner %s.', task_id, owner
+            )
+            if not owner_tasks:
+                del self.tasks[owner]
+                logger.debug('Removed empty owner %s from store.', owner)
