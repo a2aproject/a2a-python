@@ -1502,7 +1502,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     first_subscribe_event = await anext(resub_gen)
     assert first_subscribe_event == task_for_resub
 
-    received = await resub_gen.__anext__()
+    received = await anext(resub_gen)
     assert received == second_event
 
     # Finish producer to allow cleanup paths to complete
