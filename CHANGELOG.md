@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.24](https://github.com/a2aproject/a2a-python/compare/v0.3.23...v0.3.24) (2026-02-20)
+
+
+### Bug Fixes
+
+* **core:** preserve legitimate falsy values in _clean_empty ([#713](https://github.com/a2aproject/a2a-python/issues/713)) ([7632f55](https://github.com/a2aproject/a2a-python/commit/7632f55572641d8fbc353ee08ef2b1f6b75c38b6))
+* **deps:** `DeprecationWarning` on `HTTP_413_REQUEST_ENTITY_TOO_LARGE` ([#693](https://github.com/a2aproject/a2a-python/issues/693)) ([9968f9c](https://github.com/a2aproject/a2a-python/commit/9968f9c07f105bae8a6b296aeb6dea873b3b88b0))
+
 ## [0.3.23](https://github.com/a2aproject/a2a-python/compare/v0.3.22...v0.3.23) (2026-02-13)
 
 
