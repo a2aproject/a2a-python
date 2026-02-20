@@ -6,9 +6,9 @@ from collections.abc import AsyncIterator, Callable, Coroutine
 from types import TracebackType
 from typing import Any
 
-from typing_extensions import Self
-
 import httpx
+
+from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
