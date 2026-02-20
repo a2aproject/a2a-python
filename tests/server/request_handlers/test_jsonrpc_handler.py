@@ -554,7 +554,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
         mock_push_notification_store.set_info.assert_called_once_with(
-            mock_task.id, push_config
+            mock_task.id, push_config, None
         )
 
     async def test_get_push_notification_success(self) -> None:
@@ -601,7 +601,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         push_notification_store = InMemoryPushNotificationConfigStore()
         push_notification_sender = BasePushNotificationSender(
-            mock_httpx_client, push_notification_store
+            mock_httpx_client, push_notification_store, ServerCallContext()
         )
         request_handler = DefaultRequestHandler(
             mock_agent_executor,

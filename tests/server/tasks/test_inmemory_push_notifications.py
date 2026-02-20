@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
 # logging.disable(logging.CRITICAL)
 
 
-def create_sample_task(
+def _create_sample_task(
     task_id: str = 'task123',
     status_state: TaskState = TaskState.TASK_STATE_COMPLETED,
 ) -> Task:
@@ -37,7 +37,7 @@ def create_sample_task(
     )
 
 
-def create_sample_push_config(
+def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
@@ -60,12 +60,17 @@ class SampleUser(User):
         return self._user_name
 
 
+MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
+
+
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         self.config_store = InMemoryPushNotificationConfigStore()
         self.notifier = BasePushNotificationSender(
-            httpx_client=self.mock_httpx_client, config_store=self.config_store
+            httpx_client=self.mock_httpx_client,
+            config_store=self.config_store,
+            context=MINIMAL_CALL_CONTEXT,
         )  # Corrected argument name
 
     def test_constructor_stores_client(self) -> None:
@@ -73,26 +78,34 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_info_adds_new_config(self) -> None:
         task_id = 'task_new'
-        config = create_sample_push_config(url='http://new.url/callback')
+        config = _create_sample_push_config(url='http://new.url/callback')
 
-        await self.config_store.set_info(task_id, config)
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(retrieved, [config])
 
     async def test_set_info_appends_to_existing_config(self) -> None:
         task_id = 'task_update'
-        initial_config = create_sample_push_config(
+        initial_config = _create_sample_push_config(
             url='http://initial.url/callback', config_id='cfg_initial'
         )
-        await self.config_store.set_info(task_id, initial_config)
+        await self.config_store.set_info(
+            task_id, initial_config, MINIMAL_CALL_CONTEXT
+        )
 
-        updated_config = create_sample_push_config(
+        updated_config = _create_sample_push_config(
             url='http://updated.url/callback', config_id='cfg_updated'
         )
-        await self.config_store.set_info(task_id, updated_config)
+        await self.config_store.set_info(
+            task_id, updated_config, MINIMAL_CALL_CONTEXT
+        )
 
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(len(retrieved), 2)
         self.assertEqual(retrieved[0], initial_config)
         self.assertEqual(retrieved[1], updated_config)
@@ -102,62 +115,84 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         initial_config = PushNotificationConfig(
             url='http://initial.url/callback'
         )
-        await self.config_store.set_info(task_id, initial_config)
+        await self.config_store.set_info(
+            task_id, initial_config, MINIMAL_CALL_CONTEXT
+        )
 
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         assert retrieved[0].id == task_id
 
         updated_config = PushNotificationConfig(
             url='http://initial.url/callback_new'
         )
-        await self.config_store.set_info(task_id, updated_config)
+        await self.config_store.set_info(
+            task_id, updated_config, MINIMAL_CALL_CONTEXT
+        )
 
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         assert len(retrieved) == 1
         self.assertEqual(retrieved[0].url, updated_config.url)
 
     async def test_get_info_existing_config(self) -> None:
         task_id = 'task_get_exist'
-        config = create_sample_push_config(url='http://get.this/callback')
-        await self.config_store.set_info(task_id, config)
+        config = _create_sample_push_config(url='http://get.this/callback')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
-        retrieved_config = await self.config_store.get_info(task_id)
+        retrieved_config = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(retrieved_config, [config])
 
     async def test_get_info_non_existent_config(self) -> None:
         task_id = 'task_get_non_exist'
-        retrieved_config = await self.config_store.get_info(task_id)
+        retrieved_config = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         assert retrieved_config == []
 
     async def test_delete_info_existing_config(self) -> None:
         task_id = 'task_delete_exist'
-        config = create_sample_push_config(url='http://delete.this/callback')
-        await self.config_store.set_info(task_id, config)
+        config = _create_sample_push_config(url='http://delete.this/callback')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(len(retrieved), 1)
 
-        await self.config_store.delete_info(task_id, config_id=config.id)
-        retrieved = await self.config_store.get_info(task_id)
+        await self.config_store.delete_info(
+            task_id, config_id=config.id, context=MINIMAL_CALL_CONTEXT
+        )
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(len(retrieved), 0)
 
     async def test_delete_info_non_existent_config(self) -> None:
         task_id = 'task_delete_non_exist'
         # Ensure it doesn't raise an error
         try:
-            await self.config_store.delete_info(task_id)
+            await self.config_store.delete_info(
+                task_id, context=MINIMAL_CALL_CONTEXT
+            )
         except Exception as e:
             self.fail(
                 f'delete_info raised {e} unexpectedly for nonexistent task_id'
             )
-        retrieved = await self.config_store.get_info(task_id)
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.assertEqual(len(retrieved), 0)
 
     async def test_send_notification_success(self) -> None:
         task_id = 'task_send_success'
-        task_data = create_sample_task(task_id=task_id)
-        config = create_sample_push_config(url='http://notify.me/here')
-        await self.config_store.set_info(task_id, config)
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url='http://notify.me/here')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         # Mock the post call to simulate success
         mock_response = AsyncMock(spec=httpx.Response)
@@ -180,11 +215,11 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_send_notification_with_token_success(self) -> None:
         task_id = 'task_send_success'
-        task_data = create_sample_task(task_id=task_id)
-        config = create_sample_push_config(
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(
             url='http://notify.me/here', token='unique_token'
         )
-        await self.config_store.set_info(task_id, config)
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         # Mock the post call to simulate success
         mock_response = AsyncMock(spec=httpx.Response)
@@ -211,7 +246,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
-        task_data = create_sample_task(task_id=task_id)
+        task_data = _create_sample_task(task_id=task_id)
 
         await self.notifier.send_notification(task_data)  # Pass only task_data
 
@@ -222,9 +257,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self, mock_logger: MagicMock
     ) -> None:
         task_id = 'task_send_http_err'
-        task_data = create_sample_task(task_id=task_id)
-        config = create_sample_push_config(url='http://notify.me/http_error')
-        await self.config_store.set_info(task_id, config)
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url='http://notify.me/http_error')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         mock_response = MagicMock(
             spec=httpx.Response
@@ -252,9 +287,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self, mock_logger: MagicMock
     ) -> None:
         task_id = 'task_send_req_err'
-        task_data = create_sample_task(task_id=task_id)
-        config = create_sample_push_config(url='http://notify.me/req_error')
-        await self.config_store.set_info(task_id, config)
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url='http://notify.me/req_error')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         request_error = httpx.RequestError('Network issue', request=MagicMock())
         self.mock_httpx_client.post.side_effect = request_error
@@ -279,11 +314,11 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         still works even if the config has an authentication field set.
         """
         task_id = 'task_send_auth'
-        task_data = create_sample_task(task_id=task_id)
-        config = create_sample_push_config(url='http://notify.me/auth')
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url='http://notify.me/auth')
         # The current implementation doesn't use the authentication field
         # It only supports token-based auth via the token field
-        await self.config_store.set_info(task_id, config)
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -367,14 +402,14 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
         # Test DELETE_INFO
         # User 2 deleting User 1's config should not work
-        await self.config_store.delete_info('task1', 't1-u1-c1', context_user2)
+        await self.config_store.delete_info('task1', context_user2, 't1-u1-c1')
         u1_task1_configs = await self.config_store.get_info(
             'task1', context_user1
         )
         self.assertEqual(len(u1_task1_configs), 2)
 
         # User 1 deleting their own config
-        await self.config_store.delete_info('task1', 't1-u1-c1', context_user1)
+        await self.config_store.delete_info('task1', context_user1, 't1-u1-c1')
         u1_task1_configs = await self.config_store.get_info(
             'task1', context_user1
         )

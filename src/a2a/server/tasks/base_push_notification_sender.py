@@ -5,6 +5,7 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict
 
+from a2a.server.context import ServerCallContext
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
@@ -22,19 +23,24 @@ class BasePushNotificationSender(PushNotificationSender):
         self,
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
+        context: ServerCallContext,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
         Args:
             httpx_client: An async HTTP client instance to send notifications.
             config_store: A PushNotificationConfigStore instance to retrieve configurations.
+            context: The `ServerCallContext` that this push notification is produced under.
         """
         self._client = httpx_client
         self._config_store = config_store
+        self._call_context: ServerCallContext = context
 
     async def send_notification(self, task: Task) -> None:
         """Sends a push notification for a task if configuration exists."""
-        push_configs = await self._config_store.get_info(task.id)
+        push_configs = await self._config_store.get_info(
+            task.id, self._call_context
+        )
         if not push_configs:
             return
 

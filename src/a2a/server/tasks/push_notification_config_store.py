@@ -12,7 +12,7 @@ class PushNotificationConfigStore(ABC):
         self,
         task_id: str,
         notification_config: PushNotificationConfig,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
 
@@ -20,7 +20,7 @@ class PushNotificationConfigStore(ABC):
     async def get_info(
         self,
         task_id: str,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> list[PushNotificationConfig]:
         """Retrieves the push notification configuration for a task."""
 
@@ -28,7 +28,7 @@ class PushNotificationConfigStore(ABC):
     async def delete_info(
         self,
         task_id: str,
+        context: ServerCallContext,
         config_id: str | None = None,
-        context: ServerCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a task."""

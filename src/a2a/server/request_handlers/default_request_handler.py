@@ -228,7 +228,7 @@ class DefaultRequestHandler(RequestHandler):
     async def _setup_message_execution(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
         """Common setup logic for both streaming and non-streaming message handling.
 
@@ -284,7 +284,7 @@ class DefaultRequestHandler(RequestHandler):
             and params.configuration.push_notification_config
         ):
             await self._push_config_store.set_info(
-                task_id, params.configuration.push_notification_config
+                task_id, params.configuration.push_notification_config, context
             )
 
         queue = await self._queue_manager.create_or_tap(task_id)
@@ -498,6 +498,7 @@ class DefaultRequestHandler(RequestHandler):
         await self._push_config_store.set_info(
             task_id,
             params.config,
+            context,
         )
 
         return TaskPushNotificationConfig(
@@ -524,7 +525,7 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(error=TaskNotFoundError())
 
         push_notification_configs: list[PushNotificationConfig] = (
-            await self._push_config_store.get_info(task_id) or []
+            await self._push_config_store.get_info(task_id, context) or []
         )
 
         for config in push_notification_configs:
@@ -596,7 +597,7 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(error=TaskNotFoundError())
 
         push_notification_config_list = await self._push_config_store.get_info(
-            task_id
+            task_id, context
         )
 
         return ListTaskPushNotificationConfigsResponse(
@@ -627,4 +628,4 @@ class DefaultRequestHandler(RequestHandler):
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
-        await self._push_config_store.delete_info(task_id, config_id)
+        await self._push_config_store.delete_info(task_id, context, config_id)

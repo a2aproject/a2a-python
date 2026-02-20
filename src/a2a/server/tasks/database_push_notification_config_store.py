@@ -241,7 +241,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         self,
         task_id: str,
         notification_config: PushNotificationConfig,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
@@ -266,7 +266,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     async def get_info(
         self,
         task_id: str,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> list[PushNotificationConfig]:
         """Retrieves all push notification configurations for a task, for the given owner."""
         await self._ensure_initialized()
@@ -297,8 +297,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     async def delete_info(
         self,
         task_id: str,
+        context: ServerCallContext,
         config_id: str | None = None,
-        context: ServerCallContext | None = None,
     ) -> None:
         """Deletes push notification configurations for a task.
 

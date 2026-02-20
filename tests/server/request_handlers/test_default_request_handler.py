@@ -546,6 +546,7 @@ async def test_on_message_send_with_push_notification():
         lambda self: mock_current_result()
     )
 
+    context = create_server_call_context()
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -560,12 +561,10 @@ async def test_on_message_send_with_push_notification():
             return_value=sample_initial_task,
         ),
     ):  # Ensure task object is returned
-        await request_handler.on_message_send(
-            params, create_server_call_context()
-        )
+        await request_handler.on_message_send(params, context)
 
     mock_push_notification_store.set_info.assert_awaited_once_with(
-        task_id, push_config
+        task_id, push_config, context
     )
     # Other assertions for full flow if needed (e.g., agent execution)
     mock_agent_executor.execute.assert_awaited_once()
@@ -665,6 +664,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         mock_consume_and_break_on_interrupt
     )
 
+    context = create_server_call_context()
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -680,9 +680,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         ),
     ):
         # Execute the non-blocking request
-        result = await request_handler.on_message_send(
-            params, create_server_call_context()
-        )
+        result = await request_handler.on_message_send(params, context)
 
     # Verify the result is the initial task (non-blocking behavior)
     assert result == initial_task
@@ -700,7 +698,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
 
     # Verify that the push notification config was stored
     mock_push_notification_store.set_info.assert_awaited_once_with(
-        task_id, push_config
+        task_id, push_config, context
     )
 
 
@@ -763,6 +761,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         lambda self: mock_current_result()
     )
 
+    context = create_server_call_context()
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -773,12 +772,10 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
             return_value=None,
         ),
     ):
-        await request_handler.on_message_send(
-            params, create_server_call_context()
-        )
+        await request_handler.on_message_send(params, context)
 
     mock_push_notification_store.set_info.assert_awaited_once_with(
-        task_id, push_config
+        task_id, push_config, context
     )
     # Other assertions for full flow if needed (e.g., agent execution)
     mock_agent_executor.execute.assert_awaited_once()
@@ -1382,6 +1379,7 @@ async def test_on_message_send_stream_with_push_notification():
         side_effect=[get_current_result_coro1(), get_current_result_coro2()]
     )
 
+    context = create_server_call_context()
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -1397,16 +1395,16 @@ async def test_on_message_send_stream_with_push_notification():
         ),
     ):
         # Consume the stream
-        async for _ in request_handler.on_message_send_stream(
-            params, create_server_call_context()
-        ):
+        async for _ in request_handler.on_message_send_stream(params, context):
             pass
 
     await asyncio.wait_for(execute_called.wait(), timeout=0.1)
 
     # Assertions
     # 1. set_info called once at the beginning if task exists (or after task is created from message)
-    mock_push_config_store.set_info.assert_any_call(task_id, push_config)
+    mock_push_config_store.set_info.assert_any_call(
+        task_id, push_config, context
+    )
 
     # 2. send_notification called for each task event yielded by aggregator
     assert mock_push_sender.send_notification.await_count == 2
@@ -2082,7 +2080,9 @@ async def test_get_task_push_notification_config_info_not_found():
         exc_info.value.error, InternalError
     )  # Current code raises InternalError
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
-    mock_push_store.get_info.assert_awaited_once_with('non_existent_task')
+    mock_push_store.get_info.assert_awaited_once_with(
+        'non_existent_task', context
+    )
 
 
 @pytest.mark.asyncio
@@ -2236,7 +2236,7 @@ async def test_on_message_send_stream():
     async def consume_stream():
         events = []
         async for event in request_handler.on_message_send_stream(
-            message_params
+            message_params, create_server_call_context()
         ):
             events.append(event)
             if len(events) >= 3:
@@ -2340,8 +2340,9 @@ async def test_list_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('task_1', push_config1)
-    await push_store.set_info('task_1', push_config2)
+    context = create_server_call_context()
+    await push_store.set_info('task_1', push_config1, context)
+    await push_store.set_info('task_1', push_config2, context)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
@@ -2467,6 +2468,7 @@ async def test_delete_no_task_push_notification_config_info():
     await push_store.set_info(
         'task_2',
         PushNotificationConfig(id='config_1', url='http://example.com'),
+        create_server_call_context(),
     )
 
     request_handler = DefaultRequestHandler(
@@ -2509,9 +2511,10 @@ async def test_delete_task_push_notification_config_info_with_config():
     )
 
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('task_1', push_config1)
-    await push_store.set_info('task_1', push_config2)
-    await push_store.set_info('task_2', push_config1)
+    context = create_server_call_context()
+    await push_store.set_info('task_1', push_config1, context)
+    await push_store.set_info('task_1', push_config2, context)
+    await push_store.set_info('task_2', push_config1, context)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
@@ -2550,8 +2553,9 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
 
     # insertion without id should replace the existing config
     push_store = InMemoryPushNotificationConfigStore()
-    await push_store.set_info('task_1', push_config)
-    await push_store.set_info('task_1', push_config)
+    context = create_server_call_context()
+    await push_store.set_info('task_1', push_config, context)
+    await push_store.set_info('task_1', push_config, context)
 
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),

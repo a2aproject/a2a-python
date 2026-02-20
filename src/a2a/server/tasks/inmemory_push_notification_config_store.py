@@ -36,7 +36,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         self,
         task_id: str,
         notification_config: PushNotificationConfig,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
@@ -65,7 +65,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     async def get_info(
         self,
         task_id: str,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> list[PushNotificationConfig]:
         """Retrieves all push notification configurations for a task from memory, for the given owner."""
         owner = self.owner_resolver(context)
@@ -78,8 +78,8 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     async def delete_info(
         self,
         task_id: str,
+        context: ServerCallContext,
         config_id: str | None = None,
-        context: ServerCallContext | None = None,
     ) -> None:
         """Deletes push notification configurations for a task from memory.
 
