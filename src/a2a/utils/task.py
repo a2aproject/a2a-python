@@ -107,18 +107,18 @@ def apply_history_length(
 
     Returns:
         A new task object with limited history
+
+    See Also:
+        https://a2a-protocol.org/latest/specification/#324-history-length-semantics
     """
-    if config is None:
-        return task
-
-    # See https://a2a-protocol.org/latest/specification/#324-history-length-semantics
-
-    if not config.HasField('history_length'):
+    if config is None or not config.HasField('history_length'):
         return task
 
     history_length = config.history_length
 
     if history_length == 0:
+        if not task.history:
+            return task
         task_copy = Task()
         task_copy.CopyFrom(task)
         task_copy.ClearField('history')
