@@ -25,9 +25,12 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -377,6 +380,69 @@ class JsonRpcTransport(ClientTransport):
             json_rpc_response.result, TaskPushNotificationConfig()
         )
         return response
+
+    async def list_task_callback(
+        self,
+        request: ListTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Lists push notification configurations for a specific task."""
+        rpc_request = JSONRPC20Request(
+            method='ListTaskPushNotificationConfig',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4()),
+        )
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
+        payload, modified_kwargs = await self._apply_interceptors(
+            'ListTaskPushNotificationConfig',
+            cast('dict[str, Any]', rpc_request.data),
+            modified_kwargs,
+            context,
+        )
+        response_data = await self._send_request(payload, modified_kwargs)
+        json_rpc_response = JSONRPC20Response(**response_data)
+        if json_rpc_response.error:
+            raise A2AClientJSONRPCError(json_rpc_response.error)
+        response: ListTaskPushNotificationConfigResponse = (
+            json_format.ParseDict(
+                json_rpc_response.result,
+                ListTaskPushNotificationConfigResponse(),
+            )
+        )
+        return response
+
+    async def delete_task_callback(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
+        rpc_request = JSONRPC20Request(
+            method='DeleteTaskPushNotificationConfig',
+            params=json_format.MessageToDict(request),
+            _id=str(uuid4()),
+        )
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
+        payload, modified_kwargs = await self._apply_interceptors(
+            'DeleteTaskPushNotificationConfig',
+            cast('dict[str, Any]', rpc_request.data),
+            modified_kwargs,
+            context,
+        )
+        response_data = await self._send_request(payload, modified_kwargs)
+        json_rpc_response = JSONRPC20Response(**response_data)
+        if json_rpc_response.error:
+            raise A2AClientJSONRPCError(json_rpc_response.error)
 
     async def subscribe(
         self,

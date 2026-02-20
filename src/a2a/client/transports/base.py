@@ -9,8 +9,11 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -109,6 +112,26 @@ class ClientTransport(ABC):
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
+
+    @abstractmethod
+    async def list_task_callback(
+        self,
+        request: ListTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigResponse:
+        """Lists push notification configurations for a specific task."""
+
+    @abstractmethod
+    async def delete_task_callback(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
 
     @abstractmethod
     async def subscribe(

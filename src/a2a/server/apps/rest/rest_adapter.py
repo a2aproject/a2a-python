@@ -235,6 +235,12 @@ class RESTAdapter:
                 self._handle_request, self.handler.get_push_notification
             ),
             (
+                '/v1/tasks/{id}/pushNotificationConfigs/{push_id}',
+                'DELETE',
+            ): functools.partial(
+                self._handle_request, self.handler.delete_push_notification
+            ),
+            (
                 '/v1/tasks/{id}/pushNotificationConfigs',
                 'POST',
             ): functools.partial(
