@@ -55,16 +55,15 @@ class InMemoryTaskStore(TaskStore):
                 task_id,
                 owner,
             )
-            owner_tasks = self.tasks.get(owner)
-            if owner_tasks:
-                task = owner_tasks.get(task_id)
-                if task:
-                    logger.debug(
-                        'Task %s retrieved successfully for owner %s.',
-                        task_id,
-                        owner,
-                    )
-                    return task
+            owner_tasks = self.tasks.get(owner, {})
+            task = owner_tasks.get(task_id)
+            if task:
+                logger.debug(
+                    'Task %s retrieved successfully for owner %s.',
+                    task_id,
+                    owner,
+                )
+                return task
             logger.debug(
                 'Task %s not found in store for owner %s.', task_id, owner
             )

@@ -275,6 +275,9 @@ async def test_owner_resource_scoping() -> None:
 
     context_user1 = ServerCallContext(user=SampleUser(user_name='user1'))
     context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
+    context_user3 = ServerCallContext(
+        user=SampleUser(user_name='user3')
+    )  # For testing non-existent user
 
     # Create tasks for different owners
     task1_user1 = Task()
@@ -298,6 +301,7 @@ async def test_owner_resource_scoping() -> None:
     assert await store.get('u1-task1', context_user2) is None
     assert await store.get('u2-task1', context_user1) is None
     assert await store.get('u2-task1', context_user2) is not None
+    assert await store.get('u2-task1', context_user3) is None
 
     # Test LIST
     params = ListTasksRequest()
@@ -310,6 +314,10 @@ async def test_owner_resource_scoping() -> None:
     assert len(page_user2.tasks) == 1
     assert {t.id for t in page_user2.tasks} == {'u2-task1'}
     assert page_user2.total_size == 1
+
+    page_user3 = await store.list(params, context_user3)
+    assert len(page_user3.tasks) == 0
+    assert page_user3.total_size == 0
 
     # Test DELETE
     await store.delete('u1-task1', context_user2)  # Should not delete
