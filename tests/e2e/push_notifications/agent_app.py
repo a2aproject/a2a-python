@@ -4,6 +4,7 @@ from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.apps import A2ARESTFastAPIApplication
+from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
@@ -148,6 +149,7 @@ def create_agent_app(
             push_sender=BasePushNotificationSender(
                 httpx_client=notification_client,
                 config_store=push_config_store,
+                context=ServerCallContext(),
             ),
         ),
     )
