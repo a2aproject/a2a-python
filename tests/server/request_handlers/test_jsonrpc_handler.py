@@ -550,11 +550,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             task_id=mock_task.id,
             config=push_config,
         )
-        response = await handler.set_push_notification_config(request)
+        context = ServerCallContext()
+        response = await handler.set_push_notification_config(request, context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
         mock_push_notification_store.set_info.assert_called_once_with(
-            mock_task.id, push_config, None
+            mock_task.id, push_config, context
         )
 
     async def test_get_push_notification_success(self) -> None:
