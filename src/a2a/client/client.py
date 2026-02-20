@@ -3,7 +3,10 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Coroutine
+from types import TracebackType
 from typing import Any
+
+from typing_extensions import Self
 
 import httpx
 
@@ -105,6 +108,19 @@ class Client(ABC):
             consumers = []
         self._consumers = consumers
         self._middleware = middleware
+
+    async def __aenter__(self) -> Self:
+        """Enters the async context manager."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exits the async context manager and closes the client."""
+        await self.close()
 
     @abstractmethod
     async def send_message(
@@ -217,3 +233,7 @@ class Client(ABC):
             return
         for c in self._consumers:
             await c(event, card)
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Closes the client and releases any underlying resources."""
