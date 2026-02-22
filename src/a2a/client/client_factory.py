@@ -71,12 +71,17 @@ class ClientFactory:
     def _register_defaults(
         self, supported: list[str | TransportProtocol]
     ) -> None:
-        # Empty support list implies JSON-RPC only.
+        httpx_client = self._config.httpx_client
+        if httpx_client is None and self._config.tls_config is not None:
+            httpx_client = self._config.tls_config.create_httpx_client()
+        elif httpx_client is None:
+            httpx_client = httpx.AsyncClient()
+
         if TransportProtocol.jsonrpc in supported or not supported:
             self.register(
                 TransportProtocol.jsonrpc,
                 lambda card, url, config, interceptors: JsonRpcTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    httpx_client,
                     card,
                     url,
                     interceptors,
@@ -87,7 +92,7 @@ class ClientFactory:
             self.register(
                 TransportProtocol.http_json,
                 lambda card, url, config, interceptors: RestTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    httpx_client,
                     card,
                     url,
                     interceptors,

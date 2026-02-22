@@ -80,9 +80,14 @@ class GrpcTransport(ClientTransport):
         interceptors: list[ClientCallInterceptor],
     ) -> 'GrpcTransport':
         """Creates a gRPC transport for the A2A client."""
-        if config.grpc_channel_factory is None:
+        channel_factory = config.grpc_channel_factory
+        if channel_factory is None and config.tls_config is not None:
+            from a2a.client.tls import create_grpc_channel_factory
+
+            channel_factory = create_grpc_channel_factory(config.tls_config)
+        if channel_factory is None:
             raise ValueError('grpc_channel_factory is required when using gRPC')
-        return cls(config.grpc_channel_factory(url), card, config.extensions)
+        return cls(channel_factory(url), card, config.extensions)
 
     async def send_message(
         self,

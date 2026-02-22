@@ -13,6 +13,7 @@ dependencies = [
   "pydantic>=2.11.3",
   "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
+  "jsonschema>=4.23.0",
 ]
 
 classifiers = [
@@ -37,6 +38,8 @@ postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
+performance = ["uvloop>=0.21.0"]
+tls = ["cryptography>=43.0.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -47,6 +50,8 @@ all = [
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
   "a2a-sdk[signing]",
+  "a2a-sdk[performance]",
+  "a2a-sdk[tls]",
 ]
 
 [project.urls]
