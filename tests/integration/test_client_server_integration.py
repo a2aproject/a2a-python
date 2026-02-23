@@ -24,6 +24,7 @@ from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
 )
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -191,7 +192,9 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     transport = JsonRpcTransport(
-        httpx_client=httpx_client, agent_card=agent_card
+        httpx_client=httpx_client,
+        agent_card=agent_card,
+        url=agent_card.supported_interfaces[0].url,
     )
     return TransportSetup(transport=transport, handler=mock_request_handler)
 
@@ -203,7 +206,11 @@ def rest_setup(http_base_setup) -> TransportSetup:
     app_builder = A2ARESTFastAPIApplication(agent_card, mock_request_handler)
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
-    transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
+    transport = RestTransport(
+        httpx_client=httpx_client,
+        agent_card=agent_card,
+        url=agent_card.supported_interfaces[0].url,
+    )
     return TransportSetup(transport=transport, handler=mock_request_handler)
 
 
@@ -819,7 +826,11 @@ async def test_http_transport_get_authenticated_card(
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
-    transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
+    transport = RestTransport(
+        httpx_client=httpx_client,
+        agent_card=agent_card,
+        url=agent_card.supported_interfaces[0].url,
+    )
     result = await transport.get_extended_agent_card()
     assert result.name == extended_agent_card.name
     assert transport.agent_card is not None
@@ -947,19 +958,28 @@ async def test_json_transport_get_signed_base_card(
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
-    transport = JsonRpcTransport(
-        httpx_client=httpx_client,
-        url=agent_card.supported_interfaces[0].url,
-        agent_card=None,
-    )
-
-    # Get the card, this will trigger verification in get_card
+    agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
         create_key_provider(key), ['HS384']
     )
-    result = await transport.get_extended_agent_card(
+
+    resolver = A2ACardResolver(
+        httpx_client=httpx_client,
+        base_url=agent_url,
+    )
+
+    # Verification happens here
+    result = await resolver.get_agent_card(
         signature_verifier=signature_verifier
     )
+
+    # Create transport with the verified card
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        agent_card=result,
+        url=agent_url,
+    )
+
     assert result.name == agent_card.name
     assert len(result.signatures) == 1
     assert transport.agent_card is not None
@@ -1011,7 +1031,9 @@ async def test_json_transport_get_signed_extended_card(
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     transport = JsonRpcTransport(
-        httpx_client=httpx_client, agent_card=agent_card
+        httpx_client=httpx_client,
+        agent_card=agent_card,
+        url=agent_card.supported_interfaces[0].url,
     )
 
     # Get the card, this will trigger verification in get_card
@@ -1074,16 +1096,29 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
-    transport = JsonRpcTransport(
-        httpx_client=httpx_client,
-        url=agent_card.supported_interfaces[0].url,
-        agent_card=None,
-    )
-
-    # Get the card, this will trigger verification in get_card
+    agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
         create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
     )
+
+    resolver = A2ACardResolver(
+        httpx_client=httpx_client,
+        base_url=agent_url,
+    )
+
+    # 1. Fetch base card
+    base_card = await resolver.get_agent_card(
+        signature_verifier=signature_verifier
+    )
+
+    # 2. Create transport with base card
+    transport = JsonRpcTransport(
+        httpx_client=httpx_client,
+        agent_card=base_card,
+        url=agent_url,
+    )
+
+    # 3. Fetch extended card via transport
     result = await transport.get_extended_agent_card(
         signature_verifier=signature_verifier
     )
@@ -1138,16 +1173,29 @@ async def test_rest_transport_get_signed_card(
     app = app_builder.build()
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
-    transport = RestTransport(
-        httpx_client=httpx_client,
-        url=agent_card.supported_interfaces[0].url,
-        agent_card=None,
-    )
-
-    # Get the card, this will trigger verification in get_card
+    agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
         create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
     )
+
+    resolver = A2ACardResolver(
+        httpx_client=httpx_client,
+        base_url=agent_url,
+    )
+
+    # 1. Fetch base card
+    base_card = await resolver.get_agent_card(
+        signature_verifier=signature_verifier
+    )
+
+    # 2. Create transport with base card
+    transport = RestTransport(
+        httpx_client=httpx_client,
+        agent_card=base_card,
+        url=agent_url,
+    )
+
+    # 3. Fetch extended card
     result = await transport.get_extended_agent_card(
         signature_verifier=signature_verifier
     )
