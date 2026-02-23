@@ -10,7 +10,7 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 
-from alembic import op
+from alembic import context, op
 
 
 # revision identifiers, used by Alembic.
@@ -22,15 +22,19 @@ depends_on: str | Sequence[str] | None = None
 
 def upgrade() -> None:
     """Upgrade schema."""
+    # Get the default value from the config (passed via CLI)
+    owner = context.config.get_main_option("owner", "unknown")
+
     op.add_column(
         'tasks',
         sa.Column(
             'owner',
-            sa.String(255),
+            sa.String(128),
             nullable=False,
-            server_default='unknown',  # Set your desired default value here
+            server_default=owner,
         ),
     )
+
 
 
 def downgrade() -> None:

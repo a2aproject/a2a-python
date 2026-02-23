@@ -148,7 +148,7 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner: Mapped[str] = mapped_column(String(128), nullable=False)
     last_updated: Mapped[str] = mapped_column(String(22), nullable=True)
 
     # Properly typed Pydantic fields with automatic serialization

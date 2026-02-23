@@ -32,6 +32,9 @@ class InMemoryTaskStore(TaskStore):
         self.lock = asyncio.Lock()
         self.owner_resolver = owner_resolver
 
+    def _get_owner_tasks(self, owner: str) -> dict[str, Task]:
+        return self.tasks.get(owner, {})
+
     async def save(
         self, task: Task, context: ServerCallContext | None = None
     ) -> None:
@@ -55,7 +58,7 @@ class InMemoryTaskStore(TaskStore):
                 task_id,
                 owner,
             )
-            owner_tasks = self.tasks.get(owner, {})
+            owner_tasks = self._get_owner_tasks(owner)
             task = owner_tasks.get(task_id)
             if task:
                 logger.debug(
@@ -79,7 +82,7 @@ class InMemoryTaskStore(TaskStore):
         logger.debug('Listing tasks for owner %s with params %s', owner, params)
 
         async with self.lock:
-            owner_tasks = self.tasks.get(owner, {})
+            owner_tasks = self._get_owner_tasks(owner)
             tasks = list(owner_tasks.values())
 
         # Filter tasks
@@ -161,7 +164,7 @@ class InMemoryTaskStore(TaskStore):
                 owner,
             )
 
-            owner_tasks = self.tasks.get(owner, {})
+            owner_tasks = self._get_owner_tasks(owner)
             if task_id not in owner_tasks:
                 logger.warning(
                     'Attempted to delete nonexistent task with id: %s for owner %s',

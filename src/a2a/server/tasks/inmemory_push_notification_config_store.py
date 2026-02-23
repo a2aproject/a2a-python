@@ -31,6 +31,9 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
             str, dict[str, list[PushNotificationConfig]]
         ] = defaultdict(dict)
         self.owner_resolver = owner_resolver
+    
+    def _get_owner_push_notification_infos(self, owner: str) -> dict[str, list[PushNotificationConfig]]:
+        return self._push_notification_infos.get(owner, {})
 
     async def set_info(
         self,
@@ -70,7 +73,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         """Retrieves all push notification configurations for a task from memory, for the given owner."""
         owner = self.owner_resolver(context)
         async with self.lock:
-            owner_infos = self._push_notification_infos.get(owner, {})
+            owner_infos = self._get_owner_push_notification_infos(owner)
             return list(owner_infos.get(task_id, []))
 
     async def delete_info(
@@ -86,7 +89,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         """
         owner = self.owner_resolver(context)
         async with self.lock:
-            owner_infos = self._push_notification_infos.get(owner, {})
+            owner_infos = self._get_owner_push_notification_infos(owner)
             if task_id not in owner_infos:
                 logger.warning(
                     'Attempted to delete push notification config for task %s, owner %s that does not exist.',
