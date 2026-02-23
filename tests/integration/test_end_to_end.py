@@ -33,7 +33,7 @@ from a2a.types import (
     TaskState,
     a2a_pb2_grpc,
 )
-from a2a.utils import TRANSPORT_GRPC, TRANSPORT_HTTP_JSON, TRANSPORT_JSONRPC
+from a2a.utils import TransportProtocol
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -68,15 +68,15 @@ def agent_card() -> AgentCard:
         default_output_modes=['text/plain'],
         supported_interfaces=[
             AgentInterface(
-                protocol_binding=TRANSPORT_HTTP_JSON,
+                protocol_binding=TransportProtocol.HTTP_JSON,
                 url='http://testserver',
             ),
             AgentInterface(
-                protocol_binding=TRANSPORT_JSONRPC,
+                protocol_binding=TransportProtocol.JSONRPC,
                 url='http://testserver',
             ),
             AgentInterface(
-                protocol_binding=TRANSPORT_GRPC,
+                protocol_binding=TransportProtocol.GRPC,
                 url='localhost:50051',
             ),
         ],
@@ -149,7 +149,7 @@ async def grpc_setup(
 
     # Update the gRPC interface dynamically based on the assigned port
     for interface in grpc_agent_card.supported_interfaces:
-        if interface.protocol_binding == TRANSPORT_GRPC:
+        if interface.protocol_binding == TransportProtocol.GRPC:
             interface.url = server_address
             break
     else:

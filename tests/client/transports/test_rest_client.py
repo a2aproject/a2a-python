@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from google.protobuf import json_format
 
+from google.protobuf import json_format
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
@@ -15,10 +15,9 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
-    Role,
     SendMessageRequest,
 )
-from a2a.utils.constants import TRANSPORT_HTTP_JSON
+from a2a.utils.constants import TransportProtocol
 
 
 @pytest.fixture
@@ -31,7 +30,7 @@ def mock_agent_card() -> MagicMock:
     mock = MagicMock(spec=AgentCard, url='http://agent.example.com/api')
     mock.supported_interfaces = [
         AgentInterface(
-            protocol_binding=TRANSPORT_HTTP_JSON,
+            protocol_binding=TransportProtocol.HTTP_JSON,
             url='http://agent.example.com/api',
         )
     ]
@@ -276,7 +275,7 @@ class TestRestTransportExtensions:
             capabilities=AgentCapabilities(extended_agent_card=True),
         )
         interface = agent_card.supported_interfaces.add()
-        interface.protocol_binding = TRANSPORT_HTTP_JSON
+        interface.protocol_binding = TransportProtocol.HTTP_JSON
         interface.url = 'http://agent.example.com/api'
 
         client = RestTransport(

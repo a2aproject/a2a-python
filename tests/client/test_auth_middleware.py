@@ -178,7 +178,7 @@ async def test_client_with_simple_interceptor() -> None:
     interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
     card = AgentCard(
         supported_interfaces=[
-            AgentInterface(url=url, protocol_binding=TransportProtocol.jsonrpc)
+            AgentInterface(url=url, protocol_binding=TransportProtocol.JSONRPC)
         ],
         name='testbot',
         description='test bot',
@@ -192,7 +192,7 @@ async def test_client_with_simple_interceptor() -> None:
     async with httpx.AsyncClient() as http_client:
         config = ClientConfig(
             httpx_client=http_client,
-            supported_protocol_bindings=[TransportProtocol.jsonrpc],
+            supported_protocol_bindings=[TransportProtocol.JSONRPC],
         )
         factory = ClientFactory(config)
         client = factory.create(card, interceptors=[interceptor])
@@ -310,7 +310,7 @@ async def test_auth_interceptor_variants(
     agent_card = AgentCard(
         supported_interfaces=[
             AgentInterface(
-                url=test_case.url, protocol_binding=TransportProtocol.jsonrpc
+                url=test_case.url, protocol_binding=TransportProtocol.JSONRPC
             )
         ],
         name=f'{test_case.scheme_name}bot',
@@ -333,7 +333,7 @@ async def test_auth_interceptor_variants(
     async with httpx.AsyncClient() as http_client:
         config = ClientConfig(
             httpx_client=http_client,
-            supported_protocol_bindings=[TransportProtocol.jsonrpc],
+            supported_protocol_bindings=[TransportProtocol.JSONRPC],
         )
         factory = ClientFactory(config)
         client = factory.create(agent_card, interceptors=[auth_interceptor])
@@ -362,7 +362,7 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         supported_interfaces=[
             AgentInterface(
                 url='http://agent.com/rpc',
-                protocol_binding=TransportProtocol.jsonrpc,
+                protocol_binding=TransportProtocol.JSONRPC,
             )
         ],
         name='missingbot',
