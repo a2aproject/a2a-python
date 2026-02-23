@@ -21,6 +21,7 @@ from a2a.server.events import (
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import (
     PushNotificationConfigStore,
+    PushNotificationEvent,
     PushNotificationSender,
     ResultAggregator,
     TaskManager,
@@ -319,13 +320,15 @@ class DefaultRequestHandler(RequestHandler):
             )
 
     async def _send_push_notification_if_needed(
-        self, task_id: str, result_aggregator: ResultAggregator
+        self, task_id: str, event: Event
     ) -> None:
-        """Sends push notification if configured and task is available."""
-        if self._push_sender and task_id:
-            latest_task = await result_aggregator.current_result
-            if isinstance(latest_task, Task):
-                await self._push_sender.send_notification(latest_task)
+        """Sends push notification if configured."""
+        if (
+            self._push_sender
+            and task_id
+            and isinstance(event, PushNotificationEvent)
+        ):
+            await self._push_sender.send_notification(task_id, event)
 
     async def on_message_send(
         self,
@@ -357,10 +360,8 @@ class DefaultRequestHandler(RequestHandler):
         interrupted_or_non_blocking = False
         try:
             # Create async callback for push notifications
-            async def push_notification_callback() -> None:
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+            async def push_notification_callback(event: Event) -> None:
+                await self._send_push_notification_if_needed(task_id, event)
 
             (
                 result,
@@ -393,8 +394,6 @@ class DefaultRequestHandler(RequestHandler):
             if params.configuration:
                 result = apply_history_length(result, params.configuration)
 
-        await self._send_push_notification_if_needed(task_id, result_aggregator)
-
         return result
 
     async def on_message_send_stream(
@@ -422,9 +421,7 @@ class DefaultRequestHandler(RequestHandler):
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
 
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+                await self._send_push_notification_if_needed(task_id, event)
                 yield event
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
