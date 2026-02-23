@@ -1,17 +1,14 @@
 from collections.abc import AsyncGenerator
-from typing import NamedTuple
+from typing import NamedTuple, cast
 
 import grpc
 import httpx
 import pytest
 import pytest_asyncio
 
-from a2a.client.transports import (
-    ClientTransport,
-    GrpcTransport,
-    JsonRpcTransport,
-    RestTransport,
-)
+from a2a.client.base_client import BaseClient
+from a2a.client.client import Client, ClientConfig
+from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.events import EventQueue
@@ -84,9 +81,9 @@ def agent_card() -> AgentCard:
 
 
 class TransportSetup(NamedTuple):
-    """Holds the transport and task_store for a given test."""
+    """Holds the client and task_store for a given test."""
 
-    transport: ClientTransport
+    client: BaseClient
     task_store: InMemoryTaskStore
 
 
@@ -109,9 +106,15 @@ def rest_setup(agent_card, base_e2e_setup) -> TransportSetup:
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )
-    transport = RestTransport(httpx_client=httpx_client, agent_card=agent_card)
+    factory = ClientFactory(
+        config=ClientConfig(
+            httpx_client=httpx_client,
+            supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
+        )
+    )
+    client = cast(BaseClient, factory.create(agent_card))
     return TransportSetup(
-        transport=transport,
+        client=client,
         task_store=task_store,
     )
 
@@ -126,11 +129,15 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> TransportSetup:
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )
-    transport = JsonRpcTransport(
-        httpx_client=httpx_client, agent_card=agent_card
+    factory = ClientFactory(
+        config=ClientConfig(
+            httpx_client=httpx_client,
+            supported_protocol_bindings=[TransportProtocol.JSONRPC],
+        )
     )
+    client = cast(BaseClient, factory.create(agent_card))
     return TransportSetup(
-        transport=transport,
+        client=client,
         task_store=task_store,
     )
 
@@ -159,14 +166,19 @@ async def grpc_setup(
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
 
-    channel = grpc.aio.insecure_channel(server_address)
-    transport = GrpcTransport(agent_card=grpc_agent_card, channel=channel)
+    factory = ClientFactory(
+        config=ClientConfig(
+            grpc_channel_factory=lambda url: grpc.aio.insecure_channel(url),
+            supported_protocol_bindings=[TransportProtocol.GRPC],
+        )
+    )
+    client = cast(BaseClient, factory.create(grpc_agent_card))
     yield TransportSetup(
-        transport=transport,
+        client=client,
         task_store=task_store,
     )
 
-    await channel.close()
+    await client.close()
     await server.stop(0)
 
 
@@ -184,7 +196,7 @@ def transport_setups(request) -> TransportSetup:
 
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_blocking(transport_setups):
-    transport = transport_setups.transport
+    client = transport_setups.client
 
     message_to_send = Message(
         role=Role.ROLE_USER,
@@ -192,20 +204,23 @@ async def test_end_to_end_send_message_blocking(transport_setups):
         parts=[Part(text='Run dummy agent!')],
     )
     configuration = SendMessageConfiguration(blocking=True)
-    params = SendMessageRequest(
-        message=message_to_send, configuration=configuration
-    )
 
-    response = await transport.send_message(request=params)
+    events = [
+        event
+        async for event in client.send_message(
+            request=message_to_send, configuration=configuration
+        )
+    ]
+    response, task = events[-1]
 
-    task = response.task
+    assert task
     assert task.id
     assert task.status.state == TaskState.TASK_STATE_COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_non_blocking(transport_setups):
-    transport = transport_setups.transport
+    client = transport_setups.client
 
     message_to_send = Message(
         role=Role.ROLE_USER,
@@ -213,58 +228,63 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
         parts=[Part(text='Run dummy agent!')],
     )
     configuration = SendMessageConfiguration(blocking=False)
-    params = SendMessageRequest(
-        message=message_to_send, configuration=configuration
-    )
 
-    response = await transport.send_message(request=params)
+    events = [
+        event
+        async for event in client.send_message(
+            request=message_to_send, configuration=configuration
+        )
+    ]
+    response, task = events[-1]
 
-    task = response.task
+    assert task
     assert task.id
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_streaming(transport_setups):
-    transport = transport_setups.transport
+    client = transport_setups.client
 
     message_to_send = Message(
         role=Role.ROLE_USER,
         message_id='msg-e2e-streaming',
         parts=[Part(text='Run dummy agent!')],
     )
-    params = SendMessageRequest(message=message_to_send)
 
     events = [
-        event
-        async for event in transport.send_message_streaming(request=params)
+        event async for event in client.send_message(request=message_to_send)
     ]
 
     assert len(events) > 0
-    final_event = events[-1]
+    stream_response, task = events[-1]
 
-    assert final_event.HasField('status_update')
-    assert final_event.status_update.task_id
+    assert stream_response.HasField('status_update')
+    assert stream_response.status_update.task_id
     assert (
-        final_event.status_update.status.state == TaskState.TASK_STATE_COMPLETED
+        stream_response.status_update.status.state
+        == TaskState.TASK_STATE_COMPLETED
     )
+    assert task
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_get_task(transport_setups):
-    transport = transport_setups.transport
+    client = transport_setups.client
 
     message_to_send = Message(
         role=Role.ROLE_USER,
         message_id='msg-e2e-get',
         parts=[Part(text='Test Get Task')],
     )
-    response = await transport.send_message(
-        request=SendMessageRequest(message=message_to_send)
-    )
-    task_id = response.task.id
+    events = [
+        event async for event in client.send_message(request=message_to_send)
+    ]
+    _, task = events[-1]
+    task_id = task.id
 
     get_request = GetTaskRequest(id=task_id)
-    retrieved_task = await transport.get_task(request=get_request)
+    retrieved_task = await client.get_task(request=get_request)
 
     assert retrieved_task.id == task_id
     assert retrieved_task.status.state in {
@@ -276,22 +296,22 @@ async def test_end_to_end_get_task(transport_setups):
 
 @pytest.mark.asyncio
 async def test_end_to_end_list_tasks(transport_setups):
-    transport = transport_setups.transport
+    client = transport_setups.client
 
     total_items = 6
     page_size = 2
 
     for i in range(total_items):
-        await transport.send_message(
-            request=SendMessageRequest(
-                message=Message(
-                    role=Role.ROLE_USER,
-                    message_id=f'msg-e2e-list-{i}',
-                    parts=[Part(text=f'Test List Tasks {i}')],
-                ),
-                configuration=SendMessageConfiguration(blocking=False),
-            )
-        )
+        # We need to await the iterator to ensure request completes
+        async for _ in client.send_message(
+            request=Message(
+                role=Role.ROLE_USER,
+                message_id=f'msg-e2e-list-{i}',
+                parts=[Part(text=f'Test List Tasks {i}')],
+            ),
+            configuration=SendMessageConfiguration(blocking=False),
+        ):
+            pass
 
     list_request = ListTasksRequest(page_size=page_size)
 
@@ -302,7 +322,7 @@ async def test_end_to_end_list_tasks(transport_setups):
         if token:
             list_request.page_token = token
 
-        list_response = await transport.list_tasks(request=list_request)
+        list_response = await client.list_tasks(request=list_request)
         assert 0 < len(list_response.tasks) <= page_size
         assert list_response.total_size == total_items
         assert list_response.page_size == page_size
