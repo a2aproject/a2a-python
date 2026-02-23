@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.3.25](https://github.com/a2aproject/a2a-python/compare/v0.3.24...v0.3.25) (2026-02-23)
+
+
+### Documentation
+
+* GEMINI.md updates ([#729](https://github.com/a2aproject/a2a-python/issues/729)) ([3ad2503](https://github.com/a2aproject/a2a-python/commit/3ad2503107dd1faa71ab6b56da9017141e24e34c))
+
 ## [0.3.24](https://github.com/a2aproject/a2a-python/compare/v0.3.23...v0.3.24) (2026-02-20)
 
 
