@@ -44,7 +44,9 @@ class BasePushNotificationSender(PushNotificationSender):
         self, task_id: str, event: PushNotificationEvent
     ) -> None:
         """Sends a push notification for an event if configuration exists."""
-        push_configs = await self._config_store.get_info(task_id, self._call_context)
+        push_configs = await self._config_store.get_info(
+            task_id, self._call_context
+        )
         if not push_configs:
             return
 

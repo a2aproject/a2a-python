@@ -23,7 +23,7 @@ depends_on: str | Sequence[str] | None = None
 def upgrade() -> None:
     """Upgrade schema."""
     # Get the default value from the config (passed via CLI)
-    owner = context.config.get_main_option("owner", "unknown")
+    owner = context.config.get_main_option('owner', 'unknown')
 
     op.add_column(
         'tasks',
@@ -34,7 +34,6 @@ def upgrade() -> None:
             server_default=owner,
         ),
     )
-
 
 
 def downgrade() -> None:

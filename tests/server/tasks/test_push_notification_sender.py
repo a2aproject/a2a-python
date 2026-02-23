@@ -21,6 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 
+
 class SampleUser(User):
     """A test implementation of the User interface."""
 
@@ -35,7 +36,9 @@ class SampleUser(User):
     def user_name(self) -> str:
         return self._user_name
 
+
 MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
+
 
 def _create_sample_task(
     task_id: str = 'task123',
@@ -82,7 +85,9 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(task_data.id, MINIMAL_CALL_CONTEXT)
+        self.mock_config_store.get_info.assert_awaited_once_with(
+            task_data.id, MINIMAL_CALL_CONTEXT
+        )
 
         # assert httpx_client post method got invoked with right parameters
         self.mock_httpx_client.post.assert_awaited_once_with(
@@ -106,7 +111,9 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(task_data.id, MINIMAL_CALL_CONTEXT)
+        self.mock_config_store.get_info.assert_awaited_once_with(
+            task_data.id, MINIMAL_CALL_CONTEXT
+        )
 
         # assert httpx_client post method got invoked with right parameters
         self.mock_httpx_client.post.assert_awaited_once_with(
@@ -148,7 +155,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         await self.sender.send_notification(task_id, task_data)
 
         self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT       
+            task_id, MINIMAL_CALL_CONTEXT
         )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
@@ -175,7 +182,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         await self.sender.send_notification(task_id, task_data)
 
         self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT       
+            task_id, MINIMAL_CALL_CONTEXT
         )
         self.assertEqual(self.mock_httpx_client.post.call_count, 2)
 
@@ -208,7 +215,9 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, event)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(task_id, MINIMAL_CALL_CONTEXT)
+        self.mock_config_store.get_info.assert_awaited_once_with(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(status_update=event)),
@@ -230,7 +239,9 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, event)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(task_id, MINIMAL_CALL_CONTEXT)
+        self.mock_config_store.get_info.assert_awaited_once_with(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),

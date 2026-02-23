@@ -32,7 +32,9 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         ] = defaultdict(dict)
         self.owner_resolver = owner_resolver
 
-    def _get_owner_push_notification_infos(self, owner: str) -> dict[str, list[PushNotificationConfig]]:
+    def _get_owner_push_notification_infos(
+        self, owner: str
+    ) -> dict[str, list[PushNotificationConfig]]:
         return self._push_notification_infos.get(owner, {})
 
     async def set_info(
