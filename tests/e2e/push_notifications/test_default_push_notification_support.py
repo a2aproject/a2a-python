@@ -105,7 +105,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
     token = uuid.uuid4().hex
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_protocol_bindings=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
             push_notification_configs=[
                 PushNotificationConfig(
                     id='in-message-config',
@@ -114,7 +114,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
                 )
             ],
         )
-    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.HTTP_JSON]))
 
     # Send a message and extract the returned task.
     responses = [
@@ -157,9 +157,9 @@ async def test_notification_triggering_after_config_change_e2e(
     # Configure an A2A client without a push notification config.
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_protocol_bindings=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
         )
-    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.HTTP_JSON]))
 
     # Send a message and extract the returned task.
     responses = [

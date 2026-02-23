@@ -12,9 +12,6 @@ from a2a.utils.constants import (
     DEFAULT_RPC_URL,
     EXTENDED_AGENT_CARD_PATH,
     PREV_AGENT_CARD_WELL_KNOWN_PATH,
-    TRANSPORT_GRPC,
-    TRANSPORT_HTTP_JSON,
-    TRANSPORT_JSONRPC,
     TransportProtocol,
 )
 from a2a.utils.helpers import (
@@ -45,9 +42,6 @@ __all__ = [
     'DEFAULT_RPC_URL',
     'EXTENDED_AGENT_CARD_PATH',
     'PREV_AGENT_CARD_WELL_KNOWN_PATH',
-    'TRANSPORT_GRPC',
-    'TRANSPORT_HTTP_JSON',
-    'TRANSPORT_JSONRPC',
     'TransportProtocol',
     'append_artifact_to_task',
     'are_modalities_compatible',

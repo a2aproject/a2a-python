@@ -25,7 +25,7 @@ def base_agent_card() -> AgentCard:
         description='An agent for testing.',
         supported_interfaces=[
             AgentInterface(
-                protocol_binding=TransportProtocol.jsonrpc,
+                protocol_binding=TransportProtocol.JSONRPC,
                 url='http://primary-url.com',
             )
         ],
@@ -42,8 +42,8 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
         supported_protocol_bindings=[
-            TransportProtocol.jsonrpc,
-            TransportProtocol.http_json,
+            TransportProtocol.JSONRPC,
+            TransportProtocol.HTTP_JSON,
         ],
         extensions=['https://example.com/test-ext/v0'],
     )
@@ -61,7 +61,7 @@ def test_client_factory_selects_secondary_transport_url(
     """Verify that the factory selects the correct URL for a secondary transport."""
     base_agent_card.supported_interfaces.append(
         AgentInterface(
-            protocol_binding=TransportProtocol.http_json,
+            protocol_binding=TransportProtocol.HTTP_JSON,
             url='http://secondary-url.com',
         )
     )
@@ -69,8 +69,8 @@ def test_client_factory_selects_secondary_transport_url(
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
         supported_protocol_bindings=[
-            TransportProtocol.http_json,
-            TransportProtocol.jsonrpc,
+            TransportProtocol.HTTP_JSON,
+            TransportProtocol.JSONRPC,
         ],
         use_client_preference=True,
         extensions=['https://example.com/test-ext/v0'],
@@ -89,13 +89,13 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     base_agent_card.supported_interfaces.insert(
         0,
         AgentInterface(
-            protocol_binding=TransportProtocol.http_json,
+            protocol_binding=TransportProtocol.HTTP_JSON,
             url='http://primary-url.com',
         ),
     )
     base_agent_card.supported_interfaces.append(
         AgentInterface(
-            protocol_binding=TransportProtocol.jsonrpc,
+            protocol_binding=TransportProtocol.JSONRPC,
             url='http://secondary-url.com',
         )
     )
@@ -103,8 +103,8 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     config = ClientConfig(
         httpx_client=httpx.AsyncClient(),
         supported_protocol_bindings=[
-            TransportProtocol.jsonrpc,
-            TransportProtocol.http_json,
+            TransportProtocol.JSONRPC,
+            TransportProtocol.HTTP_JSON,
         ],
     )
     factory = ClientFactory(config)
@@ -258,7 +258,8 @@ async def test_client_factory_connect_with_extra_transports(
         base_agent_card,
         client_config=config,
         extra_transports=typing.cast(
-            dict[str, TransportProducer], {'custom': custom_transport_producer}
+            'dict[str, TransportProducer]',
+            {'custom': custom_transport_producer},
         ),
     )
 

@@ -19,11 +19,7 @@ from a2a.client.transports.grpc import GrpcTransport
 from a2a.types import a2a_pb2_grpc
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.utils.constants import (
-    TRANSPORT_HTTP_JSON,
-    TRANSPORT_GRPC,
-    TRANSPORT_JSONRPC,
-)
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
@@ -156,10 +152,10 @@ def agent_card() -> AgentCard:
         default_output_modes=['text/plain'],
         supported_interfaces=[
             AgentInterface(
-                protocol_binding=TRANSPORT_HTTP_JSON,
+                protocol_binding=TransportProtocol.HTTP_JSON,
                 url='http://testserver',
             ),
-            AgentInterface(protocol_binding='grpc', url='localhost:50051'),
+            AgentInterface(protocol_binding=TransportProtocol.GRPC, url='localhost:50051'),
         ],
     )
 
