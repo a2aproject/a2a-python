@@ -227,6 +227,52 @@ def validate_message(
         ) from e
 
 
+def _validate_against_types(
+    data: dict[str, Any],
+    model_types: tuple[type[BaseModel], ...],
+    category_name: str,
+) -> BaseModel:
+    """Validate data against multiple model types and return first match.
+
+    Args:
+        data: Raw data to validate.
+        model_types: Tuple of model types to try.
+        category_name: Name of the category for error messages (e.g., 'request', 'response').
+
+    Returns:
+        The validated model instance.
+
+    Raises:
+        ValidationError: If data doesn't match any of the provided types.
+    """
+    errors: list[dict[str, Any]] = []
+
+    for model_type in model_types:
+        try:
+            return validate_message(data, model_type, strict=False)
+        except ValidationError as e:
+            errors.append(
+                {
+                    'type': model_type.__name__,
+                    'path': e.errors[0].get('path', []) if e.errors else [],
+                    'message': e.errors[0].get('message', str(e))
+                    if e.errors
+                    else str(e),
+                }
+            )
+
+    error_details = '; '.join(
+        f'{e["type"]}: {e["message"]} (path: {".".join(map(str, e["path"])) or "root"})'
+        for e in errors
+    )
+    raise ValidationError(
+        f'Data does not match any known A2A {category_name} type. '
+        f'Attempted types: {[e["type"] for e in errors]}. Details: {error_details}',
+        errors=errors,
+        instance=data,
+    )
+
+
 def validate_request(data: dict[str, Any]) -> BaseModel:
     """Validate and parse an A2A request message.
 
@@ -252,33 +298,7 @@ def validate_request(data: dict[str, Any]) -> BaseModel:
         TaskResubscriptionRequest,
     )
 
-    errors: list[dict[str, Any]] = []
-
-    for model_type in request_types:
-        try:
-            return validate_message(data, model_type, strict=False)
-        except ValidationError:
-            continue
-
-    raise ValidationError(
-        'Data does not match any known A2A request type',
-        errors=errors,
-        instance=data,
-    )
-
-    errors: list[dict[str, Any]] = []
-
-    for model_type in request_types:
-        try:
-            return validate_message(data, model_type, strict=False)
-        except ValidationError:
-            continue
-
-    raise ValidationError(
-        'Data does not match any known A2A request type',
-        errors=errors,
-        instance=data,
-    )
+    return _validate_against_types(data, request_types, 'request')
 
 
 def validate_response(data: dict[str, Any]) -> BaseModel:
@@ -302,27 +322,7 @@ def validate_response(data: dict[str, Any]) -> BaseModel:
         GetTaskPushNotificationConfigResponse,
     )
 
-    for model_type in response_types:
-        try:
-            return validate_message(data, model_type, strict=False)
-        except ValidationError:
-            continue
-
-    raise ValidationError(
-        'Data does not match any known A2A response type',
-        instance=data,
-    )
-
-    for model_type in response_types:
-        try:
-            return validate_message(data, model_type, strict=False)
-        except ValidationError:
-            continue
-
-    raise ValidationError(
-        'Data does not match any known A2A response type',
-        instance=data,
-    )
+    return _validate_against_types(data, response_types, 'response')
 
 
 class MessageValidator:

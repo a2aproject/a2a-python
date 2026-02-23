@@ -54,13 +54,15 @@ class TLSConfig:
         if isinstance(self.verify, ssl.SSLContext):
             return self.verify
 
-        protocol_map = {
-            'TLSv1_2': ssl.PROTOCOL_TLSv1_2,
-            'TLSv1_3': ssl.PROTOCOL_TLS_CLIENT,
-        }
-        protocol = protocol_map.get(self.min_version, ssl.PROTOCOL_TLS_CLIENT)
+        context = ssl.SSLContext(ssl.PROTOCOL_TLS_CLIENT)
 
-        context = ssl.SSLContext(protocol)
+        version_map = {
+            'TLSv1_2': ssl.TLSVersion.TLSv1_2,
+            'TLSv1_3': ssl.TLSVersion.TLSv1_3,
+        }
+        context.minimum_version = version_map.get(
+            self.min_version, ssl.TLSVersion.TLSv1_2
+        )
 
         if self.ca_cert:
             context.load_verify_locations(cafile=str(self.ca_cert))
@@ -220,14 +222,16 @@ def create_server_ssl_context(
     Returns:
         Configured ssl.SSLContext for server use.
     """
-    protocol_map = {
-        'TLSv1_2': ssl.PROTOCOL_TLSv1_2,
-        'TLSv1_3': ssl.PROTOCOL_TLS_SERVER,
-    }
-    protocol = protocol_map.get(min_version, ssl.PROTOCOL_TLS_SERVER)
-
-    context = ssl.SSLContext(protocol)
+    context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
     context.load_cert_chain(str(cert_file), str(key_file))
+
+    version_map = {
+        'TLSv1_2': ssl.TLSVersion.TLSv1_2,
+        'TLSv1_3': ssl.TLSVersion.TLSv1_3,
+    }
+    context.minimum_version = version_map.get(
+        min_version, ssl.TLSVersion.TLSv1_2
+    )
 
     if ca_cert:
         context.load_verify_locations(cafile=str(ca_cert))
