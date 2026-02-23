@@ -155,7 +155,9 @@ def agent_card() -> AgentCard:
                 protocol_binding=TransportProtocol.HTTP_JSON,
                 url='http://testserver',
             ),
-            AgentInterface(protocol_binding=TransportProtocol.GRPC, url='localhost:50051'),
+            AgentInterface(
+                protocol_binding=TransportProtocol.GRPC, url='localhost:50051'
+            ),
         ],
     )
 

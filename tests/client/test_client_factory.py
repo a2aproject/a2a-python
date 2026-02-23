@@ -258,8 +258,7 @@ async def test_client_factory_connect_with_extra_transports(
         base_agent_card,
         client_config=config,
         extra_transports=typing.cast(
-            'dict[str, TransportProducer]',
-            {'custom': custom_transport_producer},
+            dict[str, TransportProducer], {'custom': custom_transport_producer}
         ),
     )
 
