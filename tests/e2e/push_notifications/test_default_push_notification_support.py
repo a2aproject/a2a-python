@@ -105,7 +105,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
     token = uuid.uuid4().hex
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_protocol_bindings=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
             push_notification_configs=[
                 PushNotificationConfig(
                     id='in-message-config',
@@ -114,7 +114,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
                 )
             ],
         )
-    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.HTTP_JSON]))
 
     # Send a message and extract the returned task.
     responses = [
@@ -139,12 +139,22 @@ async def test_notification_triggering_with_in_message_config_e2e(
     notifications = await wait_for_n_notifications(
         http_client,
         f'{notifications_server}/{task.id}/notifications',
-        n=1,
+        n=2,
     )
     assert notifications[0].token == token
-    # Notification.task is a dict from proto serialization
-    assert notifications[0].task['id'] == task.id
-    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
+
+    # Verify exactly two consecutive events: SUBMITTED -> COMPLETED
+    assert len(notifications) == 2
+
+    # 1. First event: SUBMITTED (Task)
+    event0 = notifications[0].event
+    state0 = event0['task'].get('status', {}).get('state')
+    assert state0 == 'TASK_STATE_SUBMITTED'
+
+    # 2. Second event: COMPLETED (TaskStatusUpdateEvent)
+    event1 = notifications[1].event
+    state1 = event1['status_update'].get('status', {}).get('state')
+    assert state1 == 'TASK_STATE_COMPLETED'
 
 
 @pytest.mark.asyncio
@@ -157,9 +167,9 @@ async def test_notification_triggering_after_config_change_e2e(
     # Configure an A2A client without a push notification config.
     a2a_client = ClientFactory(
         ClientConfig(
-            supported_protocol_bindings=[TransportProtocol.http_json],
+            supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
         )
-    ).create(minimal_agent_card(agent_server, [TransportProtocol.http_json]))
+    ).create(minimal_agent_card(agent_server, [TransportProtocol.HTTP_JSON]))
 
     # Send a message and extract the returned task.
     responses = [
@@ -220,9 +230,9 @@ async def test_notification_triggering_after_config_change_e2e(
         f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
-    # Notification.task is a dict from proto serialization
-    assert notifications[0].task['id'] == task.id
-    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
+    event = notifications[0].event
+    state = event['status_update'].get('status', {}).get('state', '')
+    assert state == 'TASK_STATE_COMPLETED'
     assert notifications[0].token == token
 
 

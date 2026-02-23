@@ -35,8 +35,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import (
-    TRANSPORT_HTTP_JSON,
-    TRANSPORT_JSONRPC,
+    TransportProtocol,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -62,15 +61,15 @@ class RestTransport(ClientTransport):
         elif agent_card:
             for interface in agent_card.supported_interfaces:
                 if interface.protocol_binding in (
-                    TRANSPORT_HTTP_JSON,
-                    TRANSPORT_JSONRPC,
+                    TransportProtocol.HTTP_JSON,
+                    TransportProtocol.JSONRPC,
                 ):
                     self.url = interface.url
                     break
             else:
                 raise ValueError(
-                    f'AgentCard does not support {TRANSPORT_HTTP_JSON} '
-                    f'or {TRANSPORT_JSONRPC}'
+                    f'AgentCard does not support {TransportProtocol.HTTP_JSON} '
+                    f'or {TransportProtocol.JSONRPC}'
                 )
         else:
             raise ValueError('Must provide either agent_card or url')

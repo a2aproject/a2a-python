@@ -20,9 +20,7 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
 )
 from a2a.utils.constants import (
-    TRANSPORT_GRPC,
-    TRANSPORT_HTTP_JSON,
-    TRANSPORT_JSONRPC,
+    TransportProtocol,
 )
 
 
@@ -74,9 +72,9 @@ class ClientFactory:
 
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
-        if TRANSPORT_JSONRPC in supported or not supported:
+        if TransportProtocol.JSONRPC in supported or not supported:
             self.register(
-                TRANSPORT_JSONRPC,
+                TransportProtocol.JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -85,9 +83,9 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TRANSPORT_HTTP_JSON in supported:
+        if TransportProtocol.HTTP_JSON in supported:
             self.register(
-                TRANSPORT_HTTP_JSON,
+                TransportProtocol.HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
                     config.httpx_client or httpx.AsyncClient(),
                     card,
@@ -96,14 +94,14 @@ class ClientFactory:
                     config.extensions or None,
                 ),
             )
-        if TRANSPORT_GRPC in supported:
+        if TransportProtocol.GRPC in supported:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
             self.register(
-                TRANSPORT_GRPC,
+                TransportProtocol.GRPC,
                 GrpcTransport.create,
             )
 
@@ -207,7 +205,7 @@ class ClientFactory:
           server configuration, a `ValueError` is raised.
         """
         client_set = self._config.supported_protocol_bindings or [
-            TRANSPORT_JSONRPC
+            TransportProtocol.JSONRPC
         ]
         transport_protocol = None
         transport_url = None
