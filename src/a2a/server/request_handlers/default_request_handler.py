@@ -128,8 +128,7 @@ class DefaultRequestHandler(RequestHandler):
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
-        # Apply historyLength parameter if specified
-        return apply_history_length(task, params.history_length)
+        return apply_history_length(task, params)
 
     async def on_list_tasks(
         self,
@@ -142,7 +141,7 @@ class DefaultRequestHandler(RequestHandler):
             if not params.include_artifacts:
                 task.ClearField('artifacts')
 
-            updated_task = apply_history_length(task, params.history_length)
+            updated_task = apply_history_length(task, params)
             if updated_task is not task:
                 task.CopyFrom(updated_task)
 
@@ -381,9 +380,7 @@ class DefaultRequestHandler(RequestHandler):
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
             if params.configuration:
-                result = apply_history_length(
-                    result, params.configuration.history_length
-                )
+                result = apply_history_length(result, params.configuration)
 
         return result
 
@@ -552,10 +549,14 @@ class DefaultRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
-                error=InvalidParamsError(
+                error=UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
             )
+
+        # The operation MUST return a Task object as the first event in the stream
+        # https://a2a-protocol.org/latest/specification/#316-subscribe-to-task
+        yield task
 
         task_manager = TaskManager(
             task_id=task.id,

@@ -1506,7 +1506,10 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     # Allow producer to emit the next event
     allow_second_event.set()
 
-    received = await resub_gen.__anext__()
+    first_subscribe_event = await anext(resub_gen)
+    assert first_subscribe_event == task_for_resub
+
+    received = await anext(resub_gen)
     assert received == second_event
 
     # Finish producer to allow cleanup paths to complete
@@ -2713,7 +2716,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass  # pragma: no cover
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
     assert exc_info.value.error.message
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
