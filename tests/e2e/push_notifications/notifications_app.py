@@ -37,13 +37,14 @@ def create_notifications_app() -> FastAPI:
             json_data = await request.json()
             stream_response = ParseDict(json_data, StreamResponse())
 
+            payload_name = stream_response.WhichOneof('payload')
             task_id = None
-            if stream_response.HasField('task'):
-                task_id = stream_response.task.id
-            elif stream_response.HasField('status_update'):
-                task_id = stream_response.status_update.task_id
-            elif stream_response.HasField('artifact_update'):
-                task_id = stream_response.artifact_update.task_id
+            if payload_name:
+                event_payload = getattr(stream_response, payload_name)
+                # The 'Task' message uses 'id', while event messages use 'task_id'.
+                task_id = getattr(
+                    event_payload, 'task_id', getattr(event_payload, 'id', None)
+                )
 
             if not task_id:
                 raise HTTPException(

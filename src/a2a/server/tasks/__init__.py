@@ -75,6 +75,7 @@ __all__ = [
     'InMemoryPushNotificationConfigStore',
     'InMemoryTaskStore',
     'PushNotificationConfigStore',
+    'PushNotificationEvent',
     'PushNotificationSender',
     'ResultAggregator',
     'TaskManager',
