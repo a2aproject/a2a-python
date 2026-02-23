@@ -12,7 +12,7 @@
    ```
 3. Run mypy type checkers to check for type errors
    ```
-   uv run mypy
+   uv run mypy src
    ```
 4. Run the unit tests to make sure that none of the unit tests are broken.
   ```
