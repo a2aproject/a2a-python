@@ -1,6 +1,7 @@
 import asyncio
 import contextlib
 import logging
+import uuid
 import time
 
 from unittest.mock import (
@@ -659,6 +660,8 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         nonlocal event_callback_passed, event_callback_received
         event_callback_passed = event_callback is not None
         event_callback_received = event_callback
+        if event_callback_received:
+            await event_callback_received(final_task)
         return initial_task, True  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
@@ -696,7 +699,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     )
 
     # Verify that the push notification was sent with the final task
-    mock_push_sender.send_notification.assert_called_with(final_task)
+    mock_push_sender.send_notification.assert_called_with(task_id, final_task)
 
     # Verify that the push notification config was stored
     mock_push_notification_store.set_info.assert_awaited_once_with(
@@ -1412,8 +1415,12 @@ async def test_on_message_send_stream_with_push_notification():
 
     # 2. send_notification called for each task event yielded by aggregator
     assert mock_push_sender.send_notification.await_count == 2
-    mock_push_sender.send_notification.assert_any_await(event1_task_update)
-    mock_push_sender.send_notification.assert_any_await(event2_final_task)
+    mock_push_sender.send_notification.assert_any_await(
+        task_id, event1_task_update
+    )
+    mock_push_sender.send_notification.assert_any_await(
+        task_id, event2_final_task
+    )
 
     mock_agent_executor.execute.assert_awaited_once()
 
