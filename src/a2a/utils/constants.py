@@ -7,6 +7,9 @@ DEFAULT_RPC_URL = '/'
 DEFAULT_LIST_TASKS_PAGE_SIZE = 50
 """Default page size for the `tasks/list` method."""
 
+MAX_LIST_TASKS_PAGE_SIZE = 100
+"""Maximum page size for the `tasks/list` method."""
+
 
 # Transport protocol constants
 # These match the protocol binding values used in AgentCard

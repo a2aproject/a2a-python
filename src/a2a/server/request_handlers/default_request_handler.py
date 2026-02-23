@@ -52,7 +52,11 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.task import apply_history_length
+from a2a.utils.task import (
+    apply_history_length,
+    validate_history_length,
+    validate_page_size,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -122,6 +126,8 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
+        validate_history_length(params)
+
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -135,6 +141,10 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
+        validate_history_length(params)
+        if params.HasField('page_size'):
+            validate_page_size(params.page_size)
+
         page = await self.task_store.list(params, context)
         for task in page.tasks:
             if not params.include_artifacts:
@@ -327,6 +337,8 @@ class DefaultRequestHandler(RequestHandler):
         Starts the agent execution for the message and waits for the final
         result (Task or Message).
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
