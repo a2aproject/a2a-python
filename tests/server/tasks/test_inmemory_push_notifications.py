@@ -156,7 +156,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_awaited_once()
         called_args, called_kwargs = self.mock_httpx_client.post.call_args
@@ -183,7 +183,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_awaited_once()
         called_args, called_kwargs = self.mock_httpx_client.post.call_args
@@ -205,7 +205,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         task_id = 'task_send_no_config'
         task_data = create_sample_task(task_id=task_id)
 
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_not_called()
 
@@ -229,7 +229,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.side_effect = http_error
 
         # The method should catch the error and log it, not re-raise
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_awaited_once()
         mock_logger.exception.assert_called_once()
@@ -251,7 +251,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         request_error = httpx.RequestError('Network issue', request=MagicMock())
         self.mock_httpx_client.post.side_effect = request_error
 
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_awaited_once()
         mock_logger.exception.assert_called_once()
@@ -281,7 +281,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
-        await self.notifier.send_notification(task_data)  # Pass only task_data
+        await self.notifier.send_notification(task_id, task_data)
 
         self.mock_httpx_client.post.assert_awaited_once()
         called_args, called_kwargs = self.mock_httpx_client.post.call_args

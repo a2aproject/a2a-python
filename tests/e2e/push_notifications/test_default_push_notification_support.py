@@ -139,12 +139,22 @@ async def test_notification_triggering_with_in_message_config_e2e(
     notifications = await wait_for_n_notifications(
         http_client,
         f'{notifications_server}/{task.id}/notifications',
-        n=1,
+        n=2,
     )
     assert notifications[0].token == token
-    # Notification.task is a dict from proto serialization
-    assert notifications[0].task['id'] == task.id
-    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
+
+    # Verify exactly two consecutive events: SUBMITTED -> COMPLETED
+    assert len(notifications) == 2
+
+    # 1. First event: SUBMITTED (Task)
+    event0 = notifications[0].event
+    state0 = event0['task'].get('status', {}).get('state')
+    assert state0 == 'TASK_STATE_SUBMITTED'
+
+    # 2. Second event: COMPLETED (TaskStatusUpdateEvent)
+    event1 = notifications[1].event
+    state1 = event1['status_update'].get('status', {}).get('state')
+    assert state1 == 'TASK_STATE_COMPLETED'
 
 
 @pytest.mark.asyncio
@@ -220,9 +230,9 @@ async def test_notification_triggering_after_config_change_e2e(
         f'{notifications_server}/{task.id}/notifications',
         n=1,
     )
-    # Notification.task is a dict from proto serialization
-    assert notifications[0].task['id'] == task.id
-    assert notifications[0].task['status']['state'] == 'TASK_STATE_COMPLETED'
+    event = notifications[0].event
+    state = event['status_update'].get('status', {}).get('state', '')
+    assert state == 'TASK_STATE_COMPLETED'
     assert notifications[0].token == token
 
 

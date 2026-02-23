@@ -13,6 +13,8 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils.constants import MAX_LIST_TASKS_PAGE_SIZE
+from a2a.utils.errors import InvalidParamsError, ServerError
 
 
 def new_task(request: Message) -> Task:
@@ -96,6 +98,16 @@ class HistoryLengthConfig(Protocol):
         ...
 
 
+def validate_history_length(config: HistoryLengthConfig | None) -> None:
+    """Validates that history_length is non-negative."""
+    if config and config.history_length < 0:
+        raise ServerError(
+            error=InvalidParamsError(
+                message='history length must be non-negative'
+            )
+        )
+
+
 def apply_history_length(
     task: Task, config: HistoryLengthConfig | None
 ) -> Task:
@@ -134,6 +146,24 @@ def apply_history_length(
         return task_copy
 
     return task
+
+
+def validate_page_size(page_size: int) -> None:
+    """Validates that page_size is in range [1, 100].
+
+    See Also:
+        https://a2a-protocol.org/latest/specification/#314-list-tasks
+    """
+    if page_size < 1:
+        raise ServerError(
+            error=InvalidParamsError(message='minimum page size is 1')
+        )
+    if page_size > MAX_LIST_TASKS_PAGE_SIZE:
+        raise ServerError(
+            error=InvalidParamsError(
+                message=f'maximum page size is {MAX_LIST_TASKS_PAGE_SIZE}'
+            )
+        )
 
 
 _ENCODING = 'utf-8'

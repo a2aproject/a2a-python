@@ -98,7 +98,7 @@ class ResultAggregator:
         self,
         consumer: EventConsumer,
         blocking: bool = True,
-        event_callback: Callable[[], Awaitable[None]] | None = None,
+        event_callback: Callable[[Event], Awaitable[None]] | None = None,
     ) -> tuple[Task | Message | None, bool]:
         """Processes the event stream until completion or an interruptible state is encountered.
 
@@ -130,6 +130,9 @@ class ResultAggregator:
                 self._message = event
                 return event, False
             await self.task_manager.process(event)
+
+            if event_callback:
+                await event_callback(event)
 
             should_interrupt = False
             is_auth_required = (
@@ -169,7 +172,7 @@ class ResultAggregator:
     async def _continue_consuming(
         self,
         event_stream: AsyncIterator[Event],
-        event_callback: Callable[[], Awaitable[None]] | None = None,
+        event_callback: Callable[[Event], Awaitable[None]] | None = None,
     ) -> None:
         """Continues processing an event stream in a background task.
 
@@ -183,4 +186,4 @@ class ResultAggregator:
         async for event in event_stream:
             await self.task_manager.process(event)
             if event_callback:
-                await event_callback()
+                await event_callback(event)
