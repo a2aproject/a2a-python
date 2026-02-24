@@ -632,6 +632,7 @@ async def test_owner_resource_scoping(
 
     context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
     context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
+    context_user3 = ServerCallContext(user=TestUser(user_name='user3')) # user with no tasks
 
     # Create tasks for different owners
     task1_user1, task2_user1, task1_user2 = Task(), Task(), Task()
@@ -663,6 +664,10 @@ async def test_owner_resource_scoping(
     assert len(page_user2.tasks) == 1
     assert {t.id for t in page_user2.tasks} == {'u2-task1'}
     assert page_user2.total_size == 1
+
+    page_user3 = await task_store.list(params, context_user3)
+    assert len(page_user3.tasks) == 0
+    assert page_user3.total_size == 0
 
     # Test DELETE
     await task_store.delete('u1-task1', context_user2)  # Should not delete
