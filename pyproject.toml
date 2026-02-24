@@ -37,6 +37,7 @@ postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
+vertex = ["google-cloud-aiplatform>=1.140.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -47,6 +48,7 @@ all = [
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
   "a2a-sdk[signing]",
+  "a2a-sdk[vertex]",
 ]
 
 [project.urls]
@@ -61,6 +63,9 @@ build-backend = "hatchling.build"
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
+
+[tool.hatch.metadata]
+allow-direct-references = true
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/a2a"]
