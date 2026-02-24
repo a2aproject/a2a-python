@@ -3,7 +3,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterator, Callable, Coroutine
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import httpx
 
@@ -22,6 +22,10 @@ from a2a.types import (
     TaskStatusUpdateEvent,
     TransportProtocol,
 )
+
+
+if TYPE_CHECKING:
+    from a2a.client.tls import TLSConfig
 
 
 logger = logging.getLogger(__name__)
@@ -69,6 +73,46 @@ class ClientConfig:
 
     extensions: list[str] = dataclasses.field(default_factory=list)
     """A list of extension URIs the client supports."""
+
+    tls_config: 'TLSConfig | None' = None
+    """TLS/SSL configuration for secure communication. If provided, this
+       will be used to configure secure connections for HTTP and gRPC
+       transports. Ignored if httpx_client or grpc_channel_factory is
+       explicitly provided."""
+
+    validate_messages: bool = False
+    """Whether to validate messages against JSON Schema before sending
+       and after receiving. Useful for protocol compliance testing."""
+
+    def get_httpx_client(self) -> httpx.AsyncClient:
+        """Get or create an httpx client with TLS configuration.
+
+        Returns:
+            Configured httpx.AsyncClient instance.
+        """
+        if self.httpx_client is not None:
+            return self.httpx_client
+
+        if self.tls_config is not None:
+            return self.tls_config.create_httpx_client()
+
+        return httpx.AsyncClient()
+
+    def get_grpc_channel_factory(self) -> Callable[[str], Channel] | None:
+        """Get or create a gRPC channel factory with TLS configuration.
+
+        Returns:
+            A callable that creates gRPC channels, or None.
+        """
+        if self.grpc_channel_factory is not None:
+            return self.grpc_channel_factory
+
+        if self.tls_config is not None:
+            from a2a.client.tls import create_grpc_channel_factory
+
+            return create_grpc_channel_factory(self.tls_config)
+
+        return None
 
 
 UpdateEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None
