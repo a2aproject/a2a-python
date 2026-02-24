@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import os
 
 from logging.config import fileConfig
@@ -28,6 +29,9 @@ config.set_main_option('sqlalchemy.url', db_url)
 # This line sets up loggers basically.
 if config.config_file_name is not None:
     fileConfig(config.config_file_name)
+
+if config.get_main_option('verbose') == 'true':
+    logging.getLogger('sqlalchemy.engine').setLevel(logging.INFO)
 
 # add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
