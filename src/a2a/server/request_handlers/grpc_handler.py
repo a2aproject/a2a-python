@@ -24,6 +24,7 @@ from a2a import types
 from a2a.auth.user import UnauthenticatedUser
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
+    HTTP_EXTENSION_HEADER_DEPRECATED,
     get_requested_extensions,
 )
 from a2a.grpc import a2a_pb2
@@ -72,12 +73,13 @@ class DefaultCallContextBuilder(CallContextBuilder):
         state = {}
         with contextlib.suppress(Exception):
             state['grpc_context'] = context
+        extension_values = _get_metadata_value(
+            context, HTTP_EXTENSION_HEADER
+        ) or _get_metadata_value(context, HTTP_EXTENSION_HEADER_DEPRECATED)
         return ServerCallContext(
             user=user,
             state=state,
-            requested_extensions=get_requested_extensions(
-                _get_metadata_value(context, HTTP_EXTENSION_HEADER)
-            ),
+            requested_extensions=get_requested_extensions(extension_values),
         )
 
 
