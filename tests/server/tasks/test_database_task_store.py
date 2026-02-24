@@ -632,7 +632,9 @@ async def test_owner_resource_scoping(
 
     context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
     context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
-    context_user3 = ServerCallContext(user=TestUser(user_name='user3')) # user with no tasks
+    context_user3 = ServerCallContext(
+        user=TestUser(user_name='user3')
+    )  # user with no tasks
 
     # Create tasks for different owners
     task1_user1, task2_user1, task1_user2 = Task(), Task(), Task()
