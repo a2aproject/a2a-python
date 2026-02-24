@@ -35,7 +35,18 @@ def upgrade() -> None:
         ),
     )
 
+    op.add_column(
+        'push_notification_configs',
+        sa.Column(
+            'owner',
+            sa.String(128),
+            nullable=False,
+            server_default=owner,
+        ),
+    )
+
 
 def downgrade() -> None:
     """Downgrade schema."""
     op.drop_column('tasks', 'owner')
+    op.drop_column('push_notification_configs', 'owner')

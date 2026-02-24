@@ -4,9 +4,13 @@ This directory handles the database schema updates for the A2A SDK. It uses a bu
 
 ## User Guide (For Integrators)
 
-When you install the `a2a-sdk`, you get a built-in command `a2a-db` to manage your database schema.
+When you install the `a2a-sdk`, you get a built-in command `a2a-db` which updates tables 'tasks' and 'push_notification_configs' in your database to make it compatible with the latest version of the SDK.
 
-### 1. Set your Database URL
+### 1. Recommended: Backup your database
+
+Before running migrations, it is recommended to backup your database.
+
+### 2. Set your Database URL
 Migrations require the `DATABASE_URL` environment variable to be set with an **async-compatible** driver or you can use the `-u` flag to specify the database URL for a single command.
 
 ```bash
@@ -20,7 +24,7 @@ export DATABASE_URL="postgresql+asyncpg://user:pass@localhost/your_database_name
 export DATABASE_URL="mysql+aiomysql://user:pass@localhost/your_database_name"
 ```
 
-### 2. Apply Migrations
+### 3. Apply Migrations
 Always run this command after installing or upgrading the SDK to ensure your database matches the required schema.
 
 ```bash
@@ -28,14 +32,14 @@ Always run this command after installing or upgrading the SDK to ensure your dat
 a2a-db
 ```
 
-### 3. Customizing Defaults
+### 4. Customizing Defaults
 Add owner to tasks migration allows you to pass custom values for the new `owner` column. For example, to set a specific default owner for existing tasks:
 
 ```bash
 a2a-db -o "admin_user"
 ```
 
-### 4. Rolling Back
+### 5. Rolling Back
 If you need to revert a change:
 
 ```bash
