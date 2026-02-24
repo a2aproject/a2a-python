@@ -2,7 +2,7 @@
 set -e
 
 # Run buf generate to regenerate protobuf code and OpenAPI spec
-npx @bufbuild/buf generate
+npx --yes @bufbuild/buf generate
 
 # The OpenAPI generator produces a file named like 'a2a.swagger.json' or similar.
 # We need it to be 'a2a.json' for the A2A SDK.
