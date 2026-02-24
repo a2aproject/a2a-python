@@ -19,7 +19,7 @@ db_url = os.getenv('DATABASE_URL')
 if not db_url:
     raise RuntimeError(
         'DATABASE_URL environment variable is not set. '
-        "Please set it (e.g., export DATABASE_URL='sqlite+aiosqlite:///./my-database.db') before running migrations"
+        "Please set it (e.g., export DATABASE_URL='sqlite+aiosqlite:///./my-database.db') before running migrations "
         'or use the --database-url flag.'
     )
 config.set_main_option('sqlalchemy.url', db_url)
