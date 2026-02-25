@@ -237,7 +237,7 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
     ]
     assert len(events) == 1
     response, _ = events[0]
-    assert response.task.id 
+    assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
 
 
@@ -252,20 +252,19 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     )
 
     events = [
-        event async for event in client.send_message(request=message_to_send)
+        event async for event, _ in client.send_message(request=message_to_send)
     ]
 
-    assert len(events) > 0
-    stream_response, task = events[-1]
+    expected_states = [
+        TaskState.TASK_STATE_SUBMITTED,
+        TaskState.TASK_STATE_WORKING,
+        TaskState.TASK_STATE_COMPLETED,
+    ]
 
-    assert stream_response.HasField('status_update')
-    assert stream_response.status_update.task_id
-    assert (
-        stream_response.status_update.status.state
-        == TaskState.TASK_STATE_COMPLETED
-    )
-    assert task
-    assert task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert len(events) == len(expected_states)
+    for event, expected_state in zip(events, expected_states):
+        assert event.HasField('status_update')
+        assert event.status_update.status.state == expected_state
 
 
 @pytest.mark.asyncio
@@ -304,13 +303,15 @@ async def test_end_to_end_list_tasks(transport_setups):
     expected_task_ids = []
     for i in range(total_items):
         # One event is enough to get the task ID
-        _, task = await anext(client.send_message(
-            request=Message(
-                role=Role.ROLE_USER,
-                message_id=f'msg-e2e-list-{i}',
-                parts=[Part(text=f'Test List Tasks {i}')],
+        _, task = await anext(
+            client.send_message(
+                request=Message(
+                    role=Role.ROLE_USER,
+                    message_id=f'msg-e2e-list-{i}',
+                    parts=[Part(text=f'Test List Tasks {i}')],
+                )
             )
-        ))
+        )
         expected_task_ids.append(task.id)
 
     list_request = ListTasksRequest(page_size=page_size)
