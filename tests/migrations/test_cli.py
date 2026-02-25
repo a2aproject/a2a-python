@@ -146,7 +146,6 @@ def test_cli_upgrade_online(mock_alembic_command, mock_alembic_config):
     )
 
 
-
 def test_cli_downgrade_online(mock_alembic_command, mock_alembic_config):
     _, mock_downgrade = mock_alembic_command
     target_table = 'other_table'
@@ -165,7 +164,6 @@ def test_cli_downgrade_online(mock_alembic_command, mock_alembic_config):
     mock_alembic_config.return_value.set_main_option.assert_any_call(
         'tables', target_table
     )
-
 
 
 def test_cli_database_url_flag(mock_alembic_command, mock_alembic_config):
