@@ -41,6 +41,9 @@ class MockAgentExecutor(AgentExecutor):
         )
         await task_updater.update_status(TaskState.TASK_STATE_SUBMITTED)
         await task_updater.update_status(TaskState.TASK_STATE_WORKING)
+        await task_updater.add_artifact(
+            parts=[Part(text='artifact content')], name='test-artifact'
+        )
         await task_updater.update_status(
             TaskState.TASK_STATE_COMPLETED,
             message=task_updater.new_agent_message([Part(text='done')]),
@@ -167,7 +170,7 @@ async def grpc_setup(
 
     factory = ClientFactory(
         config=ClientConfig(
-            grpc_channel_factory=lambda url: grpc.aio.insecure_channel(url),
+            grpc_channel_factory=grpc.aio.insecure_channel,
             supported_protocol_bindings=[TransportProtocol.GRPC],
         )
     )
@@ -215,6 +218,9 @@ async def test_end_to_end_send_message_blocking(transport_setups):
     response, _ = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert len(response.task.artifacts) == 1
+    assert response.task.artifacts[0].name == 'test-artifact'
+    assert response.task.artifacts[0].parts[0].text == 'artifact content'
 
 
 @pytest.mark.asyncio
@@ -255,16 +261,26 @@ async def test_end_to_end_send_message_streaming(transport_setups):
         event async for event, _ in client.send_message(request=message_to_send)
     ]
 
-    expected_states = [
-        TaskState.TASK_STATE_SUBMITTED,
-        TaskState.TASK_STATE_WORKING,
-        TaskState.TASK_STATE_COMPLETED,
+    expected_events = [
+        ('status_update', TaskState.TASK_STATE_SUBMITTED),
+        ('status_update', TaskState.TASK_STATE_WORKING),
+        ('artifact_update', None),
+        ('status_update', TaskState.TASK_STATE_COMPLETED),
     ]
 
-    assert len(events) == len(expected_states)
-    for event, expected_state in zip(events, expected_states):
-        assert event.HasField('status_update')
-        assert event.status_update.status.state == expected_state
+    assert len(events) == len(expected_events)
+    for event, (expected_type, expected_state) in zip(
+        events, expected_events, strict=True
+    ):
+        assert event.HasField(expected_type)
+        if expected_type == 'status_update':
+            assert event.status_update.status.state == expected_state
+        elif expected_type == 'artifact_update':
+            assert event.artifact_update.artifact.name == 'test-artifact'
+            assert (
+                event.artifact_update.artifact.parts[0].text
+                == 'artifact content'
+            )
 
 
 @pytest.mark.asyncio
@@ -328,8 +344,7 @@ async def test_end_to_end_list_tasks(transport_setups):
         assert list_response.total_size == total_items
         assert list_response.page_size == page_size
 
-        for task in list_response.tasks:
-            actual_task_ids.append(task.id)
+        actual_task_ids.extend([task.id for task in list_response.tasks])
 
         token = list_response.next_page_token
 
