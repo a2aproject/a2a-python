@@ -8,7 +8,13 @@ from sqlalchemy import Connection, pool
 from sqlalchemy.ext.asyncio import async_engine_from_config
 
 from a2a.server.models import Base
-from alembic import context
+
+try:
+    from alembic import context
+except ImportError as e:
+    raise ImportError(
+        "Migrations require Alembic. Install with: 'pip install a2a-sdk[cli]'."
+    ) from e
 
 
 # this is the Alembic Config object, which provides

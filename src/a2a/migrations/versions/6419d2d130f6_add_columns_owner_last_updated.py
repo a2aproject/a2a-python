@@ -10,7 +10,12 @@ from collections.abc import Sequence
 
 import sqlalchemy as sa
 
-from alembic import context, op
+try:
+    from alembic import context, op
+except ImportError as e:
+    raise ImportError(
+        "Add columns to database tables migration requires Alembic. Install with: 'pip install a2a-sdk[cli]'."
+    ) from e
 
 
 # revision identifiers, used by Alembic.

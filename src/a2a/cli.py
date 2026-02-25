@@ -4,11 +4,20 @@ import os
 
 from importlib.resources import files
 
-from alembic import command
-from alembic.config import Config
+
+try:
+    from alembic import command
+    from alembic.config import Config
+
+except ImportError as e:
+    raise ImportError(
+        "CLI requires Alembic. Install with: 'pip install a2a-sdk[cli]'."
+    ) from e
 
 
-def _add_shared_args(parser: argparse.ArgumentParser, is_sub: bool = False) -> None:
+def _add_shared_args(
+    parser: argparse.ArgumentParser, is_sub: bool = False
+) -> None:
     """Add common arguments to the given parser."""
     prefix = 'sub_' if is_sub else ''
     parser.add_argument(
