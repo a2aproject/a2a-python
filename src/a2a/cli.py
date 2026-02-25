@@ -8,6 +8,37 @@ from alembic import command
 from alembic.config import Config
 
 
+def _add_shared_args(parser: argparse.ArgumentParser, is_sub: bool = False) -> None:
+    """Add common arguments to the given parser."""
+    prefix = 'sub_' if is_sub else ''
+    parser.add_argument(
+        '-u',
+        '--database-url',
+        dest=f'{prefix}database_url',
+        help='Database URL to use for the migrations. If not set, the DATABASE_URL environment variable will be used.',
+    )
+    parser.add_argument(
+        '-t',
+        '--table',
+        dest=f'{prefix}table',
+        help="Specific table to update. If not set, both 'tasks' and 'push_notification_configs' are updated.",
+        action='append',
+    )
+    parser.add_argument(
+        '-v',
+        '--verbose',
+        dest=f'{prefix}verbose',
+        help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--sql',
+        dest=f'{prefix}sql',
+        help='Run migrations in sql mode (generate SQL instead of executing)',
+        action='store_true',
+    )
+
+
 def create_parser() -> argparse.ArgumentParser:
     """Create the argument parser for the migration tool."""
     parser = argparse.ArgumentParser(description='A2A Database Migration Tool')
@@ -18,28 +49,7 @@ def create_parser() -> argparse.ArgumentParser:
         '--owner',
         help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
     )
-    parser.add_argument(
-        '-u',
-        '--database-url',
-        help='Database URL to use for the migrations. If not set, the DATABASE_URL environment variable will be used.',
-    )
-    parser.add_argument(
-        '-t',
-        '--table',
-        help="Specific table to update. If not set, both 'tasks' and 'push_notification_configs' are updated.",
-        action='append',
-    )
-    parser.add_argument(
-        '-v',
-        '--verbose',
-        help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
-        action='store_true',
-    )
-    parser.add_argument(
-        '--sql',
-        help='Run migrations in sql mode (generate SQL instead of executing)',
-        action='store_true',
-    )
+    _add_shared_args(parser)
 
     subparsers = parser.add_subparsers(dest='cmd', help='Migration command')
 
@@ -56,32 +66,7 @@ def create_parser() -> argparse.ArgumentParser:
     up_parser.add_argument(
         '-o', '--owner', dest='sub_owner', help='Alias for top-level --owner'
     )
-    up_parser.add_argument(
-        '-u',
-        '--database-url',
-        dest='sub_database_url',
-        help='Alias for top-level --database-url',
-    )
-    up_parser.add_argument(
-        '-t',
-        '--table',
-        dest='sub_table',
-        help='Alias for top-level --table',
-        action='append',
-    )
-    up_parser.add_argument(
-        '-v',
-        '--verbose',
-        dest='sub_verbose',
-        help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
-        action='store_true',
-    )
-    up_parser.add_argument(
-        '--sql',
-        dest='sub_sql',
-        help='Run migrations in sql mode (generate SQL instead of executing)',
-        action='store_true',
-    )
+    _add_shared_args(up_parser, is_sub=True)
 
     # Downgrade command
     down_parser = subparsers.add_parser(
@@ -93,32 +78,7 @@ def create_parser() -> argparse.ArgumentParser:
         default='base',
         help='Revision target (e.g., -1, base or a specific ID)',
     )
-    down_parser.add_argument(
-        '-u',
-        '--database-url',
-        dest='sub_database_url',
-        help='Alias for top-level --database-url',
-    )
-    down_parser.add_argument(
-        '-t',
-        '--table',
-        dest='sub_table',
-        help='Alias for top-level --table',
-        action='append',
-    )
-    down_parser.add_argument(
-        '-v',
-        '--verbose',
-        dest='sub_verbose',
-        help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
-        action='store_true',
-    )
-    down_parser.add_argument(
-        '--sql',
-        dest='sub_sql',
-        help='Run migrations in sql mode (generate SQL instead of executing)',
-        action='store_true',
-    )
+    _add_shared_args(down_parser, is_sub=True)
 
     return parser
 

@@ -22,6 +22,7 @@ dependencies = [
 
 [package.optional-dependencies]
 all = [
+    { name = "alembic" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "grpcio" },
@@ -33,6 +34,9 @@ all = [
     { name = "sqlalchemy", extra = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"] },
     { name = "sse-starlette" },
     { name = "starlette" },
+]
+cli = [
+    { name = "alembic" },
 ]
 encryption = [
     { name = "cryptography" },
@@ -70,7 +74,6 @@ telemetry = [
 [package.dev-dependencies]
 dev = [
     { name = "a2a-sdk", extra = ["all"] },
-    { name = "alembic" },
     { name = "autoflake" },
     { name = "mypy" },
     { name = "no-implicit-optional" },
@@ -94,6 +97,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", marker = "extra == 'all'", specifier = ">=1.14.0" },
+    { name = "alembic", marker = "extra == 'cli'", specifier = ">=1.14.0" },
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
     { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
@@ -131,12 +136,11 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
+provides-extras = ["all", "cli", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
     { name = "a2a-sdk", extras = ["all"], editable = "." },
-    { name = "alembic", specifier = ">=1.14.0" },
     { name = "autoflake" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "no-implicit-optional" },
@@ -2352,7 +2356,7 @@ wheels = [
 
 [[package]]
 name = "virtualenv"
-version = "20.38.0"
+version = "20.39.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "distlib" },
@@ -2360,9 +2364,9 @@ dependencies = [
     { name = "platformdirs" },
     { name = "typing-extensions", marker = "python_full_version < '3.11'" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/d2/03/a94d404ca09a89a7301a7008467aed525d4cdeb9186d262154dd23208709/virtualenv-20.38.0.tar.gz", hash = "sha256:94f39b1abaea5185bf7ea5a46702b56f1d0c9aa2f41a6c2b8b0af4ddc74c10a7", size = 5864558, upload-time = "2026-02-19T07:48:02.385Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/ed/54/809199edc537dbace273495ac0884d13df26436e910a5ed4d0ec0a69806b/virtualenv-20.39.0.tar.gz", hash = "sha256:a15f0cebd00d50074fd336a169d53422436a12dfe15149efec7072cfe817df8b", size = 5869141, upload-time = "2026-02-23T18:09:13.349Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/42/d7/394801755d4c8684b655d35c665aea7836ec68320304f62ab3c94395b442/virtualenv-20.38.0-py3-none-any.whl", hash = "sha256:d6e78e5889de3a4742df2d3d44e779366325a90cf356f15621fddace82431794", size = 5837778, upload-time = "2026-02-19T07:47:59.778Z" },
+    { url = "https://files.pythonhosted.org/packages/f7/b4/8268da45f26f4fe84f6eae80a6ca1485ffb490a926afecff75fc48f61979/virtualenv-20.39.0-py3-none-any.whl", hash = "sha256:44888bba3775990a152ea1f73f8e5f566d49f11bbd1de61d426fd7732770043e", size = 5839121, upload-time = "2026-02-23T18:09:11.173Z" },
 ]
 
 [[package]]

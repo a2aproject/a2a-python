@@ -39,6 +39,7 @@ postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
+cli = ["alembic>=1.14.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -49,6 +50,7 @@ all = [
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
   "a2a-sdk[signing]",
+  "a2a-sdk[cli]",
 ]
 
 [project.urls]
@@ -106,7 +108,6 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
-  "alembic>=1.14.0",
   "mypy>=1.15.0",
   "PyJWT>=2.0.0",
   "pytest>=8.3.5",
