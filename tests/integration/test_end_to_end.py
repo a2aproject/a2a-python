@@ -79,7 +79,7 @@ def agent_card() -> AgentCard:
     )
 
 
-class TransportSetup(NamedTuple):
+class ClientSetup(NamedTuple):
     """Holds the client and task_store for a given test."""
 
     client: BaseClient
@@ -98,7 +98,7 @@ def base_e2e_setup():
 
 
 @pytest.fixture
-def rest_setup(agent_card, base_e2e_setup) -> TransportSetup:
+def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
     app_builder = A2ARESTFastAPIApplication(agent_card, handler)
     app = app_builder.build()
@@ -112,14 +112,14 @@ def rest_setup(agent_card, base_e2e_setup) -> TransportSetup:
         )
     )
     client = factory.create(agent_card)
-    return TransportSetup(
+    return ClientSetup(
         client=client,
         task_store=task_store,
     )
 
 
 @pytest.fixture
-def jsonrpc_setup(agent_card, base_e2e_setup) -> TransportSetup:
+def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
     app_builder = A2AFastAPIApplication(
         agent_card, handler, extended_agent_card=agent_card
@@ -135,7 +135,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> TransportSetup:
         )
     )
     client = factory.create(agent_card)
-    return TransportSetup(
+    return ClientSetup(
         client=client,
         task_store=task_store,
     )
@@ -144,7 +144,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> TransportSetup:
 @pytest_asyncio.fixture
 async def grpc_setup(
     agent_card: AgentCard, base_e2e_setup
-) -> AsyncGenerator[TransportSetup, None]:
+) -> AsyncGenerator[ClientSetup, None]:
     task_store, handler = base_e2e_setup
     server = grpc.aio.server()
     port = server.add_insecure_port('[::]:0')
@@ -172,7 +172,7 @@ async def grpc_setup(
         )
     )
     client = factory.create(grpc_agent_card)
-    yield TransportSetup(
+    yield ClientSetup(
         client=client,
         task_store=task_store,
     )
@@ -188,7 +188,7 @@ async def grpc_setup(
         pytest.param('grpc_setup', id='gRPC'),
     ]
 )
-def transport_setups(request) -> TransportSetup:
+def transport_setups(request) -> ClientSetup:
     """Parametrized fixture that runs tests against all supported transports."""
     return request.getfixturevalue(request.param)
 
