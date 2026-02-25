@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 import grpc
 import httpx
@@ -7,7 +7,7 @@ import pytest
 import pytest_asyncio
 
 from a2a.client.base_client import BaseClient
-from a2a.client.client import Client, ClientConfig
+from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
@@ -26,7 +26,6 @@ from a2a.types import (
     Part,
     Role,
     SendMessageConfiguration,
-    SendMessageRequest,
     TaskState,
     a2a_pb2_grpc,
 )
@@ -112,7 +111,7 @@ def rest_setup(agent_card, base_e2e_setup) -> TransportSetup:
             supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
         )
     )
-    client = cast(BaseClient, factory.create(agent_card))
+    client = factory.create(agent_card)
     return TransportSetup(
         client=client,
         task_store=task_store,
@@ -135,7 +134,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> TransportSetup:
             supported_protocol_bindings=[TransportProtocol.JSONRPC],
         )
     )
-    client = cast(BaseClient, factory.create(agent_card))
+    client = factory.create(agent_card)
     return TransportSetup(
         client=client,
         task_store=task_store,
@@ -172,7 +171,7 @@ async def grpc_setup(
             supported_protocol_bindings=[TransportProtocol.GRPC],
         )
     )
-    client = cast(BaseClient, factory.create(grpc_agent_card))
+    client = factory.create(grpc_agent_card)
     yield TransportSetup(
         client=client,
         task_store=task_store,
