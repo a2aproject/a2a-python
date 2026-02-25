@@ -196,6 +196,7 @@ def transport_setups(request) -> ClientSetup:
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_blocking(transport_setups):
     client = transport_setups.client
+    client._config.streaming = False
 
     message_to_send = Message(
         role=Role.ROLE_USER,
@@ -210,16 +211,16 @@ async def test_end_to_end_send_message_blocking(transport_setups):
             request=message_to_send, configuration=configuration
         )
     ]
-    response, task = events[-1]
-
-    assert task
-    assert task.id
-    assert task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert len(events) == 1
+    response, _ = events[0]
+    assert response.task.id
+    assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
 
 
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_non_blocking(transport_setups):
     client = transport_setups.client
+    client._config.streaming = False
 
     message_to_send = Message(
         role=Role.ROLE_USER,
@@ -234,10 +235,10 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
             request=message_to_send, configuration=configuration
         )
     ]
-    response, task = events[-1]
-
-    assert task
-    assert task.id
+    assert len(events) == 1
+    response, _ = events[0]
+    assert response.task.id 
+    assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
 
 
 @pytest.mark.asyncio
@@ -300,21 +301,21 @@ async def test_end_to_end_list_tasks(transport_setups):
     total_items = 6
     page_size = 2
 
+    expected_task_ids = []
     for i in range(total_items):
-        # We need to await the iterator to ensure request completes
-        async for _ in client.send_message(
+        # One event is enough to get the task ID
+        _, task = await anext(client.send_message(
             request=Message(
                 role=Role.ROLE_USER,
                 message_id=f'msg-e2e-list-{i}',
                 parts=[Part(text=f'Test List Tasks {i}')],
-            ),
-            configuration=SendMessageConfiguration(blocking=False),
-        ):
-            pass
+            )
+        ))
+        expected_task_ids.append(task.id)
 
     list_request = ListTasksRequest(page_size=page_size)
 
-    unique_task_ids = set()
+    actual_task_ids = []
     token = None
 
     while token != '':
@@ -327,8 +328,9 @@ async def test_end_to_end_list_tasks(transport_setups):
         assert list_response.page_size == page_size
 
         for task in list_response.tasks:
-            unique_task_ids.add(task.id)
+            actual_task_ids.append(task.id)
 
         token = list_response.next_page_token
 
-    assert len(unique_task_ids) == total_items
+    assert len(actual_task_ids) == total_items
+    assert sorted(actual_task_ids) == sorted(expected_task_ids)
