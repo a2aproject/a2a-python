@@ -101,6 +101,8 @@ def run_migrations_online() -> None:
 
 
 if context.is_offline_mode():
+    logging.info('Running migrations in offline mode.')
     run_migrations_offline()
 else:
+    logging.info('Running migrations in online mode.')
     run_migrations_online()

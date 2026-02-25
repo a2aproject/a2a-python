@@ -1,4 +1,5 @@
 import argparse
+import logging
 import os
 
 from importlib.resources import files
@@ -7,8 +8,8 @@ from alembic import command
 from alembic.config import Config
 
 
-def run_migrations() -> None:
-    """CLI tool to manage database migrations."""
+def create_parser() -> argparse.ArgumentParser:
+    """Create the argument parser for the migration tool."""
     parser = argparse.ArgumentParser(description='A2A Database Migration Tool')
 
     # Global options
@@ -32,6 +33,11 @@ def run_migrations() -> None:
         '-v',
         '--verbose',
         help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
+        action='store_true',
+    )
+    parser.add_argument(
+        '--sql',
+        help='Run migrations in sql mode (generate SQL instead of executing)',
         action='store_true',
     )
 
@@ -70,6 +76,12 @@ def run_migrations() -> None:
         help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
         action='store_true',
     )
+    up_parser.add_argument(
+        '--sql',
+        dest='sub_sql',
+        help='Run migrations in sql mode (generate SQL instead of executing)',
+        action='store_true',
+    )
 
     # Downgrade command
     down_parser = subparsers.add_parser(
@@ -101,7 +113,22 @@ def run_migrations() -> None:
         help='Enable verbose output (sets sqlalchemy.engine logging to INFO)',
         action='store_true',
     )
+    down_parser.add_argument(
+        '--sql',
+        dest='sub_sql',
+        help='Run migrations in sql mode (generate SQL instead of executing)',
+        action='store_true',
+    )
 
+    return parser
+
+
+def run_migrations() -> None:
+    """CLI tool to manage database migrations."""
+    # Configure logging to show INFO messages
+    logging.basicConfig(level=logging.INFO, format='%(levelname)s  %(message)s')
+
+    parser = create_parser()
     args = parser.parse_args()
 
     # Default to upgrade head if no command is provided
@@ -117,11 +144,12 @@ def run_migrations() -> None:
     migrations_path = files('a2a').joinpath('migrations')
     cfg.set_main_option('script_location', str(migrations_path))
 
-    # Consolidate owner, db_url, tables and verbose values
+    # Consolidate owner, db_url, tables, verbose and sql values
     owner = args.owner or getattr(args, 'sub_owner', None)
     db_url = args.database_url or getattr(args, 'sub_database_url', None)
     tables = args.table or getattr(args, 'sub_table', None)
     verbose = args.verbose or getattr(args, 'sub_verbose', False)
+    sql = args.sql or getattr(args, 'sub_sql', False)
 
     # Pass custom arguments to the migration context
     if owner:
@@ -139,10 +167,10 @@ def run_migrations() -> None:
 
     # Execute the requested command
     if args.cmd == 'upgrade':
-        print(f'Upgrading database to {args.revision}...')
-        command.upgrade(cfg, args.revision)
+        logging.info('Upgrading database to %s', args.revision)
+        command.upgrade(cfg, args.revision, sql=sql)
     elif args.cmd == 'downgrade':
-        print(f'Downgrading database to {args.revision}...')
-        command.downgrade(cfg, args.revision)
+        logging.info('Downgrading database to %s', args.revision)
+        command.downgrade(cfg, args.revision, sql=sql)
 
-    print('Done.')
+    logging.info('Done.')

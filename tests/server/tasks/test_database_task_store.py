@@ -36,7 +36,7 @@ from a2a.server.context import ServerCallContext
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 
 
-class TestUser(User):
+class SampleUser(User):
     """A test implementation of the User interface."""
 
     def __init__(self, user_name: str):
@@ -630,10 +630,10 @@ async def test_owner_resource_scoping(
     """Test that operations are scoped to the correct owner."""
     task_store = db_store_parameterized
 
-    context_user1 = ServerCallContext(user=TestUser(user_name='user1'))
-    context_user2 = ServerCallContext(user=TestUser(user_name='user2'))
+    context_user1 = ServerCallContext(user=SampleUser(user_name='user1'))
+    context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
     context_user3 = ServerCallContext(
-        user=TestUser(user_name='user3')
+        user=SampleUser(user_name='user3')
     )  # user with no tasks
 
     # Create tasks for different owners

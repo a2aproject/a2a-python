@@ -21,6 +21,8 @@ depends_on: str | Sequence[str] | None = None
 
 
 def column_exists(table_name: str, column_name: str) -> bool:
+    if context.is_offline_mode():
+        return False
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     columns = [c['name'] for c in inspector.get_columns(table_name)]
@@ -28,6 +30,8 @@ def column_exists(table_name: str, column_name: str) -> bool:
 
 
 def index_exists(table_name: str, index_name: str) -> bool:
+    if context.is_offline_mode():
+        return False
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     indexes = [i['name'] for i in inspector.get_indexes(table_name)]

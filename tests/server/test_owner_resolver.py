@@ -4,7 +4,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import resolve_user_scope
 
 
-class TestUser(User):
+class SampleUser(User):
     """A test implementation of the User interface."""
 
     def __init__(self, user_name: str):
@@ -21,9 +21,9 @@ class TestUser(User):
 
 def test_resolve_user_scope_valid_user():
     """Test resolve_user_scope with a valid user in the context."""
-    user = TestUser(user_name='testuser')
+    user = SampleUser(user_name='SampleUser')
     context = ServerCallContext(user=user)
-    assert resolve_user_scope(context) == 'testuser'
+    assert resolve_user_scope(context) == 'SampleUser'
 
 
 def test_resolve_user_scope_no_context():
