@@ -48,7 +48,7 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
 
     # 2. Run Upgrade via CLI with a custom owner
     custom_owner = 'test_owner_123'
-    
+
     # We use the CLI tool to perform the upgrade
     # Using the new --owner-name flag and --database-url flag
     result = subprocess.run(
@@ -102,11 +102,7 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
 
     # 4. Run Downgrade via CLI
     result = subprocess.run(
-        [
-            'uv', 'run', 'a2a-db', 
-            '--database-url', db_url,
-            'downgrade', 'base'
-        ],
+        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'downgrade', 'base'],
         capture_output=True,
         text=True,
         check=False,
@@ -147,36 +143,46 @@ def test_migration_6419d2d130f6_custom_tables(temp_db: str) -> None:
     # 1. Setup initial schema with custom names
     conn = sqlite3.connect(temp_db)
     cursor = conn.cursor()
-    cursor.execute(f"CREATE TABLE {custom_tasks} (id VARCHAR(36) PRIMARY KEY, kind VARCHAR(16))")
-    cursor.execute(f"CREATE TABLE {custom_push} (task_id VARCHAR(36), PRIMARY KEY (task_id))")
+    cursor.execute(
+        f'CREATE TABLE {custom_tasks} (id VARCHAR(36) PRIMARY KEY, kind VARCHAR(16))'
+    )
+    cursor.execute(
+        f'CREATE TABLE {custom_push} (task_id VARCHAR(36), PRIMARY KEY (task_id))'
+    )
     conn.commit()
     conn.close()
 
     # 2. Run Upgrade via CLI with custom table flags
     result = subprocess.run(
         [
-            'uv', 'run', 'a2a-db',
-            '--database-url', db_url,
-            '--tasks-table', custom_tasks,
-            '--push-notification-table', custom_push,
-            'upgrade', '6419d2d130f6',
+            'uv',
+            'run',
+            'a2a-db',
+            '--database-url',
+            db_url,
+            '--tasks-table',
+            custom_tasks,
+            '--push-notification-table',
+            custom_push,
+            'upgrade',
+            '6419d2d130f6',
         ],
         capture_output=True,
         text=True,
         check=False,
     )
-    assert result.returncode == 0, f"Upgrade failed: {result.stderr}"
+    assert result.returncode == 0, f'Upgrade failed: {result.stderr}'
 
     # 3. Verify columns exist in custom tables
     conn = sqlite3.connect(temp_db)
     cursor = conn.cursor()
-    
+
     cursor.execute(f'PRAGMA table_info({custom_tasks})')
     assert 'owner' in {row[1] for row in cursor.fetchall()}
-    
+
     cursor.execute(f'PRAGMA table_info({custom_push})')
     assert 'owner' in {row[1] for row in cursor.fetchall()}
-    
+
     conn.close()
 
 
@@ -186,14 +192,25 @@ def test_migration_6419d2d130f6_missing_tables(temp_db: str) -> None:
 
     # Run upgrade on empty database
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
+        [
+            'uv',
+            'run',
+            'a2a-db',
+            '--database-url',
+            db_url,
+            'upgrade',
+            '6419d2d130f6',
+        ],
         capture_output=True,
         text=True,
         check=False,
     )
-    
+
     assert result.returncode == 0
-    assert "Table 'tasks' does not exist" in result.stderr or "Table 'tasks' does not exist" in result.stdout
+    assert (
+        "Table 'tasks' does not exist" in result.stderr
+        or "Table 'tasks' does not exist" in result.stdout
+    )
 
 
 def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
@@ -214,7 +231,15 @@ def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
 
     # 2. Run Upgrade first time
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
+        [
+            'uv',
+            'run',
+            'a2a-db',
+            '--database-url',
+            db_url,
+            'upgrade',
+            '6419d2d130f6',
+        ],
         capture_output=True,
         text=True,
         check=False,
@@ -223,7 +248,15 @@ def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
 
     # 3. Run Upgrade second time - should not fail even if columns already exist
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
+        [
+            'uv',
+            'run',
+            'a2a-db',
+            '--database-url',
+            db_url,
+            'upgrade',
+            '6419d2d130f6',
+        ],
         capture_output=True,
         text=True,
         check=False,
