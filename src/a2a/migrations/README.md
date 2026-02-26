@@ -2,6 +2,16 @@
 
 This directory handles the database schema updates for the A2A SDK. It uses a bundled CLI tool to simplify the migration process.
 
+## Installation
+
+To use the `a2a-db` migration tool, must install the `a2a-sdk` with the `cli`.
+
+| Extra | `uv` Command | `pip` Command |
+| :--- | :--- | :--- |
+| **CLI Only** | `uv add "a2a-sdk[cli]"` | `pip install "a2a-sdk[cli]"` |
+| **All Extras** | `uv add "a2a-sdk[all]"` | `pip install "a2a-sdk[all]"` |
+
+
 ## User Guide for Integrators
 
 When you install the `a2a-sdk`, you get a built-in command `a2a-db` which updates your database to make it compatible with the latest version of the SDK.
