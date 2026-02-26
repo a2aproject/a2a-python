@@ -262,11 +262,15 @@ class RESTHandler:
         try:
             params = TaskQueryParams(
                 id=task_id,
-                history_length=history_length_str if history_length_str else None,
+                history_length=history_length_str
+                if history_length_str
+                else None,
             )
         except ValidationError:
             raise ServerError(
-                error=InvalidParamsError(message='historyLength must be a valid integer')
+                error=InvalidParamsError(
+                    message='historyLength must be a valid integer'
+                )
             ) from None
         task = await self.request_handler.on_get_task(params, context)
         if task:
