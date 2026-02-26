@@ -4,6 +4,7 @@ from collections.abc import AsyncIterable, AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
+from pydantic import ValidationError
 
 
 if TYPE_CHECKING:
@@ -21,6 +22,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import (
     AgentCard,
     GetTaskPushNotificationConfigParams,
+    InvalidParamsError,
     TaskIdParams,
     TaskNotFoundError,
     TaskQueryParams,
@@ -257,8 +259,19 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
-        params = TaskQueryParams(id=task_id, history_length=history_length)
+        try:
+            params = TaskQueryParams(
+                id=task_id,
+                history_length=history_length_str
+                if history_length_str
+                else None,
+            )
+        except ValidationError:
+            raise ServerError(
+                error=InvalidParamsError(
+                    message='historyLength must be a valid integer'
+                )
+            ) from None
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(proto_utils.ToProto.task(task))

@@ -399,5 +399,17 @@ async def test_send_message_rejected_task(
     assert expected_response == actual_response
 
 
+@pytest.mark.anyio
+async def test_get_task_invalid_history_length_returns_422(
+    client: AsyncClient,
+) -> None:
+    """Non-numeric historyLength query param returns 422 InvalidParamsError."""
+    response = await client.get('/v1/tasks/some-task-id?historyLength=abc')
+    assert response.status_code == 422
+    data = response.json()
+    assert 'message' in data
+    assert 'historylength' in data['message'].lower()
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
