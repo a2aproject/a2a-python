@@ -1,8 +1,6 @@
 import asyncio
 import logging
 
-from collections import defaultdict
-
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
@@ -29,7 +27,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         self.lock = asyncio.Lock()
         self._push_notification_infos: dict[
             str, dict[str, list[PushNotificationConfig]]
-        ] = defaultdict(dict)
+        ] = {}
         self.owner_resolver = owner_resolver
 
     def _get_owner_push_notification_infos(
@@ -45,6 +43,8 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     ) -> None:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
+        if owner not in self._push_notification_infos:
+            self._push_notification_infos[owner] = {}
         async with self.lock:
             owner_infos = self._push_notification_infos[owner]
             if task_id not in owner_infos:

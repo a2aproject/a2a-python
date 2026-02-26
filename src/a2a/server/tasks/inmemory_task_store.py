@@ -1,8 +1,6 @@
 import asyncio
 import logging
 
-from collections import defaultdict
-
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.task_store import TaskStore
@@ -28,7 +26,7 @@ class InMemoryTaskStore(TaskStore):
     ) -> None:
         """Initializes the InMemoryTaskStore."""
         logger.debug('Initializing InMemoryTaskStore')
-        self.tasks: dict[str, dict[str, Task]] = defaultdict(dict)
+        self.tasks: dict[str, dict[str, Task]] = {}
         self.lock = asyncio.Lock()
         self.owner_resolver = owner_resolver
 
@@ -40,6 +38,8 @@ class InMemoryTaskStore(TaskStore):
     ) -> None:
         """Saves or updates a task in the in-memory store for the resolved owner."""
         owner = self.owner_resolver(context)
+        if owner not in self.tasks:
+            self.tasks[owner] = {}
 
         async with self.lock:
             self.tasks[owner][task.id] = task
