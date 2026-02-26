@@ -126,7 +126,7 @@ def test_cli_database_url_flag(mock_alembic_command, mock_alembic_config):
 def test_cli_owner_with_downgrade_error(
     mock_alembic_command, mock_alembic_config
 ):
-    # This should trigger parser.error()
+    # This should trigger parser.error(). Flag --owner-name is not allowed with downgrade
     test_args = ['a2a-db', 'downgrade', 'base', '--owner-name', 'some-owner']
 
     with patch('sys.argv', test_args):
