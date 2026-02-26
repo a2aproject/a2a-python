@@ -250,10 +250,14 @@ class RESTHandler:
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
         try:
-            history_length = int(history_length_str) if history_length_str else None
+            history_length = (
+                int(history_length_str) if history_length_str else None
+            )
         except ValueError:
             raise ServerError(
-                error=InvalidParamsError(message='historyLength must be a valid integer')
+                error=InvalidParamsError(
+                    message='historyLength must be a valid integer'
+                )
             ) from None
         params = GetTaskRequest(id=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
