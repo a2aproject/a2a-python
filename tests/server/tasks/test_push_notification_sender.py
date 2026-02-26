@@ -3,11 +3,14 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+import pytest
+from pydantic import ValidationError
 
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types import (
+    PushNotificationAuthenticationInfo,
     PushNotificationConfig,
     Task,
     TaskState,
@@ -29,8 +32,14 @@ def create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    authentication: PushNotificationAuthenticationInfo | None = None,
 ) -> PushNotificationConfig:
-    return PushNotificationConfig(id=config_id, url=url, token=token)
+    return PushNotificationConfig(
+        id=config_id,
+        url=url,
+        token=token,
+        authentication=authentication,
+    )
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
@@ -91,6 +100,71 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
+
+    async def test_send_notification_with_auth_header(self) -> None:
+        task_id = 'task_send_auth'
+        task_data = create_sample_task(task_id=task_id)
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['Basic', 'Bearer'], credentials='token_or_jwt'
+        )
+        config = create_sample_push_config(
+            url='http://notify.me/here',
+            token='unique_token',
+            authentication=auth,
+        )
+        self.mock_config_store.get_info.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_data)
+
+        self.mock_config_store.get_info.assert_awaited_once_with
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=task_data.model_dump(mode='json', exclude_none=True),
+            headers={
+                'X-A2A-Notification-Token': 'unique_token',
+                'Authorization': 'Bearer token_or_jwt',
+            },
+        )
+        mock_response.raise_for_status.assert_called_once()
+
+    def test_authorization_header_no_credentials(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['Bearer'], credentials=None
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) is None
+
+    def test_authorization_header_empty_schemes(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=[], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) is None
+
+    def test_authorization_header_non_bearer_scheme(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['Basic'], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) == 'Basic token'
+
+    def test_authorization_header_filters_empty_schemes(self) -> None:
+        auth = PushNotificationAuthenticationInfo(
+            schemes=['', 'Bearer'], credentials='token'
+        )
+        config = create_sample_push_config(authentication=auth)
+        assert self.sender._authorization_header(config) == 'Bearer token'
+
+    def test_authorization_header_none_scheme_rejected(self) -> None:
+        with pytest.raises(ValidationError):
+            PushNotificationAuthenticationInfo(
+                schemes=['Bearer', None], credentials='token'
+            )
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'

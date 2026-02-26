@@ -76,6 +76,15 @@ from typing_extensions import Self
 
 
 if TYPE_CHECKING:
+    from typing_extensions import Self
+else:
+    try:
+        from typing import Self
+    except ImportError:  # pragma: no cover - for Python < 3.11
+        from typing_extensions import Self
+
+
+if TYPE_CHECKING:
     from opentelemetry.trace import SpanKind as SpanKindType
 else:
     SpanKindType = object
