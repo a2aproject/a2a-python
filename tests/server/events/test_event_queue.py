@@ -69,6 +69,7 @@ def test_constructor_invalid_max_queue_size() -> None:
     ):
         EventQueue(max_queue_size=-10)
 
+
 @pytest.mark.asyncio
 async def test_event_queue_async_context_manager(
     event_queue: EventQueue,
