@@ -559,5 +559,16 @@ class TestTenantExtraction:
         assert context.tenant == ''
 
 
+@pytest.mark.anyio
+async def test_get_task_invalid_history_length_returns_400(
+    client: AsyncClient,
+) -> None:
+    """Non-numeric historyLength query param returns 400 ParseError."""
+    response = await client.get('/tasks/some-task-id?historyLength=abc')
+    assert response.status_code == 400
+    data = response.json()
+    assert data.get('type') == 'ParseError'
+
+
 if __name__ == '__main__':
     pytest.main([__file__])
