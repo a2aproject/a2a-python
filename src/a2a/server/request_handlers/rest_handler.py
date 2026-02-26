@@ -3,8 +3,8 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
 from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
+from pydantic import ValidationError
 
 
 if TYPE_CHECKING:
@@ -267,7 +267,7 @@ class RESTHandler:
         except ValidationError:
             raise ServerError(
                 error=InvalidParamsError(message='historyLength must be a valid integer')
-            )
+            ) from None
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(proto_utils.ToProto.task(task))
