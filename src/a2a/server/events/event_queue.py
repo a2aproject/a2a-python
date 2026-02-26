@@ -2,6 +2,10 @@ import asyncio
 import logging
 import sys
 
+from types import TracebackType
+
+from typing_extensions import Self
+
 from a2a.types import (
     Message,
     Task,
@@ -42,6 +46,19 @@ class EventQueue:
         self._is_closed = False
         self._lock = asyncio.Lock()
         logger.debug('EventQueue initialized.')
+
+    async def __aenter__(self) -> Self:
+        """Enters the async context manager, returning the queue itself."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exits the async context manager, ensuring close() is called."""
+        await self.close()
 
     async def enqueue_event(self, event: Event) -> None:
         """Enqueues an event to this queue and all its children.
