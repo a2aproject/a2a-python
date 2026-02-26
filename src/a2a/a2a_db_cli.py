@@ -11,7 +11,7 @@ try:
 
 except ImportError as e:
     raise ImportError(
-        "CLI requires Alembic. Install with: 'pip install a2a-sdk[cli]'."
+        "CLI requires Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
     ) from e
 
 
@@ -21,16 +21,20 @@ def _add_shared_args(
     """Add common arguments to the given parser."""
     prefix = 'sub_' if is_sub else ''
     parser.add_argument(
-        '-u',
         '--database-url',
         dest=f'{prefix}database_url',
         help='Database URL to use for the migrations. If not set, the DATABASE_URL environment variable will be used.',
     )
     parser.add_argument(
-        '-t',
-        '--table',
-        dest=f'{prefix}table',
-        help="Specific table to update. If not set, both 'tasks' and 'push_notification_configs' are updated.",
+        '--tasks-table',
+        dest=f'{prefix}tasks_table',
+        help='Custom tasks table to update.',
+        action='append',
+    )
+    parser.add_argument(
+        '--push-notification-table',
+        dest=f'{prefix}push_notification_table',
+        help='Custom push notification configs table to update.',
         action='append',
     )
     parser.add_argument(
@@ -54,8 +58,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Global options
     parser.add_argument(
-        '-o',
-        '--owner',
+        '--owner-name',
+        dest='owner_name',
         help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
     )
     _add_shared_args(parser)
@@ -73,7 +77,9 @@ def create_parser() -> argparse.ArgumentParser:
         help='Revision target (default: head)',
     )
     up_parser.add_argument(
-        '-o', '--owner', dest='sub_owner', help='Alias for top-level --owner'
+        '--owner-name',
+        dest='sub_owner_name',
+        help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
     )
     _add_shared_args(up_parser, is_sub=True)
 
@@ -114,9 +120,12 @@ def run_migrations() -> None:
     cfg.set_main_option('script_location', str(migrations_path))
 
     # Consolidate owner, db_url, tables, verbose and sql values
-    owner = args.owner or getattr(args, 'sub_owner', None)
+    owner = args.owner_name or getattr(args, 'sub_owner_name', None)
     db_url = args.database_url or getattr(args, 'sub_database_url', None)
-    tables = args.table or getattr(args, 'sub_table', None)
+    task_tables = args.tasks_table or getattr(args, 'sub_tasks_table', None)
+    push_notification_tables = args.push_notification_table or getattr(
+        args, 'sub_push_notification_table', None
+    )
     verbose = args.verbose or getattr(args, 'sub_verbose', False)
     sql = args.sql or getattr(args, 'sub_sql', False)
 
@@ -129,8 +138,12 @@ def run_migrations() -> None:
         cfg.set_main_option('owner', owner)
     if db_url:
         os.environ['DATABASE_URL'] = db_url
-    if tables:
-        cfg.set_main_option('tables', ','.join(tables))
+    if task_tables:
+        cfg.set_main_option('tasks_tables', ','.join(task_tables))
+    if push_notification_tables:
+        cfg.set_main_option(
+            'push_notification_tables', ','.join(push_notification_tables)
+        )
     if verbose:
         cfg.set_main_option('verbose', 'true')
 

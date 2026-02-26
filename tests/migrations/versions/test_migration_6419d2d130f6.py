@@ -48,23 +48,23 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
 
     # 2. Run Upgrade via CLI with a custom owner
     custom_owner = 'test_owner_123'
-    env = os.environ.copy()
-    env['DATABASE_URL'] = db_url
-
+    
     # We use the CLI tool to perform the upgrade
+    # Using the new --owner-name flag and --database-url flag
     result = subprocess.run(
         [
             'uv',
             'run',
             'a2a-db',
-            '--owner',
+            '--database-url',
+            db_url,
+            '--owner-name',
             custom_owner,
             'upgrade',
             '6419d2d130f6',
         ],
         capture_output=True,
         text=True,
-        env=env,
         check=False,
     )
 
@@ -102,10 +102,13 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
 
     # 4. Run Downgrade via CLI
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', 'downgrade', 'base'],
+        [
+            'uv', 'run', 'a2a-db', 
+            '--database-url', db_url,
+            'downgrade', 'base'
+        ],
         capture_output=True,
         text=True,
-        env=env,
         check=False,
     )
 
@@ -135,11 +138,69 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
     conn.close()
 
 
+def test_migration_6419d2d130f6_custom_tables(temp_db: str) -> None:
+    """Test the migration with custom table names."""
+    db_url = f'sqlite+aiosqlite:///{temp_db}'
+    custom_tasks = 'custom_tasks'
+    custom_push = 'custom_push'
+
+    # 1. Setup initial schema with custom names
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    cursor.execute(f"CREATE TABLE {custom_tasks} (id VARCHAR(36) PRIMARY KEY, kind VARCHAR(16))")
+    cursor.execute(f"CREATE TABLE {custom_push} (task_id VARCHAR(36), PRIMARY KEY (task_id))")
+    conn.commit()
+    conn.close()
+
+    # 2. Run Upgrade via CLI with custom table flags
+    result = subprocess.run(
+        [
+            'uv', 'run', 'a2a-db',
+            '--database-url', db_url,
+            '--tasks-table', custom_tasks,
+            '--push-notification-table', custom_push,
+            'upgrade', '6419d2d130f6',
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert result.returncode == 0, f"Upgrade failed: {result.stderr}"
+
+    # 3. Verify columns exist in custom tables
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    
+    cursor.execute(f'PRAGMA table_info({custom_tasks})')
+    assert 'owner' in {row[1] for row in cursor.fetchall()}
+    
+    cursor.execute(f'PRAGMA table_info({custom_push})')
+    assert 'owner' in {row[1] for row in cursor.fetchall()}
+    
+    conn.close()
+
+
+def test_migration_6419d2d130f6_missing_tables(temp_db: str) -> None:
+    """Test that the migration handles missing tables gracefully (logs warning but doesn't fail)."""
+    db_url = f'sqlite+aiosqlite:///{temp_db}'
+
+    # Run upgrade on empty database
+    result = subprocess.run(
+        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    
+    assert result.returncode == 0
+    assert "Table 'tasks' does not exist" in result.stderr or "Table 'tasks' does not exist" in result.stdout
+
+
 def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
     """Test that the migration is idempotent (can be run multiple times)."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
-    # 1. Setup initial schema - must include both tables expected by the migration
+    # 1. Setup initial schema
     conn = sqlite3.connect(temp_db)
     cursor = conn.cursor()
     cursor.execute(
@@ -151,26 +212,20 @@ def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
     conn.commit()
     conn.close()
 
-    env = os.environ.copy()
-    env['DATABASE_URL'] = db_url
-
     # 2. Run Upgrade first time
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', 'upgrade', '6419d2d130f6'],
+        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
         capture_output=True,
         text=True,
-        env=env,
         check=False,
     )
     assert result.returncode == 0
 
     # 3. Run Upgrade second time - should not fail even if columns already exist
-    # (The migration script has 'if not column_exists' checks)
     result = subprocess.run(
-        ['uv', 'run', 'a2a-db', 'upgrade', '6419d2d130f6'],
+        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'upgrade', '6419d2d130f6'],
         capture_output=True,
         text=True,
-        env=env,
         check=False,
     )
     assert result.returncode == 0

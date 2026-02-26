@@ -4,11 +4,11 @@ This directory handles the database schema updates for the A2A SDK. It uses a bu
 
 ## Installation
 
-To use the `a2a-db` migration tool, must install the `a2a-sdk` with the `cli`.
+To use the `a2a-db` migration tool, install the `a2a-sdk` with the `a2a-db-cli` extra.
 
 | Extra | `uv` Command | `pip` Command |
 | :--- | :--- | :--- |
-| **CLI Only** | `uv add "a2a-sdk[cli]"` | `pip install "a2a-sdk[cli]"` |
+| **CLI Only** | `uv add "a2a-sdk[a2a-db-cli]"` | `pip install "a2a-sdk[a2a-db-cli]"` |
 | **All Extras** | `uv add "a2a-sdk[all]"` | `pip install "a2a-sdk[all]"` |
 
 
@@ -32,7 +32,7 @@ export DATABASE_URL="postgresql+asyncpg://user:pass@localhost/your_database_name
 export DATABASE_URL="mysql+aiomysql://user:pass@localhost/your_database_name"
 ```
 
-Or you can use the `-u` flag to specify the database URL for a single command.
+Or you can use the `--database-url` flag to specify the database URL for a single command.
 
 
 ### 3. Apply Migrations
@@ -43,32 +43,32 @@ uv run a2a-db
 ```
 
 ### 4. Customizing Defaults with Flags
-#### -o
-Allows you to pass custom values for the new `owner` column. If not set, it will default to the value `unknown`.
+#### --owner-name
+Allows you to pass custom values for the new `owner` column. If not set, it will default to the value `legacy_v03_no_user_info`.
 
 ```bash
-uv run a2a-db -o "admin_user"
+uv run a2a-db --owner-name "admin_user"
 ```
-#### -u
-You can use the `-u` flag to specify the database URL for a single command.
+#### --database-url
+You can use the `--database-url` flag to specify the database URL for a single command.
 
 ```bash
-uv run a2a-db -u "sqlite+aiosqlite:///my_database.db"
+uv run a2a-db --database-url "sqlite+aiosqlite:///my_database.db"
 ```
-#### -t
-By default, tables `tasks` and `push_notification_configs` are updated. Using `-t` flag allows you to choose which tables to update.
+#### --tasks-table / --push-notification-table
+The tables `tasks` and `push_notification_configs` are always updated by default. If your application uses additional tables that require the same migration, you can specify them using these flags.
 
 ```bash
-uv run a2a-db -t "my_table1" -t "my_table2"
+uv run a2a-db --tasks-table "my_tasks" --push-notification-table "my_configs"
 ```
-#### -v
+#### -v / --verbose
 Enables verbose output by setting `sqlalchemy.engine` logging to `INFO`.
 
 ```bash
 uv run a2a-db -v
 ```
 #### --sql
-Enables running migrations in `offline` mode. Migrations are generated as SQL scripts instead of being run against the database.
+Enables running migrations in `offline` mode. Migrations are generated as SQL scripts and printed to stdout instead of being run against the database.
 
 ```bash
 uv run a2a-db --sql
@@ -88,7 +88,7 @@ uv run a2a-db downgrade <revision_id>
 uv run a2a-db downgrade base
 ```
 
-All flags except the `-o` flag can be used during rollbacks.
+Note: All flags except `--owner-name` can be used during rollbacks.
 
 ---
 

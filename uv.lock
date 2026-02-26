@@ -21,6 +21,9 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
+a2a-db-cli = [
+    { name = "alembic" },
+]
 all = [
     { name = "alembic" },
     { name = "cryptography" },
@@ -34,9 +37,6 @@ all = [
     { name = "sqlalchemy", extra = ["aiomysql", "aiosqlite", "asyncio", "postgresql-asyncpg"] },
     { name = "sse-starlette" },
     { name = "starlette" },
-]
-cli = [
-    { name = "alembic" },
 ]
 encryption = [
     { name = "cryptography" },
@@ -97,8 +97,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
+    { name = "alembic", marker = "extra == 'a2a-db-cli'", specifier = ">=1.14.0" },
     { name = "alembic", marker = "extra == 'all'", specifier = ">=1.14.0" },
-    { name = "alembic", marker = "extra == 'cli'", specifier = ">=1.14.0" },
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
     { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
@@ -136,7 +136,7 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["all", "cli", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
+provides-extras = ["a2a-db-cli", "all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
