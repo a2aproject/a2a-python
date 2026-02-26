@@ -34,7 +34,7 @@ class APIKeySecurityScheme(A2ABaseModel):
     """
     An optional description for the security scheme.
     """
-    in_: In
+    in_: In = Field(..., alias='in')
     """
     The location of the API key.
     """
