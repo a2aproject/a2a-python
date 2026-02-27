@@ -277,7 +277,7 @@ def test_migration_6419d2d130f6_offline(
     assert 'ALTER TABLE tasks ADD COLUMN owner' in captured.out
     assert 'ALTER TABLE tasks ADD COLUMN last_updated' in captured.out
     assert 'CREATE INDEX idx_tasks_owner_last_updated' in captured.out
-    assert 'CREATE TABLE alembic_version' in captured.out
+    assert 'CREATE TABLE a2a_alembic_version' in captured.out
     assert (
         'ALTER TABLE push_notification_configs ADD COLUMN owner' in captured.out
     )
@@ -291,7 +291,7 @@ def test_migration_6419d2d130f6_offline(
     tables = {row[0] for row in cursor.fetchall()}
     assert 'tasks' in tables
     assert 'push_notification_configs' in tables
-    assert 'alembic_version' not in tables
+    assert 'a2a_alembic_version' not in tables
 
     # Verify columns were NOT added to tasks
     cursor.execute('PRAGMA table_info(tasks)')

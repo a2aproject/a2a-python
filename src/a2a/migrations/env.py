@@ -77,7 +77,11 @@ def do_run_migrations(connection: Connection) -> None:
     Args:
         connection: The SQLAlchemy connection to use for the migrations.
     """
-    context.configure(connection=connection, target_metadata=target_metadata)
+    context.configure(
+        connection=connection,
+        target_metadata=target_metadata,
+        version_table='a2a_alembic_version',
+    )
 
     with context.begin_transaction():
         context.run_migrations()
