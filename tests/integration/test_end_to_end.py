@@ -32,6 +32,46 @@ from a2a.types import (
 from a2a.utils import TransportProtocol
 
 
+def assert_message_matches(message, expected_role, expected_text):
+    assert message.role == expected_role
+    assert message.parts[0].text == expected_text
+
+
+def assert_history_matches(history, expected_history):
+    assert len(history) == len(expected_history)
+    for msg, (expected_role, expected_text) in zip(
+        history, expected_history, strict=True
+    ):
+        assert_message_matches(msg, expected_role, expected_text)
+
+
+def assert_artifacts_match(artifacts, expected_artifacts):
+    assert len(artifacts) == len(expected_artifacts)
+    for artifact, (expected_name, expected_text) in zip(
+        artifacts, expected_artifacts, strict=True
+    ):
+        assert artifact.name == expected_name
+        assert artifact.parts[0].text == expected_text
+
+
+def assert_events_match(events, expected_events):
+    assert len(events) == len(expected_events)
+    for (event, _), (expected_type, expected_val) in zip(
+        events, expected_events, strict=True
+    ):
+        assert event.HasField(expected_type)
+        if expected_type == 'status_update':
+            assert event.status_update.status.state == expected_val
+        elif expected_type == 'artifact_update':
+            if expected_val is not None:
+                assert_artifacts_match(
+                    [event.artifact_update.artifact],
+                    expected_val,
+                )
+        else:
+            raise ValueError(f'Unexpected event type: {expected_type}')
+
+
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         task_updater = TaskUpdater(
@@ -39,15 +79,42 @@ class MockAgentExecutor(AgentExecutor):
             context.task_id,
             context.context_id,
         )
-        await task_updater.update_status(TaskState.TASK_STATE_SUBMITTED)
-        await task_updater.update_status(TaskState.TASK_STATE_WORKING)
-        await task_updater.add_artifact(
-            parts=[Part(text='artifact content')], name='test-artifact'
+        user_input = context.get_user_input()
+
+        is_input_required_resumption = (
+            context.current_task is not None
+            and context.current_task.status.state
+            == TaskState.TASK_STATE_INPUT_REQUIRED
         )
+
+        if not is_input_required_resumption:
+            await task_updater.update_status(
+                TaskState.TASK_STATE_SUBMITTED,
+                message=task_updater.new_agent_message(
+                    [Part(text='task submitted')]
+                ),
+            )
+
         await task_updater.update_status(
-            TaskState.TASK_STATE_COMPLETED,
-            message=task_updater.new_agent_message([Part(text='done')]),
+            TaskState.TASK_STATE_WORKING,
+            message=task_updater.new_agent_message([Part(text='task working')]),
         )
+
+        if user_input == 'Need input':
+            await task_updater.update_status(
+                TaskState.TASK_STATE_INPUT_REQUIRED,
+                message=task_updater.new_agent_message(
+                    [Part(text='Please provide input')]
+                ),
+            )
+        else:
+            await task_updater.add_artifact(
+                parts=[Part(text='artifact content')], name='test-artifact'
+            )
+            await task_updater.update_status(
+                TaskState.TASK_STATE_COMPLETED,
+                message=task_updater.new_agent_message([Part(text='done')]),
+            )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         raise NotImplementedError('Cancellation is not supported')
@@ -218,9 +285,18 @@ async def test_end_to_end_send_message_blocking(transport_setups):
     response, _ = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
-    assert len(response.task.artifacts) == 1
-    assert response.task.artifacts[0].name == 'test-artifact'
-    assert response.task.artifacts[0].parts[0].text == 'artifact content'
+    assert_artifacts_match(
+        response.task.artifacts,
+        [('test-artifact', 'artifact content')],
+    )
+    assert_history_matches(
+        response.task.history,
+        [
+            (Role.ROLE_USER, 'Run dummy agent!'),
+            (Role.ROLE_AGENT, 'task submitted'),
+            (Role.ROLE_AGENT, 'task working'),
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -245,6 +321,12 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
     response, _ = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert_history_matches(
+        response.task.history,
+        [
+            (Role.ROLE_USER, 'Run dummy agent!'),
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -258,29 +340,30 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     )
 
     events = [
-        event async for event, _ in client.send_message(request=message_to_send)
+        event async for event in client.send_message(request=message_to_send)
     ]
 
-    expected_events = [
-        ('status_update', TaskState.TASK_STATE_SUBMITTED),
-        ('status_update', TaskState.TASK_STATE_WORKING),
-        ('artifact_update', None),
-        ('status_update', TaskState.TASK_STATE_COMPLETED),
-    ]
+    assert_events_match(
+        events,
+        [
+            ('status_update', TaskState.TASK_STATE_SUBMITTED),
+            ('status_update', TaskState.TASK_STATE_WORKING),
+            ('artifact_update', [('test-artifact', 'artifact content')]),
+            ('status_update', TaskState.TASK_STATE_COMPLETED),
+        ],
+    )
 
-    assert len(events) == len(expected_events)
-    for event, (expected_type, expected_state) in zip(
-        events, expected_events, strict=True
-    ):
-        assert event.HasField(expected_type)
-        if expected_type == 'status_update':
-            assert event.status_update.status.state == expected_state
-        elif expected_type == 'artifact_update':
-            assert event.artifact_update.artifact.name == 'test-artifact'
-            assert (
-                event.artifact_update.artifact.parts[0].text
-                == 'artifact content'
-            )
+    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+    assert_history_matches(
+        task.history,
+        [
+            (Role.ROLE_USER, 'Run dummy agent!'),
+            (Role.ROLE_AGENT, 'task submitted'),
+            (Role.ROLE_AGENT, 'task working'),
+        ],
+    )
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert_message_matches(task.status.message, Role.ROLE_AGENT, 'done')
 
 
 @pytest.mark.asyncio
@@ -307,6 +390,14 @@ async def test_end_to_end_get_task(transport_setups):
         TaskState.TASK_STATE_WORKING,
         TaskState.TASK_STATE_COMPLETED,
     }
+    assert_history_matches(
+        retrieved_task.history,
+        [
+            (Role.ROLE_USER, 'Test Get Task'),
+            (Role.ROLE_AGENT, 'task submitted'),
+            (Role.ROLE_AGENT, 'task working'),
+        ],
+    )
 
 
 @pytest.mark.asyncio
@@ -346,7 +437,93 @@ async def test_end_to_end_list_tasks(transport_setups):
 
         actual_task_ids.extend([task.id for task in list_response.tasks])
 
+        for task in list_response.tasks:
+            assert len(task.history) >= 1
+            assert task.history[0].role == Role.ROLE_USER
+            assert task.history[0].parts[0].text.startswith('Test List Tasks ')
+
         token = list_response.next_page_token
 
     assert len(actual_task_ids) == total_items
     assert sorted(actual_task_ids) == sorted(expected_task_ids)
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_input_required(transport_setups):
+    client = transport_setups.client
+
+    message_to_send = Message(
+        role=Role.ROLE_USER,
+        message_id='msg-e2e-input-req-1',
+        parts=[Part(text='Need input')],
+    )
+
+    events = [
+        event async for event in client.send_message(request=message_to_send)
+    ]
+
+    assert_events_match(
+        events,
+        [
+            ('status_update', TaskState.TASK_STATE_SUBMITTED),
+            ('status_update', TaskState.TASK_STATE_WORKING),
+            ('status_update', TaskState.TASK_STATE_INPUT_REQUIRED),
+        ],
+    )
+
+    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    assert_history_matches(
+        task.history,
+        [
+            (Role.ROLE_USER, 'Need input'),
+            (Role.ROLE_AGENT, 'task submitted'),
+            (Role.ROLE_AGENT, 'task working'),
+        ],
+    )
+    assert_message_matches(
+        task.status.message, Role.ROLE_AGENT, 'Please provide input'
+    )
+
+    # Follow-up message
+    follow_up_message = Message(
+        task_id=task.id,
+        role=Role.ROLE_USER,
+        message_id='msg-e2e-input-req-2',
+        parts=[Part(text='Here is the input')],
+    )
+
+    follow_up_events = [
+        event async for event in client.send_message(request=follow_up_message)
+    ]
+
+    assert_events_match(
+        follow_up_events,
+        [
+            ('status_update', TaskState.TASK_STATE_WORKING),
+            ('artifact_update', [('test-artifact', 'artifact content')]),
+            ('status_update', TaskState.TASK_STATE_COMPLETED),
+        ],
+    )
+
+    task = await client.get_task(request=GetTaskRequest(id=task.id))
+
+    assert task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert_artifacts_match(
+        task.artifacts,
+        [('test-artifact', 'artifact content')],
+    )
+
+    assert_history_matches(
+        task.history,
+        [
+            (Role.ROLE_USER, 'Need input'),
+            (Role.ROLE_AGENT, 'task submitted'),
+            (Role.ROLE_AGENT, 'task working'),
+            (Role.ROLE_AGENT, 'Please provide input'),
+            (Role.ROLE_USER, 'Here is the input'),
+            (Role.ROLE_AGENT, 'task working'),
+        ],
+    )
+    assert_message_matches(task.status.message, Role.ROLE_AGENT, 'done')
