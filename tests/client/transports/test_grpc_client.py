@@ -15,8 +15,8 @@ from a2a.types.a2a_pb2 import (
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     GetTaskRequest,
     Message,
     Part,
@@ -45,7 +45,7 @@ def mock_grpc_stub() -> AsyncMock:
     stub.CancelTask = AsyncMock()
     stub.CreateTaskPushNotificationConfig = AsyncMock()
     stub.GetTaskPushNotificationConfig = AsyncMock()
-    stub.ListTaskPushNotificationConfig = AsyncMock()
+    stub.ListTaskPushNotificationConfigs = AsyncMock()
     stub.DeleteTaskPushNotificationConfig = AsyncMock()
     return stub
 
@@ -538,18 +538,18 @@ async def test_list_task_callback(
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test retrieving task push notification configs."""
-    mock_grpc_stub.ListTaskPushNotificationConfig.return_value = (
-        a2a_pb2.ListTaskPushNotificationConfigResponse(
+    mock_grpc_stub.ListTaskPushNotificationConfigs.return_value = (
+        a2a_pb2.ListTaskPushNotificationConfigsResponse(
             configs=[sample_task_push_notification_config]
         )
     )
 
     response = await grpc_transport.list_task_callback(
-        ListTaskPushNotificationConfigRequest(task_id='task-1')
+        ListTaskPushNotificationConfigsRequest(task_id='task-1')
     )
 
-    mock_grpc_stub.ListTaskPushNotificationConfig.assert_awaited_once_with(
-        a2a_pb2.ListTaskPushNotificationConfigRequest(task_id='task-1'),
+    mock_grpc_stub.ListTaskPushNotificationConfigs.assert_awaited_once_with(
+        a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id='task-1'),
         metadata=[
             (
                 HTTP_EXTENSION_HEADER.lower(),

@@ -319,7 +319,7 @@ class RESTHandler:
             A list of `dict` representing the `TaskPushNotificationConfig` objects.
         """
         task_id = request.path_params['id']
-        params = a2a_pb2.ListTaskPushNotificationConfigRequest(task_id=task_id)
+        params = a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id=task_id)
 
         # Parse query params, keeping arrays/repeated fields in mind if there are any
         ParseDict(
@@ -327,7 +327,7 @@ class RESTHandler:
         )
 
         result = (
-            await self.request_handler.on_list_task_push_notification_config(
+            await self.request_handler.on_list_task_push_notification_configs(
                 params, context
             )
         )

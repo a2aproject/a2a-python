@@ -12,8 +12,8 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -116,11 +116,11 @@ class ClientTransport(ABC):
     @abstractmethod
     async def list_task_callback(
         self,
-        request: ListTaskPushNotificationConfigRequest,
+        request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
+    ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
 
     @abstractmethod

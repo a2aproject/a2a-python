@@ -25,8 +25,8 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -358,11 +358,11 @@ class RestTransport(ClientTransport):
 
     async def list_task_callback(
         self,
-        request: ListTaskPushNotificationConfigRequest,
+        request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
+    ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         params = MessageToDict(request)
         modified_kwargs = update_extension_header(
@@ -381,8 +381,8 @@ class RestTransport(ClientTransport):
             params,
             modified_kwargs,
         )
-        response: ListTaskPushNotificationConfigResponse = ParseDict(
-            response_data, ListTaskPushNotificationConfigResponse()
+        response: ListTaskPushNotificationConfigsResponse = ParseDict(
+            response_data, ListTaskPushNotificationConfigsResponse()
         )
         return response
 

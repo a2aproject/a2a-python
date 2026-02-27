@@ -2265,7 +2265,7 @@ async def test_on_message_send_stream():
 
 @pytest.mark.asyncio
 async def test_list_task_push_notification_config_no_store():
-    """Test on_list_task_push_notification_config when _push_config_store is None."""
+    """Test on_list_task_push_notification_configs when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
@@ -2282,7 +2282,7 @@ async def test_list_task_push_notification_config_no_store():
 
 @pytest.mark.asyncio
 async def test_list_task_push_notification_config_task_not_found():
-    """Test on_list_task_push_notification_config when task is not found."""
+    """Test on_list_task_push_notification_configs when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
     mock_push_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -2330,7 +2330,7 @@ async def test_list_no_task_push_notification_config_info():
 
 @pytest.mark.asyncio
 async def test_list_task_push_notification_config_info_with_config():
-    """Test on_list_task_push_notification_config with push config+id"""
+    """Test on_list_task_push_notification_configs with push config+id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
     sample_task = create_sample_task(task_id='non_existent_task')
@@ -2367,7 +2367,7 @@ async def test_list_task_push_notification_config_info_with_config():
 
 @pytest.mark.asyncio
 async def test_list_task_push_notification_config_info_with_config_and_no_id():
-    """Test on_list_task_push_notification_config with no push config id"""
+    """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
 
@@ -2497,7 +2497,7 @@ async def test_delete_no_task_push_notification_config_info():
 
 @pytest.mark.asyncio
 async def test_delete_task_push_notification_config_info_with_config():
-    """Test on_list_task_push_notification_config with push config+id"""
+    """Test on_list_task_push_notification_configs with push config+id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
     sample_task = create_sample_task(task_id='non_existent_task')
@@ -2542,7 +2542,7 @@ async def test_delete_task_push_notification_config_info_with_config():
 
 @pytest.mark.asyncio
 async def test_delete_task_push_notification_config_info_with_config_and_no_id():
-    """Test on_list_task_push_notification_config with no push config id"""
+    """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
     sample_task = create_sample_task(task_id='non_existent_task')

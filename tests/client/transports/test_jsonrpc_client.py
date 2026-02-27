@@ -26,8 +26,8 @@ from a2a.types.a2a_pb2 import (
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     GetTaskRequest,
     Message,
     Part,
@@ -371,7 +371,6 @@ class TestTaskCallback:
                 'configs': [
                     {
                         'task_id': f'{task_id}',
-                        'id': 'config-1',
                         'push_notification_config': {
                             'id': 'config-1',
                             'url': 'https://example.com',
@@ -383,7 +382,7 @@ class TestTaskCallback:
         mock_response.raise_for_status = MagicMock()
         mock_httpx_client.post.return_value = mock_response
 
-        request = ListTaskPushNotificationConfigRequest(
+        request = ListTaskPushNotificationConfigsRequest(
             task_id=f'{task_id}',
         )
         response = await transport.list_task_callback(request)
@@ -392,7 +391,7 @@ class TestTaskCallback:
         assert response.configs[0].task_id == task_id
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']
-        assert payload['method'] == 'ListTaskPushNotificationConfig'
+        assert payload['method'] == 'ListTaskPushNotificationConfigs'
 
     @pytest.mark.asyncio
     async def test_delete_task_callback_success(
@@ -406,7 +405,6 @@ class TestTaskCallback:
             'id': '1',
             'result': {
                 'task_id': f'{task_id}',
-                'id': 'config-1',
             },
         }
         mock_response.raise_for_status = MagicMock()

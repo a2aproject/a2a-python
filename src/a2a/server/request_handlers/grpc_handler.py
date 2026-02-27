@@ -294,29 +294,29 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
 
-    async def ListTaskPushNotificationConfig(
+    async def ListTaskPushNotificationConfigs(
         self,
-        request: a2a_pb2.ListTaskPushNotificationConfigRequest,
+        request: a2a_pb2.ListTaskPushNotificationConfigsRequest,
         context: grpc.aio.ServicerContext,
-    ) -> a2a_pb2.ListTaskPushNotificationConfigResponse:
+    ) -> a2a_pb2.ListTaskPushNotificationConfigsResponse:
         """Handles the 'ListTaskPushNotificationConfig' gRPC method.
 
         Args:
-            request: The incoming `ListTaskPushNotificationConfigRequest` object.
+            request: The incoming `ListTaskPushNotificationConfigsRequest` object.
             context: Context provided by the server.
 
         Returns:
-            A `ListTaskPushNotificationConfigResponse` object containing the configs.
+            A `ListTaskPushNotificationConfigsResponse` object containing the configs.
         """
         try:
             server_context = self.context_builder.build(context)
-            return await self.request_handler.on_list_task_push_notification_config(
+            return await self.request_handler.on_list_task_push_notification_configs(
                 request,
                 server_context,
             )
         except ServerError as e:
             await self.abort_context(e, context)
-        return a2a_pb2.ListTaskPushNotificationConfigResponse()
+        return a2a_pb2.ListTaskPushNotificationConfigsResponse()
 
     async def DeleteTaskPushNotificationConfig(
         self,

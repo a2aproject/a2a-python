@@ -39,8 +39,8 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -134,8 +134,8 @@ def mock_request_handler() -> AsyncMock:
         CALLBACK_CONFIG
     )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
-    handler.on_list_task_push_notification_config.return_value = (
-        ListTaskPushNotificationConfigResponse(configs=[CALLBACK_CONFIG])
+    handler.on_list_task_push_notification_configs.return_value = (
+        ListTaskPushNotificationConfigsResponse(configs=[CALLBACK_CONFIG])
     )
     handler.on_delete_task_push_notification_config.return_value = (
         CALLBACK_CONFIG
@@ -750,14 +750,14 @@ async def test_http_transport_list_task_callback(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    params = ListTaskPushNotificationConfigRequest(
+    params = ListTaskPushNotificationConfigsRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
     )
     result = await transport.list_task_callback(request=params)
 
     assert len(result.configs) == 1
     assert result.configs[0].task_id == CALLBACK_CONFIG.task_id
-    handler.on_list_task_push_notification_config.assert_awaited_once()
+    handler.on_list_task_push_notification_configs.assert_awaited_once()
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -776,14 +776,14 @@ async def test_grpc_transport_list_task_callback(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    params = ListTaskPushNotificationConfigRequest(
+    params = ListTaskPushNotificationConfigsRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
     )
     result = await transport.list_task_callback(request=params)
 
     assert len(result.configs) == 1
     assert result.configs[0].task_id == CALLBACK_CONFIG.task_id
-    handler.on_list_task_push_notification_config.assert_awaited_once()
+    handler.on_list_task_push_notification_configs.assert_awaited_once()
 
     await transport.close()
 
@@ -806,7 +806,8 @@ async def test_http_transport_delete_task_callback(
     handler = transport_setup.handler
 
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id=f'{CALLBACK_CONFIG.task_id}', id=CALLBACK_CONFIG.id
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+        id=CALLBACK_CONFIG.push_notification_config.id,
     )
     await transport.delete_task_callback(request=params)
 
@@ -830,7 +831,8 @@ async def test_grpc_transport_delete_task_callback(
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
     params = DeleteTaskPushNotificationConfigRequest(
-        task_id=f'{CALLBACK_CONFIG.task_id}', id=CALLBACK_CONFIG.id
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+        id=CALLBACK_CONFIG.push_notification_config.id,
     )
     await transport.delete_task_callback(request=params)
 

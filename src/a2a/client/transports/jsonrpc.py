@@ -28,8 +28,8 @@ from a2a.types.a2a_pb2 import (
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -369,14 +369,14 @@ class JsonRpcTransport(ClientTransport):
 
     async def list_task_callback(
         self,
-        request: ListTaskPushNotificationConfigRequest,
+        request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
+    ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         rpc_request = JSONRPC20Request(
-            method='ListTaskPushNotificationConfig',
+            method='ListTaskPushNotificationConfigs',
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
@@ -385,7 +385,7 @@ class JsonRpcTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
-            'ListTaskPushNotificationConfig',
+            'ListTaskPushNotificationConfigs',
             cast('dict[str, Any]', rpc_request.data),
             modified_kwargs,
             context,
@@ -394,10 +394,10 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
-        response: ListTaskPushNotificationConfigResponse = (
+        response: ListTaskPushNotificationConfigsResponse = (
             json_format.ParseDict(
                 json_rpc_response.result,
-                ListTaskPushNotificationConfigResponse(),
+                ListTaskPushNotificationConfigsResponse(),
             )
         )
         return response

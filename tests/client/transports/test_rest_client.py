@@ -16,8 +16,8 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
     DeleteTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     SendMessageRequest,
     TaskPushNotificationConfig,
 )
@@ -288,7 +288,9 @@ class TestTaskCallback:
     ):
         """Test successful task multiple callbacks retrieval."""
         client = RestTransport(
-            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
         )
         task_id = 'task-1'
         mock_response = AsyncMock(spec=httpx.Response)
@@ -297,7 +299,6 @@ class TestTaskCallback:
             'configs': [
                 {
                     'taskId': task_id,
-                    'id': 'config-1',
                     'pushNotificationConfig': {
                         'id': 'config-1',
                         'url': 'https://example.com',
@@ -313,7 +314,7 @@ class TestTaskCallback:
         )
         mock_httpx_client.build_request = mock_build_request
 
-        request = ListTaskPushNotificationConfigRequest(
+        request = ListTaskPushNotificationConfigsRequest(
             task_id=task_id,
         )
         response = await client.list_task_callback(request)
@@ -332,14 +333,15 @@ class TestTaskCallback:
     ):
         """Test successful task callback deletion."""
         client = RestTransport(
-            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
         )
         task_id = 'task-1'
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
         mock_response.json.return_value = {
             'taskId': task_id,
-            'id': 'config-1',
             'pushNotificationConfig': {
                 'id': 'config-1',
                 'url': 'https://example.com',
