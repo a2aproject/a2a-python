@@ -19,7 +19,7 @@ class ServerCallContext(BaseModel):
 
     model_config = ConfigDict(arbitrary_types_allowed=True)
 
-    state: State = Field(default={})
-    user: User = Field(default=UnauthenticatedUser())
+    state: State = Field(default_factory=dict)
+    user: User = Field(default_factory=UnauthenticatedUser)
     requested_extensions: set[str] = Field(default_factory=set)
     activated_extensions: set[str] = Field(default_factory=set)
