@@ -92,6 +92,7 @@ openapiv2
 opensource
 otherurl
 pb2
+poolclass
 postgres
 POSTGRES
 postgresql

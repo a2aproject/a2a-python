@@ -1,9 +1,27 @@
+from a2a.server.context import ServerCallContext
 import pytest
 from datetime import datetime, timezone
 
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus, ListTasksRequest
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+
+from a2a.auth.user import User
+
+
+class SampleUser(User):
+    """A test implementation of the User interface."""
+
+    def __init__(self, user_name: str):
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
 
 
 def create_minimal_task(
@@ -247,3 +265,67 @@ async def test_in_memory_task_store_delete_nonexistent() -> None:
     """Test deleting a nonexistent task."""
     store = InMemoryTaskStore()
     await store.delete('nonexistent')
+
+
+@pytest.mark.asyncio
+async def test_owner_resource_scoping() -> None:
+    """Test that operations are scoped to the correct owner."""
+    store = InMemoryTaskStore()
+    task = create_minimal_task()
+
+    context_user1 = ServerCallContext(user=SampleUser(user_name='user1'))
+    context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
+    context_user3 = ServerCallContext(
+        user=SampleUser(user_name='user3')
+    )  # For testing non-existent user
+
+    # Create tasks for different owners
+    task1_user1 = Task()
+    task1_user1.CopyFrom(task)
+    task1_user1.id = 'u1-task1'
+
+    task2_user1 = Task()
+    task2_user1.CopyFrom(task)
+    task2_user1.id = 'u1-task2'
+
+    task1_user2 = Task()
+    task1_user2.CopyFrom(task)
+    task1_user2.id = 'u2-task1'
+
+    await store.save(task1_user1, context_user1)
+    await store.save(task2_user1, context_user1)
+    await store.save(task1_user2, context_user2)
+
+    # Test GET
+    assert await store.get('u1-task1', context_user1) is not None
+    assert await store.get('u1-task1', context_user2) is None
+    assert await store.get('u2-task1', context_user1) is None
+    assert await store.get('u2-task1', context_user2) is not None
+    assert await store.get('u2-task1', context_user3) is None
+
+    # Test LIST
+    params = ListTasksRequest()
+    page_user1 = await store.list(params, context_user1)
+    assert len(page_user1.tasks) == 2
+    assert {t.id for t in page_user1.tasks} == {'u1-task1', 'u1-task2'}
+    assert page_user1.total_size == 2
+
+    page_user2 = await store.list(params, context_user2)
+    assert len(page_user2.tasks) == 1
+    assert {t.id for t in page_user2.tasks} == {'u2-task1'}
+    assert page_user2.total_size == 1
+
+    page_user3 = await store.list(params, context_user3)
+    assert len(page_user3.tasks) == 0
+    assert page_user3.total_size == 0
+
+    # Test DELETE
+    await store.delete('u1-task1', context_user2)  # Should not delete
+    assert await store.get('u1-task1', context_user1) is not None
+
+    await store.delete('u1-task1', context_user1)  # Should delete
+    assert await store.get('u1-task1', context_user1) is None
+
+    # Cleanup remaining tasks
+    await store.delete('u1-task2', context_user1)
+    await store.delete('u2-task1', context_user2)
