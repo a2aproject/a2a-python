@@ -221,6 +221,9 @@ async def test_end_to_end_send_message_blocking(transport_setups):
     assert len(response.task.artifacts) == 1
     assert response.task.artifacts[0].name == 'test-artifact'
     assert response.task.artifacts[0].parts[0].text == 'artifact content'
+    assert len(response.task.history) == 1
+    assert response.task.history[0].role == Role.ROLE_USER
+    assert response.task.history[0].parts[0].text == 'Run dummy agent!'
 
 
 @pytest.mark.asyncio
@@ -245,6 +248,9 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
     response, _ = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert len(response.task.history) == 1
+    assert response.task.history[0].role == Role.ROLE_USER
+    assert response.task.history[0].parts[0].text == 'Run dummy agent!'
 
 
 @pytest.mark.asyncio
@@ -258,7 +264,7 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     )
 
     events = [
-        event async for event, _ in client.send_message(request=message_to_send)
+        event async for event in client.send_message(request=message_to_send)
     ]
 
     expected_events = [
@@ -269,7 +275,7 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     ]
 
     assert len(events) == len(expected_events)
-    for event, (expected_type, expected_state) in zip(
+    for (event, task), (expected_type, expected_state) in zip(
         events, expected_events, strict=True
     ):
         assert event.HasField(expected_type)
@@ -281,6 +287,11 @@ async def test_end_to_end_send_message_streaming(transport_setups):
                 event.artifact_update.artifact.parts[0].text
                 == 'artifact content'
             )
+
+    last_task = events[-1][1]
+    assert len(last_task.history) == 1
+    assert last_task.history[0].role == Role.ROLE_AGENT
+    assert last_task.history[0].parts[0].text == 'done'
 
 
 @pytest.mark.asyncio
@@ -307,6 +318,9 @@ async def test_end_to_end_get_task(transport_setups):
         TaskState.TASK_STATE_WORKING,
         TaskState.TASK_STATE_COMPLETED,
     }
+    assert len(retrieved_task.history) == 1
+    assert retrieved_task.history[0].role == Role.ROLE_USER
+    assert retrieved_task.history[0].parts[0].text == 'Test Get Task'
 
 
 @pytest.mark.asyncio
@@ -345,6 +359,11 @@ async def test_end_to_end_list_tasks(transport_setups):
         assert list_response.page_size == page_size
 
         actual_task_ids.extend([task.id for task in list_response.tasks])
+
+        for task in list_response.tasks:
+            assert len(task.history) == 1
+            assert task.history[0].role == Role.ROLE_USER
+            assert task.history[0].parts[0].text.startswith('Test List Tasks ')
 
         token = list_response.next_page_token
 
