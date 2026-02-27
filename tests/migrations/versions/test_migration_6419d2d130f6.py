@@ -102,6 +102,7 @@ def test_migration_6419d2d130f6_full_cycle(
     tasks_columns = {row[1]: row for row in cursor.fetchall()}
     assert 'owner' in tasks_columns
     assert 'last_updated' in tasks_columns
+    assert tasks_columns['last_updated'][2] == 'DATETIME'
 
     # Check default value for owner in tasks
     # row[4] is dflt_value in PRAGMA table_info

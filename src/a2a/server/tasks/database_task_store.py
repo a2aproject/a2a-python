@@ -124,7 +124,7 @@ class DatabaseTaskStore(TaskStore):
             kind='task',  # Default kind for tasks
             owner=owner,
             last_updated=(
-                task.status.timestamp.ToJsonString()
+                task.status.timestamp.ToDatetime()
                 if task.HasField('status') and task.status.HasField('timestamp')
                 else None
             ),
@@ -227,21 +227,16 @@ class DatabaseTaskStore(TaskStore):
                     == a2a_pb2.TaskState.Name(params.status)
                 )
             if params.HasField('status_timestamp_after'):
-                last_updated_after_iso = (
-                    params.status_timestamp_after.ToJsonString()
-                )
-                base_stmt = base_stmt.where(
-                    timestamp_col >= last_updated_after_iso
-                )
+                last_updated_after = params.status_timestamp_after.ToDatetime()
+                base_stmt = base_stmt.where(timestamp_col >= last_updated_after)
 
             # Get total count
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            # Use coalesce to treat NULL timestamps as empty strings,
-            # which sort last in descending order
+            # Use nulls_last() to ensure NULL timestamps sort last in descending order
             stmt = base_stmt.order_by(
-                func.coalesce(timestamp_col, '').desc(),
+                timestamp_col.desc().nulls_last(),
                 self.task_model.id.desc(),
             )
 

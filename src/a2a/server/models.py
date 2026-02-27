@@ -1,3 +1,4 @@
+from datetime import datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
 
@@ -18,7 +19,7 @@ from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, Dialect, Index, LargeBinary, String
+    from sqlalchemy import JSON, DateTime, Dialect, Index, LargeBinary, String
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
@@ -149,7 +150,9 @@ class TaskMixin:
         String(16), nullable=False, default='task'
     )
     owner: Mapped[str] = mapped_column(String(128), nullable=False)
-    last_updated: Mapped[str] = mapped_column(String(22), nullable=True)
+    last_updated: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Properly typed Pydantic fields with automatic serialization
     status: Mapped[TaskStatus] = mapped_column(PydanticType(TaskStatus))

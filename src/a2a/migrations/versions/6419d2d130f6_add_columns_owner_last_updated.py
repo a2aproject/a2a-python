@@ -32,13 +32,18 @@ def _get_inspector() -> sa.engine.reflection.Inspector:
     return inspector
 
 
-def _add_column(table: str, value: str, column_name: str) -> None:
+def _add_column(
+    table: str,
+    column_name: str,
+    type_: sa.types.TypeEngine,
+    value: str | None = None,
+) -> None:
     if not _column_exists(table, column_name):
         op.add_column(
             table,
             sa.Column(
                 column_name,
-                sa.String(128),
+                type_,
                 nullable=False,
                 server_default=value,
             ),
@@ -107,8 +112,8 @@ def upgrade() -> None:
     )
 
     if _table_exists(tasks_table):
-        _add_column(tasks_table, owner, 'owner')
-        _add_column(tasks_table, '0', 'last_updated')
+        _add_column(tasks_table, 'owner', sa.String(128), owner)
+        _add_column(tasks_table, 'last_updated', sa.DateTime(timezone=True))
         _add_index(
             tasks_table,
             f'idx_{tasks_table}_owner_last_updated',
@@ -120,7 +125,9 @@ def upgrade() -> None:
         )
 
     if _table_exists(push_notification_configs_table):
-        _add_column(push_notification_configs_table, owner, 'owner')
+        _add_column(
+            push_notification_configs_table, 'owner', sa.String(128), owner
+        )
     else:
         logging.warning(
             f"Table '{push_notification_configs_table}' does not exist. Skipping upgrade for this table."
