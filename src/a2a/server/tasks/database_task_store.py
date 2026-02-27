@@ -1,5 +1,6 @@
 import logging
 
+from datetime import datetime, timezone
 from typing import Any, cast
 
 
@@ -234,9 +235,13 @@ class DatabaseTaskStore(TaskStore):
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            # Use nulls_last() to ensure NULL timestamps sort last in descending order
+            # Use coalesce to treat NULL timestamps as datetime.min,
+            # which sort last in descending order
             stmt = base_stmt.order_by(
-                timestamp_col.desc().nulls_last(),
+                func.coalesce(
+                    timestamp_col,
+                    datetime.min.replace(tzinfo=timezone.utc),
+                ).desc(),
                 self.task_model.id.desc(),
             )
 

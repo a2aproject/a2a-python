@@ -35,6 +35,7 @@ def _get_inspector() -> sa.engine.reflection.Inspector:
 def _add_column(
     table: str,
     column_name: str,
+    nullable: bool,
     type_: sa.types.TypeEngine,
     value: str | None = None,
 ) -> None:
@@ -44,7 +45,7 @@ def _add_column(
             sa.Column(
                 column_name,
                 type_,
-                nullable=False,
+                nullable=nullable,
                 server_default=value,
             ),
         )
@@ -112,8 +113,8 @@ def upgrade() -> None:
     )
 
     if _table_exists(tasks_table):
-        _add_column(tasks_table, 'owner', sa.String(128), owner)
-        _add_column(tasks_table, 'last_updated', sa.DateTime(timezone=True))
+        _add_column(tasks_table, 'owner', False, sa.String(128), owner)
+        _add_column(tasks_table, 'last_updated', True, sa.DateTime())
         _add_index(
             tasks_table,
             f'idx_{tasks_table}_owner_last_updated',
@@ -126,7 +127,11 @@ def upgrade() -> None:
 
     if _table_exists(push_notification_configs_table):
         _add_column(
-            push_notification_configs_table, 'owner', sa.String(128), owner
+            push_notification_configs_table,
+            'owner',
+            False,
+            sa.String(128),
+            owner,
         )
     else:
         logging.warning(

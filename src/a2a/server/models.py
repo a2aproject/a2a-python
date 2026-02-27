@@ -151,7 +151,7 @@ class TaskMixin:
     )
     owner: Mapped[str] = mapped_column(String(128), nullable=False)
     last_updated: Mapped[datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
+        DateTime, nullable=True
     )
 
     # Properly typed Pydantic fields with automatic serialization
