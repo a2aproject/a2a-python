@@ -1,10 +1,24 @@
+import logging
 import os
 import sqlite3
-import subprocess
 import tempfile
 from typing import Generator
+from unittest.mock import patch
 
 import pytest
+
+from a2a.a2a_db_cli import run_migrations
+
+
+@pytest.fixture(autouse=True)
+def mock_logging_config():
+    """Mock logging configuration function.
+
+    This prevents tests from changing global logging state
+    and interfering with other tests (like telemetry tests).
+    """
+    with patch('logging.basicConfig'), patch('logging.config.fileConfig'):
+        yield
 
 
 @pytest.fixture
@@ -17,7 +31,9 @@ def temp_db() -> Generator[str, None, None]:
         os.remove(path)
 
 
-def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
+def test_migration_6419d2d130f6_full_cycle(
+    temp_db: str, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test the full upgrade/downgrade cycle for migration 6419d2d130f6."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
@@ -46,30 +62,20 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
     conn.commit()
     conn.close()
 
-    # 2. Run Upgrade via CLI with a custom owner
+    # 2. Run Upgrade via direct call with a custom owner
     custom_owner = 'test_owner_123'
 
-    # We use the CLI tool to perform the upgrade
-    # Using the new --add_columns_owner_last_updated-default-owner flag and --database-url flag
-    result = subprocess.run(
-        [
-            'uv',
-            'run',
-            'a2a-db',
-            '--database-url',
-            db_url,
-            '--add_columns_owner_last_updated-default-owner',
-            custom_owner,
-            'upgrade',
-            '6419d2d130f6',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, f"""Upgrade failed: {result.stderr}
-{result.stdout}"""
+    test_args = [
+        'a2a-db',
+        '--database-url',
+        db_url,
+        '--add_columns_owner_last_updated-default-owner',
+        custom_owner,
+        'upgrade',
+        '6419d2d130f6',
+    ]
+    with patch('sys.argv', test_args):
+        run_migrations()
 
     # 3. Verify columns and index exist
     conn = sqlite3.connect(temp_db)
@@ -100,16 +106,10 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
 
     conn.close()
 
-    # 4. Run Downgrade via CLI
-    result = subprocess.run(
-        ['uv', 'run', 'a2a-db', '--database-url', db_url, 'downgrade', 'base'],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-
-    assert result.returncode == 0, f"""Downgrade failed: {result.stderr}
-{result.stdout}"""
+    # 4. Run Downgrade via direct call
+    test_args = ['a2a-db', '--database-url', db_url, 'downgrade', 'base']
+    with patch('sys.argv', test_args):
+        run_migrations()
 
     # 5. Verify columns are gone
     conn = sqlite3.connect(temp_db)
@@ -134,7 +134,9 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
     conn.close()
 
 
-def test_migration_6419d2d130f6_custom_tables(temp_db: str) -> None:
+def test_migration_6419d2d130f6_custom_tables(
+    temp_db: str, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test the migration with custom table names."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
     custom_tasks = 'custom_tasks'
@@ -152,26 +154,20 @@ def test_migration_6419d2d130f6_custom_tables(temp_db: str) -> None:
     conn.commit()
     conn.close()
 
-    # 2. Run Upgrade via CLI with custom table flags
-    result = subprocess.run(
-        [
-            'uv',
-            'run',
-            'a2a-db',
-            '--database-url',
-            db_url,
-            '--tasks-table',
-            custom_tasks,
-            '--push-notification-table',
-            custom_push,
-            'upgrade',
-            '6419d2d130f6',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, f'Upgrade failed: {result.stderr}'
+    # 2. Run Upgrade via direct call with custom table flags
+    test_args = [
+        'a2a-db',
+        '--database-url',
+        db_url,
+        '--tasks-table',
+        custom_tasks,
+        '--push-notification-table',
+        custom_push,
+        'upgrade',
+        '6419d2d130f6',
+    ]
+    with patch('sys.argv', test_args):
+        run_migrations()
 
     # 3. Verify columns exist in custom tables
     conn = sqlite3.connect(temp_db)
@@ -186,34 +182,29 @@ def test_migration_6419d2d130f6_custom_tables(temp_db: str) -> None:
     conn.close()
 
 
-def test_migration_6419d2d130f6_missing_tables(temp_db: str) -> None:
-    """Test that the migration handles missing tables gracefully (logs warning but doesn't fail)."""
+def test_migration_6419d2d130f6_missing_tables(
+    temp_db: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test that the migration handles missing tables gracefully."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
     # Run upgrade on empty database
-    result = subprocess.run(
-        [
-            'uv',
-            'run',
-            'a2a-db',
-            '--database-url',
-            db_url,
-            'upgrade',
-            '6419d2d130f6',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    test_args = [
+        'a2a-db',
+        '--database-url',
+        db_url,
+        'upgrade',
+        '6419d2d130f6',
+    ]
+    with patch('sys.argv', test_args), caplog.at_level(logging.WARNING):
+        run_migrations()
 
-    assert result.returncode == 0
-    assert (
-        "Table 'tasks' does not exist" in result.stderr
-        or "Table 'tasks' does not exist" in result.stdout
-    )
+    assert "Table 'tasks' does not exist" in caplog.text
 
 
-def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
+def test_migration_6419d2d130f6_idempotency(
+    temp_db: str, capsys: pytest.CaptureFixture[str]
+) -> None:
     """Test that the migration is idempotent (can be run multiple times)."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
@@ -230,35 +221,51 @@ def test_migration_6419d2d130f6_idempotency(temp_db: str) -> None:
     conn.close()
 
     # 2. Run Upgrade first time
-    result = subprocess.run(
-        [
-            'uv',
-            'run',
-            'a2a-db',
-            '--database-url',
-            db_url,
-            'upgrade',
-            '6419d2d130f6',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
+    test_args = [
+        'a2a-db',
+        '--database-url',
+        db_url,
+        'upgrade',
+        '6419d2d130f6',
+    ]
+    with patch('sys.argv', test_args):
+        run_migrations()
 
     # 3. Run Upgrade second time - should not fail even if columns already exist
-    result = subprocess.run(
-        [
-            'uv',
-            'run',
-            'a2a-db',
-            '--database-url',
-            db_url,
-            'upgrade',
-            '6419d2d130f6',
-        ],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0
+    with patch('sys.argv', test_args):
+        run_migrations()
+
+
+def test_migration_6419d2d130f6_offline(
+    temp_db: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test that offline mode generates the expected SQL without modifying the database."""
+    db_url = f'sqlite+aiosqlite:///{temp_db}'
+
+    # Run upgrade in offline mode
+    test_args = [
+        'a2a-db',
+        '--database-url',
+        db_url,
+        '--sql',
+        'upgrade',
+        '6419d2d130f6',
+    ]
+    with patch('sys.argv', test_args):
+        run_migrations()
+
+    captured = capsys.readouterr()
+    # Verify SQL output contains key migration statements
+    assert 'ALTER TABLE tasks ADD COLUMN owner' in captured.out
+    assert 'CREATE INDEX idx_tasks_owner_last_updated' in captured.out
+    assert 'CREATE TABLE alembic_version' in captured.out
+
+    # Verify the database was NOT actually changed (since it is offline mode)
+    conn = sqlite3.connect(temp_db)
+    cursor = conn.cursor()
+    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+    tables = {row[0] for row in cursor.fetchall()}
+    # alembic_version and tasks should not exist because we didn't run the SQL
+    assert 'tasks' not in tables
+    assert 'alembic_version' not in tables
+    conn.close()
