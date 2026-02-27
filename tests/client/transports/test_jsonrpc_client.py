@@ -416,7 +416,7 @@ class TestTaskCallback:
         )
         response = await transport.delete_task_callback(request)
 
-        mock_httpx_client.post.assert_called_once()  # Assuming mock_send_request was a typo for mock_httpx_client.post
+        mock_httpx_client.post.assert_called_once()
         assert response is None
         call_args = mock_httpx_client.post.call_args
         payload = call_args[1]['json']

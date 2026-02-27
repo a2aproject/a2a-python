@@ -137,9 +137,7 @@ def mock_request_handler() -> AsyncMock:
     handler.on_list_task_push_notification_configs.return_value = (
         ListTaskPushNotificationConfigsResponse(configs=[CALLBACK_CONFIG])
     )
-    handler.on_delete_task_push_notification_config.return_value = (
-        CALLBACK_CONFIG
-    )
+    handler.on_delete_task_push_notification_config.return_value = None
 
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT

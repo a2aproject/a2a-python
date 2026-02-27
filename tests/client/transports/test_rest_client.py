@@ -340,13 +340,7 @@ class TestTaskCallback:
         task_id = 'task-1'
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
-        mock_response.json.return_value = {
-            'taskId': task_id,
-            'pushNotificationConfig': {
-                'id': 'config-1',
-                'url': 'https://example.com',
-            },
-        }
+        mock_response.json.return_value = {}
         mock_httpx_client.send.return_value = mock_response
 
         # Mock the build_request method to capture its inputs

@@ -568,9 +568,7 @@ async def test_delete_task_callback(
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test deleting task push notification config."""
-    mock_grpc_stub.DeleteTaskPushNotificationConfig.return_value = (
-        sample_task_push_notification_config
-    )
+    mock_grpc_stub.DeleteTaskPushNotificationConfig.return_value = None
 
     await grpc_transport.delete_task_callback(
         DeleteTaskPushNotificationConfigRequest(
