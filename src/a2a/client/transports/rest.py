@@ -10,7 +10,6 @@ from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from google.protobuf.message import Message
 from httpx_sse import SSEError, aconnect_sse
 
-from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -37,10 +36,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.constants import (
-    TRANSPORT_HTTP_JSON,
-    TRANSPORT_JSONRPC,
-)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -54,37 +49,17 @@ class RestTransport(ClientTransport):
     def __init__(
         self,
         httpx_client: httpx.AsyncClient,
-        agent_card: AgentCard | None = None,
-        url: str | None = None,
+        agent_card: AgentCard,
+        url: str,
         interceptors: list[ClientCallInterceptor] | None = None,
         extensions: list[str] | None = None,
     ):
         """Initializes the RestTransport."""
-        if url:
-            self.url = url
-        elif agent_card:
-            for interface in agent_card.supported_interfaces:
-                if interface.protocol_binding in (
-                    TRANSPORT_HTTP_JSON,
-                    TRANSPORT_JSONRPC,
-                ):
-                    self.url = interface.url
-                    break
-            else:
-                raise ValueError(
-                    f'AgentCard does not support {TRANSPORT_HTTP_JSON} '
-                    f'or {TRANSPORT_JSONRPC}'
-                )
-        else:
-            raise ValueError('Must provide either agent_card or url')
-        if self.url.endswith('/'):
-            self.url = self.url[:-1]
+        self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.interceptors = interceptors or []
-        self._needs_extended_card = (
-            agent_card.capabilities.extended_agent_card if agent_card else True
-        )
+        self._needs_extended_card = agent_card.capabilities.extended_agent_card
         self.extensions = extensions
 
     async def _apply_interceptors(
@@ -492,15 +467,6 @@ class RestTransport(ClientTransport):
         )
 
         card = self.agent_card
-
-        if not card:
-            resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(
-                http_kwargs=modified_kwargs,
-                signature_verifier=signature_verifier,
-            )
-            self.agent_card = card
-            self._needs_extended_card = card.capabilities.extended_agent_card
 
         if not card.capabilities.extended_agent_card:
             return card

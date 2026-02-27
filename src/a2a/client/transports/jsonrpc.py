@@ -11,7 +11,6 @@ from google.protobuf import json_format
 from httpx_sse import SSEError, aconnect_sse
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
-from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -53,31 +52,18 @@ class JsonRpcTransport(ClientTransport):
     def __init__(
         self,
         httpx_client: httpx.AsyncClient,
-        agent_card: AgentCard | None = None,
-        url: str | None = None,
+        agent_card: AgentCard,
+        url: str,
         interceptors: list[ClientCallInterceptor] | None = None,
         extensions: list[str] | None = None,
     ):
         """Initializes the JsonRpcTransport."""
-        if url:
-            self.url = url
-        elif agent_card:
-            if agent_card.supported_interfaces:
-                self.url = agent_card.supported_interfaces[0].url
-            else:
-                # Fallback or error if no interfaces?
-                # For compatibility we might check if 'url' attr exists (it does not on proto anymore)
-                raise ValueError('AgentCard has no supported interfaces')
-        else:
-            raise ValueError('Must provide either agent_card or url')
-
+        self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self.extensions = extensions
-        self._needs_extended_card = (
-            agent_card.capabilities.extended_agent_card if agent_card else True
-        )
+        self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
     async def _apply_interceptors(
         self,
@@ -512,15 +498,6 @@ class JsonRpcTransport(ClientTransport):
         )
 
         card = self.agent_card
-
-        if not card:
-            resolver = A2ACardResolver(self.httpx_client, self.url)
-            card = await resolver.get_agent_card(
-                http_kwargs=modified_kwargs,
-                signature_verifier=signature_verifier,
-            )
-            self.agent_card = card
-            self._needs_extended_card = card.capabilities.extended_agent_card
 
         if not card.capabilities.extended_agent_card:
             return card

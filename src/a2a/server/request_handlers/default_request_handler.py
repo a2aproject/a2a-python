@@ -21,6 +21,7 @@ from a2a.server.events import (
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import (
     PushNotificationConfigStore,
+    PushNotificationEvent,
     PushNotificationSender,
     ResultAggregator,
     TaskManager,
@@ -32,8 +33,8 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    ListTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigResponse,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
@@ -52,7 +53,11 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.task import apply_history_length
+from a2a.utils.task import (
+    apply_history_length,
+    validate_history_length,
+    validate_page_size,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -122,13 +127,14 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
+        validate_history_length(params)
+
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
 
-        # Apply historyLength parameter if specified
-        return apply_history_length(task, params.history_length)
+        return apply_history_length(task, params)
 
     async def on_list_tasks(
         self,
@@ -136,12 +142,16 @@ class DefaultRequestHandler(RequestHandler):
         context: ServerCallContext | None = None,
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
+        validate_history_length(params)
+        if params.HasField('page_size'):
+            validate_page_size(params.page_size)
+
         page = await self.task_store.list(params, context)
         for task in page.tasks:
             if not params.include_artifacts:
                 task.ClearField('artifacts')
 
-            updated_task = apply_history_length(task, params.history_length)
+            updated_task = apply_history_length(task, params)
             if updated_task is not task:
                 task.CopyFrom(updated_task)
 
@@ -310,13 +320,15 @@ class DefaultRequestHandler(RequestHandler):
             )
 
     async def _send_push_notification_if_needed(
-        self, task_id: str, result_aggregator: ResultAggregator
+        self, task_id: str, event: Event
     ) -> None:
-        """Sends push notification if configured and task is available."""
-        if self._push_sender and task_id:
-            latest_task = await result_aggregator.current_result
-            if isinstance(latest_task, Task):
-                await self._push_sender.send_notification(latest_task)
+        """Sends push notification if configured."""
+        if (
+            self._push_sender
+            and task_id
+            and isinstance(event, PushNotificationEvent)
+        ):
+            await self._push_sender.send_notification(task_id, event)
 
     async def on_message_send(
         self,
@@ -328,6 +340,8 @@ class DefaultRequestHandler(RequestHandler):
         Starts the agent execution for the message and waits for the final
         result (Task or Message).
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -346,10 +360,8 @@ class DefaultRequestHandler(RequestHandler):
         interrupted_or_non_blocking = False
         try:
             # Create async callback for push notifications
-            async def push_notification_callback() -> None:
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+            async def push_notification_callback(event: Event) -> None:
+                await self._send_push_notification_if_needed(task_id, event)
 
             (
                 result,
@@ -380,11 +392,7 @@ class DefaultRequestHandler(RequestHandler):
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
             if params.configuration:
-                result = apply_history_length(
-                    result, params.configuration.history_length
-                )
-
-        await self._send_push_notification_if_needed(task_id, result_aggregator)
+                result = apply_history_length(result, params.configuration)
 
         return result
 
@@ -413,9 +421,7 @@ class DefaultRequestHandler(RequestHandler):
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
 
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+                await self._send_push_notification_if_needed(task_id, event)
                 yield event
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
@@ -502,7 +508,6 @@ class DefaultRequestHandler(RequestHandler):
 
         return TaskPushNotificationConfig(
             task_id=task_id,
-            id=params.config_id,
             push_notification_config=params.config,
         )
 
@@ -532,7 +537,6 @@ class DefaultRequestHandler(RequestHandler):
             if config.id == config_id:
                 return TaskPushNotificationConfig(
                     task_id=task_id,
-                    id=config.id,
                     push_notification_config=config,
                 )
 
@@ -557,10 +561,14 @@ class DefaultRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
-                error=InvalidParamsError(
+                error=UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
             )
+
+        # The operation MUST return a Task object as the first event in the stream
+        # https://a2a-protocol.org/latest/specification/#316-subscribe-to-task
+        yield task
 
         task_manager = TaskManager(
             task_id=task.id,
@@ -580,12 +588,12 @@ class DefaultRequestHandler(RequestHandler):
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
-    async def on_list_task_push_notification_config(
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigRequest,
+        params: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext | None = None,
-    ) -> ListTaskPushNotificationConfigResponse:
-        """Default handler for 'ListTaskPushNotificationConfig'.
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Default handler for 'ListTaskPushNotificationConfigs'.
 
         Requires a `PushConfigStore` to be configured.
         """
@@ -601,11 +609,10 @@ class DefaultRequestHandler(RequestHandler):
             task_id
         )
 
-        return ListTaskPushNotificationConfigResponse(
+        return ListTaskPushNotificationConfigsResponse(
             configs=[
                 TaskPushNotificationConfig(
                     task_id=task_id,
-                    id=config.id,
                     push_notification_config=config,
                 )
                 for config in push_notification_config_list

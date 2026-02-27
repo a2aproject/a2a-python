@@ -329,7 +329,6 @@ def test_set_task_push_notification_config_request():
     )
     request = CreateTaskPushNotificationConfigRequest(
         task_id='task-123',
-        config_id='config-1',
         config=config,
     )
     assert request.task_id == 'task-123'

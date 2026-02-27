@@ -23,6 +23,7 @@ from a2a.types import (
     AgentSkill,
     Message,
     Part,
+    Role,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
@@ -87,7 +88,7 @@ class SUTAgentExecutor(AgentExecutor):
             status=TaskStatus(
                 state=TaskState.TASK_STATE_WORKING,
                 message=Message(
-                    role='agent',
+                    role=Role.ROLE_AGENT,
                     message_id=str(uuid.uuid4()),
                     parts=[Part(text='Processing your question')],
                     task_id=task_id,
@@ -108,7 +109,7 @@ class SUTAgentExecutor(AgentExecutor):
         logger.info('[SUTAgentExecutor] Response: %s', agent_reply_text)
 
         agent_message = Message(
-            role='agent',
+            role=Role.ROLE_AGENT,
             message_id=str(uuid.uuid4()),
             parts=[Part(text=agent_reply_text)],
             task_id=task_id,

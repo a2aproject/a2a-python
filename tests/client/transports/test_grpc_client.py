@@ -194,7 +194,6 @@ def sample_task_push_notification_config(
     """Provides a sample TaskPushNotificationConfig object."""
     return TaskPushNotificationConfig(
         task_id='task-1',
-        id=sample_push_notification_config.id,
         push_notification_config=sample_push_notification_config,
     )
 
@@ -432,7 +431,6 @@ async def test_set_task_callback_with_valid_task(
     # Create the request object expected by the transport
     request = CreateTaskPushNotificationConfigRequest(
         task_id='task-1',
-        config_id=sample_task_push_notification_config.push_notification_config.id,
         config=sample_task_push_notification_config.push_notification_config,
     )
     response = await grpc_transport.set_task_callback(request)
@@ -460,14 +458,12 @@ async def test_set_task_callback_with_invalid_task(
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
         a2a_pb2.TaskPushNotificationConfig(
             task_id='invalid-path-to-task-1',
-            id='config-1',
             push_notification_config=sample_push_notification_config,
         )
     )
 
     request = CreateTaskPushNotificationConfigRequest(
         task_id='task-1',
-        config_id='config-1',
         config=sample_push_notification_config,
     )
 
@@ -521,7 +517,6 @@ async def test_get_task_callback_with_invalid_task(
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
         a2a_pb2.TaskPushNotificationConfig(
             task_id='invalid-path-to-task-1',
-            id='config-1',
             push_notification_config=sample_push_notification_config,
         )
     )

@@ -3,8 +3,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest
-from google.protobuf import json_format
 
+from google.protobuf import json_format
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
@@ -18,11 +18,10 @@ from a2a.types.a2a_pb2 import (
     DeleteTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigResponse,
-    Role,
     SendMessageRequest,
     TaskPushNotificationConfig,
 )
-from a2a.utils.constants import TRANSPORT_HTTP_JSON
+from a2a.utils.constants import TransportProtocol
 
 
 @pytest.fixture
@@ -35,7 +34,7 @@ def mock_agent_card() -> MagicMock:
     mock = MagicMock(spec=AgentCard, url='http://agent.example.com/api')
     mock.supported_interfaces = [
         AgentInterface(
-            protocol_binding=TRANSPORT_HTTP_JSON,
+            protocol_binding=TransportProtocol.HTTP_JSON,
             url='http://agent.example.com/api',
         )
     ]
@@ -70,7 +69,9 @@ class TestRestTransport:
         mock_agent_card: MagicMock,
     ):
         client = RestTransport(
-            httpx_client=mock_httpx_client, agent_card=mock_agent_card
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello stream')
@@ -106,8 +107,9 @@ class TestRestTransportExtensions:
         ]
         client = RestTransport(
             httpx_client=mock_httpx_client,
-            extensions=extensions,
             agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+            extensions=extensions,
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello')
@@ -151,6 +153,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
             extensions=extensions,
         )
         params = SendMessageRequest(
@@ -190,6 +193,7 @@ class TestRestTransportExtensions:
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
         )
         request = SendMessageRequest(
             message=create_text_message_object(content='Error stream')
@@ -223,47 +227,6 @@ class TestRestTransportExtensions:
         mock_aconnect_sse.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_card_no_card_provided_with_extensions(
-        self, mock_httpx_client: AsyncMock
-    ):
-        """Test get_extended_agent_card with extensions set in Client when no card is initially provided.
-        Tests that the extensions are added to the HTTP GET request."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
-        client = RestTransport(
-            httpx_client=mock_httpx_client,
-            url='http://agent.example.com/api',
-            extensions=extensions,
-        )
-
-        agent_card = AgentCard(
-            name='Test Agent',
-            description='Test Agent Description',
-            version='1.0.0',
-            capabilities=AgentCapabilities(),
-        )
-
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.status_code = 200
-        mock_response.json.return_value = json_format.MessageToDict(agent_card)
-        mock_httpx_client.get.return_value = mock_response
-
-        await client.get_extended_agent_card()
-
-        mock_httpx_client.get.assert_called_once()
-        _, mock_kwargs = mock_httpx_client.get.call_args
-
-        _assert_extensions_header(
-            mock_kwargs,
-            {
-                'https://example.com/test-ext/v1',
-                'https://example.com/test-ext/v2',
-            },
-        )
-
-    @pytest.mark.asyncio
     async def test_get_card_with_extended_card_support_with_extensions(
         self, mock_httpx_client: AsyncMock
     ):
@@ -280,12 +243,13 @@ class TestRestTransportExtensions:
             capabilities=AgentCapabilities(extended_agent_card=True),
         )
         interface = agent_card.supported_interfaces.add()
-        interface.protocol_binding = TRANSPORT_HTTP_JSON
+        interface.protocol_binding = TransportProtocol.HTTP_JSON
         interface.url = 'http://agent.example.com/api'
 
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://agent.example.com/api',
         )
 
         mock_response = AsyncMock(spec=httpx.Response)

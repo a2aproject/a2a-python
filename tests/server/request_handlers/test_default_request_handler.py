@@ -1,7 +1,10 @@
 import asyncio
 import contextlib
 import logging
+import uuid
 import time
+import uuid
+from typing import cast
 
 from unittest.mock import (
     AsyncMock,
@@ -12,6 +15,7 @@ from unittest.mock import (
 
 import pytest
 
+from a2a.auth.user import UnauthenticatedUser
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -34,9 +38,11 @@ from a2a.server.tasks import (
 from a2a.types import (
     InternalError,
     InvalidParamsError,
+    TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.errors import ServerError
 from a2a.types.a2a_pb2 import (
     Artifact,
     DeleteTaskPushNotificationConfigRequest,
@@ -44,7 +50,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     ListTasksRequest,
     ListTasksResponse,
-    ListTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
     PushNotificationConfig,
@@ -105,7 +111,6 @@ def create_sample_task(
 # Helper to create ServerCallContext
 def create_server_call_context() -> ServerCallContext:
     # Assuming UnauthenticatedUser is available or can be imported
-    from a2a.auth.user import UnauthenticatedUser
 
     return ServerCallContext(user=UnauthenticatedUser())
 
@@ -143,8 +148,6 @@ async def test_on_get_task_not_found():
     )
 
     params = GetTaskRequest(id='non_existent_task')
-
-    from a2a.utils.errors import ServerError  # Local import for ServerError
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -252,6 +255,23 @@ async def test_on_list_tasks_applies_history_length():
 
 
 @pytest.mark.asyncio
+async def test_on_list_tasks_negative_history_length_error():
+    """Test on_list_tasks raises error for negative history length."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+    )
+    params = ListTasksRequest(history_length=-1, page_size=10)
+    context = create_server_call_context()
+
+    with pytest.raises(ServerError) as exc_info:
+        await request_handler.on_list_tasks(params, context)
+
+    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert 'history length must be non-negative' in exc_info.value.error.message
+
+
+@pytest.mark.asyncio
 async def test_on_cancel_task_task_not_found():
     """Test on_cancel_task when the task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
@@ -261,8 +281,6 @@ async def test_on_cancel_task_task_not_found():
         agent_executor=MockAgentExecutor(), task_store=mock_task_store
     )
     params = CancelTaskRequest(id='task_not_found_for_cancel')
-
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -405,11 +423,6 @@ async def test_on_cancel_task_completes_during_cancellation():
     mock_producer_task = AsyncMock(spec=asyncio.Task)
     request_handler._running_agents[task_id] = mock_producer_task
 
-    from a2a.utils.errors import (
-        ServerError,  # Local import
-        TaskNotCancelableError,  # Local import
-    )
-
     with patch(
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
         return_value=mock_result_aggregator_instance,
@@ -450,8 +463,6 @@ async def test_on_cancel_task_invalid_result_type():
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
     )
-
-    from a2a.utils.errors import ServerError  # Local import
 
     with patch(
         'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -659,6 +670,8 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         nonlocal event_callback_passed, event_callback_received
         event_callback_passed = event_callback is not None
         event_callback_received = event_callback
+        if event_callback_received:
+            await event_callback_received(final_task)
         return initial_task, True  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
@@ -696,7 +709,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     )
 
     # Verify that the push notification was sent with the final task
-    mock_push_sender.send_notification.assert_called_with(final_task)
+    mock_push_sender.send_notification.assert_called_with(task_id, final_task)
 
     # Verify that the push notification config was stored
     mock_push_notification_store.set_info.assert_awaited_once_with(
@@ -812,8 +825,6 @@ async def test_on_message_send_no_result_from_aggregator():
         False,
     )
 
-    from a2a.utils.errors import ServerError  # Local import
-
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -864,8 +875,6 @@ async def test_on_message_send_task_id_mismatch():
         mismatched_task,
         False,
     )
-
-    from a2a.utils.errors import ServerError  # Local import
 
     with (
         patch(
@@ -1412,8 +1421,12 @@ async def test_on_message_send_stream_with_push_notification():
 
     # 2. send_notification called for each task event yielded by aggregator
     assert mock_push_sender.send_notification.await_count == 2
-    mock_push_sender.send_notification.assert_any_await(event1_task_update)
-    mock_push_sender.send_notification.assert_any_await(event2_final_task)
+    mock_push_sender.send_notification.assert_any_await(
+        task_id, event1_task_update
+    )
+    mock_push_sender.send_notification.assert_any_await(
+        task_id, event2_final_task
+    )
 
     mock_agent_executor.execute.assert_awaited_once()
 
@@ -1499,7 +1512,10 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
     # Allow producer to emit the next event
     allow_second_event.set()
 
-    received = await resub_gen.__anext__()
+    first_subscribe_event = await anext(resub_gen)
+    assert first_subscribe_event == task_for_resub
+
+    received = await anext(resub_gen)
     assert received == second_event
 
     # Finish producer to allow cleanup paths to complete
@@ -1659,7 +1675,6 @@ async def test_disconnect_persists_final_task_to_store():
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            from typing import cast
 
             updater = TaskUpdater(
                 event_queue,
@@ -1893,8 +1908,6 @@ async def test_on_message_send_stream_task_id_mismatch():
         event_stream_gen_mismatch()
     )
 
-    from a2a.utils.errors import ServerError  # Local import
-
     with (
         patch(
             'a2a.server.request_handlers.default_request_handler.ResultAggregator',
@@ -1962,10 +1975,8 @@ async def test_set_task_push_notification_config_no_notifier():
     )
     params = CreateTaskPushNotificationConfigRequest(
         task_id='task1',
-        config_id='config1',
         config=PushNotificationConfig(url='http://example.com'),
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_create_task_push_notification_config(
@@ -1990,10 +2001,8 @@ async def test_set_task_push_notification_config_task_not_found():
     )
     params = CreateTaskPushNotificationConfigRequest(
         task_id='non_existent_task',
-        config_id='config1',
         config=PushNotificationConfig(url='http://example.com'),
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -2018,7 +2027,6 @@ async def test_get_task_push_notification_config_no_store():
         task_id='task1',
         id='push_notification_config',
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_get_task_push_notification_config(
@@ -2042,7 +2050,6 @@ async def test_get_task_push_notification_config_task_not_found():
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='push_notification_config'
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -2074,7 +2081,6 @@ async def test_get_task_push_notification_config_info_not_found():
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='push_notification_config'
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -2105,7 +2111,6 @@ async def test_get_task_push_notification_config_info_with_config():
 
     set_config_params = CreateTaskPushNotificationConfigRequest(
         task_id='task_1',
-        config_id='config_id',
         config=PushNotificationConfig(
             id='config_id', url='http://1.example.com'
         ),
@@ -2147,7 +2152,6 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
 
     set_config_params = CreateTaskPushNotificationConfigRequest(
         task_id='task_1',
-        config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
     await request_handler.on_create_task_push_notification_config(
@@ -2179,8 +2183,6 @@ async def test_on_subscribe_to_task_task_not_found():
     )
     params = SubscribeToTaskRequest(id='resub_task_not_found')
 
-    from a2a.utils.errors import ServerError  # Local import
-
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         # Need to consume the async generator to trigger the error
@@ -2209,8 +2211,6 @@ async def test_on_subscribe_to_task_queue_not_found():
         queue_manager=mock_queue_manager,
     )
     params = SubscribeToTaskRequest(id='resub_queue_not_found')
-
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -2271,11 +2271,10 @@ async def test_list_task_push_notification_config_no_store():
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='task1')
-    from a2a.utils.errors import ServerError  # Local import
+    params = ListTaskPushNotificationConfigsRequest(task_id='task1')
 
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_list_task_push_notification_config(
+        await request_handler.on_list_task_push_notification_configs(
             params, create_server_call_context()
         )
     assert isinstance(exc_info.value.error, UnsupportedOperationError)
@@ -2293,12 +2292,11 @@ async def test_list_task_push_notification_config_task_not_found():
         task_store=mock_task_store,
         push_config_store=mock_push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='non_existent_task')
-    from a2a.utils.errors import ServerError  # Local import
+    params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
-        await request_handler.on_list_task_push_notification_config(
+        await request_handler.on_list_task_push_notification_configs(
             params, context
         )
 
@@ -2322,9 +2320,9 @@ async def test_list_no_task_push_notification_config_info():
         task_store=mock_task_store,
         push_config_store=push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='non_existent_task')
+    params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
 
-    result = await request_handler.on_list_task_push_notification_config(
+    result = await request_handler.on_list_task_push_notification_configs(
         params, create_server_call_context()
     )
     assert result.configs == []
@@ -2354,9 +2352,9 @@ async def test_list_task_push_notification_config_info_with_config():
         task_store=mock_task_store,
         push_config_store=push_store,
     )
-    params = ListTaskPushNotificationConfigRequest(task_id='task_1')
+    params = ListTaskPushNotificationConfigsRequest(task_id='task_1')
 
-    result = await request_handler.on_list_task_push_notification_config(
+    result = await request_handler.on_list_task_push_notification_configs(
         params, create_server_call_context()
     )
 
@@ -2384,7 +2382,6 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     # multiple calls without config id should replace the existing
     set_config_params1 = CreateTaskPushNotificationConfigRequest(
         task_id='task_1',
-        config_id='default',
         config=PushNotificationConfig(url='http://1.example.com'),
     )
     await request_handler.on_create_task_push_notification_config(
@@ -2393,16 +2390,15 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
     set_config_params2 = CreateTaskPushNotificationConfigRequest(
         task_id='task_1',
-        config_id='default',
         config=PushNotificationConfig(url='http://2.example.com'),
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
     )
 
-    params = ListTaskPushNotificationConfigRequest(task_id='task_1')
+    params = ListTaskPushNotificationConfigsRequest(task_id='task_1')
 
-    result = await request_handler.on_list_task_push_notification_config(
+    result = await request_handler.on_list_task_push_notification_configs(
         params, create_server_call_context()
     )
 
@@ -2426,7 +2422,6 @@ async def test_delete_task_push_notification_config_no_store():
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task1', id='config1'
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     with pytest.raises(ServerError) as exc_info:
         await request_handler.on_delete_task_push_notification_config(
@@ -2450,7 +2445,6 @@ async def test_delete_task_push_notification_config_task_not_found():
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='config1'
     )
-    from a2a.utils.errors import ServerError  # Local import
 
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
@@ -2536,8 +2530,8 @@ async def test_delete_task_push_notification_config_info_with_config():
 
     assert result1 is None
 
-    result2 = await request_handler.on_list_task_push_notification_config(
-        ListTaskPushNotificationConfigRequest(task_id='task_1'),
+    result2 = await request_handler.on_list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task_1'),
         create_server_call_context(),
     )
 
@@ -2576,8 +2570,8 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
 
     assert result is None
 
-    result2 = await request_handler.on_list_task_push_notification_config(
-        ListTaskPushNotificationConfigRequest(task_id='task_1'),
+    result2 = await request_handler.on_list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task_1'),
         create_server_call_context(),
     )
 
@@ -2619,8 +2613,6 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-
-    from a2a.utils.errors import ServerError
 
     # Patch the TaskManager's get_task method to return our terminal task
     with patch(
@@ -2665,8 +2657,6 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         )
     )
 
-    from a2a.utils.errors import ServerError
-
     with patch(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
@@ -2705,14 +2695,12 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
     )
     params = SubscribeToTaskRequest(id=f'{task_id}')
 
-    from a2a.utils.errors import ServerError
-
     context = create_server_call_context()
     with pytest.raises(ServerError) as exc_info:
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass  # pragma: no cover
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert isinstance(exc_info.value.error, UnsupportedOperationError)
     assert exc_info.value.error.message
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
@@ -2740,8 +2728,6 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
             context_id='ctx1',
         )
     )
-
-    from a2a.utils.errors import ServerError
 
     # Mock TaskManager.get_task to return None (task not found)
     with patch(
@@ -2780,8 +2766,6 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
             context_id='ctx1',
         )
     )
-
-    from a2a.utils.errors import ServerError
 
     # Mock TaskManager.get_task to return None (task not found)
     with patch(
@@ -2852,3 +2836,81 @@ async def test_on_message_send_error_does_not_hang():
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
+
+
+@pytest.mark.asyncio
+async def test_on_get_task_negative_history_length_error():
+    """Test on_get_task raises error for negative history length."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+    )
+    # GetTaskRequest also has history_length
+    params = GetTaskRequest(id='task1', history_length=-1)
+    context = create_server_call_context()
+
+    with pytest.raises(ServerError) as exc_info:
+        await request_handler.on_get_task(params, context)
+
+    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert 'history length must be non-negative' in exc_info.value.error.message
+
+
+@pytest.mark.asyncio
+async def test_on_list_tasks_page_size_too_small():
+    """Test on_list_tasks raises error for page_size < 1."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+    )
+    params = ListTasksRequest(page_size=0)
+    context = create_server_call_context()
+
+    with pytest.raises(ServerError) as exc_info:
+        await request_handler.on_list_tasks(params, context)
+
+    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert 'minimum page size is 1' in exc_info.value.error.message
+
+
+@pytest.mark.asyncio
+async def test_on_list_tasks_page_size_too_large():
+    """Test on_list_tasks raises error for page_size > 100."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+    )
+    params = ListTasksRequest(page_size=101)
+    context = create_server_call_context()
+
+    with pytest.raises(ServerError) as exc_info:
+        await request_handler.on_list_tasks(params, context)
+
+    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert 'maximum page size is 100' in exc_info.value.error.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_negative_history_length_error():
+    """Test on_message_send raises error for negative history length in configuration."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor, task_store=mock_task_store
+    )
+
+    message_config = SendMessageConfiguration(
+        history_length=-1,
+        accepted_output_modes=['text/plain'],
+    )
+    params = SendMessageRequest(
+        message=Message(role=Role.ROLE_USER, message_id='msg1', parts=[]),
+        configuration=message_config,
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(ServerError) as exc_info:
+        await request_handler.on_message_send(params, context)
+
+    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert 'history length must be non-negative' in exc_info.value.error.message

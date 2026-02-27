@@ -12,7 +12,7 @@ from google.protobuf.json_format import ParseDict, MessageToDict
 class Notification(BaseModel):
     """Encapsulates default push notification data."""
 
-    task: dict[str, Any]
+    event: dict[str, Any]
     token: str
 
 
@@ -36,20 +36,33 @@ def create_notifications_app() -> FastAPI:
         try:
             json_data = await request.json()
             stream_response = ParseDict(json_data, StreamResponse())
-            if not stream_response.HasField('task'):
-                raise HTTPException(
-                    status_code=400, detail='Missing task in StreamResponse'
+
+            payload_name = stream_response.WhichOneof('payload')
+            task_id = None
+            if payload_name:
+                event_payload = getattr(stream_response, payload_name)
+                # The 'Task' message uses 'id', while event messages use 'task_id'.
+                task_id = getattr(
+                    event_payload, 'task_id', getattr(event_payload, 'id', None)
                 )
-            task = stream_response.task
+
+            if not task_id:
+                raise HTTPException(
+                    status_code=400,
+                    detail='Missing "task_id" in push notification.',
+                )
+
         except Exception as e:
             raise HTTPException(status_code=400, detail=str(e))
 
         async with store_lock:
-            if task.id not in store:
-                store[task.id] = []
-            store[task.id].append(
+            if task_id not in store:
+                store[task_id] = []
+            store[task_id].append(
                 Notification(
-                    task=MessageToDict(task, preserving_proto_field_name=True),
+                    event=MessageToDict(
+                        stream_response, preserving_proto_field_name=True
+                    ),
                     token=token,
                 )
             )

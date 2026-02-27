@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.3.24](https://github.com/a2aproject/a2a-python/compare/v0.3.23...v0.3.24) (2026-02-20)
+
+
+### Bug Fixes
+
+* **core:** preserve legitimate falsy values in _clean_empty ([#713](https://github.com/a2aproject/a2a-python/issues/713)) ([7632f55](https://github.com/a2aproject/a2a-python/commit/7632f55572641d8fbc353ee08ef2b1f6b75c38b6))
+* **deps:** `DeprecationWarning` on `HTTP_413_REQUEST_ENTITY_TOO_LARGE` ([#693](https://github.com/a2aproject/a2a-python/issues/693)) ([9968f9c](https://github.com/a2aproject/a2a-python/commit/9968f9c07f105bae8a6b296aeb6dea873b3b88b0))
+
+## [0.3.23](https://github.com/a2aproject/a2a-python/compare/v0.3.22...v0.3.23) (2026-02-13)
+
+
+### Features
+
+* add async context manager support to BaseClient ([#688](https://github.com/a2aproject/a2a-python/issues/688)) ([ae9dc88](https://github.com/a2aproject/a2a-python/commit/ae9dc8897885ad26461083682dd7ba008d5af3cb))
+* add async context manager support to ClientTransport ([#682](https://github.com/a2aproject/a2a-python/issues/682)) ([2e45c0d](https://github.com/a2aproject/a2a-python/commit/2e45c0d54e47f1725b13c67c8e509b0e6e61efb6))
+* support async card modifiers ([#654](https://github.com/a2aproject/a2a-python/issues/654)) ([a802500](https://github.com/a2aproject/a2a-python/commit/a802500b3ad82845c1a6fc155f80e75a20a1bcab))
+* support disabling OTel instrumentation via env var ([#611](https://github.com/a2aproject/a2a-python/issues/611)) ([72216b9](https://github.com/a2aproject/a2a-python/commit/72216b988c0681e07d26ea8d5489a619d1ad6dda))
+
+
+### Bug Fixes
+
+* do not crash on SSE comment line ([#636](https://github.com/a2aproject/a2a-python/issues/636)) ([3dcb847](https://github.com/a2aproject/a2a-python/commit/3dcb84772fdc8a4d3b63b518ed491e5ed3d38d0a))
+* gRPC metadata header casing and invocation_metadata() call ([#676](https://github.com/a2aproject/a2a-python/issues/676)) ([390b763](https://github.com/a2aproject/a2a-python/commit/390b763d106eae3b2ca8ca78a2d0bfdc68f8fe2c))
+* Improve error handling for Timeout exceptions on REST and JSON-RPC clients ([#690](https://github.com/a2aproject/a2a-python/issues/690)) ([2acd838](https://github.com/a2aproject/a2a-python/commit/2acd838796d44ab9bfe6ba8c8b4ea0c2571a59dc))
+* map rejected task state in proto converters ([#668](https://github.com/a2aproject/a2a-python/issues/668)) ([957e92b](https://github.com/a2aproject/a2a-python/commit/957e92b9059792c44a40bbab18160996f5512145)), closes [#625](https://github.com/a2aproject/a2a-python/issues/625)
+* **server:** fix deadlocks on agent execution failure in non-streaming ([#614](https://github.com/a2aproject/a2a-python/issues/614)) ([d3c973f](https://github.com/a2aproject/a2a-python/commit/d3c973fe72afc0142f8a4c94d0c0fbe4ba2ddfe8))
+
+
+### Documentation
+
+* explicitly mention supported spec version and transports in readme ([#681](https://github.com/a2aproject/a2a-python/issues/681)) ([c91d4fb](https://github.com/a2aproject/a2a-python/commit/c91d4fba517190d8f7c76b42ea26914a4275f1d5)), closes [#677](https://github.com/a2aproject/a2a-python/issues/677)
+* Update README to include Code Wiki badge ([2698cc0](https://github.com/a2aproject/a2a-python/commit/2698cc04f15282fb358018f06bd88ae159d987b4))
+
 ## [0.3.22](https://github.com/a2aproject/a2a-python/compare/v0.3.21...v0.3.22) (2025-12-16)
 
 

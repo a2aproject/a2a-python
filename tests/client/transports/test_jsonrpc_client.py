@@ -73,6 +73,7 @@ def transport(mock_httpx_client, agent_card):
     return JsonRpcTransport(
         httpx_client=mock_httpx_client,
         agent_card=agent_card,
+        url='http://test-agent.example.com',
     )
 
 
@@ -81,6 +82,7 @@ def transport_with_url(mock_httpx_client):
     """Creates a JsonRpcTransport with just a URL."""
     return JsonRpcTransport(
         httpx_client=mock_httpx_client,
+        agent_card=AgentCard(name='Dummy'),
         url='http://custom-url.example.com',
     )
 
@@ -116,34 +118,10 @@ class TestJsonRpcTransportInit:
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
         )
         assert transport.url == 'http://test-agent.example.com'
         assert transport.agent_card == agent_card
-
-    def test_init_with_url(self, mock_httpx_client):
-        """Test initialization with a URL."""
-        transport = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            url='http://custom-url.example.com',
-        )
-        assert transport.url == 'http://custom-url.example.com'
-        assert transport.agent_card is None
-
-    def test_init_url_takes_precedence(self, mock_httpx_client, agent_card):
-        """Test that explicit URL takes precedence over agent card URL."""
-        transport = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            agent_card=agent_card,
-            url='http://override-url.example.com',
-        )
-        assert transport.url == 'http://override-url.example.com'
-
-    def test_init_requires_url_or_agent_card(self, mock_httpx_client):
-        """Test that initialization requires either URL or agent card."""
-        with pytest.raises(
-            ValueError, match='Must provide either agent_card or url'
-        ):
-            JsonRpcTransport(httpx_client=mock_httpx_client)
 
     def test_init_with_interceptors(self, mock_httpx_client, agent_card):
         """Test initialization with interceptors."""
@@ -151,6 +129,7 @@ class TestJsonRpcTransportInit:
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
             interceptors=[interceptor],
         )
         assert transport.interceptors == [interceptor]
@@ -161,6 +140,7 @@ class TestJsonRpcTransportInit:
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
             extensions=extensions,
         )
         assert transport.extensions == extensions
@@ -361,7 +341,6 @@ class TestTaskCallback:
             'id': '1',
             'result': {
                 'task_id': f'{task_id}',
-                'id': 'config-1',
             },
         }
         mock_response.raise_for_status = MagicMock()
@@ -537,6 +516,7 @@ class TestInterceptors:
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
             interceptors=[interceptor],
         )
 
@@ -576,6 +556,7 @@ class TestExtensions:
         transport = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
             extensions=extensions,
         )
 
@@ -619,6 +600,7 @@ class TestExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
         )
         request = create_send_message_request(text='Error stream')
 
@@ -649,41 +631,6 @@ class TestExtensions:
         mock_aconnect_sse.assert_called_once()
 
     @pytest.mark.asyncio
-    async def test_get_card_no_card_provided_with_extensions(
-        self, mock_httpx_client: AsyncMock, agent_card: AgentCard
-    ):
-        """Test get_extended_agent_card with extensions set in Client when no card is initially provided.
-        Tests that the extensions are added to the HTTP GET request."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
-        client = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            url='http://test-agent.example.com',
-            extensions=extensions,
-        )
-        mock_response = AsyncMock(spec=httpx.Response)
-        mock_response.status_code = 200
-        mock_response.json.return_value = json_format.MessageToDict(agent_card)
-        mock_httpx_client.get.return_value = mock_response
-
-        agent_card.capabilities.extended_agent_card = False
-
-        await client.get_extended_agent_card()
-
-        mock_httpx_client.get.assert_called_once()
-        _, mock_kwargs = mock_httpx_client.get.call_args
-
-        _assert_extensions_header(
-            mock_kwargs,
-            {
-                'https://example.com/test-ext/v1',
-                'https://example.com/test-ext/v2',
-            },
-        )
-
-    @pytest.mark.asyncio
     async def test_get_card_with_extended_card_support_with_extensions(
         self, mock_httpx_client: AsyncMock, agent_card: AgentCard
     ):
@@ -698,6 +645,7 @@ class TestExtensions:
         client = JsonRpcTransport(
             httpx_client=mock_httpx_client,
             agent_card=agent_card,
+            url='http://test-agent.example.com',
             extensions=extensions,
         )
 

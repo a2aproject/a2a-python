@@ -12,7 +12,10 @@ from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.server.tasks.push_notification_sender import PushNotificationSender
+from a2a.server.tasks.push_notification_sender import (
+    PushNotificationEvent,
+    PushNotificationSender,
+)
 from a2a.server.tasks.result_aggregator import ResultAggregator
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.server.tasks.task_store import TaskStore
@@ -72,6 +75,7 @@ __all__ = [
     'InMemoryPushNotificationConfigStore',
     'InMemoryTaskStore',
     'PushNotificationConfigStore',
+    'PushNotificationEvent',
     'PushNotificationSender',
     'ResultAggregator',
     'TaskManager',
