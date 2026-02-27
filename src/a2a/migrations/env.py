@@ -42,6 +42,10 @@ if config.get_main_option('verbose') == 'true':
 # add your model's MetaData object here for 'autogenerate' support
 target_metadata = Base.metadata
 
+# Version table name to avoid conflicts with existing alembic_version tables in the database.
+# This ensures that the migration history for A2A is tracked separately.
+VERSION_TABLE = 'a2a_alembic_version'
+
 
 def run_migrations_offline() -> None:
     """Run migrations in 'offline' mode.
@@ -61,6 +65,7 @@ def run_migrations_offline() -> None:
         target_metadata=target_metadata,
         literal_binds=True,
         dialect_opts={'paramstyle': 'named'},
+        version_table=VERSION_TABLE,
     )
 
     with context.begin_transaction():
@@ -80,7 +85,7 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        version_table='a2a_alembic_version',
+        version_table=VERSION_TABLE,
     )
 
     with context.begin_transaction():
