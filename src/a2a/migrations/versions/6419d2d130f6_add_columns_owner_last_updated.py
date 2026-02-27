@@ -15,7 +15,7 @@ try:
     from alembic import context, op
 except ImportError as e:
     raise ImportError(
-        "Add columns to database tables migration requires Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
+        "'Add columns owner and last_updated to database tables' migration requires Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
     ) from e
 
 
@@ -26,7 +26,13 @@ branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
 
-def table_exists(table_name: str) -> bool:
+def _get_inspector() -> sa.engine.reflection.Inspector:
+    bind = op.get_bind()
+    inspector = sa.inspect(bind)
+    return inspector
+
+
+def _table_exists(table_name: str) -> bool:
     if context.is_offline_mode():
         return True
     bind = op.get_bind()
@@ -34,24 +40,24 @@ def table_exists(table_name: str) -> bool:
     return table_name in inspector.get_table_names()
 
 
-def column_exists(table_name: str, column_name: str) -> bool:
+def _column_exists(
+    table_name: str, column_name: str, downgrade_mode: bool = False
+) -> bool:
     if context.is_offline_mode():
-        return False
-    if not table_exists(table_name):
-        return False
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
+        return downgrade_mode
+
+    inspector = _get_inspector()
     columns = [c['name'] for c in inspector.get_columns(table_name)]
     return column_name in columns
 
 
-def index_exists(table_name: str, index_name: str) -> bool:
+def _index_exists(
+    table_name: str, index_name: str, downgrade_mode: bool = False
+) -> bool:
     if context.is_offline_mode():
-        return False
-    if not table_exists(table_name):
-        return False
-    bind = op.get_bind()
-    inspector = sa.inspect(bind)
+        return downgrade_mode
+
+    inspector = _get_inspector()
     indexes = [i['name'] for i in inspector.get_indexes(table_name)]
     return index_name in indexes
 
@@ -59,7 +65,10 @@ def index_exists(table_name: str, index_name: str) -> bool:
 def upgrade() -> None:
     """Upgrade schema."""
     # Get the default value from the config (passed via CLI)
-    owner = context.config.get_main_option('owner', 'legacy_v03_no_user_info')
+    owner = context.config.get_main_option(
+        'add_columns_owner_last_updated_default_owner',
+        'legacy_v03_no_user_info',
+    )
     tasks_tables = ['tasks']
     push_notification_tables = ['push_notification_configs']
 
@@ -73,8 +82,8 @@ def upgrade() -> None:
         )
 
     for table in tasks_tables + push_notification_tables:
-        if table_exists(table):
-            if not column_exists(table, 'owner'):
+        if _table_exists(table):
+            if not _column_exists(table, 'owner'):
                 op.add_column(
                     table,
                     sa.Column(
@@ -85,17 +94,20 @@ def upgrade() -> None:
                     ),
                 )
         else:
+            if table in tasks_tables:
+                tasks_tables.remove(table)
             logging.warning(
                 f"Table '{table}' does not exist. Skipping upgrade for this table."
             )
+
     for table in tasks_tables:
-        if table_exists(table):
-            if not column_exists(table, 'last_updated'):
+        if _table_exists(table):
+            if not _column_exists(table, 'last_updated'):
                 op.add_column(
                     table,
                     sa.Column('last_updated', sa.String(22), nullable=True),
                 )
-            if not index_exists(table, f'idx_{table}_owner_last_updated'):
+            if not _index_exists(table, f'idx_{table}_owner_last_updated'):
                 op.create_index(
                     f'idx_{table}_owner_last_updated',
                     table,
@@ -109,27 +121,36 @@ def upgrade() -> None:
 
 def downgrade() -> None:
     """Downgrade schema."""
-    tables = ['tasks', 'push_notification_configs']
+    tasks_tables = ['tasks']
+    push_notification_tables = ['push_notification_configs']
 
     if tasks_tables_str := context.config.get_main_option('tasks_tables', None):
-        tables.extend([t.strip() for t in tasks_tables_str.split(',')])
+        tasks_tables.extend([t.strip() for t in tasks_tables_str.split(',')])
     if push_notification_tables_str := context.config.get_main_option(
         'push_notification_tables', None
     ):
-        tables.extend(
+        push_notification_tables.extend(
             [t.strip() for t in push_notification_tables_str.split(',')]
         )
 
-    for table in tables:
-        if table_exists(table):
-            if index_exists(table, f'idx_{table}_owner_last_updated'):
+    for table in tasks_tables:
+        if _table_exists(table):
+            if _index_exists(table, f'idx_{table}_owner_last_updated', True):
                 op.drop_index(
                     f'idx_{table}_owner_last_updated', table_name=table
                 )
-            if column_exists(table, 'owner'):
-                op.drop_column(table, 'owner')
-            if column_exists(table, 'last_updated'):
+            if _column_exists(table, 'last_updated', True):
                 op.drop_column(table, 'last_updated')
+        else:
+            tasks_tables.remove(table)
+            logging.warning(
+                f"Table '{table}' does not exist. Skipping downgrade for this table."
+            )
+
+    for table in tasks_tables + push_notification_tables:
+        if _table_exists(table):
+            if _column_exists(table, 'owner', True):
+                op.drop_column(table, 'owner')
         else:
             logging.warning(
                 f"Table '{table}' does not exist. Skipping downgrade for this table."

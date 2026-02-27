@@ -43,11 +43,11 @@ uv run a2a-db
 ```
 
 ### 4. Customizing Defaults with Flags
-#### --owner-name
+#### --add_columns_owner_last_updated-default-owner
 Allows you to pass custom values for the new `owner` column. If not set, it will default to the value `legacy_v03_no_user_info`.
 
 ```bash
-uv run a2a-db --owner-name "admin_user"
+uv run a2a-db --add_columns_owner_last_updated-default-owner "admin_user"
 ```
 #### --database-url
 You can use the `--database-url` flag to specify the database URL for a single command.
@@ -86,9 +86,12 @@ uv run a2a-db downgrade <revision_id>
 
 # Revert all migrations
 uv run a2a-db downgrade base
+
+# Revert all migrations in offline mode
+uv run a2a-db downgrade head:base --sql
 ```
 
-Note: All flags except `--owner-name` can be used during rollbacks.
+Note: All flags except `--add_columns_owner_last_updated-default-owner` can be used during rollbacks.
 
 ---
 

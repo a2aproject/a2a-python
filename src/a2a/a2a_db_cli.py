@@ -58,8 +58,8 @@ def create_parser() -> argparse.ArgumentParser:
 
     # Global options
     parser.add_argument(
-        '--owner-name',
-        dest='owner_name',
+        '--add_columns_owner_last_updated-default-owner',
+        dest='owner',
         help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
     )
     _add_shared_args(parser)
@@ -77,9 +77,9 @@ def create_parser() -> argparse.ArgumentParser:
         help='Revision target (default: head)',
     )
     up_parser.add_argument(
-        '--owner-name',
-        dest='sub_owner_name',
-        help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
+        '--add_columns_owner_last_updated-default-owner',
+        dest='sub_owner',
+        help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'legacy_v03_no_user_info'",
     )
     _add_shared_args(up_parser, is_sub=True)
 
@@ -120,7 +120,7 @@ def run_migrations() -> None:
     cfg.set_main_option('script_location', str(migrations_path))
 
     # Consolidate owner, db_url, tables, verbose and sql values
-    owner = args.owner_name or getattr(args, 'sub_owner_name', None)
+    owner = args.owner or getattr(args, 'sub_owner', None)
     db_url = args.database_url or getattr(args, 'sub_database_url', None)
     task_tables = args.tasks_table or getattr(args, 'sub_tasks_table', None)
     push_notification_tables = args.push_notification_table or getattr(
@@ -133,9 +133,11 @@ def run_migrations() -> None:
     if owner:
         if args.cmd == 'downgrade':
             parser.error(
-                "The --owner option is not supported for the 'downgrade' command."
+                "The --add_columns_owner_last_updated-default-owner option is not supported for the 'downgrade' command."
             )
-        cfg.set_main_option('owner', owner)
+        cfg.set_main_option(
+            'add_columns_owner_last_updated_default_owner', owner
+        )
     if db_url:
         os.environ['DATABASE_URL'] = db_url
     if task_tables:

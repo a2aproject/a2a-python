@@ -50,7 +50,7 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
     custom_owner = 'test_owner_123'
 
     # We use the CLI tool to perform the upgrade
-    # Using the new --owner-name flag and --database-url flag
+    # Using the new --add_columns_owner_last_updated-default-owner flag and --database-url flag
     result = subprocess.run(
         [
             'uv',
@@ -58,7 +58,7 @@ def test_migration_6419d2d130f6_full_cycle(temp_db: str) -> None:
             'a2a-db',
             '--database-url',
             db_url,
-            '--owner-name',
+            '--add_columns_owner_last_updated-default-owner',
             custom_owner,
             'upgrade',
             '6419d2d130f6',

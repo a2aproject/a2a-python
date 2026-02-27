@@ -7,8 +7,15 @@ Create Date: ${create_date}
 """
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+
+try:
+    from alembic import op
+except ImportError as e:
+    raise ImportError(
+        "A2A migrations require the 'a2a-db-cli' extra. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
+    ) from e
+
 ${imports if imports else ""}
 
 # revision identifiers, used by Alembic.
