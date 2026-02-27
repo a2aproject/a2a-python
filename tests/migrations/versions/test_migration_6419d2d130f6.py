@@ -1,3 +1,4 @@
+import importlib
 import logging
 import os
 import sqlite3
@@ -8,6 +9,16 @@ from unittest.mock import patch
 import pytest
 
 from a2a.a2a_db_cli import run_migrations
+
+# Explicitly import the migration module to ensure it is tracked by the coverage tool
+# when Alembic loads it dynamically.
+try:
+    importlib.import_module(
+        'a2a.migrations.versions.6419d2d130f6_add_columns_owner_last_updated'
+    )
+except (ImportError, AttributeError):
+    # This might fail if Alembic context is not initialized, which is fine for coverage purposes
+    pass
 
 
 @pytest.fixture(autouse=True)
@@ -31,14 +42,9 @@ def temp_db() -> Generator[str, None, None]:
         os.remove(path)
 
 
-def test_migration_6419d2d130f6_full_cycle(
-    temp_db: str, capsys: pytest.CaptureFixture[str]
-) -> None:
-    """Test the full upgrade/downgrade cycle for migration 6419d2d130f6."""
-    db_url = f'sqlite+aiosqlite:///{temp_db}'
-
-    # 1. Setup initial schema without the new columns
-    conn = sqlite3.connect(temp_db)
+def _setup_initial_schema(db_path: str) -> None:
+    """Setup initial schema without the new columns."""
+    conn = sqlite3.connect(db_path)
     cursor = conn.cursor()
     cursor.execute("""
         CREATE TABLE tasks (
@@ -61,6 +67,16 @@ def test_migration_6419d2d130f6_full_cycle(
     """)
     conn.commit()
     conn.close()
+
+
+def test_migration_6419d2d130f6_full_cycle(
+    temp_db: str, capsys: pytest.CaptureFixture[str]
+) -> None:
+    """Test the full upgrade/downgrade cycle for migration 6419d2d130f6."""
+    db_url = f'sqlite+aiosqlite:///{temp_db}'
+
+    # 1. Setup initial schema without the new columns
+    _setup_initial_schema(temp_db)
 
     # 2. Run Upgrade via direct call with a custom owner
     custom_owner = 'test_owner_123'
@@ -174,10 +190,18 @@ def test_migration_6419d2d130f6_custom_tables(
     cursor = conn.cursor()
 
     cursor.execute(f'PRAGMA table_info({custom_tasks})')
-    assert 'owner' in {row[1] for row in cursor.fetchall()}
+    columns = {row[1] for row in cursor.fetchall()}
+    assert 'owner' in columns
+    assert 'last_updated' in columns
+
+    # Check index on custom tasks table
+    cursor.execute(f'PRAGMA index_list({custom_tasks})')
+    indexes = {row[1] for row in cursor.fetchall()}
+    assert f'idx_{custom_tasks}_owner_last_updated' in indexes
 
     cursor.execute(f'PRAGMA table_info({custom_push})')
-    assert 'owner' in {row[1] for row in cursor.fetchall()}
+    columns = {row[1] for row in cursor.fetchall()}
+    assert 'owner' in columns
 
     conn.close()
 
@@ -209,16 +233,7 @@ def test_migration_6419d2d130f6_idempotency(
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
     # 1. Setup initial schema
-    conn = sqlite3.connect(temp_db)
-    cursor = conn.cursor()
-    cursor.execute(
-        'CREATE TABLE tasks (id VARCHAR(36) PRIMARY KEY, kind VARCHAR(16))'
-    )
-    cursor.execute(
-        'CREATE TABLE push_notification_configs (task_id VARCHAR(36), config_id VARCHAR(255), PRIMARY KEY (task_id, config_id))'
-    )
-    conn.commit()
-    conn.close()
+    _setup_initial_schema(temp_db)
 
     # 2. Run Upgrade first time
     test_args = [
@@ -242,7 +257,10 @@ def test_migration_6419d2d130f6_offline(
     """Test that offline mode generates the expected SQL without modifying the database."""
     db_url = f'sqlite+aiosqlite:///{temp_db}'
 
-    # Run upgrade in offline mode
+    # 1. Setup initial schema
+    _setup_initial_schema(temp_db)
+
+    # 2. Run upgrade in offline mode
     test_args = [
         'a2a-db',
         '--database-url',
@@ -257,15 +275,33 @@ def test_migration_6419d2d130f6_offline(
     captured = capsys.readouterr()
     # Verify SQL output contains key migration statements
     assert 'ALTER TABLE tasks ADD COLUMN owner' in captured.out
+    assert 'ALTER TABLE tasks ADD COLUMN last_updated' in captured.out
     assert 'CREATE INDEX idx_tasks_owner_last_updated' in captured.out
     assert 'CREATE TABLE alembic_version' in captured.out
+    assert (
+        'ALTER TABLE push_notification_configs ADD COLUMN owner' in captured.out
+    )
 
-    # Verify the database was NOT actually changed (since it is offline mode)
+    # 3. Verify the database was NOT actually changed (since it is offline mode)
     conn = sqlite3.connect(temp_db)
     cursor = conn.cursor()
-    cursor.execute("SELECT name FROM sqlite_master WHERE type='table'")
+
+    # Verify tables exist
+    cursor.execute("SELECT name FROM sqlite_schema WHERE type='table'")
     tables = {row[0] for row in cursor.fetchall()}
-    # alembic_version and tasks should not exist because we didn't run the SQL
-    assert 'tasks' not in tables
+    assert 'tasks' in tables
+    assert 'push_notification_configs' in tables
     assert 'alembic_version' not in tables
+
+    # Verify columns were NOT added to tasks
+    cursor.execute('PRAGMA table_info(tasks)')
+    columns = {row[1] for row in cursor.fetchall()}
+    assert 'owner' not in columns
+    assert 'last_updated' not in columns
+
+    # Verify columns were NOT added to push_notification_configs
+    cursor.execute('PRAGMA table_info(push_notification_configs)')
+    columns = {row[1] for row in cursor.fetchall()}
+    assert 'owner' not in columns
+
     conn.close()
