@@ -26,7 +26,7 @@ def test_cli_upgrade_offline(mock_alembic_command, mock_alembic_config):
     tasks_table = 'my_tasks'
     push_table = 'my_push'
 
-    # Simulate: a2a-db upgrade head --sql --add_columns_owner_last_updated-default-ownertest-owner --tasks-table my_tasks --push-notification-table my_push -v
+    # Simulate: a2a-db upgrade head --sql --add_columns_owner_last_updated-default-ownertest-owner --tasks-table my_tasks --push-notification-configs-table my_push -v
     test_args = [
         'a2a-db',
         'upgrade',
@@ -36,7 +36,7 @@ def test_cli_upgrade_offline(mock_alembic_command, mock_alembic_config):
         custom_owner,
         '--tasks-table',
         tasks_table,
-        '--push-notification-table',
+        '--push-notification-configs-table',
         push_table,
         '-v',
     ]
@@ -55,10 +55,10 @@ def test_cli_upgrade_offline(mock_alembic_command, mock_alembic_config):
         'add_columns_owner_last_updated_default_owner', custom_owner
     )
     mock_alembic_config.return_value.set_main_option.assert_any_call(
-        'tasks_tables', tasks_table
+        'tasks_table', tasks_table
     )
     mock_alembic_config.return_value.set_main_option.assert_any_call(
-        'push_notification_tables', push_table
+        'push_notification_configs_table', push_table
     )
     mock_alembic_config.return_value.set_main_option.assert_any_call(
         'verbose', 'true'
@@ -88,7 +88,7 @@ def test_cli_downgrade_offline(mock_alembic_command, mock_alembic_config):
 
     # Verify tables option
     mock_alembic_config.return_value.set_main_option.assert_any_call(
-        'tasks_tables', tasks_table
+        'tasks_table', tasks_table
     )
 
 

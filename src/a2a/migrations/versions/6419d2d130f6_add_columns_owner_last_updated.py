@@ -15,7 +15,7 @@ try:
     from alembic import context, op
 except ImportError as e:
     raise ImportError(
-        "'Add columns owner and last_updated to database tables' migration requires Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
+        "'Add columns owner and last_updated to database tables' migration requires Alembic. Install with: 'pip install a2a-sdk[db-cli]'."
     ) from e
 
 
@@ -30,6 +30,38 @@ def _get_inspector() -> sa.engine.reflection.Inspector:
     bind = op.get_bind()
     inspector = sa.inspect(bind)
     return inspector
+
+
+def _add_column(table: str, value: str, column_name: str) -> None:
+    if not _column_exists(table, column_name):
+        op.add_column(
+            table,
+            sa.Column(
+                column_name,
+                sa.String(128),
+                nullable=False,
+                server_default=value,
+            ),
+        )
+
+
+def _add_index(table: str, index_name: str, columns: list[str]) -> None:
+    if not _index_exists(table, index_name):
+        op.create_index(
+            index_name,
+            table,
+            columns,
+        )
+
+
+def _drop_column(table: str, column_name: str) -> None:
+    if _column_exists(table, column_name, True):
+        op.drop_column(table, column_name)
+
+
+def _drop_index(table: str, index_name: str) -> None:
+    if _index_exists(table, index_name, True):
+        op.drop_index(index_name, table_name=table)
 
 
 def _table_exists(table_name: str) -> bool:
@@ -69,89 +101,54 @@ def upgrade() -> None:
         'add_columns_owner_last_updated_default_owner',
         'legacy_v03_no_user_info',
     )
-    tasks_tables = ['tasks']
-    push_notification_tables = ['push_notification_configs']
+    tasks_table = context.config.get_main_option('tasks_table', 'tasks')
+    push_notification_configs_table = context.config.get_main_option(
+        'push_notification_configs_table', 'push_notification_configs'
+    )
 
-    if tasks_tables_str := context.config.get_main_option('tasks_tables', None):
-        tasks_tables.extend([t.strip() for t in tasks_tables_str.split(',')])
-    if push_notification_tables_str := context.config.get_main_option(
-        'push_notification_tables', None
-    ):
-        push_notification_tables.extend(
-            [t.strip() for t in push_notification_tables_str.split(',')]
+    if _table_exists(tasks_table):
+        _add_column(tasks_table, owner, 'owner')
+        _add_column(tasks_table, '0', 'last_updated')
+        _add_index(
+            tasks_table,
+            f'idx_{tasks_table}_owner_last_updated',
+            ['owner', 'last_updated'],
+        )
+    else:
+        logging.warning(
+            f"Table '{tasks_table}' does not exist. Skipping upgrade for this table."
         )
 
-    for table in tasks_tables + push_notification_tables:
-        if _table_exists(table):
-            if not _column_exists(table, 'owner'):
-                op.add_column(
-                    table,
-                    sa.Column(
-                        'owner',
-                        sa.String(128),
-                        nullable=False,
-                        server_default=owner,
-                    ),
-                )
-        else:
-            if table in tasks_tables:
-                tasks_tables.remove(table)
-            logging.warning(
-                f"Table '{table}' does not exist. Skipping upgrade for this table."
-            )
-
-    for table in tasks_tables:
-        if _table_exists(table):
-            if not _column_exists(table, 'last_updated'):
-                op.add_column(
-                    table,
-                    sa.Column('last_updated', sa.String(22), nullable=True),
-                )
-            if not _index_exists(table, f'idx_{table}_owner_last_updated'):
-                op.create_index(
-                    f'idx_{table}_owner_last_updated',
-                    table,
-                    ['owner', 'last_updated'],
-                )
-        else:
-            logging.warning(
-                f"Table '{table}' does not exist. Skipping upgrade for this table."
-            )
+    if _table_exists(push_notification_configs_table):
+        _add_column(push_notification_configs_table, owner, 'owner')
+    else:
+        logging.warning(
+            f"Table '{push_notification_configs_table}' does not exist. Skipping upgrade for this table."
+        )
 
 
 def downgrade() -> None:
     """Downgrade schema."""
-    tasks_tables = ['tasks']
-    push_notification_tables = ['push_notification_configs']
+    tasks_table = context.config.get_main_option('tasks_table', 'tasks')
+    push_notification_configs_table = context.config.get_main_option(
+        'push_notification_configs_table', 'push_notification_configs'
+    )
 
-    if tasks_tables_str := context.config.get_main_option('tasks_tables', None):
-        tasks_tables.extend([t.strip() for t in tasks_tables_str.split(',')])
-    if push_notification_tables_str := context.config.get_main_option(
-        'push_notification_tables', None
-    ):
-        push_notification_tables.extend(
-            [t.strip() for t in push_notification_tables_str.split(',')]
+    if _table_exists(tasks_table):
+        _drop_index(
+            tasks_table,
+            f'idx_{tasks_table}_owner_last_updated',
+        )
+        _drop_column(tasks_table, 'owner')
+        _drop_column(tasks_table, 'last_updated')
+    else:
+        logging.warning(
+            f"Table '{tasks_table}' does not exist. Skipping downgrade for this table."
         )
 
-    for table in tasks_tables:
-        if _table_exists(table):
-            if _index_exists(table, f'idx_{table}_owner_last_updated', True):
-                op.drop_index(
-                    f'idx_{table}_owner_last_updated', table_name=table
-                )
-            if _column_exists(table, 'last_updated', True):
-                op.drop_column(table, 'last_updated')
-        else:
-            tasks_tables.remove(table)
-            logging.warning(
-                f"Table '{table}' does not exist. Skipping downgrade for this table."
-            )
-
-    for table in tasks_tables + push_notification_tables:
-        if _table_exists(table):
-            if _column_exists(table, 'owner', True):
-                op.drop_column(table, 'owner')
-        else:
-            logging.warning(
-                f"Table '{table}' does not exist. Skipping downgrade for this table."
-            )
+    if _table_exists(push_notification_configs_table):
+        _drop_column(push_notification_configs_table, 'owner')
+    else:
+        logging.warning(
+            f"Table '{push_notification_configs_table}' does not exist. Skipping downgrade for this table."
+        )

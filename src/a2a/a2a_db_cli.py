@@ -11,7 +11,7 @@ try:
 
 except ImportError as e:
     raise ImportError(
-        "CLI requires Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
+        "CLI requires Alembic. Install with: 'pip install a2a-sdk[db-cli]'."
     ) from e
 
 
@@ -28,14 +28,12 @@ def _add_shared_args(
     parser.add_argument(
         '--tasks-table',
         dest=f'{prefix}tasks_table',
-        help='Custom tasks table to update.',
-        action='append',
+        help='Custom tasks table to update. If not set, the default is "tasks".',
     )
     parser.add_argument(
-        '--push-notification-table',
-        dest=f'{prefix}push_notification_table',
-        help='Custom push notification configs table to update.',
-        action='append',
+        '--push-notification-configs-table',
+        dest=f'{prefix}push_notification_configs_table',
+        help='Custom push notification configs table to update. If not set, the default is "push_notification_configs".',
     )
     parser.add_argument(
         '-v',
@@ -122,29 +120,27 @@ def run_migrations() -> None:
     # Consolidate owner, db_url, tables, verbose and sql values
     owner = args.owner or getattr(args, 'sub_owner', None)
     db_url = args.database_url or getattr(args, 'sub_database_url', None)
-    task_tables = args.tasks_table or getattr(args, 'sub_tasks_table', None)
-    push_notification_tables = args.push_notification_table or getattr(
-        args, 'sub_push_notification_table', None
+    task_table = args.tasks_table or getattr(args, 'sub_tasks_table', None)
+    push_notification_configs_table = (
+        args.push_notification_configs_table
+        or getattr(args, 'sub_push_notification_configs_table', None)
     )
+
     verbose = args.verbose or getattr(args, 'sub_verbose', False)
     sql = args.sql or getattr(args, 'sub_sql', False)
 
     # Pass custom arguments to the migration context
     if owner:
-        if args.cmd == 'downgrade':
-            parser.error(
-                "The --add_columns_owner_last_updated-default-owner option is not supported for the 'downgrade' command."
-            )
         cfg.set_main_option(
             'add_columns_owner_last_updated_default_owner', owner
         )
     if db_url:
         os.environ['DATABASE_URL'] = db_url
-    if task_tables:
-        cfg.set_main_option('tasks_tables', ','.join(task_tables))
-    if push_notification_tables:
+    if task_table:
+        cfg.set_main_option('tasks_table', task_table)
+    if push_notification_configs_table:
         cfg.set_main_option(
-            'push_notification_tables', ','.join(push_notification_tables)
+            'push_notification_configs_table', push_notification_configs_table
         )
     if verbose:
         cfg.set_main_option('verbose', 'true')

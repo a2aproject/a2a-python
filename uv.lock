@@ -21,7 +21,7 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-a2a-db-cli = [
+db-cli = [
     { name = "alembic" },
 ]
 all = [
@@ -97,7 +97,7 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", marker = "extra == 'a2a-db-cli'", specifier = ">=1.14.0" },
+    { name = "alembic", marker = "extra == 'db-cli'", specifier = ">=1.14.0" },
     { name = "alembic", marker = "extra == 'all'", specifier = ">=1.14.0" },
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
@@ -136,7 +136,7 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["a2a-db-cli", "all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
+provides-extras = ["db-cli", "all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [

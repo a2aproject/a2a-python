@@ -177,7 +177,7 @@ def test_migration_6419d2d130f6_custom_tables(
         db_url,
         '--tasks-table',
         custom_tasks,
-        '--push-notification-table',
+        '--push-notification-configs-table',
         custom_push,
         'upgrade',
         '6419d2d130f6',

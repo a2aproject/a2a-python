@@ -13,7 +13,7 @@ try:
     from alembic import context
 except ImportError as e:
     raise ImportError(
-        "Migrations require Alembic. Install with: 'pip install a2a-sdk[a2a-db-cli]'."
+        "Migrations require Alembic. Install with: 'pip install a2a-sdk[db-cli]'."
     ) from e
 
 

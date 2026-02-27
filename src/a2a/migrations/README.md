@@ -4,11 +4,11 @@ This directory handles the database schema updates for the A2A SDK. It uses a bu
 
 ## Installation
 
-To use the `a2a-db` migration tool, install the `a2a-sdk` with the `a2a-db-cli` extra.
+To use the `a2a-db` migration tool, install the `a2a-sdk` with the `db-cli` extra.
 
 | Extra | `uv` Command | `pip` Command |
 | :--- | :--- | :--- |
-| **CLI Only** | `uv add "a2a-sdk[a2a-db-cli]"` | `pip install "a2a-sdk[a2a-db-cli]"` |
+| **CLI Only** | `uv add "a2a-sdk[db-cli]"` | `pip install "a2a-sdk[db-cli]"` |
 | **All Extras** | `uv add "a2a-sdk[all]"` | `pip install "a2a-sdk[all]"` |
 
 
@@ -55,11 +55,11 @@ You can use the `--database-url` flag to specify the database URL for a single c
 ```bash
 uv run a2a-db --database-url "sqlite+aiosqlite:///my_database.db"
 ```
-#### --tasks-table / --push-notification-table
-The tables `tasks` and `push_notification_configs` are always updated by default. If your application uses additional tables that require the same migration, you can specify them using these flags.
+#### --tasks-table / --push-notification-configs-table
+Custom tasks and push notification configs tables to update. If not set, the default are `tasks` and `push_notification_configs`.
 
 ```bash
-uv run a2a-db --tasks-table "my_tasks" --push-notification-table "my_configs"
+uv run a2a-db --tasks-table "my_tasks" --push-notification-configs-table "my_configs"
 ```
 #### -v / --verbose
 Enables verbose output by setting `sqlalchemy.engine` logging to `INFO`.
