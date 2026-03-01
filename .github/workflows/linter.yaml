@@ -43,7 +43,7 @@ jobs:
       - name: Run Pyright (Pylance equivalent)
         id: pyright
         continue-on-error: true
-        uses: jakebailey/pyright-action@v2
+        uses: jakebailey/pyright-action@v3
         with:
           pylance-version: latest-release
 
