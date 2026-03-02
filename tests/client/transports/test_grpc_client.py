@@ -418,7 +418,7 @@ async def test_cancel_task(
 
 
 @pytest.mark.asyncio
-async def test_set_task_callback_with_valid_task(
+async def test_create_task_push_notification_config_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
@@ -433,7 +433,9 @@ async def test_set_task_callback_with_valid_task(
         task_id='task-1',
         config=sample_task_push_notification_config.push_notification_config,
     )
-    response = await grpc_transport.set_task_callback(request)
+    response = await grpc_transport.create_task_push_notification_config(
+        request
+    )
 
     mock_grpc_stub.CreateTaskPushNotificationConfig.assert_awaited_once_with(
         request,
@@ -448,7 +450,7 @@ async def test_set_task_callback_with_valid_task(
 
 
 @pytest.mark.asyncio
-async def test_set_task_callback_with_invalid_task(
+async def test_create_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_push_notification_config: PushNotificationConfig,
@@ -469,12 +471,14 @@ async def test_set_task_callback_with_invalid_task(
 
     # Note: The transport doesn't validate the response name format
     # It just returns the response from the stub
-    response = await grpc_transport.set_task_callback(request)
+    response = await grpc_transport.create_task_push_notification_config(
+        request
+    )
     assert response.task_id == 'invalid-path-to-task-1'
 
 
 @pytest.mark.asyncio
-async def test_get_task_callback_with_valid_task(
+async def test_get_task_push_notification_config_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
@@ -485,7 +489,7 @@ async def test_get_task_callback_with_valid_task(
     )
     config_id = sample_task_push_notification_config.push_notification_config.id
 
-    response = await grpc_transport.get_task_callback(
+    response = await grpc_transport.get_task_push_notification_config(
         GetTaskPushNotificationConfigRequest(
             task_id='task-1',
             id=config_id,
@@ -508,7 +512,7 @@ async def test_get_task_callback_with_valid_task(
 
 
 @pytest.mark.asyncio
-async def test_get_task_callback_with_invalid_task(
+async def test_get_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_push_notification_config: PushNotificationConfig,
@@ -521,7 +525,7 @@ async def test_get_task_callback_with_invalid_task(
         )
     )
 
-    response = await grpc_transport.get_task_callback(
+    response = await grpc_transport.get_task_push_notification_config(
         GetTaskPushNotificationConfigRequest(
             task_id='task-1',
             id='config-1',
@@ -532,7 +536,7 @@ async def test_get_task_callback_with_invalid_task(
 
 
 @pytest.mark.asyncio
-async def test_list_task_callback(
+async def test_list_task_push_notification_configs(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
@@ -544,7 +548,7 @@ async def test_list_task_callback(
         )
     )
 
-    response = await grpc_transport.list_task_callback(
+    response = await grpc_transport.list_task_push_notification_configs(
         ListTaskPushNotificationConfigsRequest(task_id='task-1')
     )
 
@@ -562,7 +566,7 @@ async def test_list_task_callback(
 
 
 @pytest.mark.asyncio
-async def test_delete_task_callback(
+async def test_delete_task_push_notification_config(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
@@ -570,7 +574,7 @@ async def test_delete_task_callback(
     """Test deleting task push notification config."""
     mock_grpc_stub.DeleteTaskPushNotificationConfig.return_value = None
 
-    await grpc_transport.delete_task_callback(
+    await grpc_transport.delete_task_push_notification_config(
         DeleteTaskPushNotificationConfigRequest(
             task_id='task-1',
             id='config-1',
