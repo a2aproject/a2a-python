@@ -31,7 +31,7 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError, TaskNotFoundError
+from a2a.utils.errors import InvalidParamsError, ServerError, TaskNotFoundError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -249,7 +249,16 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
+        try:
+            history_length = (
+                int(history_length_str) if history_length_str else None
+            )
+        except ValueError:
+            raise ServerError(
+                error=InvalidParamsError(
+                    message='historyLength must be a valid integer'
+                )
+            ) from None
         params = GetTaskRequest(id=task_id, history_length=history_length)
         task = await self.request_handler.on_get_task(params, context)
         if task:
