@@ -22,8 +22,11 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -199,6 +202,21 @@ class RestTransport(ClientTransport):
             )
         )
 
+    async def _send_delete_request(
+        self,
+        target: str,
+        query_params: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'DELETE',
+                f'{self.url}{target}',
+                params=query_params,
+                **(http_kwargs or {}),
+            )
+        )
+
     async def get_task(
         self,
         request: GetTaskRequest,
@@ -337,6 +355,64 @@ class RestTransport(ClientTransport):
             response_data, TaskPushNotificationConfig()
         )
         return response
+
+    async def list_task_callback(
+        self,
+        request: ListTaskPushNotificationConfigsRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task."""
+        params = MessageToDict(request)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
+        params, modified_kwargs = await self._apply_interceptors(
+            params,
+            modified_kwargs,
+            context,
+        )
+        if 'task_id' in params:
+            del params['task_id']
+        response_data = await self._send_get_request(
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            params,
+            modified_kwargs,
+        )
+        response: ListTaskPushNotificationConfigsResponse = ParseDict(
+            response_data, ListTaskPushNotificationConfigsResponse()
+        )
+        return response
+
+    async def delete_task_callback(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
+        params = MessageToDict(request)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
+        params, modified_kwargs = await self._apply_interceptors(
+            params,
+            modified_kwargs,
+            context,
+        )
+        if 'id' in params:
+            del params['id']
+        if 'task_id' in params:
+            del params['task_id']
+        await self._send_delete_request(
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            params,
+            modified_kwargs,
+        )
 
     async def subscribe(
         self,
