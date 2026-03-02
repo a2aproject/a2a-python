@@ -38,6 +38,9 @@ from a2a.types.a2a_pb2 import (
     Role,
     SendMessageRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -131,6 +134,10 @@ def mock_request_handler() -> AsyncMock:
         CALLBACK_CONFIG
     )
     handler.on_get_task_push_notification_config.return_value = CALLBACK_CONFIG
+    handler.on_list_task_push_notification_configs.return_value = (
+        ListTaskPushNotificationConfigsResponse(configs=[CALLBACK_CONFIG])
+    )
+    handler.on_delete_task_push_notification_config.return_value = None
 
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT
@@ -576,7 +583,7 @@ async def test_grpc_transport_cancel_task(
         pytest.param('rest_setup', id='REST'),
     ],
 )
-async def test_http_transport_set_task_callback(
+async def test_http_transport_create_task_push_notification_config(
     transport_setup_fixture: str, request
 ) -> None:
     transport_setup: TransportSetup = request.getfixturevalue(
@@ -590,7 +597,9 @@ async def test_http_transport_set_task_callback(
         task_id='task-callback-123',
         config=CALLBACK_CONFIG.push_notification_config,
     )
-    result = await transport.set_task_callback(request=params)
+    result = await transport.create_task_push_notification_config(
+        request=params
+    )
 
     # TaskPushNotificationConfig has 'push_notification_config'
     assert (
@@ -612,7 +621,7 @@ async def test_http_transport_set_task_callback(
 
 
 @pytest.mark.asyncio
-async def test_grpc_transport_set_task_callback(
+async def test_grpc_transport_create_task_push_notification_config(
     grpc_server_and_handler: tuple[str, AsyncMock],
     agent_card: AgentCard,
 ) -> None:
@@ -629,7 +638,9 @@ async def test_grpc_transport_set_task_callback(
         task_id='task-callback-123',
         config=CALLBACK_CONFIG.push_notification_config,
     )
-    result = await transport.set_task_callback(request=params)
+    result = await transport.create_task_push_notification_config(
+        request=params
+    )
 
     # TaskPushNotificationConfig has 'push_notification_config'
     assert (
@@ -657,7 +668,7 @@ async def test_grpc_transport_set_task_callback(
         pytest.param('rest_setup', id='REST'),
     ],
 )
-async def test_http_transport_get_task_callback(
+async def test_http_transport_get_task_push_notification_config(
     transport_setup_fixture: str, request
 ) -> None:
     transport_setup: TransportSetup = request.getfixturevalue(
@@ -671,7 +682,7 @@ async def test_http_transport_get_task_callback(
         task_id=f'{CALLBACK_CONFIG.task_id}',
         id=CALLBACK_CONFIG.push_notification_config.id,
     )
-    result = await transport.get_task_callback(request=params)
+    result = await transport.get_task_push_notification_config(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
@@ -690,7 +701,7 @@ async def test_http_transport_get_task_callback(
 
 
 @pytest.mark.asyncio
-async def test_grpc_transport_get_task_callback(
+async def test_grpc_transport_get_task_push_notification_config(
     grpc_server_and_handler: tuple[str, AsyncMock],
     agent_card: AgentCard,
 ) -> None:
@@ -707,7 +718,7 @@ async def test_grpc_transport_get_task_callback(
         task_id=f'{CALLBACK_CONFIG.task_id}',
         id=CALLBACK_CONFIG.push_notification_config.id,
     )
-    result = await transport.get_task_callback(request=params)
+    result = await transport.get_task_push_notification_config(request=params)
 
     # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
@@ -720,6 +731,114 @@ async def test_grpc_transport_get_task_callback(
         == CALLBACK_CONFIG.push_notification_config.url
     )
     handler.on_get_task_push_notification_config.assert_awaited_once()
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport_setup_fixture',
+    [
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ],
+)
+async def test_http_transport_list_task_push_notification_configs(
+    transport_setup_fixture: str, request
+) -> None:
+    transport_setup: TransportSetup = request.getfixturevalue(
+        transport_setup_fixture
+    )
+    transport = transport_setup.transport
+    handler = transport_setup.handler
+
+    params = ListTaskPushNotificationConfigsRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+    )
+    result = await transport.list_task_push_notification_configs(request=params)
+
+    assert len(result.configs) == 1
+    assert result.configs[0].task_id == CALLBACK_CONFIG.task_id
+    handler.on_list_task_push_notification_configs.assert_awaited_once()
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_list_task_push_notification_configs(
+    grpc_server_and_handler: tuple[str, AsyncMock],
+    agent_card: AgentCard,
+) -> None:
+    server_address, handler = grpc_server_and_handler
+
+    def channel_factory(address: str) -> Channel:
+        return grpc.aio.insecure_channel(address)
+
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
+
+    params = ListTaskPushNotificationConfigsRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+    )
+    result = await transport.list_task_push_notification_configs(request=params)
+
+    assert len(result.configs) == 1
+    assert result.configs[0].task_id == CALLBACK_CONFIG.task_id
+    handler.on_list_task_push_notification_configs.assert_awaited_once()
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport_setup_fixture',
+    [
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ],
+)
+async def test_http_transport_delete_task_push_notification_config(
+    transport_setup_fixture: str, request
+) -> None:
+    transport_setup: TransportSetup = request.getfixturevalue(
+        transport_setup_fixture
+    )
+    transport = transport_setup.transport
+    handler = transport_setup.handler
+
+    params = DeleteTaskPushNotificationConfigRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+        id=CALLBACK_CONFIG.push_notification_config.id,
+    )
+    await transport.delete_task_push_notification_config(request=params)
+
+    handler.on_delete_task_push_notification_config.assert_awaited_once()
+
+    if hasattr(transport, 'close'):
+        await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_grpc_transport_delete_task_push_notification_config(
+    grpc_server_and_handler: tuple[str, AsyncMock],
+    agent_card: AgentCard,
+) -> None:
+    server_address, handler = grpc_server_and_handler
+
+    def channel_factory(address: str) -> Channel:
+        return grpc.aio.insecure_channel(address)
+
+    channel = channel_factory(server_address)
+    transport = GrpcTransport(channel=channel, agent_card=agent_card)
+
+    params = DeleteTaskPushNotificationConfigRequest(
+        task_id=f'{CALLBACK_CONFIG.task_id}',
+        id=CALLBACK_CONFIG.push_notification_config.id,
+    )
+    await transport.delete_task_push_notification_config(request=params)
+
+    handler.on_delete_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
 

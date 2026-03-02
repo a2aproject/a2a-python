@@ -199,7 +199,7 @@ async def test_notification_triggering_after_config_change_e2e(
 
     # Set the push notification config.
     token = uuid.uuid4().hex
-    await a2a_client.set_task_callback(
+    await a2a_client.create_task_push_notification_config(
         CreateTaskPushNotificationConfigRequest(
             task_id=f'{task.id}',
             config=PushNotificationConfig(

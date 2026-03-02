@@ -16,12 +16,16 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     Message,
     PushNotificationConfig,
+    SendMessageConfiguration,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -70,7 +74,7 @@ class ClientConfig:
     push_notification_configs: list[PushNotificationConfig] = dataclasses.field(
         default_factory=list
     )
-    """Push notification callbacks to use for every request."""
+    """Push notification configurations to use for every request."""
 
     extensions: list[str] = dataclasses.field(default_factory=list)
     """A list of extension URIs the client supports."""
@@ -127,6 +131,7 @@ class Client(ABC):
         self,
         request: Message,
         *,
+        configuration: SendMessageConfiguration | None = None,
         context: ClientCallContext | None = None,
         request_metadata: dict[str, Any] | None = None,
         extensions: list[str] | None = None,
@@ -172,7 +177,7 @@ class Client(ABC):
         """Requests the agent to cancel a specific task."""
 
     @abstractmethod
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -182,7 +187,7 @@ class Client(ABC):
         """Sets or updates the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -190,6 +195,26 @@ class Client(ABC):
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
+
+    @abstractmethod
+    async def list_task_push_notification_configs(
+        self,
+        request: ListTaskPushNotificationConfigsRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task."""
+
+    @abstractmethod
+    async def delete_task_push_notification_config(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
 
     @abstractmethod
     async def subscribe(
