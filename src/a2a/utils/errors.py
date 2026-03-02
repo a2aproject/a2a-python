@@ -106,25 +106,6 @@ __all__ = [
 ]
 
 
-class A2AServerError(Exception):
-    """Base exception for A2A Server errors."""
-
-
-class MethodNotImplementedError(A2AServerError):
-    """Exception raised for methods that are not implemented by the server handler."""
-
-    def __init__(
-        self, message: str = 'This method is not implemented by the server'
-    ):
-        """Initializes the MethodNotImplementedError.
-
-        Args:
-            message: A descriptive error message.
-        """
-        self.message = message
-        super().__init__(f'Not Implemented operation Error: {message}')
-
-
 class ServerError(Exception):
     """Wrapper exception for A2A errors originating from the server's logic.
 
