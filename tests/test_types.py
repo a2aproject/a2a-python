@@ -337,7 +337,9 @@ def test_set_task_push_notification_config_request():
 
 def test_get_task_push_notification_config_request():
     """Test GetTaskPushNotificationConfigRequest proto construction."""
-    request = GetTaskPushNotificationConfigRequest(task_id='task-123')
+    request = GetTaskPushNotificationConfigRequest(
+        task_id='task-123', id='config-1'
+    )
     assert request.task_id == 'task-123'
 
 
