@@ -84,16 +84,11 @@ class MethodNotFoundError(A2AError):
     message = 'Method not found'
 
 
-# For backward compatibility
-A2AException = A2AError
-
-
 # For backward compatibility if needed, or just aliases for clean refactor
 # We remove the Pydantic models here.
 
 __all__ = [
     'A2AError',
-    'A2AException',
     'A2AServerError',
     'AuthenticatedExtendedCardNotConfiguredError',
     'ContentTypeNotSupportedError',

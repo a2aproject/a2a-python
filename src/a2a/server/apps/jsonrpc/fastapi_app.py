@@ -30,8 +30,6 @@ from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 
 
@@ -137,7 +135,6 @@ class A2AFastAPIApplication(JSONRPCApplication):
         app: FastAPI,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
     ) -> None:
         """Adds the routes to the FastAPI application.
 
@@ -145,7 +142,6 @@ class A2AFastAPIApplication(JSONRPCApplication):
             app: The FastAPI application to add the routes to.
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
-            extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
         """
         app.post(
             rpc_url,
@@ -165,23 +161,10 @@ class A2AFastAPIApplication(JSONRPCApplication):
         )(self._handle_requests)
         app.get(agent_card_url)(self._handle_get_agent_card)
 
-        if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
-            # For backward compatibility, serve the agent card at the deprecated path as well.
-            # TODO: remove in a future release
-            app.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)(
-                self._handle_get_agent_card
-            )
-
-        if self.agent_card.capabilities.extended_agent_card:
-            app.get(extended_agent_card_url)(
-                self._handle_get_authenticated_extended_agent_card
-            )
-
     def build(
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
         **kwargs: Any,
     ) -> FastAPI:
         """Builds and returns the FastAPI application instance.
@@ -189,7 +172,6 @@ class A2AFastAPIApplication(JSONRPCApplication):
         Args:
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
-            extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:
@@ -197,8 +179,6 @@ class A2AFastAPIApplication(JSONRPCApplication):
         """
         app = A2AFastAPI(**kwargs)
 
-        self.add_routes_to_app(
-            app, agent_card_url, rpc_url, extended_agent_card_url
-        )
+        self.add_routes_to_app(app, agent_card_url, rpc_url)
 
         return app

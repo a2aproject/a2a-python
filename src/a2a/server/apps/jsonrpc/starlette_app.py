@@ -32,8 +32,6 @@ from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 
 
@@ -101,19 +99,17 @@ class A2AStarletteApplication(JSONRPCApplication):
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
     ) -> list[Route]:
         """Returns the Starlette Routes for handling A2A requests.
 
         Args:
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
-            extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
 
         Returns:
             A list of Starlette Route objects.
         """
-        app_routes = [
+        return [
             Route(
                 rpc_url,
                 self._handle_requests,
@@ -128,36 +124,11 @@ class A2AStarletteApplication(JSONRPCApplication):
             ),
         ]
 
-        if agent_card_url == AGENT_CARD_WELL_KNOWN_PATH:
-            # For backward compatibility, serve the agent card at the deprecated path as well.
-            # TODO: remove in a future release
-            app_routes.append(
-                Route(
-                    PREV_AGENT_CARD_WELL_KNOWN_PATH,
-                    self._handle_get_agent_card,
-                    methods=['GET'],
-                    name='deprecated_agent_card',
-                )
-            )
-
-        # TODO: deprecated endpoint to be removed in a future release
-        if self.agent_card.capabilities.extended_agent_card:
-            app_routes.append(
-                Route(
-                    extended_agent_card_url,
-                    self._handle_get_authenticated_extended_agent_card,
-                    methods=['GET'],
-                    name='authenticated_extended_agent_card',
-                )
-            )
-        return app_routes
-
     def add_routes_to_app(
         self,
         app: Starlette,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
     ) -> None:
         """Adds the routes to the Starlette application.
 
@@ -165,12 +136,10 @@ class A2AStarletteApplication(JSONRPCApplication):
             app: The Starlette application to add the routes to.
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
-            extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
         """
         routes = self.routes(
             agent_card_url=agent_card_url,
             rpc_url=rpc_url,
-            extended_agent_card_url=extended_agent_card_url,
         )
         app.routes.extend(routes)
 
@@ -178,7 +147,6 @@ class A2AStarletteApplication(JSONRPCApplication):
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
         **kwargs: Any,
     ) -> Starlette:
         """Builds and returns the Starlette application instance.
@@ -186,7 +154,6 @@ class A2AStarletteApplication(JSONRPCApplication):
         Args:
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
-            extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
             **kwargs: Additional keyword arguments to pass to the Starlette constructor.
 
         Returns:
@@ -194,8 +161,6 @@ class A2AStarletteApplication(JSONRPCApplication):
         """
         app = Starlette(**kwargs)
 
-        self.add_routes_to_app(
-            app, agent_card_url, rpc_url, extended_agent_card_url
-        )
+        self.add_routes_to_app(app, agent_card_url, rpc_url)
 
         return app

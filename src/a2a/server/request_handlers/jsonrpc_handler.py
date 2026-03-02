@@ -33,7 +33,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import (
-    A2AException,
+    A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -54,7 +54,7 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
+EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     TaskNotFoundError: JSONRPCError,
     TaskNotCancelableError: JSONRPCError,
     PushNotificationNotSupportedError: JSONRPCError,
@@ -68,7 +68,7 @@ EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
     MethodNotFoundError: JSONRPCError,
 }
 
-ERROR_CODE_MAP: dict[type[A2AException], int] = {
+ERROR_CODE_MAP: dict[type[A2AError], int] = {
     TaskNotFoundError: -32001,
     TaskNotCancelableError: -32002,
     PushNotificationNotSupportedError: -32003,
@@ -94,7 +94,7 @@ def _build_error_response(
 ) -> dict[str, Any]:
     """Build a JSON-RPC error response dict."""
     jsonrpc_error: JSONRPCError
-    if isinstance(error, A2AException):
+    if isinstance(error, A2AError):
         error_type = type(error)
         model_class = EXCEPTION_MAP.get(error_type, JSONRPCInternalError)
         code = ERROR_CODE_MAP.get(error_type, -32603)
