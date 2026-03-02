@@ -298,7 +298,7 @@ class RestTransport(ClientTransport):
         response: Task = ParseDict(response_data, Task())
         return response
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -324,7 +324,7 @@ class RestTransport(ClientTransport):
         )
         return response
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -356,7 +356,7 @@ class RestTransport(ClientTransport):
         )
         return response
 
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -386,7 +386,7 @@ class RestTransport(ClientTransport):
         )
         return response
 
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,

@@ -330,7 +330,7 @@ class TestTaskCallback:
     """Tests for the task callback methods."""
 
     @pytest.mark.asyncio
-    async def test_get_task_callback_success(
+    async def test_get_task_push_notification_config_success(
         self, transport, mock_httpx_client
     ):
         """Test successful task callback retrieval."""
@@ -350,7 +350,7 @@ class TestTaskCallback:
             task_id=f'{task_id}',
             id='config-1',
         )
-        response = await transport.get_task_callback(request)
+        response = await transport.get_task_push_notification_config(request)
 
         assert isinstance(response, TaskPushNotificationConfig)
         call_args = mock_httpx_client.post.call_args
@@ -358,7 +358,7 @@ class TestTaskCallback:
         assert payload['method'] == 'GetTaskPushNotificationConfig'
 
     @pytest.mark.asyncio
-    async def test_list_task_callback_success(
+    async def test_list_task_push_notification_configs_success(
         self, transport, mock_httpx_client
     ):
         """Test successful task multiple callbacks retrieval."""
@@ -385,7 +385,7 @@ class TestTaskCallback:
         request = ListTaskPushNotificationConfigsRequest(
             task_id=f'{task_id}',
         )
-        response = await transport.list_task_callback(request)
+        response = await transport.list_task_push_notification_configs(request)
 
         assert len(response.configs) == 1
         assert response.configs[0].task_id == task_id
@@ -394,7 +394,7 @@ class TestTaskCallback:
         assert payload['method'] == 'ListTaskPushNotificationConfigs'
 
     @pytest.mark.asyncio
-    async def test_delete_task_callback_success(
+    async def test_delete_task_push_notification_config_success(
         self, transport, mock_httpx_client
     ):
         """Test successful task callback deletion."""
@@ -414,7 +414,7 @@ class TestTaskCallback:
             task_id=f'{task_id}',
             id='config-1',
         )
-        response = await transport.delete_task_callback(request)
+        response = await transport.delete_task_push_notification_config(request)
 
         mock_httpx_client.post.assert_called_once()
         assert response is None

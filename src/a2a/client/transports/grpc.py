@@ -175,7 +175,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -188,7 +188,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -201,7 +201,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -214,7 +214,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,

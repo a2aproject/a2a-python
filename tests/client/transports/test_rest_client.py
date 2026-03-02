@@ -283,7 +283,7 @@ class TestTaskCallback:
     """Tests for the task callback methods."""
 
     @pytest.mark.asyncio
-    async def test_list_task_callback_success(
+    async def test_list_task_push_notification_configs_success(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test successful task multiple callbacks retrieval."""
@@ -317,7 +317,7 @@ class TestTaskCallback:
         request = ListTaskPushNotificationConfigsRequest(
             task_id=task_id,
         )
-        response = await client.list_task_callback(request)
+        response = await client.list_task_push_notification_configs(request)
 
         assert len(response.configs) == 1
         assert response.configs[0].task_id == task_id
@@ -328,7 +328,7 @@ class TestTaskCallback:
         assert f'/v1/tasks/{task_id}/pushNotificationConfigs' in call_args[0][1]
 
     @pytest.mark.asyncio
-    async def test_delete_task_callback_success(
+    async def test_delete_task_push_notification_config_success(
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test successful task callback deletion."""
@@ -353,7 +353,7 @@ class TestTaskCallback:
             task_id=task_id,
             id='config-1',
         )
-        await client.delete_task_callback(request)
+        await client.delete_task_push_notification_config(request)
 
         mock_build_request.assert_called_once()
         call_args = mock_build_request.call_args
