@@ -20,6 +20,11 @@ from a2a.client.errors import (
 from a2a.client.helpers import create_text_message_object
 from a2a.client.legacy import A2AClient
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.tls import (
+    TLSConfig,
+    create_grpc_channel_factory,
+    create_server_ssl_context,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -62,6 +67,9 @@ __all__ = [
     'Consumer',
     'CredentialService',
     'InMemoryContextCredentialStore',
+    'TLSConfig',
+    'create_grpc_channel_factory',
+    'create_server_ssl_context',
     'create_text_message_object',
     'minimal_agent_card',
 ]
