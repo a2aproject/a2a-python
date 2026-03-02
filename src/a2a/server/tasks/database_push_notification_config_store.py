@@ -8,11 +8,7 @@ from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import (
-        Table,
-        delete,
-        select,
-    )
+    from sqlalchemy import Table, and_, delete, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -31,10 +27,12 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from a2a.server.context import ServerCallContext
 from a2a.server.models import (
     Base,
     create_push_notification_config_model,
 )
+from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
@@ -60,6 +58,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     _initialized: bool
     config_model: Any
     _fernet: 'Fernet | None'
+    owner_resolver: OwnerResolver
 
     def __init__(
         self,
@@ -67,6 +66,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         create_table: bool = True,
         table_name: str = 'push_notification_configs',
         encryption_key: str | bytes | None = None,
+        owner_resolver: OwnerResolver = resolve_user_scope,
     ) -> None:
         """Initializes the DatabasePushNotificationConfigStore.
 
@@ -77,6 +77,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             encryption_key: A key for encrypting sensitive configuration data.
                 If provided, `config_data` will be encrypted in the database.
                 The key must be a URL-safe base64-encoded 32-byte key.
+            owner_resolver: Function to resolve the owner from the context.
         """
         logger.debug(
             'Initializing DatabasePushNotificationConfigStore with existing engine, table: %s',
@@ -88,6 +89,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         )
         self.create_table = create_table
         self._initialized = False
+        self.owner_resolver = owner_resolver
         self.config_model = create_push_notification_config_model(table_name)
         self._fernet = None
 
@@ -137,7 +139,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         if not self._initialized:
             await self.initialize()
 
-    def _to_orm(self, task_id: str, config: PushNotificationConfig) -> Any:
+    def _to_orm(
+        self, task_id: str, config: PushNotificationConfig, owner: str
+    ) -> Any:
         """Maps a PushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
@@ -152,6 +156,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         return self.config_model(
             task_id=task_id,
             config_id=config.id,
+            owner=owner,
             config_data=data_to_store,
         )
 
@@ -226,10 +231,14 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             ) from e
 
     async def set_info(
-        self, task_id: str, notification_config: PushNotificationConfig
+        self,
+        task_id: str,
+        notification_config: PushNotificationConfig,
+        context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
 
         # Create a copy of the config using proto CopyFrom
         config_to_save = PushNotificationConfig()
@@ -237,21 +246,30 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         if not config_to_save.id:
             config_to_save.id = task_id
 
-        db_config = self._to_orm(task_id, config_to_save)
+        db_config = self._to_orm(task_id, config_to_save, owner)
         async with self.async_session_maker.begin() as session:
             await session.merge(db_config)
             logger.debug(
-                'Push notification config for task %s with config id %s saved/updated.',
+                'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
                 config_to_save.id,
+                owner,
             )
 
-    async def get_info(self, task_id: str) -> list[PushNotificationConfig]:
-        """Retrieves all push notification configurations for a task."""
+    async def get_info(
+        self,
+        task_id: str,
+        context: ServerCallContext,
+    ) -> list[PushNotificationConfig]:
+        """Retrieves all push notification configurations for a task, for the given owner."""
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
         async with self.async_session_maker() as session:
             stmt = select(self.config_model).where(
-                self.config_model.task_id == task_id
+                and_(
+                    self.config_model.task_id == task_id,
+                    self.config_model.owner == owner,
+                )
             )
             result = await session.execute(stmt)
             models = result.scalars().all()
@@ -262,24 +280,32 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     configs.append(self._from_orm(model))
                 except ValueError:  # noqa: PERF203
                     logger.exception(
-                        'Could not deserialize push notification config for task %s, config %s',
+                        'Could not deserialize push notification config for task %s, config %s, owner %s',
                         model.task_id,
                         model.config_id,
+                        owner,
                     )
             return configs
 
     async def delete_info(
-        self, task_id: str, config_id: str | None = None
+        self,
+        task_id: str,
+        context: ServerCallContext,
+        config_id: str | None = None,
     ) -> None:
         """Deletes push notification configurations for a task.
 
         If config_id is provided, only that specific configuration is deleted.
-        If config_id is None, all configurations for the task are deleted.
+        If config_id is None, all configurations for the task for the owner are deleted.
         """
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
         async with self.async_session_maker.begin() as session:
             stmt = delete(self.config_model).where(
-                self.config_model.task_id == task_id
+                and_(
+                    self.config_model.task_id == task_id,
+                    self.config_model.owner == owner,
+                )
             )
             if config_id is not None:
                 stmt = stmt.where(self.config_model.config_id == config_id)
@@ -288,13 +314,15 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info(
-                    'Deleted %s push notification config(s) for task %s.',
+                    'Deleted %s push notification config(s) for task %s, owner %s.',
                     result.rowcount,  # type: ignore[attr-defined]
                     task_id,
+                    owner,
                 )
             else:
                 logger.warning(
-                    'Attempted to delete push notification config for task %s with config_id: %s that does not exist.',
+                    'Attempted to delete push notification config for task %s, owner %s with config_id: %s that does not exist.',
                     task_id,
+                    owner,
                     config_id,
                 )

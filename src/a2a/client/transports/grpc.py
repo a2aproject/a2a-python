@@ -23,8 +23,11 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
+    DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
     SendMessageRequest,
@@ -172,7 +175,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -185,7 +188,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -194,6 +197,32 @@ class GrpcTransport(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         return await self.stub.GetTaskPushNotificationConfig(
+            request,
+            metadata=self._get_grpc_metadata(extensions),
+        )
+
+    async def list_task_push_notification_configs(
+        self,
+        request: ListTaskPushNotificationConfigsRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task."""
+        return await self.stub.ListTaskPushNotificationConfigs(
+            request,
+            metadata=self._get_grpc_metadata(extensions),
+        )
+
+    async def delete_task_push_notification_config(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
+        await self.stub.DeleteTaskPushNotificationConfig(
             request,
             metadata=self._get_grpc_metadata(extensions),
         )
