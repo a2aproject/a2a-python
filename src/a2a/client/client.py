@@ -57,6 +57,20 @@ class ClientConfig:
        transports to exist in closed ecosystems.
     """
 
+    supported_transports: list[str] = dataclasses.field(
+        default_factory=list
+    )
+    """Backward compatible alias for supported_protocol_bindings."""
+
+    def __post_init__(self):
+        if self.supported_transports and not self.supported_protocol_bindings:
+            self.supported_protocol_bindings = self.supported_transports
+        elif (
+            self.supported_protocol_bindings
+            and not self.supported_transports
+        ):
+            self.supported_transports = self.supported_protocol_bindings
+
     use_client_preference: bool = False
     """Whether to use client transport preferences over server preferences.
        Recommended to use server preferences in most situations."""

@@ -356,6 +356,8 @@ class DefaultRequestHandler(RequestHandler):
         blocking = True  # Default to blocking behavior
         if params.configuration and params.configuration.blocking is False:
             blocking = False
+        
+        logger.warning(f"DEBUG: on_message_send task_id={task_id} blocking={blocking}")
 
         interrupted_or_non_blocking = False
         try:

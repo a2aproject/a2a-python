@@ -1,10 +1,10 @@
 import asyncio
 
-from typing import Any
 from unittest import mock
 
 import pytest
 
+from google.protobuf.struct_pb2 import Struct, Value
 from starlette.authentication import (
     AuthCredentials,
     AuthenticationBackend,
@@ -30,9 +30,6 @@ from a2a.server.jsonrpc_models import (
     JSONParseError,
     MethodNotFoundError,
 )
-from a2a.types import (
-    UnsupportedOperationError,
-)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -43,7 +40,6 @@ from a2a.types.a2a_pb2 import (
     Part,
     PushNotificationConfig,
     Role,
-    SendMessageResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,
@@ -105,7 +101,6 @@ EXTENDED_AGENT_CARD_DATA = AgentCard(
     ],
     version='1.0',
 )
-from google.protobuf.struct_pb2 import Struct, Value
 
 TEXT_PART_DATA = Part(text='Hello')
 
@@ -173,6 +168,32 @@ def test_agent_card_endpoint(client: TestClient, agent_card: AgentCard):
     assert data['name'] == agent_card.name
     assert data['version'] == agent_card.version
     assert 'streaming' in data['capabilities']
+
+
+def test_agent_card_backward_compatibility_supports_extended_card(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that supportsAuthenticatedExtendedCard is injected when extended_agent_card is True."""
+    agent_card.capabilities.extended_agent_card = True
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build())
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get('supportsAuthenticatedExtendedCard') is True
+
+
+def test_agent_card_backward_compatibility_no_extended_card(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that supportsAuthenticatedExtendedCard is absent when extended_agent_card is False."""
+    agent_card.capabilities.extended_agent_card = False
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build())
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert 'supportsAuthenticatedExtendedCard' not in data
 
 
 def test_authenticated_extended_agent_card_endpoint_not_supported(

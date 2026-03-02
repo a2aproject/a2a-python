@@ -213,6 +213,7 @@ async def test_send_message_task_response(
     mock_grpc_stub.SendMessage.assert_awaited_once()
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
+        ('x-a2a-version', '1.0.0'),
         (
             HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v3',
@@ -239,6 +240,7 @@ async def test_send_message_message_response(
     mock_grpc_stub.SendMessage.assert_awaited_once()
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
+        ('x-a2a-version', '1.0.0'),
         (
             HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
@@ -288,6 +290,7 @@ async def test_send_message_streaming(  # noqa: PLR0913
     mock_grpc_stub.SendStreamingMessage.assert_called_once()
     _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
     assert kwargs['metadata'] == [
+        ('x-a2a-version', '1.0.0'),
         (
             HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
@@ -322,12 +325,7 @@ async def test_get_task(
 
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(id=f'{sample_task.id}', history_length=None),
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',)],
     )
     assert response.id == sample_task.id
 
@@ -350,12 +348,7 @@ async def test_list_tasks(
 
     mock_grpc_stub.ListTasks.assert_awaited_once_with(
         params,
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',)],
     )
     assert result.total_size == 2
     assert not result.next_page_token
@@ -377,12 +370,7 @@ async def test_get_task_with_history(
         a2a_pb2.GetTaskRequest(
             id=f'{sample_task.id}', history_length=history_len
         ),
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',)],
     )
 
 
@@ -405,9 +393,7 @@ async def test_cancel_task(
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(id=f'{sample_task.id}'),
-        metadata=[
-            (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')],
     )
     assert response.status.state == TaskState.TASK_STATE_CANCELED
 
@@ -432,12 +418,7 @@ async def test_set_task_callback_with_valid_task(
 
     mock_grpc_stub.CreateTaskPushNotificationConfig.assert_awaited_once_with(
         request,
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',)],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -492,12 +473,7 @@ async def test_get_task_callback_with_valid_task(
             task_id='task-1',
             id=config_id,
         ),
-        metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
-        ],
+        metadata=[('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',)],
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -532,32 +508,32 @@ async def test_get_task_callback_with_invalid_task(
         (
             None,
             None,
-            None,
+            [('x-a2a-version', '1.0.0')],
         ),  # Case 1: No initial, No input
         (
             ['ext1'],
             None,
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext1')],
+            [('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'ext1')],
         ),  # Case 2: Initial, No input
         (
             None,
             ['ext2'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
+            [('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'ext2')],
         ),  # Case 3: No initial, Input
         (
             ['ext1'],
             ['ext2'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
+            [('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'ext2')],
         ),  # Case 4: Initial, Input (override)
         (
             ['ext1'],
             ['ext2', 'ext3'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3')],
+            [('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3')],
         ),  # Case 5: Initial, Multiple inputs (override)
         (
             ['ext1', 'ext2'],
             ['ext3'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext3')],
+            [('x-a2a-version', '1.0.0'), (HTTP_EXTENSION_HEADER.lower(), 'ext3')],
         ),  # Case 6: Multiple initial, Single input (override)
     ],
 )

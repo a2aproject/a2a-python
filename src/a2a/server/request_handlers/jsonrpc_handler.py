@@ -16,6 +16,7 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -489,5 +490,7 @@ class JSONRPCHandler:
         elif self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(base_card))
 
-        result = MessageToDict(card_to_serve, preserving_proto_field_name=False)
+        result = agent_card_to_dict(
+            card_to_serve, preserving_proto_field_name=False
+        )
         return _build_success_response(request_id, result)

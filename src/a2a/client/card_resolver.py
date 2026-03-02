@@ -6,12 +6,13 @@ from typing import Any
 
 import httpx
 
-from google.protobuf.json_format import ParseDict, ParseError
+from google.protobuf.json_format import ParseError
 
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
 )
+from a2a.client.helpers import parse_agent_card
 from a2a.types.a2a_pb2 import (
     AgentCard,
 )
@@ -88,7 +89,7 @@ class A2ACardResolver:
                 target_url,
                 agent_card_data,
             )
-            agent_card = ParseDict(agent_card_data, AgentCard())
+            agent_card = parse_agent_card(agent_card_data)
             if signature_verifier:
                 signature_verifier(agent_card)
         except httpx.HTTPStatusError as e:

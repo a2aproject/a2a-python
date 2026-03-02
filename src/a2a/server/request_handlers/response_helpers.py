@@ -13,6 +13,7 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     ListTasksResponse,
     Message,
     StreamResponse,
@@ -87,6 +88,110 @@ EventTypes = (
     | ListTasksResponse
 )
 """Type alias for possible event types produced by handlers."""
+
+
+def agent_card_to_dict(
+    card: AgentCard, preserving_proto_field_name: bool = False
+) -> dict[str, Any]:
+    """Convert AgentCard to dict and inject backward compatibility fields."""
+    result = MessageToDict(
+        card, preserving_proto_field_name=preserving_proto_field_name
+    )
+
+    def fname(name_camel: str, name_snake: str) -> str:
+        """Select camel or snake case based on preserving_proto_field_name."""
+        return name_snake if preserving_proto_field_name else name_camel
+
+    # supportsAuthenticatedExtendedCard
+    if card.capabilities.extended_agent_card:
+        result[
+            fname(
+                'supportsAuthenticatedExtendedCard',
+                'supports_authenticated_extended_card',
+            )
+        ] = True
+
+    # top-level connection fields
+    if card.supported_interfaces:
+        preferred_iface = card.supported_interfaces[0]
+        result['url'] = preferred_iface.url
+        result[fname('preferredTransport', 'preferred_transport')] = (
+            preferred_iface.protocol_binding
+        )
+        result[fname('protocolVersion', 'protocol_version')] = (
+            preferred_iface.protocol_version
+        )
+
+        if len(card.supported_interfaces) > 1:
+            additional_ifaces = [
+                {
+                    'url': iface.url,
+                    'transport': iface.protocol_binding,
+                }
+                for iface in card.supported_interfaces[1:]
+            ]
+            result[fname('additionalInterfaces', 'additional_interfaces')] = (
+                additional_ifaces
+            )
+
+    # security mappings
+    def map_security_requirements(reqs: Any) -> list[dict[str, list[str]]]:
+        """Convert a 1.0.0 Protobuf security requirement list into the legacy format."""
+        security_list = []
+        for req in reqs:
+            req_dict = {}
+            for scheme_name, string_list in req.schemes.items():
+                req_dict[scheme_name] = list(string_list.list)
+            security_list.append(req_dict)
+        return security_list
+
+    if card.security_requirements:
+        result['security'] = map_security_requirements(
+            card.security_requirements
+        )
+
+    skills_key = fname('skills', 'skills')
+    result.setdefault(skills_key, [])
+    if skills_key in result and isinstance(result[skills_key], list):
+        for i, skill in enumerate(card.skills):
+            if skill.security_requirements:
+                result[skills_key][i]['security'] = map_security_requirements(
+                    skill.security_requirements
+                )
+
+    result.setdefault(fname('defaultInputModes', 'default_input_modes'), [])
+    result.setdefault(fname('defaultOutputModes', 'default_output_modes'), [])
+    result.setdefault('capabilities', {})
+
+    # securitySchemes mappings
+    schemes_key = fname('securitySchemes', 'security_schemes')
+    if schemes_key in result:
+        scheme_type_map = {
+            'apiKeySecurityScheme': 'apiKey',
+            'api_key_security_scheme': 'apiKey',
+            'httpAuthSecurityScheme': 'http',
+            'http_auth_security_scheme': 'http',
+            'oauth2SecurityScheme': 'oauth2',
+            'oauth2_security_scheme': 'oauth2',
+            'openIdConnectSecurityScheme': 'openIdConnect',
+            'open_id_connect_security_scheme': 'openIdConnect',
+            'mtlsSecurityScheme': 'mutualTLS',
+            'mtls_security_scheme': 'mutualTLS',
+        }
+        for scheme_data in result[schemes_key].values():
+            for proto_key, json_type in scheme_type_map.items():
+                if proto_key in scheme_data:
+                    details = scheme_data.pop(proto_key)
+                    scheme_data['type'] = json_type
+
+                    # Map modern 'location' to legacy 'in'
+                    if json_type == 'apiKey' and 'location' in details:
+                        details['in'] = details.pop('location')
+
+                    scheme_data.update(details)
+                    break
+
+    return result
 
 
 def build_error_response(

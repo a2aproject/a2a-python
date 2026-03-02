@@ -4,8 +4,7 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict
-
+from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.utils.helpers import maybe_await
 
 
@@ -161,7 +160,7 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return MessageToDict(card_to_serve)
+        return agent_card_to_dict(card_to_serve)
 
     async def handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
@@ -197,7 +196,9 @@ class RESTAdapter:
         elif self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
+        return agent_card_to_dict(
+            card_to_serve, preserving_proto_field_name=True
+        )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
         """Constructs a dictionary of API routes and their corresponding handlers.

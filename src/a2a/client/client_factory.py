@@ -14,6 +14,11 @@ from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
+from a2a.compat.v0_3.client_adapter import (
+    Compat03GrpcTransport,
+    Compat03JsonRpcTransport,
+    Compat03RestTransport,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -65,6 +70,12 @@ class ClientFactory:
     ):
         if consumers is None:
             consumers = []
+            
+        if config.httpx_client is None:
+            config.httpx_client = httpx.AsyncClient(headers={"X-A2A-Version": "1.0.0"})
+        else:
+            config.httpx_client.headers["X-A2A-Version"] = "1.0.0"
+            
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
@@ -76,7 +87,7 @@ class ClientFactory:
             self.register(
                 TransportProtocol.JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    config.httpx_client,
                     card,
                     url,
                     interceptors,
@@ -87,7 +98,7 @@ class ClientFactory:
             self.register(
                 TransportProtocol.HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    config.httpx_client,
                     card,
                     url,
                     interceptors,
@@ -155,7 +166,7 @@ class ClientFactory:
         client_config = client_config or ClientConfig()
         if isinstance(agent, str):
             if not client_config.httpx_client:
-                async with httpx.AsyncClient() as client:
+                async with httpx.AsyncClient(headers={"X-A2A-Version": "1.0.0"}) as client:
                     resolver = A2ACardResolver(client, agent)
                     card = await resolver.get_agent_card(
                         relative_card_path=relative_card_path,
@@ -163,6 +174,7 @@ class ClientFactory:
                         signature_verifier=signature_verifier,
                     )
             else:
+                client_config.httpx_client.headers["X-A2A-Version"] = "1.0.0"
                 resolver = A2ACardResolver(client_config.httpx_client, agent)
                 card = await resolver.get_agent_card(
                     relative_card_path=relative_card_path,
@@ -243,9 +255,72 @@ class ClientFactory:
             all_extensions.extend(extensions)
             self._config.extensions = all_extensions
 
-        transport = self._registry[transport_protocol](
-            card, transport_url, self._config, interceptors or []
-        )
+        # Detect legacy v0.3 server
+        is_legacy_v03 = False
+        transport_protocol = None
+        transport_url = None
+        if self._config.use_client_preference:
+            for protocol_binding in client_set:
+                supported_interface = next(
+                    (
+                        si
+                        for si in card.supported_interfaces
+                        if si.protocol_binding == protocol_binding
+                    ),
+                    None,
+                )
+                if supported_interface:
+                    transport_protocol = protocol_binding
+                    transport_url = supported_interface.url
+                    if supported_interface.protocol_version == "0.3.0":
+                        is_legacy_v03 = True
+                    break
+        else:
+            for supported_interface in card.supported_interfaces:
+                if supported_interface.protocol_binding in client_set:
+                    transport_protocol = supported_interface.protocol_binding
+                    transport_url = supported_interface.url
+                    if supported_interface.protocol_version == "0.3.0":
+                        is_legacy_v03 = True
+                    break
+
+        if not transport_protocol or not transport_url:
+            raise ValueError('no compatible transports found.')
+        if transport_protocol not in self._registry:
+            raise ValueError(f'no client available for {transport_protocol}')
+
+        if is_legacy_v03:
+            if transport_protocol == TransportProtocol.JSONRPC:
+                transport = Compat03JsonRpcTransport(
+                    self._config.httpx_client,
+                    card,
+                    transport_url,
+                    interceptors or [],
+                    self._config.extensions or None,
+                )
+            elif transport_protocol == TransportProtocol.HTTP_JSON:
+                transport = Compat03RestTransport(
+                    self._config.httpx_client,
+                    card,
+                    transport_url,
+                    interceptors or [],
+                    self._config.extensions or None,
+                )
+            elif transport_protocol == TransportProtocol.GRPC:
+                if self._config.grpc_channel_factory is None:
+                    raise ValueError('grpc_channel_factory is required when using gRPC')
+                transport = Compat03GrpcTransport(
+                    self._config.grpc_channel_factory(transport_url),
+                    card,
+                )
+            else:
+                transport = self._registry[transport_protocol](
+                    card, transport_url, self._config, interceptors or []
+                )
+        else:
+            transport = self._registry[transport_protocol](
+                card, transport_url, self._config, interceptors or []
+            )
 
         return BaseClient(
             card,

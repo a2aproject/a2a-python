@@ -1236,6 +1236,14 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Mocking capabilities
         self.mock_agent_card.capabilities = MagicMock()
         self.mock_agent_card.capabilities.extended_agent_card = True
+        mock_iface = MagicMock()
+        mock_iface.url = 'http://localhost'
+        mock_iface.protocol_binding = 'JSONRPC'
+        mock_iface.protocol_version = '1.0.0'
+        self.mock_agent_card.supported_interfaces = [mock_iface]
+        self.mock_agent_card.security_requirements = []
+        self.mock_agent_card.skills = []
+        self.mock_agent_card.security_schemes = {}
         handler = JSONRPCHandler(
             self.mock_agent_card,
             mock_request_handler,
@@ -1309,7 +1317,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertFalse(is_error_response(response))
         from google.protobuf.json_format import ParseDict
 
-        modified_card = ParseDict(response['result'], AgentCard())
+        modified_card = ParseDict(
+            response['result'], AgentCard(), ignore_unknown_fields=True
+        )
         self.assertEqual(modified_card.name, 'Modified Card')
         self.assertEqual(modified_card.description, 'Modified for context: bar')
         self.assertEqual(modified_card.version, '1.0')

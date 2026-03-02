@@ -64,12 +64,16 @@ class GrpcTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> list[tuple[str, str]] | None:
         """Creates gRPC metadata for extensions."""
+        metadata = []
+        metadata.append(("x-a2a-version", "1.0.0"))
+        
         extensions_to_use = extensions or self.extensions
         if extensions_to_use:
-            return [
+            metadata.append(
                 (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
-            ]
-        return None
+            )
+            
+        return metadata if metadata else None
 
     @classmethod
     def create(

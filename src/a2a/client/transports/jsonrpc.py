@@ -17,6 +17,7 @@ from a2a.client.errors import (
     A2AClientJSONRPCError,
     A2AClientTimeoutError,
 )
+from a2a.client.helpers import parse_agent_card
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import update_extension_header
@@ -455,9 +456,7 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise A2AClientJSONRPCError(json_rpc_response.error)
-        response: AgentCard = json_format.ParseDict(
-            json_rpc_response.result, AgentCard()
-        )
+        response: AgentCard = parse_agent_card(json_rpc_response.result)
         if signature_verifier:
             signature_verifier(response)
 

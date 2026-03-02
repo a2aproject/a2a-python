@@ -15,6 +15,7 @@ from a2a.client.errors import (
     A2AClientJSONError,
     A2AClientTimeoutError,
 )
+from a2a.client.helpers import parse_agent_card
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import update_extension_header
@@ -226,7 +227,7 @@ class RestTransport(ClientTransport):
             params,
             modified_kwargs,
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = ParseDict(response_data, Task(), ignore_unknown_fields=True)
         return response
 
     async def list_tasks(
@@ -277,7 +278,7 @@ class RestTransport(ClientTransport):
         response_data = await self._send_post_request(
             f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = ParseDict(response_data, Task(), ignore_unknown_fields=True)
         return response
 
     async def set_task_callback(
@@ -402,7 +403,7 @@ class RestTransport(ClientTransport):
         response_data = await self._send_get_request(
             '/v1/card', {}, modified_kwargs
         )
-        response: AgentCard = ParseDict(response_data, AgentCard())
+        response: AgentCard = parse_agent_card(response_data)
 
         if signature_verifier:
             signature_verifier(response)

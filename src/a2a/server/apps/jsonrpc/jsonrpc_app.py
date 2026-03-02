@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.auth.user import UnauthenticatedUser
@@ -29,7 +29,10 @@ from a2a.server.jsonrpc_models import (
 )
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.response_helpers import build_error_response
+from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
+    build_error_response,
+)
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -367,6 +370,15 @@ class JSONRPCApplication(ABC):
                     InvalidRequestError(message='Method is required'),
                 )
 
+            # --- Backward Compatibility Hook ---
+            from a2a.compat.v0_3.server_adapter import handle_jsonrpc_legacy_request
+            legacy_response = await handle_jsonrpc_legacy_request(
+                self, method, base_request, request, self._context_builder
+            )
+            if legacy_response is not None:
+                return legacy_response
+            # -----------------------------------
+
             model_class = self.METHOD_TO_MODEL.get(method)
             if not model_class:
                 return self._generate_error_response(
@@ -591,7 +603,7 @@ class JSONRPCApplication(ABC):
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return JSONResponse(
-            MessageToDict(
+            agent_card_to_dict(
                 card_to_serve,
                 preserving_proto_field_name=False,
             )
@@ -623,7 +635,7 @@ class JSONRPCApplication(ABC):
 
         if card_to_serve:
             return JSONResponse(
-                MessageToDict(
+                agent_card_to_dict(
                     card_to_serve,
                     preserving_proto_field_name=False,
                 )
