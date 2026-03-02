@@ -1,4 +1,3 @@
-from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -72,11 +71,11 @@ async def test_transport_async_context_manager() -> None:
         patch.object(ClientTransport, '__abstractmethods__', set()),
         patch.object(ClientTransport, 'close', new_callable=AsyncMock),
     ):
-        transport = ClientTransport()  # type: ignore[abstract]
+        transport = ClientTransport()
         async with transport as t:
             assert t is transport
-            cast(AsyncMock, transport.close).assert_not_awaited()
-        cast(AsyncMock, transport.close).assert_awaited_once()
+            transport.close.assert_not_awaited()
+        transport.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio
@@ -85,11 +84,11 @@ async def test_transport_async_context_manager_on_exception() -> None:
         patch.object(ClientTransport, '__abstractmethods__', set()),
         patch.object(ClientTransport, 'close', new_callable=AsyncMock),
     ):
-        transport = ClientTransport()  # type: ignore[abstract]
+        transport = ClientTransport()
         with pytest.raises(RuntimeError, match='boom'):
             async with transport:
                 raise RuntimeError('boom')
-        cast(AsyncMock, transport.close).assert_awaited_once()
+        transport.close.assert_awaited_once()
 
 
 @pytest.mark.asyncio

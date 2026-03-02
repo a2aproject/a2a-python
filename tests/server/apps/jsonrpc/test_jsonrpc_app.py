@@ -141,7 +141,7 @@ class TestJSONRPCApplicationOptionalDeps:
         class MockJSONRPCApp(JSONRPCApplication):
             def build(  # type: ignore[override]
                 self,
-                agent_card_url='/custom.json',
+                agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):
@@ -162,7 +162,7 @@ class TestJSONRPCApplicationOptionalDeps:
         class MockJSONRPCApp(JSONRPCApplication):
             def build(  # type: ignore[override]
                 self,
-                agent_card_url='/custom.json',
+                agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):

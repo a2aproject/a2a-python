@@ -1129,7 +1129,7 @@ async def test_json_transport_get_signed_extended_card(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -1194,7 +1194,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -1271,7 +1271,7 @@ async def test_rest_transport_get_signed_card(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -1340,7 +1340,7 @@ async def test_grpc_transport_get_signed_card(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',

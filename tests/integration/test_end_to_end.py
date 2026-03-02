@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import NamedTuple, cast
+from typing import NamedTuple
 
 import grpc
 import httpx
@@ -74,8 +74,6 @@ def assert_events_match(events, expected_events):
 
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
-        assert context.task_id is not None
-        assert context.context_id is not None
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
@@ -183,7 +181,7 @@ def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
             supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
         )
     )
-    client = cast(BaseClient, factory.create(agent_card))
+    client = factory.create(agent_card)
     return ClientSetup(
         client=client,
         task_store=task_store,
@@ -206,7 +204,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
             supported_protocol_bindings=[TransportProtocol.JSONRPC],
         )
     )
-    client = cast(BaseClient, factory.create(agent_card))
+    client = factory.create(agent_card)
     return ClientSetup(
         client=client,
         task_store=task_store,
@@ -243,7 +241,7 @@ async def grpc_setup(
             supported_protocol_bindings=[TransportProtocol.GRPC],
         )
     )
-    client = cast(BaseClient, factory.create(grpc_agent_card))
+    client = factory.create(grpc_agent_card)
     yield ClientSetup(
         client=client,
         task_store=task_store,
