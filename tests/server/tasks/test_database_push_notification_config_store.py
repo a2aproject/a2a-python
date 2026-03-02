@@ -16,7 +16,6 @@ pytest.importorskip(
 
 import pytest_asyncio
 
-from typing import TYPE_CHECKING, Any
 from _pytest.mark.structures import ParameterSet
 
 # Now safe to import SQLAlchemy-dependent modules
@@ -33,10 +32,8 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.server.models import (
     Base,
-    create_push_notification_config_model,
-)
-
-PushNotificationConfigModel: Any = create_push_notification_config_model()
+    PushNotificationConfigModel,
+)  # Important: To get Base.metadata
 from a2a.server.tasks import DatabasePushNotificationConfigStore
 from a2a.types.a2a_pb2 import (
     PushNotificationConfig,
