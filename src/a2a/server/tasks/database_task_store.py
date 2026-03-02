@@ -33,7 +33,7 @@ except ImportError as e:
 from google.protobuf.json_format import MessageToDict
 
 from a2a.server.context import ServerCallContext
-from a2a.server.models import Base, TaskModel, create_task_model
+from a2a.server.models import Base, create_task_model
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
@@ -54,7 +54,7 @@ class DatabaseTaskStore(TaskStore):
     async_session_maker: async_sessionmaker[AsyncSession]
     create_table: bool
     _initialized: bool
-    task_model: type[TaskModel]
+    task_model: type[Any]
 
     def __init__(
         self,
@@ -80,11 +80,7 @@ class DatabaseTaskStore(TaskStore):
         self.create_table = create_table
         self._initialized = False
 
-        self.task_model = (
-            TaskModel
-            if table_name == 'tasks'
-            else create_task_model(table_name)
-        )
+        self.task_model = create_task_model(table_name)
 
     async def initialize(self) -> None:
         """Initialize the database and create the table if needed."""
@@ -109,7 +105,7 @@ class DatabaseTaskStore(TaskStore):
         if not self._initialized:
             await self.initialize()
 
-    def _to_orm(self, task: Task) -> TaskModel:
+    def _to_orm(self, task: Task) -> Any:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
         # Pass proto objects directly - PydanticType/PydanticListType
         # handle serialization via process_bind_param
@@ -125,7 +121,7 @@ class DatabaseTaskStore(TaskStore):
             ),
         )
 
-    def _from_orm(self, task_model: TaskModel) -> Task:
+    def _from_orm(self, task_model: Any) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
         # PydanticType/PydanticListType already deserialize to proto objects
         # via process_result_value, so we can construct the Task directly

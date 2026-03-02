@@ -52,8 +52,6 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import MethodNotImplementedError
 
@@ -175,117 +173,6 @@ def test_agent_card_endpoint(client: TestClient, agent_card: AgentCard):
     assert 'streaming' in data['capabilities']
 
 
-def test_authenticated_extended_agent_card_endpoint_not_supported(
-    agent_card: AgentCard, handler: mock.AsyncMock
-):
-    """Test extended card endpoint returns 404 if not supported by main card."""
-    # Ensure supportsAuthenticatedExtendedCard is False or None
-    agent_card.capabilities.extended_agent_card = False
-    app_instance = A2AStarletteApplication(agent_card, handler)
-    # The route should not even be added if supportsAuthenticatedExtendedCard is false
-    # So, building the app and trying to hit it should result in 404 from Starlette itself
-    client = TestClient(app_instance.build())
-    response = client.get('/agent/authenticatedExtendedCard')
-    assert response.status_code == 404  # Starlette's default for no route
-
-
-def test_agent_card_default_endpoint_has_deprecated_route(
-    agent_card: AgentCard, handler: mock.AsyncMock
-):
-    """Test agent card deprecated route is available for default route."""
-    app_instance = A2AStarletteApplication(agent_card, handler)
-    client = TestClient(app_instance.build())
-    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == agent_card.name
-    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == agent_card.name
-
-
-def test_agent_card_custom_endpoint_has_no_deprecated_route(
-    agent_card: AgentCard, handler: mock.AsyncMock
-):
-    """Test agent card deprecated route is not available for custom route."""
-    app_instance = A2AStarletteApplication(agent_card, handler)
-    client = TestClient(app_instance.build(agent_card_url='/my-agent'))
-    response = client.get('/my-agent')
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == agent_card.name
-    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 404
-
-
-def test_authenticated_extended_agent_card_endpoint_not_supported_fastapi(
-    agent_card: AgentCard, handler: mock.AsyncMock
-):
-    """Test extended card endpoint returns 404 if not supported by main card."""
-    # Ensure supportsAuthenticatedExtendedCard is False or None
-    agent_card.capabilities.extended_agent_card = False
-    app_instance = A2AFastAPIApplication(agent_card, handler)
-    # The route should not even be added if supportsAuthenticatedExtendedCard is false
-    # So, building the app and trying to hit it should result in 404 from FastAPI itself
-    client = TestClient(app_instance.build())
-    response = client.get('/agent/authenticatedExtendedCard')
-    assert response.status_code == 404  # FastAPI's default for no route
-
-
-def test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_starlette(
-    agent_card: AgentCard,
-    extended_agent_card_fixture: AgentCard,
-    handler: mock.AsyncMock,
-):
-    """Test extended card endpoint returns the specific extended card when provided."""
-    agent_card.capabilities.extended_agent_card = (
-        True  # Main card must support it
-    )
-
-    app_instance = A2AStarletteApplication(
-        agent_card, handler, extended_agent_card=extended_agent_card_fixture
-    )
-    client = TestClient(app_instance.build())
-
-    response = client.get('/agent/authenticatedExtendedCard')
-    assert response.status_code == 200
-    data = response.json()
-    # Verify it's the extended card's data
-    assert data['name'] == extended_agent_card_fixture.name
-    assert data['version'] == extended_agent_card_fixture.version
-    assert len(data['skills']) == len(extended_agent_card_fixture.skills)
-    assert any(skill['id'] == 'skill-extended' for skill in data['skills']), (
-        'Extended skill not found in served card'
-    )
-
-
-def test_authenticated_extended_agent_card_endpoint_supported_with_specific_extended_card_fastapi(
-    agent_card: AgentCard,
-    extended_agent_card_fixture: AgentCard,
-    handler: mock.AsyncMock,
-):
-    """Test extended card endpoint returns the specific extended card when provided."""
-    agent_card.capabilities.extended_agent_card = (
-        True  # Main card must support it
-    )
-    app_instance = A2AFastAPIApplication(
-        agent_card, handler, extended_agent_card=extended_agent_card_fixture
-    )
-    client = TestClient(app_instance.build())
-
-    response = client.get('/agent/authenticatedExtendedCard')
-    assert response.status_code == 200
-    data = response.json()
-    # Verify it's the extended card's data
-    assert data['name'] == extended_agent_card_fixture.name
-    assert data['version'] == extended_agent_card_fixture.version
-    assert len(data['skills']) == len(extended_agent_card_fixture.skills)
-    assert any(skill['id'] == 'skill-extended' for skill in data['skills']), (
-        'Extended skill not found in served card'
-    )
-
-
 def test_agent_card_custom_url(
     app: A2AStarletteApplication, agent_card: AgentCard
 ):
@@ -390,12 +277,6 @@ def test_fastapi_build_with_extra_routes(
     data = response.json()
     assert data['name'] == agent_card.name
 
-    # check if deprecated agent card path route is available with default well-known path
-    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == agent_card.name
-
 
 def test_fastapi_build_custom_agent_card_path(
     app: A2AFastAPIApplication, agent_card: AgentCard
@@ -411,12 +292,6 @@ def test_fastapi_build_custom_agent_card_path(
     data = response.json()
     assert data['name'] == agent_card.name
 
-    # Ensure default agent card location is not available
-    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 404
-
-    # check if deprecated agent card path route is not available
-    response = client.get(PREV_AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 404
 
 
@@ -890,102 +765,6 @@ def test_dynamic_agent_card_modifier_sync(
     assert (
         data['version'] == agent_card.version
     )  # Ensure other fields are intact
-
-
-def test_dynamic_extended_agent_card_modifier(
-    agent_card: AgentCard,
-    extended_agent_card_fixture: AgentCard,
-    handler: mock.AsyncMock,
-):
-    """Test that the extended_card_modifier dynamically alters the extended agent card."""
-    agent_card.capabilities.extended_agent_card = True
-
-    async def modifier(
-        card: AgentCard, context: ServerCallContext
-    ) -> AgentCard:
-        modified_card = AgentCard()
-        modified_card.CopyFrom(card)
-        modified_card.description = 'Dynamically Modified Extended Description'
-        return modified_card
-
-    # Test with a base extended card
-    app_instance = A2AStarletteApplication(
-        agent_card,
-        handler,
-        extended_agent_card=extended_agent_card_fixture,
-        extended_card_modifier=modifier,
-    )
-    client = TestClient(app_instance.build())
-
-    response = client.get(EXTENDED_AGENT_CARD_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == extended_agent_card_fixture.name
-    assert data['description'] == 'Dynamically Modified Extended Description'
-
-    # Test without a base extended card (modifier should receive public card)
-    app_instance_no_base = A2AStarletteApplication(
-        agent_card,
-        handler,
-        extended_agent_card=None,
-        extended_card_modifier=modifier,
-    )
-    client_no_base = TestClient(app_instance_no_base.build())
-    response_no_base = client_no_base.get(EXTENDED_AGENT_CARD_PATH)
-    assert response_no_base.status_code == 200
-    data_no_base = response_no_base.json()
-    assert data_no_base['name'] == agent_card.name
-    assert (
-        data_no_base['description']
-        == 'Dynamically Modified Extended Description'
-    )
-
-
-def test_dynamic_extended_agent_card_modifier_sync(
-    agent_card: AgentCard,
-    extended_agent_card_fixture: AgentCard,
-    handler: mock.AsyncMock,
-):
-    """Test that a synchronous extended_card_modifier dynamically alters the extended agent card."""
-    agent_card.capabilities.extended_agent_card = True
-
-    def modifier(card: AgentCard, context: ServerCallContext) -> AgentCard:
-        modified_card = AgentCard()
-        modified_card.CopyFrom(card)
-        modified_card.description = 'Dynamically Modified Extended Description'
-        return modified_card
-
-    # Test with a base extended card
-    app_instance = A2AStarletteApplication(
-        agent_card,
-        handler,
-        extended_agent_card=extended_agent_card_fixture,
-        extended_card_modifier=modifier,
-    )
-    client = TestClient(app_instance.build())
-
-    response = client.get(EXTENDED_AGENT_CARD_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == extended_agent_card_fixture.name
-    assert data['description'] == 'Dynamically Modified Extended Description'
-
-    # Test without a base extended card (modifier should receive public card)
-    app_instance_no_base = A2AStarletteApplication(
-        agent_card,
-        handler,
-        extended_agent_card=None,
-        extended_card_modifier=modifier,
-    )
-    client_no_base = TestClient(app_instance_no_base.build())
-    response_no_base = client_no_base.get(EXTENDED_AGENT_CARD_PATH)
-    assert response_no_base.status_code == 200
-    data_no_base = response_no_base.json()
-    assert data_no_base['name'] == agent_card.name
-    assert (
-        data_no_base['description']
-        == 'Dynamically Modified Extended Description'
-    )
 
 
 def test_fastapi_dynamic_agent_card_modifier(

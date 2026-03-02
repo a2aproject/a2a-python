@@ -59,7 +59,7 @@ def test_signer_and_verifier_symmetric(sample_agent_card: AgentCard):
     wrong_key = 'wrongkey'
 
     agent_card_signer = signing.create_agent_card_signer(
-        signing_key=key,
+        signing_key=key,  # type: ignore[arg-type]
         protected_header={
             'alg': 'HS384',
             'kid': 'key1',
@@ -109,7 +109,7 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     wrong_key = 'wrongkey'
 
     agent_card_signer = signing.create_agent_card_signer(
-        signing_key=key,
+        signing_key=key,  # type: ignore[arg-type]
         protected_header={
             'alg': 'HS384',
             'kid': 'key1',
@@ -148,7 +148,7 @@ def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
     public_key_error = private_key_error.public_key()
 
     agent_card_signer = signing.create_agent_card_signer(
-        signing_key=private_key,
+        signing_key=private_key,  # type: ignore[arg-type]
         protected_header={
             'alg': 'ES256',
             'kid': 'key2',

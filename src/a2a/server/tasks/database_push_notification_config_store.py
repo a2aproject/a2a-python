@@ -2,7 +2,7 @@
 import json
 import logging
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToJson, Parse
 
@@ -33,7 +33,6 @@ except ImportError as e:
 
 from a2a.server.models import (
     Base,
-    PushNotificationConfigModel,
     create_push_notification_config_model,
 )
 from a2a.server.tasks.push_notification_config_store import (
@@ -59,7 +58,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     async_session_maker: async_sessionmaker[AsyncSession]
     create_table: bool
     _initialized: bool
-    config_model: type[PushNotificationConfigModel]
+    config_model: Any
     _fernet: 'Fernet | None'
 
     def __init__(
@@ -89,11 +88,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         )
         self.create_table = create_table
         self._initialized = False
-        self.config_model = (
-            PushNotificationConfigModel
-            if table_name == 'push_notification_configs'
-            else create_push_notification_config_model(table_name)
-        )
+        self.config_model = create_push_notification_config_model(table_name)
         self._fernet = None
 
         if encryption_key:
@@ -142,9 +137,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         if not self._initialized:
             await self.initialize()
 
-    def _to_orm(
-        self, task_id: str, config: PushNotificationConfig
-    ) -> PushNotificationConfigModel:
+    def _to_orm(self, task_id: str, config: PushNotificationConfig) -> Any:
         """Maps a PushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
@@ -162,9 +155,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             config_data=data_to_store,
         )
 
-    def _from_orm(
-        self, model_instance: PushNotificationConfigModel
-    ) -> PushNotificationConfig:
+    def _from_orm(self, model_instance: Any) -> PushNotificationConfig:
         """Maps a SQLAlchemy model instance to a PushNotificationConfig proto.
 
         Handles decryption if a key is configured, with a fallback to plain JSON.

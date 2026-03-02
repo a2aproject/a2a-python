@@ -47,11 +47,9 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
 from a2a.utils.errors import (
-    A2AException,
+    A2AError,
     MethodNotImplementedError,
     UnsupportedOperationError,
 )
@@ -247,7 +245,7 @@ class JSONRPCApplication(ABC):
     def _generate_error_response(
         self,
         request_id: str | int | None,
-        error: Exception | JSONRPCError | A2AException,
+        error: Exception | JSONRPCError | A2AError,
     ) -> JSONResponse:
         """Creates a Starlette JSONResponse for a JSON-RPC error.
 
@@ -260,7 +258,7 @@ class JSONRPCApplication(ABC):
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
-        if not isinstance(error, A2AException | JSONRPCError):
+        if not isinstance(error, A2AError | JSONRPCError):
             error = InternalError(message=str(error))
 
         response_data = build_error_response(request_id, error)
@@ -578,14 +576,6 @@ class JSONRPCApplication(ABC):
         Returns:
             A JSONResponse containing the agent card data.
         """
-        if request.url.path == PREV_AGENT_CARD_WELL_KNOWN_PATH:
-            logger.warning(
-                "Deprecated agent card endpoint '%s' accessed. "
-                "Please use '%s' instead. This endpoint will be removed in a future version.",
-                PREV_AGENT_CARD_WELL_KNOWN_PATH,
-                AGENT_CARD_WELL_KNOWN_PATH,
-            )
-
         card_to_serve = self.agent_card
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
@@ -597,53 +587,11 @@ class JSONRPCApplication(ABC):
             )
         )
 
-    async def _handle_get_authenticated_extended_agent_card(
-        self, request: Request
-    ) -> JSONResponse:
-        """Handles GET requests for the authenticated extended agent card."""
-        logger.warning(
-            'HTTP GET for authenticated extended card has been called by a client. '
-            'This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.'
-        )
-        if not self.agent_card.capabilities.extended_agent_card:
-            return JSONResponse(
-                {'error': 'Extended agent card not supported or not enabled.'},
-                status_code=404,
-            )
-
-        card_to_serve = self.extended_agent_card
-
-        if self.extended_card_modifier:
-            context = self._context_builder.build(request)
-            # If no base extended card is provided, pass the public card to the modifier
-            base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(base_card, context)
-            )
-
-        if card_to_serve:
-            return JSONResponse(
-                MessageToDict(
-                    card_to_serve,
-                    preserving_proto_field_name=False,
-                )
-            )
-        # If capabilities.extended_agent_card is true, but no
-        # extended_agent_card was provided, and no modifier produced a card,
-        # return a 404.
-        return JSONResponse(
-            {
-                'error': 'Authenticated extended agent card is supported but not configured on the server.'
-            },
-            status_code=404,
-        )
-
     @abstractmethod
     def build(
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
         **kwargs: Any,
     ) -> FastAPI | Starlette:
         """Builds and returns the JSONRPC application instance.
@@ -651,8 +599,6 @@ class JSONRPCApplication(ABC):
         Args:
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
-            extended_agent_card_url: The URL for the authenticated extended
-              agent card endpoint.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:

@@ -145,6 +145,10 @@ class Base(DeclarativeBase):
 
 
 # TaskMixin that can be used with any table name
+_task_model_cache: dict[tuple[str, type], type] = {}
+_push_notification_config_model_cache: dict[tuple[str, type], type] = {}
+
+
 class TaskMixin:
     """Mixin providing standard task columns with proper type handling."""
 
@@ -205,6 +209,9 @@ def create_task_model(
 
             TaskModel = create_task_model('tasks', MyBase)
     """
+    cache_key = (table_name, base)
+    if cache_key in _task_model_cache:
+        return _task_model_cache[cache_key]
 
     class TaskModel(TaskMixin, base):  # type: ignore
         __tablename__ = table_name
@@ -221,14 +228,8 @@ def create_task_model(
     TaskModel.__name__ = f'TaskModel_{table_name}'
     TaskModel.__qualname__ = f'TaskModel_{table_name}'
 
+    _task_model_cache[cache_key] = TaskModel
     return TaskModel
-
-
-# Default TaskModel for backward compatibility
-class TaskModel(TaskMixin, Base):
-    """Default task model with standard table name."""
-
-    __tablename__ = 'tasks'
 
 
 # PushNotificationConfigMixin that can be used with any table name
@@ -253,6 +254,9 @@ def create_push_notification_config_model(
     base: type[DeclarativeBase] = Base,
 ) -> type:
     """Create a PushNotificationConfigModel class with a configurable table name."""
+    cache_key = (table_name, base)
+    if cache_key in _push_notification_config_model_cache:
+        return _push_notification_config_model_cache[cache_key]
 
     class PushNotificationConfigModel(PushNotificationConfigMixin, base):  # type: ignore
         __tablename__ = table_name
@@ -261,10 +265,11 @@ def create_push_notification_config_model(
         def __repr__(self) -> str:
             """Return a string representation of the push notification config."""
             return (
-                f'<PushNotificationConfigModel[{table_name}]('
-                f'task_id="{self.task_id}", config_id="{self.config_id}")>'
+                f'<PushNotificationConfigModel[{table_name}](task_id="{self.task_id}", '
+                f'config_id="{self.config_id}")>'
             )
 
+    # Set a dynamic name for better debugging
     PushNotificationConfigModel.__name__ = (
         f'PushNotificationConfigModel_{table_name}'
     )
@@ -272,11 +277,5 @@ def create_push_notification_config_model(
         f'PushNotificationConfigModel_{table_name}'
     )
 
+    _push_notification_config_model_cache[cache_key] = PushNotificationConfigModel
     return PushNotificationConfigModel
-
-
-# Default PushNotificationConfigModel for backward compatibility
-class PushNotificationConfigModel(PushNotificationConfigMixin, Base):
-    """Default push notification config model with standard table name."""
-
-    __tablename__ = 'push_notification_configs'

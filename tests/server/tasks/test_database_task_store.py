@@ -18,7 +18,10 @@ from sqlalchemy.inspection import inspect
 
 from google.protobuf.json_format import MessageToDict
 
-from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
+from a2a.server.models import Base, create_task_model
+from typing import Any
+
+TaskModel: Any = create_task_model()
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types.a2a_pb2 import (
     Artifact,
