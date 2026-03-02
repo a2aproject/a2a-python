@@ -292,7 +292,9 @@ def test_fastapi_build_custom_agent_card_path(
     data = response.json()
     assert data['name'] == agent_card.name
 
-    assert response.status_code == 404
+    # Ensure default path returns 404
+    default_response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert default_response.status_code == 404
 
 
 # === REQUEST METHODS TESTS ===

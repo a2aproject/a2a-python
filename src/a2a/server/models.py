@@ -289,5 +289,7 @@ def create_push_notification_config_model(
         f'PushNotificationConfigModel_{table_name}'
     )
 
-    _push_notification_config_model_cache[cache_key] = PushNotificationConfigModel
+    _push_notification_config_model_cache[cache_key] = (
+        PushNotificationConfigModel
+    )
     return PushNotificationConfigModel
