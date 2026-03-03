@@ -908,3 +908,29 @@ def test_non_dict_json(client: TestClient):
     data = response.json()
     assert 'error' in data
     assert data['error']['code'] == InvalidRequestError().code
+
+
+def test_agent_card_backward_compatibility_supports_extended_card(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that supportsAuthenticatedExtendedCard is injected when extended_agent_card is True."""
+    agent_card.capabilities.extended_agent_card = True
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build())
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data.get('supportsAuthenticatedExtendedCard') is True
+
+
+def test_agent_card_backward_compatibility_no_extended_card(
+    agent_card: AgentCard, handler: mock.AsyncMock
+):
+    """Test that supportsAuthenticatedExtendedCard is absent when extended_agent_card is False."""
+    agent_card.capabilities.extended_agent_card = False
+    app_instance = A2AStarletteApplication(agent_card, handler)
+    client = TestClient(app_instance.build())
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert 'supportsAuthenticatedExtendedCard' not in data
