@@ -17,11 +17,10 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     DeleteTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigsRequest,
-    ListTaskPushNotificationConfigsResponse,
     SendMessageRequest,
-    TaskPushNotificationConfig,
 )
 from a2a.utils.constants import TransportProtocol
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 @pytest.fixture
@@ -93,6 +92,42 @@ class TestRestTransport:
             ]
 
         assert 'Client Request timed out' in str(exc_info.value)
+
+
+    @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+    @pytest.mark.asyncio
+    async def test_rest_mapped_errors(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock, error_cls
+    ):
+        """Test handling of mapped REST HTTP error responses."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        params = SendMessageRequest(
+            message=create_text_message_object(content='Hello')
+        )
+
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 500
+        mock_response.json.return_value = {'type': error_cls.__name__, 'message': 'Mapped Error'}
+
+        error = httpx.HTTPStatusError(
+            'Server Error',
+            request=httpx.Request('POST', 'http://test.url'),
+            response=mock_response,
+        )
+
+        mock_httpx_client.send.side_effect = error
+
+        with pytest.raises(error_cls):
+            await client.send_message(request=params)
 
 
 class TestRestTransportExtensions:

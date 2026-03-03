@@ -4,9 +4,8 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn
 
-import a2a.utils.errors
-
 from a2a.client.errors import A2AClientError
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 try:
@@ -48,18 +47,18 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 logger = logging.getLogger(__name__)
 
+_A2A_ERROR_NAME_TO_CLS = {
+    error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
+}
+
 
 def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     details = e.details()
     if isinstance(details, str) and ': ' in details:
         error_type_name, error_message = details.split(': ', 1)
         # TODO(#723): Resolving imports by name is a temporary hack until proper error handling structure is added in #723.
-        exception_cls = getattr(a2a.utils.errors, error_type_name, None)
-        if (
-            exception_cls
-            and isinstance(exception_cls, type)
-            and issubclass(exception_cls, a2a.utils.errors.A2AError)
-        ):
+        exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type_name)
+        if exception_cls:
             raise exception_cls(error_message) from e
     raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
 

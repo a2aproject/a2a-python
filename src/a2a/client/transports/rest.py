@@ -10,8 +10,6 @@ from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from google.protobuf.message import Message
 from httpx_sse import SSEError, aconnect_sse
 
-import a2a.utils.errors
-
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
@@ -34,11 +32,15 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import MethodNotFoundError
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+_A2A_ERROR_NAME_TO_CLS = {
+    error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
+}
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -103,12 +105,9 @@ class RestTransport(ClientTransport):
             message = error_data.get('message', str(e))
 
             if isinstance(error_type, str):
-                exception_cls = getattr(a2a.utils.errors, error_type, None)
-                if (
-                    exception_cls
-                    and isinstance(exception_cls, type)
-                    and issubclass(exception_cls, a2a.utils.errors.A2AError)
-                ):
+                # TODO(#723): Resolving imports by name is a temporary hack until proper error handling structure is added in #723.
+                exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type)
+                if exception_cls:
                     raise exception_cls(message) from e
         except (json.JSONDecodeError, ValueError):
             pass

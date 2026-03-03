@@ -1,30 +1,27 @@
 """Tests for the JSON-RPC client transport."""
 
 import json
-from google.protobuf import json_format
-from unittest import mock
+
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
 import httpx
 import pytest
-import respx
+
+from google.protobuf import json_format
 from httpx_sse import EventSource, SSEError
 
 from a2a.client.errors import A2AClientError
-from a2a.utils.errors import InvalidRequestError
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
-    AgentInterface,
     AgentCard,
+    AgentInterface,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigsRequest,
-    ListTaskPushNotificationConfigsResponse,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
     SendMessageConfiguration,
@@ -33,8 +30,8 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
     TaskState,
-    TaskStatus,
 )
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 @pytest.fixture
@@ -174,16 +171,19 @@ class TestSendMessage:
         payload = call_args[1]['json']
         assert payload['method'] == 'SendMessage'
 
+    @pytest.mark.parametrize(
+        'error_cls, error_code', JSON_RPC_ERROR_CODE_MAP.items()
+    )
     @pytest.mark.asyncio
     async def test_send_message_jsonrpc_error(
-        self, transport, mock_httpx_client
+        self, transport, mock_httpx_client, error_cls, error_code
     ):
-        """Test handling of JSON-RPC error response."""
+        """Test handling of JSON-RPC mapped error response."""
         mock_response = MagicMock()
         mock_response.json.return_value = {
             'jsonrpc': '2.0',
             'id': '1',
-            'error': {'code': -32600, 'message': 'Invalid Request'},
+            'error': {'code': error_code, 'message': 'Mapped Error'},
             'result': None,
         }
         mock_response.raise_for_status = MagicMock()
@@ -192,7 +192,7 @@ class TestSendMessage:
         request = create_send_message_request()
 
         # The transport raises the specific A2AError mapped from code
-        with pytest.raises(InvalidRequestError):
+        with pytest.raises(error_cls):
             await transport.send_message(request)
 
     @pytest.mark.asyncio
