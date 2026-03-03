@@ -13,7 +13,7 @@ from a2a.types.a2a_pb2 import (
     Task,
 )
 from a2a.utils import get_message_text
-from a2a.utils.errors import InvalidParamsError, ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 class RequestContext:
@@ -67,15 +67,13 @@ class RequestContext:
             if task_id:
                 self._params.message.task_id = task_id
                 if task and task.id != task_id:
-                    raise ServerError(InvalidParamsError(message='bad task id'))
+                    raise InvalidParamsError(message='bad task id')
             else:
                 self._check_or_generate_task_id()
             if context_id:
                 self._params.message.context_id = context_id
                 if task and task.context_id != context_id:
-                    raise ServerError(
-                        InvalidParamsError(message='bad context id')
-                    )
+                    raise InvalidParamsError(message='bad context id')
             else:
                 self._check_or_generate_context_id()
 

@@ -46,7 +46,6 @@ from a2a.utils.error_handlers import (
 from a2a.utils.errors import (
     AuthenticatedExtendedCardNotConfiguredError,
     InvalidRequestError,
-    ServerError,
 )
 
 
@@ -127,10 +126,8 @@ class RESTAdapter:
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
-            raise ServerError(
-                error=InvalidRequestError(
-                    message=f'Failed to pre-consume request body: {e}'
-                )
+            raise InvalidRequestError(
+                message=f'Failed to pre-consume request body: {e}'
             ) from e
 
         call_context = self._context_builder.build(request)
@@ -179,10 +176,8 @@ class RESTAdapter:
             A JSONResponse containing the authenticated card.
         """
         if not self.agent_card.capabilities.extended_agent_card:
-            raise ServerError(
-                error=AuthenticatedExtendedCardNotConfiguredError(
-                    message='Authenticated card not supported'
-                )
+            raise AuthenticatedExtendedCardNotConfiguredError(
+                message='Authenticated card not supported'
             )
         card_to_serve = self.extended_agent_card
 

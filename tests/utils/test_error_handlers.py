@@ -17,7 +17,6 @@ from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import ServerError
 
 
 class MockJSONResponse:
@@ -28,12 +27,12 @@ class MockJSONResponse:
 
 @pytest.mark.asyncio
 async def test_rest_error_handler_server_error():
-    """Test rest_error_handler with ServerError."""
+    """Test rest_error_handler with A2AError."""
     error = InvalidRequestError(message='Bad request')
 
     @rest_error_handler
     async def failing_func():
-        raise ServerError(error=error)
+        raise error
 
     with patch('a2a.utils.error_handlers.JSONResponse', MockJSONResponse):
         result = await failing_func()
@@ -61,17 +60,17 @@ async def test_rest_error_handler_unknown_exception():
 
 @pytest.mark.asyncio
 async def test_rest_stream_error_handler_server_error():
-    """Test rest_stream_error_handler with ServerError."""
+    """Test rest_stream_error_handler with A2AError."""
     error = InternalError(message='Internal server error')
 
     @rest_stream_error_handler
     async def failing_stream():
-        raise ServerError(error=error)
+        raise error
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InternalError) as exc_info:
         await failing_stream()
 
-    assert exc_info.value.error == error
+    assert exc_info.value == error
 
 
 @pytest.mark.asyncio

@@ -21,7 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
-from a2a.utils.errors import ServerError, UnsupportedOperationError
+from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.telemetry import trace_function
 
 
@@ -137,7 +137,7 @@ def validate(
 
     Typically used on class methods to check capabilities or configuration
     before executing the method's logic. If the expression is False,
-    a `ServerError` with an `UnsupportedOperationError` is raised.
+    an `UnsupportedOperationError` is raised.
 
     Args:
         expression: A callable that takes the instance (`self`) as its argument
@@ -148,7 +148,7 @@ def validate(
     Examples:
         Demonstrating with an async method:
         >>> import asyncio
-        >>> from a2a.utils.errors import ServerError
+        >>> from a2a.utils.errors import UnsupportedOperationError
         >>>
         >>> class MyAgent:
         ...     def __init__(self, streaming_enabled: bool):
@@ -171,8 +171,8 @@ def validate(
         ...     agent_fail = MyAgent(streaming_enabled=False)
         ...     try:
         ...         await agent_fail.stream_response('world')
-        ...     except ServerError as e:
-        ...         print(e.error.message)
+        ...     except UnsupportedOperationError as e:
+        ...         print(e.message)
         >>>
         >>> asyncio.run(run_async_test())
         Streaming: hello
@@ -194,8 +194,8 @@ def validate(
         >>> agent = SecureAgent()
         >>> try:
         ...     agent.secure_operation('secret')
-        ... except ServerError as e:
-        ...     print(e.error.message)
+        ... except UnsupportedOperationError as e:
+        ...     print(e.message)
         Authentication must be enabled for this operation
 
     Note:
@@ -210,9 +210,7 @@ def validate(
                 if not expression(self):
                     final_message = error_message or str(expression)
                     logger.error('Unsupported Operation: %s', final_message)
-                    raise ServerError(
-                        UnsupportedOperationError(message=final_message)
-                    )
+                    raise UnsupportedOperationError(message=final_message)
                 return await function(self, *args, **kwargs)
 
             return async_wrapper
@@ -222,9 +220,7 @@ def validate(
             if not expression(self):
                 final_message = error_message or str(expression)
                 logger.error('Unsupported Operation: %s', final_message)
-                raise ServerError(
-                    UnsupportedOperationError(message=final_message)
-                )
+                raise UnsupportedOperationError(message=final_message)
             return function(self, *args, **kwargs)
 
         return sync_wrapper
@@ -239,7 +235,7 @@ def validate_async_generator(
 
     Typically used on class methods to check capabilities or configuration
     before executing the method's logic. If the expression is False,
-    a `ServerError` with an `UnsupportedOperationError` is raised.
+    an `UnsupportedOperationError` is raised.
 
     Args:
         expression: A callable that takes the instance (`self`) as its argument
@@ -250,7 +246,7 @@ def validate_async_generator(
     Examples:
         Streaming capability validation with success case:
         >>> import asyncio
-        >>> from a2a.utils.errors import ServerError
+        >>> from a2a.utils.errors import UnsupportedOperationError
         >>>
         >>> class StreamingAgent:
         ...     def __init__(self, streaming_enabled: bool):
@@ -291,8 +287,8 @@ def validate_async_generator(
         ...     try:
         ...         async for _ in agent.real_time_updates():
         ...             pass
-        ...     except ServerError as e:
-        ...         print(e.error.message)
+        ...     except UnsupportedOperationError as e:
+        ...         print(e.message)
         >>>
         >>> asyncio.run(run_error_test())
         Real-time feature must be enabled to stream updates
@@ -308,9 +304,7 @@ def validate_async_generator(
             if not expression(self):
                 final_message = error_message or str(expression)
                 logger.error('Unsupported Operation: %s', final_message)
-                raise ServerError(
-                    UnsupportedOperationError(message=final_message)
-                )
+                raise UnsupportedOperationError(message=final_message)
             async for i in function(self, *args, **kwargs):
                 yield i
 

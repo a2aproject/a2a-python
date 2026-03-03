@@ -54,7 +54,6 @@ from a2a.types.a2a_pb2 import (
 
 # Import SDK-specific error types from utils.errors
 from a2a.utils.errors import (
-    A2AException,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -84,7 +83,6 @@ A2ARequest = (
 
 __all__ = [
     # SDK-specific types from extras
-    'A2AException',
     'A2ARequest',
     # Proto types
     'APIKeySecurityScheme',

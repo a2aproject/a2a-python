@@ -25,7 +25,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageResponse as SendMessageResponseProto,
 )
 from a2a.utils.errors import (
-    A2AException,
+    A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -40,7 +40,7 @@ from a2a.utils.errors import (
 )
 
 
-EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
+EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     TaskNotFoundError: JSONRPCError,
     TaskNotCancelableError: JSONRPCError,
     PushNotificationNotSupportedError: JSONRPCError,
@@ -54,7 +54,7 @@ EXCEPTION_MAP: dict[type[A2AException], type[JSONRPCError]] = {
     InternalError: JSONRPCInternalError,
 }
 
-ERROR_CODE_MAP: dict[type[A2AException], int] = {
+ERROR_CODE_MAP: dict[type[A2AError], int] = {
     TaskNotFoundError: -32001,
     TaskNotCancelableError: -32002,
     PushNotificationNotSupportedError: -32003,
@@ -69,7 +69,7 @@ ERROR_CODE_MAP: dict[type[A2AException], int] = {
 
 
 # Tuple of all A2AError types for isinstance checks
-_A2A_ERROR_TYPES: tuple[type, ...] = (A2AException,)
+_A2A_ERROR_TYPES: tuple[type, ...] = (A2AError,)
 
 
 # Result types for handler responses
@@ -81,7 +81,7 @@ EventTypes = (
     | TaskPushNotificationConfig
     | StreamResponse
     | SendMessageResponseProto
-    | A2AException
+    | A2AError
     | JSONRPCError
     | list[TaskPushNotificationConfig]
     | ListTasksResponse
@@ -91,13 +91,13 @@ EventTypes = (
 
 def build_error_response(
     request_id: str | int | None,
-    error: A2AException | JSONRPCError,
+    error: A2AError | JSONRPCError,
 ) -> dict[str, Any]:
     """Build a JSON-RPC error response dict.
 
     Args:
         request_id: The ID of the request that caused the error.
-        error: The A2AException or JSONRPCError object.
+        error: The A2AError or JSONRPCError object.
 
     Returns:
         A dict representing the JSON-RPC error response.
@@ -105,7 +105,7 @@ def build_error_response(
     jsonrpc_error: JSONRPCError
     if isinstance(error, JSONRPCError):
         jsonrpc_error = error
-    elif isinstance(error, A2AException):
+    elif isinstance(error, A2AError):
         error_type = type(error)
         model_class = EXCEPTION_MAP.get(error_type, JSONRPCInternalError)
         code = ERROR_CODE_MAP.get(error_type, -32603)
@@ -145,7 +145,7 @@ def prepare_response_object(
             result = MessageToDict(response, preserving_proto_field_name=False)
         return JSONRPC20Response(result=result, _id=request_id).data
 
-    if isinstance(response, A2AException | JSONRPCError):
+    if isinstance(response, A2AError | JSONRPCError):
         return build_error_response(request_id, response)
 
     # If response is not an expected success type and not an error,

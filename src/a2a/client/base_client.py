@@ -1,8 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
-from types import TracebackType
 from typing import Any
-
-from typing_extensions import Self
 
 from a2a.client.client import (
     Client,
@@ -50,19 +47,6 @@ class BaseClient(Client):
         self._card = card
         self._config = config
         self._transport = transport
-
-    async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the client itself."""
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exits the async context manager, ensuring close() is called."""
-        await self.close()
 
     async def send_message(
         self,
@@ -208,7 +192,7 @@ class BaseClient(Client):
             request, context=context, extensions=extensions
         )
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -225,11 +209,11 @@ class BaseClient(Client):
         Returns:
             The created or updated `TaskPushNotificationConfig` object.
         """
-        return await self._transport.set_task_callback(
+        return await self._transport.create_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -246,11 +230,11 @@ class BaseClient(Client):
         Returns:
             A `TaskPushNotificationConfig` object containing the configuration.
         """
-        return await self._transport.get_task_callback(
+        return await self._transport.get_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -267,11 +251,11 @@ class BaseClient(Client):
         Returns:
             A `ListTaskPushNotificationConfigsResponse` object.
         """
-        return await self._transport.list_task_callback(
+        return await self._transport.list_task_push_notification_configs(
             request, context=context, extensions=extensions
         )
 
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,
@@ -285,7 +269,7 @@ class BaseClient(Client):
             context: The client call context.
             extensions: List of extensions to be activated.
         """
-        await self._transport.delete_task_callback(
+        await self._transport.delete_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 

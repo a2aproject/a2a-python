@@ -95,7 +95,7 @@ class ClientTransport(ABC):
         """Requests the agent to cancel a specific task."""
 
     @abstractmethod
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -105,7 +105,7 @@ class ClientTransport(ABC):
         """Sets or updates the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -115,7 +115,7 @@ class ClientTransport(ABC):
         """Retrieves the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -125,7 +125,7 @@ class ClientTransport(ABC):
         """Lists push notification configurations for a specific task."""
 
     @abstractmethod
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,

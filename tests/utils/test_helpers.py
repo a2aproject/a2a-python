@@ -21,7 +21,7 @@ from a2a.types import (
     TaskState,
     TaskStatus,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.helpers import (
     _clean_empty,
     append_artifact_to_task,
@@ -265,7 +265,7 @@ def test_validate_decorator():
 
     # Test failing condition
     obj.condition = False
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         obj.test_method()
     assert 'Condition not met' in str(exc_info.value)
 

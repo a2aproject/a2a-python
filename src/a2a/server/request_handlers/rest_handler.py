@@ -31,7 +31,7 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError, TaskNotFoundError
+from a2a.utils.errors import TaskNotFoundError
 from a2a.utils.helpers import validate
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -140,7 +140,7 @@ class RESTHandler:
         )
         if task:
             return MessageToDict(task)
-        raise ServerError(error=TaskNotFoundError())
+        raise TaskNotFoundError
 
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
@@ -216,7 +216,7 @@ class RESTHandler:
             A `dict` containing the config object.
 
         Raises:
-            ServerError: If push notifications are not supported by the agent
+            UnsupportedOperationError: If push notifications are not supported by the agent
                 (due to the `@validate` decorator), A2AError if processing error is
                 found.
         """
@@ -254,7 +254,7 @@ class RESTHandler:
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(task)
-        raise ServerError(error=TaskNotFoundError())
+        raise TaskNotFoundError
 
     async def delete_push_notification(
         self,
