@@ -48,7 +48,6 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
-    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -132,7 +131,7 @@ class DefaultRequestHandler(RequestHandler):
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         return apply_history_length(task, params)
 
@@ -169,14 +168,12 @@ class DefaultRequestHandler(RequestHandler):
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
-            raise ServerError(
-                error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {task.status.state}'
-                )
+            raise TaskNotCancelableError(
+                message=f'Task cannot be canceled - current state: {task.status.state}'
             )
 
         task_manager = TaskManager(
@@ -208,17 +205,13 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         result = await result_aggregator.consume_all(consumer)
         if not isinstance(result, Task):
-            raise ServerError(
-                error=InternalError(
-                    message='Agent did not return valid response for cancel'
-                )
+            raise InternalError(
+                message='Agent did not return valid response for cancel'
             )
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
-            raise ServerError(
-                error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {result.status.state}'
-                )
+            raise TaskNotCancelableError(
+                message=f'Task cannot be canceled - current state: {result.status.state}'
             )
 
         return result
@@ -260,18 +253,14 @@ class DefaultRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise ServerError(
-                    error=InvalidParamsError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state}'
-                    )
+                raise InvalidParamsError(
+                    message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
         elif params.message.task_id:
-            raise ServerError(
-                error=TaskNotFoundError(
-                    message=f'Task {params.message.task_id} was specified but does not exist'
-                )
+            raise TaskNotFoundError(
+                message=f'Task {params.message.task_id} was specified but does not exist'
             )
 
         # Build request context
@@ -317,9 +306,7 @@ class DefaultRequestHandler(RequestHandler):
                 event_task_id,
                 task_id,
             )
-            raise ServerError(
-                InternalError(message='Task ID mismatch in agent response')
-            )
+            raise InternalError(message='Task ID mismatch in agent response')
 
     async def _send_push_notification_if_needed(
         self, task_id: str, event: Event
@@ -389,7 +376,7 @@ class DefaultRequestHandler(RequestHandler):
                 await self._cleanup_producer(producer_task, task_id)
 
         if not result:
-            raise ServerError(error=InternalError())
+            raise InternalError
 
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
@@ -496,12 +483,12 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushNotifier` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         await self._push_config_store.set_info(
             task_id,
@@ -524,13 +511,13 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError
 
         task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         push_notification_configs: list[PushNotificationConfig] = (
             await self._push_config_store.get_info(
@@ -546,9 +533,7 @@ class DefaultRequestHandler(RequestHandler):
                     push_notification_config=config,
                 )
 
-        raise ServerError(
-            error=InternalError(message='Push notification config not found')
-        )
+        raise InternalError(message='Push notification config not found')
 
     async def on_subscribe_to_task(
         self,
@@ -563,13 +548,11 @@ class DefaultRequestHandler(RequestHandler):
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         if task.status.state in TERMINAL_TASK_STATES:
-            raise ServerError(
-                error=UnsupportedOperationError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
-                )
+            raise UnsupportedOperationError(
+                message=f'Task {task.id} is in terminal state: {task.status.state}'
             )
 
         # The operation MUST return a Task object as the first event in the stream
@@ -588,7 +571,7 @@ class DefaultRequestHandler(RequestHandler):
 
         queue = await self._queue_manager.tap(task.id)
         if not queue:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         consumer = EventConsumer(queue)
         async for event in result_aggregator.consume_and_emit(consumer):
@@ -604,12 +587,12 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         push_notification_config_list = await self._push_config_store.get_info(
             task_id, context or ServerCallContext()
@@ -635,13 +618,13 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError
 
         task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         await self._push_config_store.delete_info(
             task_id, context or ServerCallContext(), config_id

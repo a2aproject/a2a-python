@@ -29,12 +29,11 @@ from a2a.extensions.common import (
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.jsonrpc_models import JSONParseError
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.errors import ServerError, TaskNotFoundError
+from a2a.utils.errors import A2AError, TaskNotFoundError
 from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 
 
@@ -84,6 +83,20 @@ class DefaultCallContextBuilder(CallContextBuilder):
         )
 
 
+_ERROR_CODE_MAP = {
+    types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
+    types.MethodNotFoundError: grpc.StatusCode.NOT_FOUND,
+    types.InvalidParamsError: grpc.StatusCode.INVALID_ARGUMENT,
+    types.InternalError: grpc.StatusCode.INTERNAL,
+    types.TaskNotFoundError: grpc.StatusCode.NOT_FOUND,
+    types.TaskNotCancelableError: grpc.StatusCode.UNIMPLEMENTED,
+    types.PushNotificationNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
+    types.UnsupportedOperationError: grpc.StatusCode.UNIMPLEMENTED,
+    types.ContentTypeNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
+    types.InvalidAgentResponseError: grpc.StatusCode.INTERNAL,
+}
+
+
 class GrpcHandler(a2a_grpc.A2AServiceServicer):
     """Maps incoming gRPC requests to the appropriate request handler method."""
 
@@ -124,7 +137,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
 
         Returns:
             A `SendMessageResponse` object containing the result (Task or
-            Message) or throws an error response if a `ServerError` is raised
+            Message) or throws an error response if an A2AError is raised
             by the handler.
         """
         try:
@@ -137,7 +150,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             if isinstance(task_or_message, a2a_pb2.Task):
                 return a2a_pb2.SendMessageResponse(task=task_or_message)
             return a2a_pb2.SendMessageResponse(message=task_or_message)
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.SendMessageResponse()
 
@@ -162,7 +175,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         Yields:
             `StreamResponse` objects containing streaming events
             (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent)
-            or gRPC error responses if a `ServerError` is raised.
+            or gRPC error responses if an A2AError is raised.
         """
         server_context = self.context_builder.build(context)
         try:
@@ -171,7 +184,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             ):
                 yield proto_utils.to_stream_response(event)
             self._set_extension_metadata(context, server_context)
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return
 
@@ -196,10 +209,8 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             )
             if task:
                 return task
-            await self.abort_context(
-                ServerError(error=TaskNotFoundError()), context
-            )
-        except ServerError as e:
+            await self.abort_context(TaskNotFoundError(), context)
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.Task()
 
@@ -231,7 +242,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 server_context,
             ):
                 yield proto_utils.to_stream_response(event)
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
 
     async def GetTaskPushNotificationConfig(
@@ -256,7 +267,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                     server_context,
                 )
             )
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
 
@@ -281,7 +292,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `TaskPushNotificationConfig` object
 
         Raises:
-            ServerError: If push notifications are not supported by the agent
+            A2AError: If push notifications are not supported by the agent
                 (due to the `@validate` decorator).
         """
         try:
@@ -290,7 +301,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 request,
                 server_context,
             )
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.TaskPushNotificationConfig()
 
@@ -314,7 +325,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 request,
                 server_context,
             )
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.ListTaskPushNotificationConfigsResponse()
 
@@ -339,7 +350,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 server_context,
             )
             return empty_pb2.Empty()
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return empty_pb2.Empty()
 
@@ -364,10 +375,8 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             )
             if task:
                 return task
-            await self.abort_context(
-                ServerError(error=TaskNotFoundError()), context
-            )
-        except ServerError as e:
+            await self.abort_context(TaskNotFoundError(), context)
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.Task()
 
@@ -390,7 +399,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             return await self.request_handler.on_list_tasks(
                 request, server_context
             )
-        except ServerError as e:
+        except A2AError as e:
             await self.abort_context(e, context)
         return a2a_pb2.ListTasksResponse()
 
@@ -406,70 +415,20 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         return card_to_serve
 
     async def abort_context(
-        self, error: ServerError, context: grpc.aio.ServicerContext
+        self, error: A2AError, context: grpc.aio.ServicerContext
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
-        match error.error:
-            case JSONParseError():
-                await context.abort(
-                    grpc.StatusCode.INTERNAL,
-                    f'JSONParseError: {error.error.message}',
-                )
-            case types.InvalidRequestError():
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    f'InvalidRequestError: {error.error.message}',
-                )
-            case types.MethodNotFoundError():
-                await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f'MethodNotFoundError: {error.error.message}',
-                )
-            case types.InvalidParamsError():
-                await context.abort(
-                    grpc.StatusCode.INVALID_ARGUMENT,
-                    f'InvalidParamsError: {error.error.message}',
-                )
-            case types.InternalError():
-                await context.abort(
-                    grpc.StatusCode.INTERNAL,
-                    f'InternalError: {error.error.message}',
-                )
-            case types.TaskNotFoundError():
-                await context.abort(
-                    grpc.StatusCode.NOT_FOUND,
-                    f'TaskNotFoundError: {error.error.message}',
-                )
-            case types.TaskNotCancelableError():
-                await context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    f'TaskNotCancelableError: {error.error.message}',
-                )
-            case types.PushNotificationNotSupportedError():
-                await context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    f'PushNotificationNotSupportedError: {error.error.message}',
-                )
-            case types.UnsupportedOperationError():
-                await context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    f'UnsupportedOperationError: {error.error.message}',
-                )
-            case types.ContentTypeNotSupportedError():
-                await context.abort(
-                    grpc.StatusCode.UNIMPLEMENTED,
-                    f'ContentTypeNotSupportedError: {error.error.message}',
-                )
-            case types.InvalidAgentResponseError():
-                await context.abort(
-                    grpc.StatusCode.INTERNAL,
-                    f'InvalidAgentResponseError: {error.error.message}',
-                )
-            case _:
-                await context.abort(
-                    grpc.StatusCode.UNKNOWN,
-                    f'Unknown error type: {error.error}',
-                )
+        code = _ERROR_CODE_MAP.get(type(error))
+        if code:
+            await context.abort(
+                code,
+                f'{type(error).__name__}: {error.message}',
+            )
+        else:
+            await context.abort(
+                grpc.StatusCode.UNKNOWN,
+                f'Unknown error type: {error}',
+            )
 
     def _set_extension_metadata(
         self,

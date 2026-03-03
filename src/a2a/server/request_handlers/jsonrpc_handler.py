@@ -42,7 +42,6 @@ from a2a.utils.errors import (
     InvalidRequestError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
-    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -177,10 +176,8 @@ class JSONRPCHandler:
 
             result = MessageToDict(response)
             return _build_success_response(request_id, result)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
@@ -214,10 +211,10 @@ class JSONRPCHandler:
                 yield _build_success_response(
                     self._get_request_id(context), result
                 )
-        except ServerError as e:
+        except A2AError as e:
             yield _build_error_response(
                 self._get_request_id(context),
-                e.error if e.error else InternalError(),
+                e,
             )
 
     async def on_cancel_task(
@@ -237,10 +234,8 @@ class JSONRPCHandler:
         request_id = self._get_request_id(context)
         try:
             task = await self.request_handler.on_cancel_task(request, context)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
         if task:
             result = MessageToDict(task, preserving_proto_field_name=False)
@@ -276,10 +271,10 @@ class JSONRPCHandler:
                 yield _build_success_response(
                     self._get_request_id(context), result
                 )
-        except ServerError as e:
+        except A2AError as e:
             yield _build_error_response(
                 self._get_request_id(context),
-                e.error if e.error else InternalError(),
+                e,
             )
 
     async def get_push_notification_config(
@@ -305,10 +300,8 @@ class JSONRPCHandler:
             )
             result = MessageToDict(config, preserving_proto_field_name=False)
             return _build_success_response(request_id, result)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     @validate(
         lambda self: self.agent_card.capabilities.push_notifications,
@@ -331,7 +324,7 @@ class JSONRPCHandler:
             A dict representing the JSON-RPC response.
 
         Raises:
-            ServerError: If push notifications are not supported by the agent
+            UnsupportedOperationError: If push notifications are not supported by the agent
                 (due to the `@validate` decorator).
         """
         request_id = self._get_request_id(context)
@@ -344,10 +337,8 @@ class JSONRPCHandler:
                 result_config, preserving_proto_field_name=False
             )
             return _build_success_response(request_id, result)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     async def on_get_task(
         self,
@@ -366,10 +357,8 @@ class JSONRPCHandler:
         request_id = self._get_request_id(context)
         try:
             task = await self.request_handler.on_get_task(request, context)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
         if task:
             result = MessageToDict(task, preserving_proto_field_name=False)
@@ -398,10 +387,8 @@ class JSONRPCHandler:
             )
             result = MessageToDict(response, preserving_proto_field_name=False)
             return _build_success_response(request_id, result)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     async def list_push_notification_configs(
         self,
@@ -425,10 +412,8 @@ class JSONRPCHandler:
             # response is a ListTaskPushNotificationConfigsResponse proto
             result = MessageToDict(response, preserving_proto_field_name=False)
             return _build_success_response(request_id, result)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     async def delete_push_notification_config(
         self,
@@ -450,10 +435,8 @@ class JSONRPCHandler:
                 request, context
             )
             return _build_success_response(request_id, None)
-        except ServerError as e:
-            return _build_error_response(
-                request_id, e.error if e.error else InternalError()
-            )
+        except A2AError as e:
+            return _build_error_response(request_id, e)
 
     async def get_authenticated_extended_card(
         self,
@@ -471,10 +454,8 @@ class JSONRPCHandler:
         """
         request_id = self._get_request_id(context)
         if not self.agent_card.capabilities.extended_agent_card:
-            raise ServerError(
-                error=AuthenticatedExtendedCardNotConfiguredError(
-                    message='Authenticated card not supported'
-                )
+            raise AuthenticatedExtendedCardNotConfiguredError(
+                message='Authenticated card not supported'
             )
 
         base_card = self.extended_agent_card

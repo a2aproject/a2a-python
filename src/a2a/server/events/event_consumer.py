@@ -13,7 +13,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InternalError, ServerError
+from a2a.utils.errors import InternalError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -49,7 +49,7 @@ class EventConsumer:
             The next event from the queue.
 
         Raises:
-            ServerError: If the queue is empty when attempting to dequeue
+            InternalError: If the queue is empty when attempting to dequeue
                 immediately.
         """
         logger.debug('Attempting to consume one event.')
@@ -57,8 +57,8 @@ class EventConsumer:
             event = await self.queue.dequeue_event(no_wait=True)
         except asyncio.QueueEmpty as e:
             logger.warning('Event queue was empty in consume_one.')
-            raise ServerError(
-                InternalError(message='Agent did not return any response')
+            raise InternalError(
+                message='Agent did not return any response'
             ) from e
 
         logger.debug('Dequeued event of type: %s in consume_one.', type(event))

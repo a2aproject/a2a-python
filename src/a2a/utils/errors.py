@@ -4,8 +4,6 @@ This module contains A2A-specific error codes,
 as well as server exception classes.
 """
 
-from typing import Any
-
 
 class A2AError(Exception):
     """Base exception for A2A errors."""
@@ -89,7 +87,6 @@ class MethodNotFoundError(A2AError):
 
 __all__ = [
     'A2AError',
-    'A2AServerError',
     'AuthenticatedExtendedCardNotConfiguredError',
     'ContentTypeNotSupportedError',
     'InternalError',
@@ -97,58 +94,8 @@ __all__ = [
     'InvalidParamsError',
     'InvalidRequestError',
     'MethodNotFoundError',
-    'MethodNotImplementedError',
     'PushNotificationNotSupportedError',
-    'ServerError',
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
 ]
-
-
-class A2AServerError(Exception):
-    """Base exception for A2A Server errors."""
-
-
-class MethodNotImplementedError(A2AServerError):
-    """Exception raised for methods that are not implemented by the server handler."""
-
-    def __init__(
-        self, message: str = 'This method is not implemented by the server'
-    ):
-        """Initializes the MethodNotImplementedError.
-
-        Args:
-            message: A descriptive error message.
-        """
-        self.message = message
-        super().__init__(f'Not Implemented operation Error: {message}')
-
-
-class ServerError(Exception):
-    """Wrapper exception for A2A errors originating from the server's logic.
-
-    This exception is used internally by request handlers and other server components
-    to signal a specific error.
-    """
-
-    def __init__(
-        self,
-        error: Exception | Any | None,
-    ):
-        """Initializes the ServerError.
-
-        Args:
-            error: The specific A2A exception.
-        """
-        self.error = error
-
-    def __str__(self) -> str:
-        """Returns a readable representation of the internal error."""
-        if self.error is None:
-            return 'None'
-        return str(self.error)
-
-    def __repr__(self) -> str:
-        """Returns an unambiguous representation for developers showing how the ServerError was constructed with the internal error."""
-        return f'{self.__class__.__name__}({self.error!r})'

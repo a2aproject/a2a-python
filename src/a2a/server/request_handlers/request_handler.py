@@ -19,7 +19,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import ServerError, UnsupportedOperationError
+from a2a.utils.errors import UnsupportedOperationError
 
 
 class RequestHandler(ABC):
@@ -120,9 +120,9 @@ class RequestHandler(ABC):
             `Event` objects from the agent's execution.
 
         Raises:
-            ServerError(UnsupportedOperationError): By default, if not implemented.
+            UnsupportedOperationError: By default, if not implemented.
         """
-        raise ServerError(error=UnsupportedOperationError())
+        raise UnsupportedOperationError
         yield
 
     @abstractmethod
@@ -179,9 +179,9 @@ class RequestHandler(ABC):
              `Event` objects from the agent's ongoing execution for the specified task.
 
         Raises:
-             ServerError(UnsupportedOperationError): By default, if not implemented.
+             UnsupportedOperationError: By default, if not implemented.
         """
-        raise ServerError(error=UnsupportedOperationError())
+        raise UnsupportedOperationError
         yield
 
     @abstractmethod

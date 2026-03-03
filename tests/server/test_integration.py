@@ -53,7 +53,6 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
 )
-from a2a.utils.errors import MethodNotImplementedError
 
 
 # === TEST SETUP ===
@@ -813,9 +812,11 @@ def test_fastapi_dynamic_agent_card_modifier_sync(
     assert data['name'] == 'Dynamically Modified Agent'
 
 
-def test_method_not_implemented(client: TestClient, handler: mock.AsyncMock):
-    """Test handling MethodNotImplementedError."""
-    handler.on_get_task.side_effect = MethodNotImplementedError()
+def test_unsupported_operation_error(
+    client: TestClient, handler: mock.AsyncMock
+):
+    """Test handling UnsupportedOperationError."""
+    handler.on_get_task.side_effect = UnsupportedOperationError()
 
     response = client.post(
         '/',

@@ -50,7 +50,6 @@ from a2a.utils.constants import (
 )
 from a2a.utils.errors import (
     A2AError,
-    MethodNotImplementedError,
     UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await
@@ -394,11 +393,6 @@ class JSONRPCApplication(ABC):
 
             return await self._process_non_streaming_request(
                 request_id, specific_request, call_context
-            )
-        except MethodNotImplementedError:
-            traceback.print_exc()
-            return self._generate_error_response(
-                request_id, UnsupportedOperationError()
             )
         except json.decoder.JSONDecodeError as e:
             traceback.print_exc()
