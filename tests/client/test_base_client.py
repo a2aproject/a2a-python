@@ -1,18 +1,20 @@
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
-from a2a.client.transports.base import ClientTransport
+from a2a.client.transports.base import ClientTransport, TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
-    AgentInterface,
     AgentCard,
+    AgentInterface,
     Message,
     Part,
     Role,
     SendMessageConfiguration,
+    SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
     Task,
@@ -276,3 +278,20 @@ async def test_send_message_callsite_config_overrides_streaming(
     assert params.configuration.history_length == 0
     assert params.configuration.blocking is True
     assert params.configuration.accepted_output_modes == ['text/plain']
+
+
+@pytest.mark.asyncio
+async def test_tenant_transport_decorator(mock_transport: AsyncMock) -> None:
+    tenant_id = 'test-tenant'
+    decorator = TenantTransportDecorator(mock_transport, tenant_id)
+
+    request = SendMessageRequest(
+        message=Message(parts=[Part(text='hello')]),
+    )
+    mock_transport.send_message.return_value = SendMessageResponse()
+
+    await decorator.send_message(request)
+
+    mock_transport.send_message.assert_called_once()
+    called_request = mock_transport.send_message.call_args[0][0]
+    assert called_request.tenant == tenant_id

@@ -96,6 +96,14 @@ class RestTransport(ClientTransport):
         )
         return payload, modified_kwargs
 
+    def _get_path(self, base_path: str, tenant: str | None) -> str:
+        """Returns the full path, prepending the tenant if provided."""
+        return f'/{tenant}{base_path}' if tenant else base_path
+
+    def _pop_tenant(self, data: dict[str, Any]) -> str | None:
+        """Pops and returns the tenant from the dictionary if it exists."""
+        return data.pop('tenant', None)
+
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -107,8 +115,10 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
         )
+        tenant = self._pop_tenant(payload) or request.tenant
+        path = self._get_path('/v1/message:send', tenant)
         response_data = await self._send_post_request(
-            '/v1/message:send', payload, modified_kwargs
+            path, payload, modified_kwargs
         )
         response: SendMessageResponse = ParseDict(
             response_data, SendMessageResponse()
@@ -126,13 +136,15 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
         )
+        tenant = self._pop_tenant(payload) or request.tenant
+        path = self._get_path('/v1/message:stream', tenant)
 
         modified_kwargs.setdefault('timeout', None)
 
         async with aconnect_sse(
             self.httpx_client,
             'POST',
-            f'{self.url}/v1/message:stream',
+            f'{self.url}{path}',
             json=payload,
             **modified_kwargs,
         ) as event_source:
@@ -239,8 +251,11 @@ class RestTransport(ClientTransport):
         if 'id' in params:
             del params['id']  # id is part of the URL path, not query params
 
+        tenant = self._pop_tenant(params) or request.tenant
+        path = self._get_path(f'/v1/tasks/{request.id}', tenant)
+
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.id}',
+            path,
             params,
             modified_kwargs,
         )
@@ -255,7 +270,7 @@ class RestTransport(ClientTransport):
         extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
-        _, modified_kwargs = await self._apply_interceptors(
+        payload, modified_kwargs = await self._apply_interceptors(
             MessageToDict(request, preserving_proto_field_name=True),
             self._get_http_args(context),
             context,
@@ -264,9 +279,13 @@ class RestTransport(ClientTransport):
             modified_kwargs,
             extensions if extensions is not None else self.extensions,
         )
+
+        tenant = self._pop_tenant(payload) or request.tenant
+        path = self._get_path('/v1/tasks', tenant)
+
         response_data = await self._send_get_request(
-            '/v1/tasks',
-            _model_to_query_params(request),
+            path,
+            payload,
             modified_kwargs,
         )
         response: ListTasksResponse = ParseDict(
@@ -292,8 +311,12 @@ class RestTransport(ClientTransport):
             modified_kwargs,
             context,
         )
+
+        tenant = self._pop_tenant(payload) or request.tenant
+        path = self._get_path(f'/v1/tasks/{request.id}:cancel', tenant)
+
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
+            path, payload, modified_kwargs
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -314,8 +337,14 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._apply_interceptors(
             payload, modified_kwargs, context
         )
+
+        tenant = self._pop_tenant(payload) or request.tenant
+        path = self._get_path(
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs', tenant
+        )
+
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            path,
             payload,
             modified_kwargs,
         )
@@ -346,8 +375,15 @@ class RestTransport(ClientTransport):
             del params['id']
         if 'task_id' in params:
             del params['task_id']
-        response_data = await self._send_get_request(
+
+        tenant = self._pop_tenant(params) or request.tenant
+        path = self._get_path(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            tenant,
+        )
+
+        response_data = await self._send_get_request(
+            path,
             params,
             modified_kwargs,
         )
@@ -376,8 +412,14 @@ class RestTransport(ClientTransport):
         )
         if 'task_id' in params:
             del params['task_id']
+
+        tenant = self._pop_tenant(params) or request.tenant
+        path = self._get_path(
+            f'/v1/tasks/{request.task_id}/pushNotificationConfigs', tenant
+        )
+
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            path,
             params,
             modified_kwargs,
         )
@@ -408,8 +450,15 @@ class RestTransport(ClientTransport):
             del params['id']
         if 'task_id' in params:
             del params['task_id']
-        await self._send_delete_request(
+
+        tenant = self._pop_tenant(params) or request.tenant
+        path = self._get_path(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            tenant,
+        )
+
+        await self._send_delete_request(
+            path,
             params,
             modified_kwargs,
         )
@@ -428,10 +477,13 @@ class RestTransport(ClientTransport):
         )
         modified_kwargs.setdefault('timeout', None)
 
+        tenant = request.tenant
+        path = self._get_path(f'/v1/tasks/{request.id}:subscribe', tenant)
+
         async with aconnect_sse(
             self.httpx_client,
             'GET',
-            f'{self.url}/v1/tasks/{request.id}:subscribe',
+            f'{self.url}{path}',
             **modified_kwargs,
         ) as event_source:
             try:
@@ -491,11 +543,6 @@ class RestTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
-
-
-def _model_to_query_params(instance: Message) -> dict[str, str]:
-    data = MessageToDict(instance, preserving_proto_field_name=True)
-    return _json_to_query_params(data)
 
 
 def _json_to_query_params(data: dict[str, Any]) -> dict[str, str]:

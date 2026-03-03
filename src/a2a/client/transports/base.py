@@ -3,6 +3,7 @@ from collections.abc import AsyncGenerator, Callable
 from types import TracebackType
 
 from typing_extensions import Self
+from google.protobuf.message import Message
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types.a2a_pb2 import (
@@ -158,3 +159,164 @@ class ClientTransport(ABC):
     @abstractmethod
     async def close(self) -> None:
         """Closes the transport."""
+
+
+class TenantTransportDecorator(ClientTransport):
+    """A transport decorator that attaches a tenant to all requests."""
+
+    def __init__(self, base: ClientTransport, tenant: str):
+        self._base = base
+        self._tenant = tenant
+
+    def update_tenant(self, request: Message) -> str | None:
+        """Ensures the tenant is set on the request if provided and not already set.
+
+        Returns:
+            The tenant used for the request.
+        """
+        current_tenant = getattr(request, 'tenant', None)
+        if current_tenant:
+            return current_tenant
+
+        if self._tenant and hasattr(request, 'tenant'):
+            request.tenant = self._tenant
+            return self._tenant
+        return None
+
+    async def send_message(
+        self,
+        request: SendMessageRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> SendMessageResponse:
+        self.update_tenant(request)
+        return await self._base.send_message(
+            request, context=context, extensions=extensions
+        )
+
+    async def send_message_streaming(
+        self,
+        request: SendMessageRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> AsyncGenerator[StreamResponse]:
+        self.update_tenant(request)
+        async for event in self._base.send_message_streaming(
+            request, context=context, extensions=extensions
+        ):
+            yield event
+
+    async def get_task(
+        self,
+        request: GetTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> Task:
+        self.update_tenant(request)
+        return await self._base.get_task(
+            request, context=context, extensions=extensions
+        )
+
+    async def list_tasks(
+        self,
+        request: ListTasksRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTasksResponse:
+        self.update_tenant(request)
+        return await self._base.list_tasks(
+            request, context=context, extensions=extensions
+        )
+
+    async def cancel_task(
+        self,
+        request: CancelTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> Task:
+        self.update_tenant(request)
+        return await self._base.cancel_task(
+            request, context=context, extensions=extensions
+        )
+
+    async def set_task_callback(
+        self,
+        request: CreateTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> TaskPushNotificationConfig:
+        self.update_tenant(request)
+        return await self._base.set_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def get_task_callback(
+        self,
+        request: GetTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> TaskPushNotificationConfig:
+        self.update_tenant(request)
+        return await self._base.get_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def list_task_callback(
+        self,
+        request: ListTaskPushNotificationConfigsRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        self.update_tenant(request)
+        return await self._base.list_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def delete_task_callback(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> None:
+        self.update_tenant(request)
+        await self._base.delete_task_callback(
+            request, context=context, extensions=extensions
+        )
+
+    async def subscribe(
+        self,
+        request: SubscribeToTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+    ) -> AsyncGenerator[StreamResponse]:
+        self.update_tenant(request)
+        async for event in self._base.subscribe(
+            request, context=context, extensions=extensions
+        ):
+            yield event
+
+    async def get_extended_agent_card(
+        self,
+        *,
+        context: ClientCallContext | None = None,
+        extensions: list[str] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
+    ) -> AgentCard:
+        return await self._base.get_extended_agent_card(
+            context=context,
+            extensions=extensions,
+            signature_verifier=signature_verifier,
+        )
+
+    async def close(self) -> None:
+        await self._base.close()

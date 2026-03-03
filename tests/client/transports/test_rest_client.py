@@ -15,10 +15,17 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    Message,
     SendMessageRequest,
+    SubscribeToTaskRequest,
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import TransportProtocol
@@ -362,3 +369,160 @@ class TestTaskCallback:
             f'/v1/tasks/{task_id}/pushNotificationConfigs/config-1'
             in call_args[0][1]
         )
+
+
+class TestRestTransportTenant:
+    """Tests for tenant path prepending in RestTransport."""
+
+    @pytest.mark.parametrize(
+        'method_name, request_obj, expected_path',
+        [
+            (
+                'send_message',
+                SendMessageRequest(
+                    tenant='my-tenant',
+                    message=create_text_message_object(content='hi'),
+                ),
+                '/my-tenant/v1/message:send',
+            ),
+            (
+                'list_tasks',
+                ListTasksRequest(tenant='my-tenant'),
+                '/my-tenant/v1/tasks',
+            ),
+            (
+                'get_task',
+                GetTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/v1/tasks/task-123',
+            ),
+            (
+                'cancel_task',
+                CancelTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/v1/tasks/task-123:cancel',
+            ),
+            (
+                'set_task_callback',
+                CreateTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123'
+                ),
+                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
+            ),
+            (
+                'get_task_callback',
+                GetTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123', id='cfg-1'
+                ),
+                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs/cfg-1',
+            ),
+            (
+                'list_task_callback',
+                ListTaskPushNotificationConfigsRequest(
+                    tenant='my-tenant', task_id='task-123'
+                ),
+                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
+            ),
+            (
+                'delete_task_callback',
+                DeleteTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123', id='cfg-1'
+                ),
+                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs/cfg-1',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_rest_methods_prepend_tenant(
+        self,
+        method_name,
+        request_obj,
+        expected_path,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        # 1. Get the method dynamically
+        method = getattr(client, method_name)
+
+        # 2. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 3. Call the method
+        await method(request=request_obj)
+
+        # 4. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == f'http://agent.example.com/api{expected_path}'
+
+    @pytest.mark.parametrize(
+        'method_name, request_obj, expected_path',
+        [
+            (
+                'subscribe',
+                SubscribeToTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/v1/tasks/task-123:subscribe',
+            ),
+            (
+                'send_message_streaming',
+                SendMessageRequest(
+                    tenant='my-tenant',
+                    message=create_text_message_object(content='hi'),
+                ),
+                '/my-tenant/v1/message:stream',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.rest.aconnect_sse')
+    async def test_rest_streaming_methods_prepend_tenant(
+        self,
+        mock_aconnect_sse,
+        method_name,
+        request_obj,
+        expected_path,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        # 1. Get the method dynamically
+        method = getattr(client, method_name)
+
+        # 2. Setup mocks
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.raise_for_status.return_value = None
+
+        async def empty_aiter():
+            if False:
+                yield
+
+        mock_event_source.aiter_sse.return_value = empty_aiter()
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        # 3. Call the method
+        async for _ in method(request=request_obj):
+            pass
+
+        # 4. Verify the URL
+        mock_aconnect_sse.assert_called_once()
+        args, _ = mock_aconnect_sse.call_args
+        # url is 3rd positional argument in aconnect_sse(client, method, url, ...)
+        assert args[2] == f'http://agent.example.com/api{expected_path}'

@@ -1,5 +1,6 @@
 """Tests for the ClientFactory."""
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 import typing
 
@@ -8,7 +9,11 @@ import pytest
 
 from a2a.client import ClientConfig, ClientFactory
 from a2a.client.client_factory import TransportProducer
-from a2a.client.transports import JsonRpcTransport, RestTransport
+from a2a.client.transports import (
+    JsonRpcTransport,
+    RestTransport,
+    TenantTransportDecorator,
+)
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -284,3 +289,18 @@ async def test_client_factory_connect_with_consumers_and_interceptors(
         call_args = mock_base_client.call_args[0]
         assert call_args[3] == [consumer1]
         assert call_args[4] == [interceptor1]
+
+
+def test_client_factory_applies_tenant_decorator(base_agent_card: AgentCard):
+    """Verify that the factory applies TenantTransportDecorator when tenant is present."""
+    base_agent_card.supported_interfaces[0].tenant = 'my-tenant'
+    config = ClientConfig(
+        httpx_client=httpx.AsyncClient(),
+        supported_protocol_bindings=[TransportProtocol.JSONRPC],
+    )
+    factory = ClientFactory(config)
+    client = factory.create(base_agent_card)
+
+    assert isinstance(client._transport, TenantTransportDecorator)  # type: ignore[attr-defined]
+    assert client._transport._tenant == 'my-tenant'  # type: ignore[attr-defined]
+    assert isinstance(client._transport._base, JsonRpcTransport)  # type: ignore[attr-defined]
