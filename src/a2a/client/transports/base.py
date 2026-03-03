@@ -190,6 +190,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> SendMessageResponse:
+        """Sends a streaming message request to the agent and yields responses as they arrive."""
         self.update_tenant(request)
         return await self._base.send_message(
             request, context=context, extensions=extensions
@@ -202,6 +203,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
+        """Sends a streaming message request to the agent and yields responses."""
         self.update_tenant(request)
         async for event in self._base.send_message_streaming(
             request, context=context, extensions=extensions
@@ -215,6 +217,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
+        """Retrieves the current state and history of a specific task."""
         self.update_tenant(request)
         return await self._base.get_task(
             request, context=context, extensions=extensions
@@ -227,6 +230,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> ListTasksResponse:
+        """Retrieves tasks for an agent."""
         self.update_tenant(request)
         return await self._base.list_tasks(
             request, context=context, extensions=extensions
@@ -239,6 +243,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> Task:
+        """Requests the agent to cancel a specific task."""
         self.update_tenant(request)
         return await self._base.cancel_task(
             request, context=context, extensions=extensions
@@ -251,6 +256,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
+        """Sets or updates the push notification configuration for a specific task."""
         self.update_tenant(request)
         return await self._base.set_task_callback(
             request, context=context, extensions=extensions
@@ -263,6 +269,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
+        """Retrieves the push notification configuration for a specific task."""
         self.update_tenant(request)
         return await self._base.get_task_callback(
             request, context=context, extensions=extensions
@@ -275,6 +282,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task."""
         self.update_tenant(request)
         return await self._base.list_task_callback(
             request, context=context, extensions=extensions
@@ -287,6 +295,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> None:
+        """Deletes the push notification configuration for a specific task."""
         self.update_tenant(request)
         await self._base.delete_task_callback(
             request, context=context, extensions=extensions
@@ -299,6 +308,7 @@ class TenantTransportDecorator(ClientTransport):
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
+        """Reconnects to get task updates."""
         self.update_tenant(request)
         async for event in self._base.subscribe(
             request, context=context, extensions=extensions
@@ -312,6 +322,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
+        """Retrieves the Extended AgentCard."""
         return await self._base.get_extended_agent_card(
             context=context,
             extensions=extensions,
@@ -319,4 +330,5 @@ class TenantTransportDecorator(ClientTransport):
         )
 
     async def close(self) -> None:
+        """Closes the transport."""
         await self._base.close()
