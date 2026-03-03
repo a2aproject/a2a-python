@@ -53,6 +53,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     details = e.details()
     if isinstance(details, str) and ': ' in details:
         error_type_name, error_message = details.split(': ', 1)
+        # TODO(#723): Resolving imports by name is a temporary hack until proper error handling structure is added in #723.
         exception_cls = getattr(a2a.utils.errors, error_type_name, None)
         if (
             exception_cls
@@ -62,6 +63,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
             raise exception_cls(error_message) from e
     raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
 
+
 def _handle_grpc_exception(func: Callable[..., Any]) -> Callable[..., Any]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
@@ -69,9 +71,13 @@ def _handle_grpc_exception(func: Callable[..., Any]) -> Callable[..., Any]:
             return await func(*args, **kwargs)
         except grpc.aio.AioRpcError as e:
             _map_grpc_error(e)
+
     return wrapper
 
-def _handle_grpc_stream_exception(func: Callable[..., Any]) -> Callable[..., Any]:
+
+def _handle_grpc_stream_exception(
+    func: Callable[..., Any],
+) -> Callable[..., Any]:
     @wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
@@ -79,6 +85,7 @@ def _handle_grpc_stream_exception(func: Callable[..., Any]) -> Callable[..., Any
                 yield item
         except grpc.aio.AioRpcError as e:
             _map_grpc_error(e)
+
     return wrapper
 
 
