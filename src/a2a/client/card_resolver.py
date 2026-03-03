@@ -61,7 +61,7 @@ class A2ACardResolver:
             An `AgentCard` object representing the agent's capabilities.
 
         Raises:
-            A2AClientError: If an HTTP error occurs during the request, if the
+            AgentCardResolutionError: If an HTTP error occurs during the request, if the
                 response body cannot be decoded as JSON, or if it cannot be
                 validated against the AgentCard schema.
         """
