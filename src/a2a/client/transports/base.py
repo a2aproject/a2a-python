@@ -2,8 +2,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from types import TracebackType
 
-from typing_extensions import Self
 from google.protobuf.message import Message
+from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext
 from a2a.types.a2a_pb2 import (
@@ -179,7 +179,7 @@ class TenantTransportDecorator(ClientTransport):
             return current_tenant
 
         if self._tenant and hasattr(request, 'tenant'):
-            request.tenant = self._tenant
+            setattr(request, 'tenant', self._tenant)
             return self._tenant
         return None
 
@@ -249,7 +249,7 @@ class TenantTransportDecorator(ClientTransport):
             request, context=context, extensions=extensions
         )
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -258,11 +258,11 @@ class TenantTransportDecorator(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         self.update_tenant(request)
-        return await self._base.set_task_callback(
+        return await self._base.create_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -271,11 +271,11 @@ class TenantTransportDecorator(ClientTransport):
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         self.update_tenant(request)
-        return await self._base.get_task_callback(
+        return await self._base.get_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -284,11 +284,11 @@ class TenantTransportDecorator(ClientTransport):
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         self.update_tenant(request)
-        return await self._base.list_task_callback(
+        return await self._base.list_task_push_notification_configs(
             request, context=context, extensions=extensions
         )
 
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,
@@ -297,7 +297,7 @@ class TenantTransportDecorator(ClientTransport):
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
         self.update_tenant(request)
-        await self._base.delete_task_callback(
+        await self._base.delete_task_push_notification_config(
             request, context=context, extensions=extensions
         )
 

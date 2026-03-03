@@ -7,7 +7,6 @@ from typing import Any
 import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
-from google.protobuf.message import Message
 from httpx_sse import SSEError, aconnect_sse
 
 from a2a.client.errors import (

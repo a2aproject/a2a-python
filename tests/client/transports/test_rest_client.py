@@ -401,28 +401,28 @@ class TestRestTransportTenant:
                 '/my-tenant/v1/tasks/task-123:cancel',
             ),
             (
-                'set_task_callback',
+                'create_task_push_notification_config',
                 CreateTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123'
                 ),
                 '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
             ),
             (
-                'get_task_callback',
+                'get_task_push_notification_config',
                 GetTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123', id='cfg-1'
                 ),
                 '/my-tenant/v1/tasks/task-123/pushNotificationConfigs/cfg-1',
             ),
             (
-                'list_task_callback',
+                'list_task_push_notification_configs',
                 ListTaskPushNotificationConfigsRequest(
                     tenant='my-tenant', task_id='task-123'
                 ),
                 '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
             ),
             (
-                'delete_task_callback',
+                'delete_task_push_notification_config',
                 DeleteTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123', id='cfg-1'
                 ),
