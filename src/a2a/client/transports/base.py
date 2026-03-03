@@ -2,7 +2,6 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
 from types import TracebackType
 
-from google.protobuf.message import Message
 from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext
@@ -168,20 +167,15 @@ class TenantTransportDecorator(ClientTransport):
         self._base = base
         self._tenant = tenant
 
-    def update_tenant(self, request: Message) -> str | None:
-        """Ensures the tenant is set on the request if provided and not already set.
+    def update_tenant(self, tenant: str) -> str:
+        """If tenant is not provided, use the default tenant.
 
         Returns:
             The tenant used for the request.
         """
-        current_tenant = getattr(request, 'tenant', None)
-        if current_tenant:
-            return current_tenant
-
-        if self._tenant and hasattr(request, 'tenant'):
-            setattr(request, 'tenant', self._tenant)
-            return self._tenant
-        return None
+        if tenant != '':
+            return tenant
+        return self._tenant or ''
 
     async def send_message(
         self,
@@ -191,7 +185,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> SendMessageResponse:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.send_message(
             request, context=context, extensions=extensions
         )
@@ -204,7 +198,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         async for event in self._base.send_message_streaming(
             request, context=context, extensions=extensions
         ):
@@ -218,7 +212,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.get_task(
             request, context=context, extensions=extensions
         )
@@ -231,7 +225,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.list_tasks(
             request, context=context, extensions=extensions
         )
@@ -244,7 +238,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.cancel_task(
             request, context=context, extensions=extensions
         )
@@ -257,7 +251,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.create_task_push_notification_config(
             request, context=context, extensions=extensions
         )
@@ -270,7 +264,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.get_task_push_notification_config(
             request, context=context, extensions=extensions
         )
@@ -283,7 +277,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         return await self._base.list_task_push_notification_configs(
             request, context=context, extensions=extensions
         )
@@ -296,7 +290,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         await self._base.delete_task_push_notification_config(
             request, context=context, extensions=extensions
         )
@@ -309,7 +303,7 @@ class TenantTransportDecorator(ClientTransport):
         extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        self.update_tenant(request)
+        request.tenant = self.update_tenant(request.tenant)
         async for event in self._base.subscribe(
             request, context=context, extensions=extensions
         ):
