@@ -4,6 +4,7 @@ from a2a.types import AgentCard, AgentExtension
 
 
 HTTP_EXTENSION_HEADER = 'X-A2A-Extensions'
+GRPC_EXTENSION_HEADER = 'x-a2a-extensions'
 
 
 def get_requested_extensions(values: list[str]) -> set[str]:

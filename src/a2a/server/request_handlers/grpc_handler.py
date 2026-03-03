@@ -23,7 +23,7 @@ import a2a.grpc.a2a_pb2_grpc as a2a_grpc
 from a2a import types
 from a2a.auth.user import UnauthenticatedUser
 from a2a.extensions.common import (
-    HTTP_EXTENSION_HEADER,
+    GRPC_EXTENSION_HEADER,
     get_requested_extensions,
 )
 from a2a.grpc import a2a_pb2
@@ -76,7 +76,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
             user=user,
             state=state,
             requested_extensions=get_requested_extensions(
-                _get_metadata_value(context, HTTP_EXTENSION_HEADER)
+                _get_metadata_value(context, GRPC_EXTENSION_HEADER)
             ),
         )
 
@@ -417,7 +417,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         if server_context.activated_extensions:
             context.set_trailing_metadata(
                 [
-                    (HTTP_EXTENSION_HEADER.lower(), e)
+                    (GRPC_EXTENSION_HEADER.lower(), e)
                     for e in sorted(server_context.activated_extensions)
                 ]
             )
