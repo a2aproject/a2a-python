@@ -103,6 +103,33 @@ def test_data_part_conversion():
     assert v03_restored == v03_part
 
 
+def test_data_part_conversion_primitive():
+    primitive_cases = [
+        'Primitive String',
+        42,
+        3.14,
+        True,
+        False,
+        ['a', 'b', 'c'],
+        [1, 2, 3],
+        None,
+    ]
+
+    for val in primitive_cases:
+        v10_expected = pb2_v10.Part()
+        ParseDict(val, v10_expected.data)
+
+        # Test v10 -> v03
+        v03_part = to_compat_part(v10_expected)
+        assert isinstance(v03_part.root, types_v03.DataPart)
+        assert v03_part.root.data == {'value': val}
+        assert v03_part.root.metadata['data_part_compat'] is True
+
+        # Test v03 -> v10
+        v10_restored = to_core_part(v03_part)
+        assert v10_restored == v10_expected
+
+
 def test_file_part_uri_conversion():
     v03_file = types_v03.FileWithUri(
         uri='http://example.com/file', mime_type='text/plain', name='file.txt'
@@ -352,8 +379,8 @@ def test_push_notification_config_conversion():
     v03_config = types_v03.PushNotificationConfig(
         id='c1',
         url='http://test.com',
-        token='tok',
-        authentication=v03_auth,  # noqa: S106
+        token='tok',  # noqa: S106
+        authentication=v03_auth,
     )
 
     v10_expected = pb2_v10.PushNotificationConfig(
@@ -507,9 +534,59 @@ def test_task_status_update_event_conversion():
         context_id='c1',
         status=v03_status,
         metadata={'m': 'v'},
-        final=False,  # final is not preserved in v1.0
+        final=True,  # final is computed based on status.state
     )
     assert v03_restored == v03_expected_restored
+
+
+def test_task_status_update_event_conversion_terminal_states():
+    # Test all terminal states result in final=True
+    terminal_states = [
+        (
+            pb2_v10.TaskState.TASK_STATE_COMPLETED,
+            types_v03.TaskState.completed,
+        ),
+        (pb2_v10.TaskState.TASK_STATE_CANCELED, types_v03.TaskState.canceled),
+        (pb2_v10.TaskState.TASK_STATE_FAILED, types_v03.TaskState.failed),
+        (pb2_v10.TaskState.TASK_STATE_REJECTED, types_v03.TaskState.rejected),
+    ]
+
+    for core_st, compat_st in terminal_states:
+        v10_event = pb2_v10.TaskStatusUpdateEvent(
+            status=pb2_v10.TaskStatus(state=core_st)
+        )
+        v03_restored = to_compat_task_status_update_event(v10_event)
+        assert v03_restored.final is True
+        assert v03_restored.status.state == compat_st
+
+    # Test non-terminal states result in final=False
+    non_terminal_states = [
+        (
+            pb2_v10.TaskState.TASK_STATE_SUBMITTED,
+            types_v03.TaskState.submitted,
+        ),
+        (pb2_v10.TaskState.TASK_STATE_WORKING, types_v03.TaskState.working),
+        (
+            pb2_v10.TaskState.TASK_STATE_INPUT_REQUIRED,
+            types_v03.TaskState.input_required,
+        ),
+        (
+            pb2_v10.TaskState.TASK_STATE_AUTH_REQUIRED,
+            types_v03.TaskState.auth_required,
+        ),
+        (
+            pb2_v10.TaskState.TASK_STATE_UNSPECIFIED,
+            types_v03.TaskState.unknown,
+        ),
+    ]
+
+    for core_st, compat_st in non_terminal_states:
+        v10_event = pb2_v10.TaskStatusUpdateEvent(
+            status=pb2_v10.TaskStatus(state=core_st)
+        )
+        v03_restored = to_compat_task_status_update_event(v10_event)
+        assert v03_restored.final is False
+        assert v03_restored.status.state == compat_st
 
 
 def test_task_status_update_event_conversion_minimal():
@@ -632,16 +709,16 @@ def test_oauth_flows_conversion_auth_code():
 def test_oauth_flows_conversion_client_credentials():
     v03_flows = types_v03.OAuthFlows(
         client_credentials=types_v03.ClientCredentialsOAuthFlow(
-            token_url='http://token2',
+            token_url='http://token2',  # noqa: S106
             scopes={'c': 'd'},
-            refresh_url='ref2',  # noqa: S106
+            refresh_url='ref2',
         )
     )
     v10_expected = pb2_v10.OAuthFlows(
         client_credentials=pb2_v10.ClientCredentialsOAuthFlow(
-            token_url='http://token2',
+            token_url='http://token2',  # noqa: S106
             scopes={'c': 'd'},
-            refresh_url='ref2',  # noqa: S106
+            refresh_url='ref2',
         )
     )
     v10_flows = to_core_oauth_flows(v03_flows)
@@ -674,16 +751,16 @@ def test_oauth_flows_conversion_implicit():
 def test_oauth_flows_conversion_password():
     v03_flows = types_v03.OAuthFlows(
         password=types_v03.PasswordOAuthFlow(
-            token_url='http://token3',
+            token_url='http://token3',  # noqa: S106
             scopes={'g': 'h'},
-            refresh_url='ref4',  # noqa: S106
+            refresh_url='ref4',
         )
     )
     v10_expected = pb2_v10.OAuthFlows(
         password=pb2_v10.PasswordOAuthFlow(
-            token_url='http://token3',
+            token_url='http://token3',  # noqa: S106
             scopes={'g': 'h'},
-            refresh_url='ref4',  # noqa: S106
+            refresh_url='ref4',
         )
     )
     v10_flows = to_core_oauth_flows(v03_flows)
@@ -730,8 +807,8 @@ def test_security_scheme_oauth2():
     v03_flows = types_v03.OAuthFlows(
         authorization_code=types_v03.AuthorizationCodeOAuthFlow(
             authorization_url='u',
-            token_url='t',
-            scopes={},  # noqa: S106
+            token_url='t',  # noqa: S106
+            scopes={},
         )
     )
     v03_scheme = types_v03.SecurityScheme(
@@ -1161,8 +1238,8 @@ def test_task_push_notification_config_conversion():
         push_notification_config=types_v03.PushNotificationConfig(
             id='c1',
             url='http://url',
-            token='tok',
-            authentication=v03_auth,  # noqa: S106
+            token='tok',  # noqa: S106
+            authentication=v03_auth,
         ),
     )
     v10_expected = pb2_v10.TaskPushNotificationConfig(
@@ -1183,8 +1260,8 @@ def test_task_push_notification_config_conversion():
         push_notification_config=types_v03.PushNotificationConfig(
             id='c1',
             url='http://url',
-            token='tok',
-            authentication=v03_auth,  # noqa: S106
+            token='tok',  # noqa: S106
+            authentication=v03_auth,
         ),
     )
     assert v03_restored == v03_expected_restored

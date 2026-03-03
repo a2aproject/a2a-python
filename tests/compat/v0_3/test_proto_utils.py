@@ -11,7 +11,7 @@ import pytest
 from a2a.compat.v0_3 import types
 from a2a.compat.v0_3 import a2a_v0_3_pb2 as a2a_pb2
 from a2a.compat.v0_3 import proto_utils
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 # --- Test Data ---
@@ -158,9 +158,9 @@ class TestFromProto:
 
     def test_task_query_params_invalid_name(self):
         request = a2a_pb2.GetTaskRequest(name='invalid-name-format')
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             proto_utils.FromProto.task_query_params(request)
-        assert isinstance(exc_info.value.error, types.InvalidParamsError)
+        assert 'No task for' in str(exc_info.value)
 
 
 class TestProtoUtils:
@@ -252,15 +252,17 @@ class TestProtoUtils:
 
     def test_task_id_params_from_proto_invalid_name(self):
         request = a2a_pb2.CancelTaskRequest(name='invalid-name-format')
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             proto_utils.FromProto.task_id_params(request)
-        assert isinstance(exc_info.value.error, types.InvalidParamsError)
+        assert 'No task for' in str(exc_info.value)
 
     def test_task_push_config_from_proto_invalid_parent(self):
         request = a2a_pb2.TaskPushNotificationConfig(name='invalid-name-format')
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             proto_utils.FromProto.task_push_notification_config(request)
-        assert isinstance(exc_info.value.error, types.InvalidParamsError)
+        assert 'Bad TaskPushNotificationConfig resource name' in str(
+            exc_info.value
+        )
 
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""

@@ -86,6 +86,7 @@ notif
 npx
 oauthoidc
 oidc
+Oneof
 OpenAPI
 openapiv
 openapiv2

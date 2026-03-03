@@ -1,6 +1,6 @@
 import base64
 
-from typing import Any, cast
+from typing import Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 
@@ -8,7 +8,24 @@ from a2a.compat.v0_3 import types as types_v03
 from a2a.types import a2a_pb2 as pb2_v10
 
 
-def to_core_part(compat_part: types_v03.Part) -> pb2_v10.Part:
+_COMPAT_TO_CORE_TASK_STATE: dict[types_v03.TaskState, Any] = {
+    types_v03.TaskState.unknown: pb2_v10.TaskState.TASK_STATE_UNSPECIFIED,
+    types_v03.TaskState.submitted: pb2_v10.TaskState.TASK_STATE_SUBMITTED,
+    types_v03.TaskState.working: pb2_v10.TaskState.TASK_STATE_WORKING,
+    types_v03.TaskState.completed: pb2_v10.TaskState.TASK_STATE_COMPLETED,
+    types_v03.TaskState.failed: pb2_v10.TaskState.TASK_STATE_FAILED,
+    types_v03.TaskState.canceled: pb2_v10.TaskState.TASK_STATE_CANCELED,
+    types_v03.TaskState.input_required: pb2_v10.TaskState.TASK_STATE_INPUT_REQUIRED,
+    types_v03.TaskState.rejected: pb2_v10.TaskState.TASK_STATE_REJECTED,
+    types_v03.TaskState.auth_required: pb2_v10.TaskState.TASK_STATE_AUTH_REQUIRED,
+}
+
+_CORE_TO_COMPAT_TASK_STATE: dict[Any, types_v03.TaskState] = {
+    v: k for k, v in _COMPAT_TO_CORE_TASK_STATE.items()
+}
+
+
+def to_core_part(compat_part: types_v03.Part) -> pb2_v10.Part:  # noqa: PLR0912
     """Converts a v0.3 Part (Pydantic model) to a v1.0 core Part (Protobuf object)."""
     core_part = pb2_v10.Part()
     root = compat_part.root
@@ -19,10 +36,19 @@ def to_core_part(compat_part: types_v03.Part) -> pb2_v10.Part:
             ParseDict(root.metadata, core_part.metadata)
 
     elif isinstance(root, types_v03.DataPart):
-        # root.data is a dict. google.protobuf.Value can represent it via struct_value
-        ParseDict(root.data, core_part.data.struct_value)
-        if root.metadata is not None:
-            ParseDict(root.metadata, core_part.metadata)
+        if root.metadata is None:
+            data_part_compat = False
+        else:
+            meta = dict(root.metadata)
+            data_part_compat = meta.pop('data_part_compat', False)
+            if meta:
+                ParseDict(meta, core_part.metadata)
+
+        if data_part_compat:
+            val = root.data['value']
+            ParseDict(val, core_part.data)
+        else:
+            ParseDict(root.data, core_part.data.struct_value)
 
     elif isinstance(root, types_v03.FilePart):
         if isinstance(root.file, types_v03.FileWithBytes):
@@ -61,6 +87,11 @@ def to_compat_part(core_part: pb2_v10.Part) -> types_v03.Part:
     if which == 'data':
         # core_part.data is a google.protobuf.Value. It can be converted to dict.
         data_dict = MessageToDict(core_part.data)
+        if not isinstance(data_dict, dict):
+            data_dict = {'value': data_dict}
+            metadata = metadata or {}
+            metadata['data_part_compat'] = True
+
         return types_v03.Part(
             root=types_v03.DataPart(data=data_dict, metadata=metadata)
         )
@@ -142,17 +173,9 @@ def to_core_task_status(
     """Convert task status to v1.0 core type."""
     core_status = pb2_v10.TaskStatus()
     if compat_status.state:
-        # map Enum string to proto enum
-        state_str = compat_status.state.value.upper()
-        if state_str == 'UNKNOWN':
-            core_status.state = pb2_v10.TaskState.TASK_STATE_UNSPECIFIED
-        else:
-            # Handle 'input-required', 'auth-required'
-            state_str = state_str.replace('-', '_')
-
-            core_status.state = cast(
-                'Any', pb2_v10.TaskState.Value(f'TASK_STATE_{state_str}')
-            )
+        core_status.state = _COMPAT_TO_CORE_TASK_STATE.get(
+            compat_status.state, pb2_v10.TaskState.TASK_STATE_UNSPECIFIED
+        )
 
     if compat_status.message:
         core_status.message.CopyFrom(to_core_message(compat_status.message))
@@ -167,16 +190,9 @@ def to_compat_task_status(
     core_status: pb2_v10.TaskStatus,
 ) -> types_v03.TaskStatus:
     """Convert task status to v0.3 compat type."""
-    state_str = (
-        pb2_v10.TaskState.Name(core_status.state)
-        .replace('TASK_STATE_', '')
-        .lower()
+    state_enum = _CORE_TO_COMPAT_TASK_STATE.get(
+        core_status.state, types_v03.TaskState.unknown
     )
-    if state_str == 'unspecified':
-        state_str = 'unknown'
-    else:
-        state_str = state_str.replace('_', '-')
-    state_enum = types_v03.TaskState(state_str)
 
     update = (
         to_compat_message(core_status.message)
@@ -380,16 +396,25 @@ def to_compat_task_status_update_event(
     core_event: pb2_v10.TaskStatusUpdateEvent,
 ) -> types_v03.TaskStatusUpdateEvent:
     """Convert task status update event to v0.3 compat type."""
+    status = (
+        to_compat_task_status(core_event.status)
+        if core_event.HasField('status')
+        else types_v03.TaskStatus(state=types_v03.TaskState.unknown)
+    )
+    final = status.state in (
+        types_v03.TaskState.completed,
+        types_v03.TaskState.canceled,
+        types_v03.TaskState.failed,
+        types_v03.TaskState.rejected,
+    )
     return types_v03.TaskStatusUpdateEvent(
         task_id=core_event.task_id,
         context_id=core_event.context_id,
-        status=to_compat_task_status(core_event.status)
-        if core_event.HasField('status')
-        else types_v03.TaskStatus(state=types_v03.TaskState.unknown),
+        status=status,
         metadata=MessageToDict(core_event.metadata)
         if core_event.HasField('metadata')
         else None,
-        final=False,  # 'final' was removed in v1.0
+        final=final,
     )
 
 

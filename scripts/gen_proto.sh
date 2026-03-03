@@ -22,7 +22,8 @@ sed 's/import a2a_pb2 as a2a__pb2/from . import a2a_pb2 as a2a__pb2/g' src/a2a/t
 
 # Download legacy v0.3 compatibility protobuf code
 echo "Downloading legacy v0.3 proto file..."
-curl -o src/a2a/compat/v0_3/a2a_v0_3.proto https://raw.githubusercontent.com/a2aproject/A2A/a8b45dcc429a5571ef8a24c36336bf84b89bbd7f/specification/grpc/a2a.proto
+# Commit hash was selected as a2a.proto version from 0.3 branch with latests fixes.
+curl -o src/a2a/compat/v0_3/a2a_v0_3.proto https://raw.githubusercontent.com/a2aproject/A2A/b3b266d127dde3d1000ec103b252d1de81289e83/specification/grpc/a2a.proto 
 
 # Generate legacy v0.3 compatibility protobuf code
 echo "Generating legacy v0.3 compatibility protobuf code"

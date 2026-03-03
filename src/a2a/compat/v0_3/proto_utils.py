@@ -14,7 +14,7 @@ from google.protobuf import json_format, struct_pb2
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2 as a2a_pb2
 from a2a.compat.v0_3 import types
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 logger = logging.getLogger(__name__)
@@ -808,19 +808,11 @@ class FromProto:
         if isinstance(request, a2a_pb2.GetTaskPushNotificationConfigRequest):
             m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
             if not m:
-                raise ServerError(
-                    error=types.InvalidParamsError(
-                        message=f'No task for {request.name}'
-                    )
-                )
+                raise InvalidParamsError(message=f'No task for {request.name}')
             return types.TaskIdParams(id=m.group(1))
         m = _TASK_NAME_MATCH.match(request.name)
         if not m:
-            raise ServerError(
-                error=types.InvalidParamsError(
-                    message=f'No task for {request.name}'
-                )
-            )
+            raise InvalidParamsError(message=f'No task for {request.name}')
         return types.TaskIdParams(id=m.group(1))
 
     @classmethod
@@ -830,11 +822,7 @@ class FromProto:
     ) -> types.TaskPushNotificationConfig:
         m = _TASK_NAME_MATCH.match(request.parent)
         if not m:
-            raise ServerError(
-                error=types.InvalidParamsError(
-                    message=f'No task for {request.parent}'
-                )
-            )
+            raise InvalidParamsError(message=f'No task for {request.parent}')
         return types.TaskPushNotificationConfig(
             push_notification_config=cls.push_notification_config(
                 request.config.push_notification_config,
@@ -849,10 +837,8 @@ class FromProto:
     ) -> types.TaskPushNotificationConfig:
         m = _TASK_PUSH_CONFIG_NAME_MATCH.match(config.name)
         if not m:
-            raise ServerError(
-                error=types.InvalidParamsError(
-                    message=f'Bad TaskPushNotificationConfig resource name {config.name}'
-                )
+            raise InvalidParamsError(
+                message=f'Bad TaskPushNotificationConfig resource name {config.name}'
             )
         return types.TaskPushNotificationConfig(
             push_notification_config=cls.push_notification_config(
@@ -919,11 +905,7 @@ class FromProto:
     ) -> types.TaskQueryParams:
         m = _TASK_NAME_MATCH.match(request.name)
         if not m:
-            raise ServerError(
-                error=types.InvalidParamsError(
-                    message=f'No task for {request.name}'
-                )
-            )
+            raise InvalidParamsError(message=f'No task for {request.name}')
         return types.TaskQueryParams(
             history_length=request.history_length
             if request.history_length
