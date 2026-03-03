@@ -1,6 +1,12 @@
 import logging
 
 from collections.abc import AsyncGenerator, Callable
+from functools import wraps
+from typing import Any, NoReturn
+
+import a2a.utils.errors
+
+from a2a.client.errors import A2AClientError
 
 
 try:
@@ -41,6 +47,39 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+
+def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
+    details = e.details()
+    if isinstance(details, str) and ': ' in details:
+        error_type_name, error_message = details.split(': ', 1)
+        exception_cls = getattr(a2a.utils.errors, error_type_name, None)
+        if (
+            exception_cls
+            and isinstance(exception_cls, type)
+            and issubclass(exception_cls, a2a.utils.errors.A2AError)
+        ):
+            raise exception_cls(error_message) from e
+    raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
+
+def _handle_grpc_exception(func: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except grpc.aio.AioRpcError as e:
+            _map_grpc_error(e)
+    return wrapper
+
+def _handle_grpc_stream_exception(func: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            async for item in func(*args, **kwargs):
+                yield item
+        except grpc.aio.AioRpcError as e:
+            _map_grpc_error(e)
+    return wrapper
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -87,6 +126,7 @@ class GrpcTransport(ClientTransport):
             raise ValueError('grpc_channel_factory is required when using gRPC')
         return cls(config.grpc_channel_factory(url), card, config.extensions)
 
+    @_handle_grpc_exception
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -100,6 +140,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_stream_exception
     async def send_message_streaming(
         self,
         request: SendMessageRequest,
@@ -118,6 +159,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield response
 
+    @_handle_grpc_stream_exception
     async def subscribe(
         self,
         request: SubscribeToTaskRequest,
@@ -136,6 +178,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield response
 
+    @_handle_grpc_exception
     async def get_task(
         self,
         request: GetTaskRequest,
@@ -149,6 +192,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def list_tasks(
         self,
         request: ListTasksRequest,
@@ -162,6 +206,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def cancel_task(
         self,
         request: CancelTaskRequest,
@@ -175,6 +220,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
@@ -188,6 +234,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
@@ -201,6 +248,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
@@ -214,6 +262,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
@@ -227,6 +276,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def get_extended_agent_card(
         self,
         *,

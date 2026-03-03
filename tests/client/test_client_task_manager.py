@@ -3,10 +3,7 @@ from unittest.mock import patch
 import pytest
 
 from a2a.client.client_task_manager import ClientTaskManager
-from a2a.client.errors import (
-    A2AClientInvalidArgsError,
-    A2AClientInvalidStateError,
-)
+from a2a.client.errors import A2AClientError
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
@@ -53,7 +50,7 @@ def test_get_task_no_task_id_returns_none(
 def test_get_task_or_raise_no_task_raises_error(
     task_manager: ClientTaskManager,
 ) -> None:
-    with pytest.raises(A2AClientInvalidStateError, match='no current Task'):
+    with pytest.raises(A2AClientError, match='no current Task'):
         task_manager.get_task_or_raise()
 
 
@@ -78,7 +75,7 @@ async def test_process_with_task_already_set_raises_error(
     event = StreamResponse(task=sample_task)
     await task_manager.process(event)
     with pytest.raises(
-        A2AClientInvalidArgsError,
+        A2AClientError,
         match='Task is already set, create new manager for new tasks.',
     ):
         await task_manager.process(event)

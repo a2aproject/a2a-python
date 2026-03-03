@@ -2,7 +2,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator, Callable
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 
@@ -10,11 +10,9 @@ from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from google.protobuf.message import Message
 from httpx_sse import SSEError, aconnect_sse
 
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-    A2AClientTimeoutError,
-)
+import a2a.utils.errors
+
+from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import update_extension_header
@@ -36,6 +34,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.errors import MethodNotFoundError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -96,6 +95,33 @@ class RestTransport(ClientTransport):
         )
         return payload, modified_kwargs
 
+    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+        """Handles HTTP status errors and raises the appropriate A2AError."""
+        try:
+            error_data = e.response.json()
+            error_type = error_data.get('type')
+            message = error_data.get('message', str(e))
+
+            if isinstance(error_type, str):
+                exception_cls = getattr(a2a.utils.errors, error_type, None)
+                if (
+                    exception_cls
+                    and isinstance(exception_cls, type)
+                    and issubclass(exception_cls, a2a.utils.errors.A2AError)
+                ):
+                    raise exception_cls(message) from e
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Fallback mappings for status codes if 'type' is missing or unknown
+        status_code = e.response.status_code
+        if status_code == httpx.codes.NOT_FOUND:
+            raise MethodNotFoundError(
+                f'Resource not found: {e.request.url}'
+            ) from e
+
+        raise A2AClientError(f'HTTP Error {status_code}: {e}') from e
+
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -129,32 +155,33 @@ class RestTransport(ClientTransport):
 
         modified_kwargs.setdefault('timeout', None)
 
-        async with aconnect_sse(
-            self.httpx_client,
-            'POST',
-            f'{self.url}/v1/message:stream',
-            json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                event_source.response.raise_for_status()
-                async for sse in event_source.aiter_sse():
-                    event: StreamResponse = Parse(sse.data, StreamResponse())
-                    yield event
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except httpx.HTTPStatusError as e:
-                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
+        try:
+            async with aconnect_sse(
+                self.httpx_client,
+                'POST',
+                f'{self.url}/v1/message:stream',
+                json=payload,
+                **modified_kwargs,
+            ) as event_source:
+                try:
+                    event_source.response.raise_for_status()
+                    async for sse in event_source.aiter_sse():
+                        event: StreamResponse = Parse(
+                            sse.data, StreamResponse()
+                        )
+                        yield event
+                except httpx.HTTPStatusError as e:
+                    self._handle_http_error(e)
+                except SSEError as e:
+                    raise A2AClientError(
+                        f'Invalid SSE response or protocol error: {e}'
+                    ) from e
+        except httpx.TimeoutException as e:
+            raise A2AClientError('Client Request timed out') from e
+        except httpx.RequestError as e:
+            raise A2AClientError(f'Network communication error: {e}') from e
+        except json.JSONDecodeError as e:
+            raise A2AClientError(f'JSON Decode Error: {e}') from e
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
         try:
@@ -162,15 +189,13 @@ class RestTransport(ClientTransport):
             response.raise_for_status()
             return response.json()
         except httpx.TimeoutException as e:
-            raise A2AClientTimeoutError('Client Request timed out') from e
+            raise A2AClientError('Client Request timed out') from e
         except httpx.HTTPStatusError as e:
-            raise A2AClientHTTPError(e.response.status_code, str(e)) from e
+            self._handle_http_error(e)
         except json.JSONDecodeError as e:
-            raise A2AClientJSONError(str(e)) from e
+            raise A2AClientError(f'JSON Decode Error: {e}') from e
         except httpx.RequestError as e:
-            raise A2AClientHTTPError(
-                503, f'Network communication error: {e}'
-            ) from e
+            raise A2AClientError(f'Network communication error: {e}') from e
 
     async def _send_post_request(
         self,
@@ -285,7 +310,7 @@ class RestTransport(ClientTransport):
         payload = MessageToDict(request)
         modified_kwargs = update_extension_header(
             self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+            extensions if extensions not in (None, []) else self.extensions,
         )
         payload, modified_kwargs = await self._apply_interceptors(
             payload,
@@ -428,30 +453,33 @@ class RestTransport(ClientTransport):
         )
         modified_kwargs.setdefault('timeout', None)
 
-        async with aconnect_sse(
-            self.httpx_client,
-            'GET',
-            f'{self.url}/v1/tasks/{request.id}:subscribe',
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                async for sse in event_source.aiter_sse():
-                    if not sse.data:
-                        continue
-                    event: StreamResponse = Parse(sse.data, StreamResponse())
-                    yield event
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
+        try:
+            async with aconnect_sse(
+                self.httpx_client,
+                'GET',
+                f'{self.url}/v1/tasks/{request.id}:subscribe',
+                **modified_kwargs,
+            ) as event_source:
+                try:
+                    async for sse in event_source.aiter_sse():
+                        if not sse.data:
+                            continue
+                        event: StreamResponse = Parse(
+                            sse.data, StreamResponse()
+                        )
+                        yield event
+                except httpx.HTTPStatusError as e:
+                    self._handle_http_error(e)
+                except SSEError as e:
+                    raise A2AClientError(
+                        f'Invalid SSE response or protocol error: {e}'
+                    ) from e
+        except httpx.TimeoutException as e:
+            raise A2AClientError('Client Request timed out') from e
+        except httpx.RequestError as e:
+            raise A2AClientError(f'Network communication error: {e}') from e
+        except json.JSONDecodeError as e:
+            raise A2AClientError(f'JSON Decode Error: {e}') from e
 
     async def get_extended_agent_card(
         self,

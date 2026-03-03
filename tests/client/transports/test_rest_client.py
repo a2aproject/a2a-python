@@ -8,7 +8,7 @@ from google.protobuf import json_format
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
-from a2a.client.errors import A2AClientHTTPError, A2AClientTimeoutError
+from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types.a2a_pb2 import (
@@ -86,7 +86,7 @@ class TestRestTransport:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientTimeoutError) as exc_info:
+        with pytest.raises(A2AClientError) as exc_info:
             _ = [
                 item
                 async for item in client.send_message_streaming(request=params)
@@ -218,11 +218,11 @@ class TestRestTransportExtensions:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(A2AClientError) as exc_info:
             async for _ in client.send_message_streaming(request=request):
                 pass
 
-        assert exc_info.value.status_code == 403
+        assert 'HTTP Error 403' in str(exc_info.value)
 
         mock_aconnect_sse.assert_called_once()
 

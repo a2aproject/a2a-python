@@ -1,9 +1,6 @@
 import logging
 
-from a2a.client.errors import (
-    A2AClientInvalidArgsError,
-    A2AClientInvalidStateError,
-)
+from a2a.client.errors import A2AClientError
 from a2a.types.a2a_pb2 import (
     Message,
     StreamResponse,
@@ -53,7 +50,7 @@ class ClientTaskManager:
             The `Task` object.
 
         Raises:
-            A2AClientInvalidStateError: If there is no current known Task.
+            A2AClientError: If there is no current known Task.
         """
         if not (task := self.get_task()):
             # Note: The source of this error is either from bad client usage
@@ -61,7 +58,7 @@ class ClientTaskManager:
             # task manager has not consumed any information about a task, yet
             # the caller is attempting to retrieve the current state of the task
             # it expects to be present.
-            raise A2AClientInvalidStateError('no current Task')
+            raise A2AClientError('no current Task')
         return task
 
     async def process(
@@ -79,7 +76,7 @@ class ClientTaskManager:
             The updated `Task` object after processing the event.
 
         Raises:
-            ClientError: If the task ID in the event conflicts with the TaskManager's ID
+            A2AClientError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
         if event.HasField('message'):
@@ -88,7 +85,7 @@ class ClientTaskManager:
 
         if event.HasField('task'):
             if self._current_task:
-                raise A2AClientInvalidArgsError(
+                raise A2AClientError(
                     'Task is already set, create new manager for new tasks.'
                 )
             await self._save_task(event.task)

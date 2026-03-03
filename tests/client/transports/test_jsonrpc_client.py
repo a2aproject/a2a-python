@@ -11,12 +11,8 @@ import pytest
 import respx
 from httpx_sse import EventSource, SSEError
 
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-    A2AClientJSONRPCError,
-    A2AClientTimeoutError,
-)
+from a2a.client.errors import A2AClientError
+from a2a.utils.errors import InvalidRequestError
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -195,8 +191,8 @@ class TestSendMessage:
 
         request = create_send_message_request()
 
-        # The transport raises A2AClientJSONRPCError when there's an error response
-        with pytest.raises(A2AClientJSONRPCError):
+        # The transport raises the specific A2AError mapped from code
+        with pytest.raises(InvalidRequestError):
             await transport.send_message(request)
 
     @pytest.mark.asyncio
@@ -206,7 +202,7 @@ class TestSendMessage:
 
         request = create_send_message_request()
 
-        with pytest.raises(A2AClientTimeoutError, match='timed out'):
+        with pytest.raises(A2AClientError, match='timed out'):
             await transport.send_message(request)
 
     @pytest.mark.asyncio
@@ -220,7 +216,7 @@ class TestSendMessage:
 
         request = create_send_message_request()
 
-        with pytest.raises(A2AClientHTTPError):
+        with pytest.raises(A2AClientError):
             await transport.send_message(request)
 
     @pytest.mark.asyncio
@@ -235,7 +231,7 @@ class TestSendMessage:
 
         request = create_send_message_request()
 
-        with pytest.raises(A2AClientJSONError):
+        with pytest.raises(A2AClientError):
             await transport.send_message(request)
 
 
@@ -450,7 +446,7 @@ class TestStreamingErrors:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientHTTPError):
+        with pytest.raises(A2AClientError):
             async for _ in transport.send_message_streaming(request):
                 pass
 
@@ -473,7 +469,7 @@ class TestStreamingErrors:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientHTTPError):
+        with pytest.raises(A2AClientError):
             async for _ in transport.send_message_streaming(request):
                 pass
 
@@ -494,7 +490,7 @@ class TestStreamingErrors:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientTimeoutError, match='timed out'):
+        with pytest.raises(A2AClientError, match='timed out'):
             async for _ in transport.send_message_streaming(request):
                 pass
 
@@ -621,11 +617,11 @@ class TestExtensions:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(A2AClientError) as exc_info:
             async for _ in client.send_message_streaming(request=request):
                 pass
 
-        assert exc_info.value.status_code == 403
+        assert 'HTTP Error 403' in str(exc_info.value)
         mock_aconnect_sse.assert_called_once()
 
     @pytest.mark.asyncio
