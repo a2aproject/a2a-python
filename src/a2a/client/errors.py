@@ -9,3 +9,7 @@ class A2AClientError(A2AError):
 
 class AgentCardResolutionError(A2AClientError):
     """Exception raised when an agent card cannot be resolved."""
+
+    def __init__(self, message: str, status_code: int | None = None) -> None:
+        super().__init__(message)
+        self.status_code = status_code

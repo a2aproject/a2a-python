@@ -91,6 +91,7 @@ class A2ACardResolver:
         except httpx.HTTPStatusError as e:
             raise AgentCardResolutionError(
                 f'Failed to fetch agent card from {target_url} (HTTP {e.response.status_code}): {e}',
+                status_code=e.response.status_code,
             ) from e
         except json.JSONDecodeError as e:
             raise AgentCardResolutionError(
@@ -98,7 +99,7 @@ class A2ACardResolver:
             ) from e
         except httpx.RequestError as e:
             raise AgentCardResolutionError(
-                f'Network communication error fetching agent card from {target_url} (HTTP 503): {e}',
+                f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e
         except ParseError as e:
             raise AgentCardResolutionError(

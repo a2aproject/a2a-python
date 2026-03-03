@@ -221,6 +221,7 @@ class TestGetAgentCard:
         with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
 
+        assert exc_info.value.status_code == status_code
         assert f'HTTP {status_code}' in str(exc_info.value)
         assert 'Failed to fetch agent card' in str(exc_info.value)
 
@@ -247,7 +248,6 @@ class TestGetAgentCard:
         )
         with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
-        assert 'HTTP 503' in str(exc_info.value)
         assert 'Network communication error' in str(exc_info.value)
 
     @pytest.mark.asyncio
