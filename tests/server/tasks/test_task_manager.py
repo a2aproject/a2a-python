@@ -16,7 +16,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 # Create proto task instead of dict
@@ -240,7 +240,7 @@ async def test_save_task(
 async def test_save_task_event_mismatched_id_raises_error(
     task_manager: TaskManager,
 ) -> None:
-    """Test that save_task_event raises ServerError on task ID mismatch."""
+    """Test that save_task_event raises InvalidParamsError on task ID mismatch."""
     # The task_manager is initialized with 'task-abc'
     mismatched_task = Task(
         id='wrong-id',
@@ -248,9 +248,9 @@ async def test_save_task_event_mismatched_id_raises_error(
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await task_manager.save_task_event(mismatched_task)
-    assert isinstance(exc_info.value.error, InvalidParamsError)
+    assert exc_info.value is not None
 
 
 @pytest.mark.asyncio

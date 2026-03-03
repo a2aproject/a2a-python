@@ -8,9 +8,8 @@ from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
-from a2a.server.jsonrpc_models import JSONParseError, JSONRPCError
+from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.utils.errors import ServerError
 
 
 # --- Fixtures ---
@@ -92,9 +91,9 @@ async def test_send_message_server_error(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test SendMessage call when handler raises a ServerError."""
+    """Test SendMessage call when handler raises an A2AError."""
     request_proto = a2a_pb2.SendMessageRequest()
-    error = ServerError(error=types.InvalidParamsError(message='Bad params'))
+    error = types.InvalidParamsError(message='Bad params')
     mock_request_handler.on_message_send.side_effect = error
 
     await grpc_handler.SendMessage(request_proto, mock_grpc_context)
@@ -149,9 +148,9 @@ async def test_cancel_task_server_error(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test CancelTask call when handler raises ServerError."""
+    """Test CancelTask call when handler raises A2AError."""
     request_proto = a2a_pb2.CancelTaskRequest(id='task-1')
-    error = ServerError(error=types.TaskNotCancelableError())
+    error = types.TaskNotCancelableError()
     mock_request_handler.on_cancel_task.side_effect = error
 
     await grpc_handler.CancelTask(request_proto, mock_grpc_context)
@@ -177,7 +176,11 @@ async def test_send_streaming_message(
             status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
         )
 
-    mock_request_handler.on_message_send_stream.return_value = mock_stream()
+    # Use MagicMock because on_message_send_stream is an async generator,
+    # and we iterate over it directly. AsyncMock would return a coroutine.
+    mock_request_handler.on_message_send_stream = MagicMock(
+        return_value=mock_stream()
+    )
     request_proto = a2a_pb2.SendMessageRequest()
 
     results = [
@@ -307,67 +310,57 @@ async def test_list_tasks_success(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'server_error, grpc_status_code, error_message_part',
+    'a2a_error, grpc_status_code, error_message_part',
     [
         (
-            ServerError(error=JSONParseError()),
-            grpc.StatusCode.INTERNAL,
-            'JSONParseError',
-        ),
-        (
-            ServerError(error=types.InvalidRequestError()),
+            types.InvalidRequestError(),
             grpc.StatusCode.INVALID_ARGUMENT,
             'InvalidRequestError',
         ),
         (
-            ServerError(error=types.MethodNotFoundError()),
+            types.MethodNotFoundError(),
             grpc.StatusCode.NOT_FOUND,
             'MethodNotFoundError',
         ),
         (
-            ServerError(error=types.InvalidParamsError()),
+            types.InvalidParamsError(),
             grpc.StatusCode.INVALID_ARGUMENT,
             'InvalidParamsError',
         ),
         (
-            ServerError(error=types.InternalError()),
+            types.InternalError(),
             grpc.StatusCode.INTERNAL,
             'InternalError',
         ),
         (
-            ServerError(error=types.TaskNotFoundError()),
+            types.TaskNotFoundError(),
             grpc.StatusCode.NOT_FOUND,
             'TaskNotFoundError',
         ),
         (
-            ServerError(error=types.TaskNotCancelableError()),
+            types.TaskNotCancelableError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'TaskNotCancelableError',
         ),
         (
-            ServerError(error=types.PushNotificationNotSupportedError()),
+            types.PushNotificationNotSupportedError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'PushNotificationNotSupportedError',
         ),
         (
-            ServerError(error=types.UnsupportedOperationError()),
+            types.UnsupportedOperationError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'UnsupportedOperationError',
         ),
         (
-            ServerError(error=types.ContentTypeNotSupportedError()),
+            types.ContentTypeNotSupportedError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'ContentTypeNotSupportedError',
         ),
         (
-            ServerError(error=types.InvalidAgentResponseError()),
+            types.InvalidAgentResponseError(),
             grpc.StatusCode.INTERNAL,
             'InvalidAgentResponseError',
-        ),
-        (
-            ServerError(error=JSONRPCError(code=99, message='Unknown')),
-            grpc.StatusCode.UNKNOWN,
-            'Unknown error',
         ),
     ],
 )
@@ -375,11 +368,11 @@ async def test_abort_context_error_mapping(  # noqa: PLR0913
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-    server_error: ServerError,
+    a2a_error: Exception,
     grpc_status_code: grpc.StatusCode,
     error_message_part: str,
 ) -> None:
-    mock_request_handler.on_get_task.side_effect = server_error
+    mock_request_handler.on_get_task.side_effect = a2a_error
     request_proto = a2a_pb2.GetTaskRequest(id='any')
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
 
@@ -480,7 +473,9 @@ class TestGrpcExtensions:
                 ),
             )
 
-        mock_request_handler.on_message_send_stream.side_effect = side_effect
+        mock_request_handler.on_message_send_stream = MagicMock(
+            side_effect=side_effect
+        )
 
         results = [
             result

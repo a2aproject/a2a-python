@@ -23,6 +23,7 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError,
 )
 from a2a.utils.errors import (
+    A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
     InternalError,
@@ -31,7 +32,6 @@ from a2a.utils.errors import (
     InvalidRequestError,
     MethodNotFoundError,
     PushNotificationNotSupportedError,
-    ServerError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -78,16 +78,13 @@ A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
 def rest_error_handler(
     func: Callable[..., Awaitable[Response]],
 ) -> Callable[..., Awaitable[Response]]:
-    """Decorator to catch ServerError and map it to an appropriate JSONResponse."""
+    """Decorator to catch A2AError and map it to an appropriate JSONResponse."""
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Response:
         try:
             return await func(*args, **kwargs)
-        except ServerError as e:
-            error = e.error or InternalError(
-                message='Internal error due to unknown reason'
-            )
+        except A2AError as error:
             http_code = A2AErrorToHttpStatus.get(
                 cast('_A2AErrorType', type(error)), 500
             )
@@ -122,17 +119,13 @@ def rest_error_handler(
 def rest_stream_error_handler(
     func: Callable[..., Coroutine[Any, Any, Any]],
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch ServerError for a streaming method,log it and then rethrow it to be handled by framework."""
+    """Decorator to catch A2AError for a streaming method, log it and then rethrow it to be handled by framework."""
 
     @functools.wraps(func)
     async def wrapper(*args: Any, **kwargs: Any) -> Any:
         try:
             return await func(*args, **kwargs)
-        except ServerError as e:
-            error = e.error or InternalError(
-                message='Internal error due to unknown reason'
-            )
-
+        except A2AError as error:
             log_level = (
                 logging.ERROR
                 if isinstance(error, InternalError)
@@ -150,7 +143,7 @@ def rest_stream_error_handler(
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)
             # and reraise the error and let server framework manage
-            raise e
+            raise error
         except Exception as e:
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)

@@ -31,7 +31,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import get_text_parts, proto_utils
-from a2a.utils.errors import ServerError
 
 
 @pytest.fixture
