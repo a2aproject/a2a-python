@@ -473,9 +473,7 @@ class TestGrpcExtensions:
                 ),
             )
 
-        mock_request_handler.on_message_send_stream = MagicMock(
-            side_effect=side_effect
-        )
+        mock_request_handler.on_message_send_stream.side_effect = side_effect
 
         results = [
             result
