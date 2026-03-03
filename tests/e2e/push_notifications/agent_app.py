@@ -26,7 +26,6 @@ from a2a.utils import (
     new_agent_text_message,
     new_task,
 )
-from a2a.utils.errors import ServerError
 
 
 def test_agent_card(url: str) -> AgentCard:
@@ -119,7 +118,7 @@ class TestAgentExecutor(AgentExecutor):
         event_queue: EventQueue,
     ) -> None:
         if not context.message:
-            raise ServerError(error=InvalidParamsError(message='No message'))
+            raise InvalidParamsError(message='No message')
 
         task = context.current_task
         if not task:

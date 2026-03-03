@@ -12,7 +12,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import append_artifact_to_task
-from a2a.utils.errors import InvalidParamsError, ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 logger = logging.getLogger(__name__)
@@ -100,7 +100,7 @@ class TaskManager:
             The updated `Task` object after processing the event.
 
         Raises:
-            ServerError: If the task ID in the event conflicts with the TaskManager's ID
+            InvalidParamsError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
         task_id_from_event = (
@@ -108,18 +108,14 @@ class TaskManager:
         )
         # If task id is known, make sure it is matched
         if self.task_id and self.task_id != task_id_from_event:
-            raise ServerError(
-                error=InvalidParamsError(
-                    message=f"Task in event doesn't match TaskManager {self.task_id} : {task_id_from_event}"
-                )
+            raise InvalidParamsError(
+                message=f"Task in event doesn't match TaskManager {self.task_id} : {task_id_from_event}"
             )
         if not self.task_id:
             self.task_id = task_id_from_event
         if self.context_id and self.context_id != event.context_id:
-            raise ServerError(
-                error=InvalidParamsError(
-                    message=f"Context in event doesn't match TaskManager {self.context_id} : {event.context_id}"
-                )
+            raise InvalidParamsError(
+                message=f"Context in event doesn't match TaskManager {self.context_id} : {event.context_id}"
             )
         if not self.context_id:
             self.context_id = event.context_id

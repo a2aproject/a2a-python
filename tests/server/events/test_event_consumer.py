@@ -22,7 +22,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
 
 
 def create_sample_message(message_id: str = '111') -> Message:
@@ -120,7 +119,7 @@ async def test_consume_one_queue_empty(
     try:
         result = await event_consumer.consume_one()
         assert result is not None
-    except ServerError:
+    except InternalError:
         pass
     mock_event_queue.task_done.assert_not_called()
 

@@ -303,7 +303,7 @@ class JsonRpcTransport(ClientTransport):
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
         return response
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
@@ -335,7 +335,7 @@ class JsonRpcTransport(ClientTransport):
         )
         return response
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
@@ -367,7 +367,7 @@ class JsonRpcTransport(ClientTransport):
         )
         return response
 
-    async def list_task_callback(
+    async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
@@ -402,7 +402,7 @@ class JsonRpcTransport(ClientTransport):
         )
         return response
 
-    async def delete_task_callback(
+    async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,

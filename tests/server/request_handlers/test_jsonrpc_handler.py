@@ -57,7 +57,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
 
 
 # Helper function to create a minimal Task proto
@@ -200,8 +199,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
 
-        request_handler.on_list_tasks.side_effect = ServerError(
-            InternalError(message='DB down')
+        request_handler.on_list_tasks.side_effect = InternalError(
+            message='DB down'
         )
         from a2a.types.a2a_pb2 import ListTasksRequest
 
@@ -266,7 +265,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
 
         async def streaming_coro():
-            raise ServerError(UnsupportedOperationError())
+            raise UnsupportedOperationError()
             yield
 
         with patch(
@@ -376,7 +375,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_agent_executor.execute.return_value = None
 
         async def streaming_coro():
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError()
             yield
 
         with patch(
@@ -747,13 +746,13 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             message=create_message(),
         )
 
-        # Should raise ServerError about streaming not supported
-        with self.assertRaises(ServerError) as context:
+        # Should raise UnsupportedOperationError about streaming not supported
+        with self.assertRaises(UnsupportedOperationError) as context:
             async for _ in handler.on_message_send_stream(request):
                 pass
 
         self.assertEqual(
-            str(context.exception.error.message),  # type: ignore
+            str(context.exception.message),
             'Streaming is not supported by the agent',
         )
 
@@ -778,12 +777,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             config=push_config,
         )
 
-        # Should raise ServerError about push notifications not supported
-        with self.assertRaises(ServerError) as context:
+        # Should raise UnsupportedOperationError about push notifications not supported
+        with self.assertRaises(UnsupportedOperationError) as context:
             await handler.set_push_notification_config(request)
 
         self.assertEqual(
-            str(context.exception.error.message),  # type: ignore
+            str(context.exception.message),
             'Push notifications are not supported by the agent',
         )
 
@@ -858,7 +857,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Make the request handler raise an Internal error without specifying an error type
         async def raise_server_error(*args, **kwargs) -> NoReturn:
-            raise ServerError(InternalError(message='Internal Error'))
+            raise InternalError(message='Internal Error')
 
         # Patch the method to raise an error
         with patch.object(
@@ -888,7 +887,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         # Make the request handler raise an Internal error without specifying an error type
         async def raise_server_error(*args, **kwargs):
-            raise ServerError(InternalError(message='Internal Error'))
+            raise InternalError(message='Internal Error')
             yield  # Need this to make it an async generator
 
         # Patch the method to raise an error
@@ -944,7 +943,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
 
     async def test_on_message_send_error_handling(self) -> None:
-        """Test error handling in on_message_send when consuming raises ServerError."""
+        """Test error handling in on_message_send when consuming raises A2AError."""
         # Arrange
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
@@ -957,9 +956,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task = create_task()
         mock_task_store.get.return_value = mock_task
 
-        # Set up consume_and_break_on_interrupt to raise ServerError
+        # Set up consume_and_break_on_interrupt to raise UnsupportedOperationError
         async def consume_raises_error(*args, **kwargs) -> NoReturn:
-            raise ServerError(error=UnsupportedOperationError())
+            raise UnsupportedOperationError()
 
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
@@ -1126,7 +1125,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         # throw server error
         request_handler.on_list_task_push_notification_configs.side_effect = (
-            ServerError(InternalError())
+            InternalError()
         )
 
         self.mock_agent_card.capabilities = AgentCapabilities(
@@ -1172,7 +1171,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         request_handler = AsyncMock(spec=DefaultRequestHandler)
         # throw server error
         request_handler.on_delete_task_push_notification_config.side_effect = (
-            ServerError(UnsupportedOperationError())
+            UnsupportedOperationError()
         )
 
         self.mock_agent_card.capabilities = AgentCapabilities(

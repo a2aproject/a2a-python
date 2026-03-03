@@ -42,7 +42,7 @@ from a2a.types import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
+
 from a2a.types.a2a_pb2 import (
     Artifact,
     DeleteTaskPushNotificationConfigRequest,
@@ -150,10 +150,9 @@ async def test_on_get_task_not_found():
     params = GetTaskRequest(id='non_existent_task')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_get_task(params, context)
 
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
 
 
@@ -264,11 +263,10 @@ async def test_on_list_tasks_negative_history_length_error():
     params = ListTasksRequest(history_length=-1, page_size=10)
     context = create_server_call_context()
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_list_tasks(params, context)
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert 'history length must be non-negative' in exc_info.value.error.message
+    assert 'history length must be non-negative' in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -283,10 +281,9 @@ async def test_on_cancel_task_task_not_found():
     params = CancelTaskRequest(id='task_not_found_for_cancel')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_cancel_task(params, context)
 
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
         'task_not_found_for_cancel', context
     )
@@ -428,14 +425,13 @@ async def test_on_cancel_task_completes_during_cancellation():
         return_value=mock_result_aggregator_instance,
     ):
         params = CancelTaskRequest(id=f'{task_id}')
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(TaskNotCancelableError):
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
             )
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
-    assert isinstance(exc_info.value.error, TaskNotCancelableError)
 
 
 @pytest.mark.asyncio
@@ -469,16 +465,15 @@ async def test_on_cancel_task_invalid_result_type():
         return_value=mock_result_aggregator_instance,
     ):
         params = CancelTaskRequest(id=f'{task_id}')
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InternalError) as exc_info:
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
             )
 
-    assert isinstance(exc_info.value.error, InternalError)
     assert (
         'Agent did not return valid response for cancel'
-        in exc_info.value.error.message
-    )  # type: ignore
+        in exc_info.value.message
+    )
 
 
 @pytest.mark.asyncio
@@ -832,12 +827,10 @@ async def test_on_message_send_no_result_from_aggregator():
             return_value=None,
         ),
     ):  # TaskManager.get_task for initial task
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InternalError):
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
-
-    assert isinstance(exc_info.value.error, InternalError)
 
 
 @pytest.mark.asyncio
@@ -883,13 +876,12 @@ async def test_on_message_send_task_id_mismatch():
             return_value=None,
         ),
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InternalError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
 
-    assert isinstance(exc_info.value.error, InternalError)
-    assert 'Task ID mismatch' in exc_info.value.error.message  # type: ignore
+    assert 'Task ID mismatch' in exc_info.value.message  # type: ignore
 
 
 class HelloAgentExecutor(AgentExecutor):
@@ -1914,14 +1906,13 @@ async def test_on_message_send_stream_task_id_mismatch():
             return_value=None,
         ),
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InternalError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
                 pass  # Consume the stream to trigger the error
 
-    assert isinstance(exc_info.value.error, InternalError)
-    assert 'Task ID mismatch' in exc_info.value.error.message  # type: ignore
+    assert 'Task ID mismatch' in exc_info.value.message  # type: ignore
 
 
 @pytest.mark.asyncio
@@ -1974,11 +1965,10 @@ async def test_set_task_push_notification_config_no_notifier():
         config=PushNotificationConfig(url='http://example.com'),
     )
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         await request_handler.on_create_task_push_notification_config(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value.error, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
@@ -2001,12 +1991,10 @@ async def test_set_task_push_notification_config_task_not_found():
     )
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_create_task_push_notification_config(
             params, context
         )
-
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.set_info.assert_not_awaited()
 
@@ -2024,11 +2012,10 @@ async def test_get_task_push_notification_config_no_store():
         id='push_notification_config',
     )
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         await request_handler.on_get_task_push_notification_config(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value.error, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
@@ -2048,12 +2035,10 @@ async def test_get_task_push_notification_config_task_not_found():
     )
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_get_task_push_notification_config(
             params, context
         )
-
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
@@ -2079,14 +2064,10 @@ async def test_get_task_push_notification_config_info_not_found():
     )
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InternalError):
         await request_handler.on_get_task_push_notification_config(
             params, context
         )
-
-    assert isinstance(
-        exc_info.value.error, InternalError
-    )  # Current code raises InternalError
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_awaited_once_with(
         'non_existent_task', context
@@ -2182,12 +2163,10 @@ async def test_on_subscribe_to_task_task_not_found():
     params = SubscribeToTaskRequest(id='resub_task_not_found')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         # Need to consume the async generator to trigger the error
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass
-
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with(
         'resub_task_not_found', context
     )
@@ -2211,13 +2190,9 @@ async def test_on_subscribe_to_task_queue_not_found():
     params = SubscribeToTaskRequest(id='resub_queue_not_found')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass
-
-    assert isinstance(
-        exc_info.value.error, TaskNotFoundError
-    )  # Should be TaskNotFoundError as per spec
     mock_task_store.get.assert_awaited_once_with(
         'resub_queue_not_found', context
     )
@@ -2271,11 +2246,10 @@ async def test_list_task_push_notification_config_no_store():
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task1')
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         await request_handler.on_list_task_push_notification_configs(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value.error, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
@@ -2293,12 +2267,10 @@ async def test_list_task_push_notification_config_task_not_found():
     params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_list_task_push_notification_configs(
             params, context
         )
-
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
@@ -2422,11 +2394,11 @@ async def test_delete_task_push_notification_config_no_store():
         task_id='task1', id='config1'
     )
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         await request_handler.on_delete_task_push_notification_config(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value.error, UnsupportedOperationError)
+    assert isinstance(exc_info.value, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
@@ -2446,12 +2418,11 @@ async def test_delete_task_push_notification_config_task_not_found():
     )
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_delete_task_push_notification_config(
             params, context
         )
-
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
     mock_task_store.get.assert_awaited_once_with('non_existent_task', context)
     mock_push_store.get_info.assert_not_awaited()
 
@@ -2621,16 +2592,14 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert exc_info.value.error.message
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
-        in exc_info.value.error.message
+        in exc_info.value.message
     )
 
 
@@ -2663,17 +2632,15 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
                 pass  # pragma: no cover
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert exc_info.value.error.message
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
-        in exc_info.value.error.message
+        in exc_info.value.message
     )
 
 
@@ -2698,15 +2665,14 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
     params = SubscribeToTaskRequest(id=f'{task_id}')
 
     context = create_server_call_context()
-    with pytest.raises(ServerError) as exc_info:
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass  # pragma: no cover
 
-    assert isinstance(exc_info.value.error, UnsupportedOperationError)
-    assert exc_info.value.error.message
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
-        in exc_info.value.error.message
+        in exc_info.value.message
     )
     mock_task_store.get.assert_awaited_once_with(f'{task_id}', context)
 
@@ -2736,16 +2702,14 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=None,
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(TaskNotFoundError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
 
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
-    assert exc_info.value.error.message
     assert (
         f'Task {task_id} was specified but does not exist'
-        in exc_info.value.error.message
+        in exc_info.value.message
     )
 
 
@@ -2774,18 +2738,16 @@ async def test_on_message_send_stream_task_id_provided_but_task_not_found():
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=None,
     ):
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(TaskNotFoundError) as exc_info:
             # Need to consume the async generator to trigger the error
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
                 pass
 
-    assert isinstance(exc_info.value.error, TaskNotFoundError)
-    assert exc_info.value.error.message
     assert (
         f'Task {task_id} was specified but does not exist'
-        in exc_info.value.error.message
+        in exc_info.value.message
     )
 
 
@@ -2851,11 +2813,10 @@ async def test_on_get_task_negative_history_length_error():
     params = GetTaskRequest(id='task1', history_length=-1)
     context = create_server_call_context()
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_get_task(params, context)
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert 'history length must be non-negative' in exc_info.value.error.message
+    assert 'history length must be non-negative' in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -2868,11 +2829,10 @@ async def test_on_list_tasks_page_size_too_small():
     params = ListTasksRequest(page_size=0)
     context = create_server_call_context()
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_list_tasks(params, context)
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert 'minimum page size is 1' in exc_info.value.error.message
+    assert 'minimum page size is 1' in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -2885,11 +2845,10 @@ async def test_on_list_tasks_page_size_too_large():
     params = ListTasksRequest(page_size=101)
     context = create_server_call_context()
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_list_tasks(params, context)
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert 'maximum page size is 100' in exc_info.value.error.message
+    assert 'maximum page size is 100' in exc_info.value.message
 
 
 @pytest.mark.asyncio
@@ -2911,8 +2870,7 @@ async def test_on_message_send_negative_history_length_error():
     )
     context = create_server_call_context()
 
-    with pytest.raises(ServerError) as exc_info:
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(params, context)
 
-    assert isinstance(exc_info.value.error, InvalidParamsError)
-    assert 'history length must be non-negative' in exc_info.value.error.message
+    assert 'history length must be non-negative' in exc_info.value.message
