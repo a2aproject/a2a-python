@@ -2,21 +2,20 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator, Callable
-from typing import Any
+from typing import Any, NoReturn
 
 import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 from google.protobuf.message import Message
-from httpx_sse import SSEError, aconnect_sse
 
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-    A2AClientTimeoutError,
-)
+from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.client.transports.http_helpers import (
+    send_http_request,
+    send_http_stream_request,
+)
 from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -36,10 +35,15 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+_A2A_ERROR_NAME_TO_CLS = {
+    error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
+}
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -61,40 +65,6 @@ class RestTransport(ClientTransport):
         self.interceptors = interceptors or []
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
         self.extensions = extensions
-
-    async def _apply_interceptors(
-        self,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        final_http_kwargs = http_kwargs or {}
-        final_request_payload = request_payload
-        # TODO: Implement interceptors for other transports
-        return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
-
-    async def _prepare_send_message(
-        self,
-        request: SendMessageRequest,
-        context: ClientCallContext | None,
-        extensions: list[str] | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        payload = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
-            modified_kwargs,
-            context,
-        )
-        return payload, modified_kwargs
 
     def _get_path(self, base_path: str, tenant: str | None) -> str:
         """Returns the full path, prepending the tenant if provided."""
@@ -133,95 +103,13 @@ class RestTransport(ClientTransport):
         )
         path = self._get_path('/v1/message:stream', request.tenant)
 
-        modified_kwargs.setdefault('timeout', None)
-
-        async with aconnect_sse(
-            self.httpx_client,
+        async for event in self._send_stream_request(
             'POST',
-            f'{self.url}{path}',
+            path,
+            http_kwargs=modified_kwargs,
             json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                event_source.response.raise_for_status()
-                async for sse in event_source.aiter_sse():
-                    event: StreamResponse = Parse(sse.data, StreamResponse())
-                    yield event
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except httpx.HTTPStatusError as e:
-                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
-
-    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
-        try:
-            response = await self.httpx_client.send(request)
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException as e:
-            raise A2AClientTimeoutError('Client Request timed out') from e
-        except httpx.HTTPStatusError as e:
-            raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-        except json.JSONDecodeError as e:
-            raise A2AClientJSONError(str(e)) from e
-        except httpx.RequestError as e:
-            raise A2AClientHTTPError(
-                503, f'Network communication error: {e}'
-            ) from e
-
-    async def _send_post_request(
-        self,
-        target: str,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'POST',
-                f'{self.url}{target}',
-                json=rpc_request_payload,
-                **(http_kwargs or {}),
-            )
-        )
-
-    async def _send_get_request(
-        self,
-        target: str,
-        query_params: dict[str, str],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'GET',
-                f'{self.url}{target}',
-                params=query_params,
-                **(http_kwargs or {}),
-            )
-        )
-
-    async def _send_delete_request(
-        self,
-        target: str,
-        query_params: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'DELETE',
-                f'{self.url}{target}',
-                params=query_params,
-                **(http_kwargs or {}),
-            )
-        )
+        ):
+            yield event
 
     async def get_task(
         self,
@@ -464,36 +352,17 @@ class RestTransport(ClientTransport):
             self._get_http_args(context),
             extensions if extensions is not None else self.extensions,
         )
-        modified_kwargs.setdefault('timeout', None)
 
         path = self._get_path(
             f'/v1/tasks/{request.id}:subscribe', request.tenant
         )
 
-        async with aconnect_sse(
-            self.httpx_client,
+        async for event in self._send_stream_request(
             'GET',
-            f'{self.url}{path}',
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                async for sse in event_source.aiter_sse():
-                    if not sse.data:
-                        continue
-                    event: StreamResponse = Parse(sse.data, StreamResponse())
-                    yield event
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
+            f'{path}',
+            http_kwargs=modified_kwargs,
+        ):
+            yield event
 
     async def get_extended_agent_card(
         self,
@@ -533,6 +402,134 @@ class RestTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
+
+    async def _apply_interceptors(
+        self,
+        request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None,
+        context: ClientCallContext | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        final_http_kwargs = http_kwargs or {}
+        final_request_payload = request_payload
+        # TODO: Implement interceptors for other transports
+        return final_request_payload, final_http_kwargs
+
+    def _get_http_args(
+        self, context: ClientCallContext | None
+    ) -> dict[str, Any] | None:
+        return context.state.get('http_kwargs') if context else None
+
+    async def _prepare_send_message(
+        self,
+        request: SendMessageRequest,
+        context: ClientCallContext | None,
+        extensions: list[str] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        payload = MessageToDict(request)
+        modified_kwargs = update_extension_header(
+            self._get_http_args(context),
+            extensions if extensions is not None else self.extensions,
+        )
+        payload, modified_kwargs = await self._apply_interceptors(
+            payload,
+            modified_kwargs,
+            context,
+        )
+        return payload, modified_kwargs
+
+    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+        """Handles HTTP status errors and raises the appropriate A2AError."""
+        try:
+            error_data = e.response.json()
+            error_type = error_data.get('type')
+            message = error_data.get('message', str(e))
+
+            if isinstance(error_type, str):
+                # TODO(#723): Resolving imports by name is temporary until proper error handling structure is added in #723.
+                exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type)
+                if exception_cls:
+                    raise exception_cls(message) from e
+        except (json.JSONDecodeError, ValueError):
+            pass
+
+        # Fallback mappings for status codes if 'type' is missing or unknown
+        status_code = e.response.status_code
+        if status_code == httpx.codes.NOT_FOUND:
+            raise MethodNotFoundError(
+                f'Resource not found: {e.request.url}'
+            ) from e
+
+        raise A2AClientError(f'HTTP Error {status_code}: {e}') from e
+
+    async def _send_stream_request(
+        self,
+        method: str,
+        target: str,
+        http_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[StreamResponse]:
+        final_kwargs = dict(http_kwargs or {})
+        final_kwargs.update(kwargs)
+
+        async for sse_data in send_http_stream_request(
+            self.httpx_client,
+            method,
+            f'{self.url}{target}',
+            self._handle_http_error,
+            **final_kwargs,
+        ):
+            event: StreamResponse = Parse(sse_data, StreamResponse())
+            yield event
+
+    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
+        return await send_http_request(
+            self.httpx_client, request, self._handle_http_error
+        )
+
+    async def _send_post_request(
+        self,
+        target: str,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'POST',
+                f'{self.url}{target}',
+                json=rpc_request_payload,
+                **(http_kwargs or {}),
+            )
+        )
+
+    async def _send_get_request(
+        self,
+        target: str,
+        query_params: dict[str, str],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'GET',
+                f'{self.url}{target}',
+                params=query_params,
+                **(http_kwargs or {}),
+            )
+        )
+
+    async def _send_delete_request(
+        self,
+        target: str,
+        query_params: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        return await self._send_request(
+            self.httpx_client.build_request(
+                'DELETE',
+                f'{self.url}{target}',
+                params=query_params,
+                **(http_kwargs or {}),
+            )
+        )
 
 
 def _model_to_query_params(instance: Message) -> dict[str, str]:

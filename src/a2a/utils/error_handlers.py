@@ -103,14 +103,19 @@ def rest_error_handler(
                 if getattr(error, 'data', None)
                 else '',
             )
+            # TODO(#722): Standardize error response format.
             return JSONResponse(
-                content={'message': getattr(error, 'message', str(error))},
+                content={
+                    'message': getattr(error, 'message', str(error)),
+                    'type': type(error).__name__,
+                },
                 status_code=http_code,
             )
         except Exception:
             logger.exception('Unknown error occurred')
             return JSONResponse(
-                content={'message': 'unknown exception'}, status_code=500
+                content={'message': 'unknown exception', 'type': 'Exception'},
+                status_code=500,
             )
 
     return wrapper

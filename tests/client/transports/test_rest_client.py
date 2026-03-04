@@ -8,7 +8,7 @@ from google.protobuf import json_format
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
-from a2a.client.errors import A2AClientHTTPError, A2AClientTimeoutError
+from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types.a2a_pb2 import (
@@ -21,14 +21,13 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
-    ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     Message,
     SendMessageRequest,
     SubscribeToTaskRequest,
-    TaskPushNotificationConfig,
 )
 from a2a.utils.constants import TransportProtocol
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 @pytest.fixture
@@ -68,7 +67,7 @@ def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
 
 class TestRestTransport:
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_timeout(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -93,13 +92,54 @@ class TestRestTransport:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientTimeoutError) as exc_info:
+        with pytest.raises(A2AClientError) as exc_info:
             _ = [
                 item
                 async for item in client.send_message_streaming(request=params)
             ]
 
         assert 'Client Request timed out' in str(exc_info.value)
+
+    @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+    @pytest.mark.asyncio
+    async def test_rest_mapped_errors(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        error_cls,
+    ):
+        """Test handling of mapped REST HTTP error responses."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        params = SendMessageRequest(
+            message=create_text_message_object(content='Hello')
+        )
+
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 500
+        mock_response.json.return_value = {
+            'type': error_cls.__name__,
+            'message': 'Mapped Error',
+        }
+
+        error = httpx.HTTPStatusError(
+            'Server Error',
+            request=httpx.Request('POST', 'http://test.url'),
+            response=mock_response,
+        )
+
+        mock_httpx_client.send.side_effect = error
+
+        with pytest.raises(error_cls):
+            await client.send_message(request=params)
 
 
 class TestRestTransportExtensions:
@@ -147,7 +187,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_with_new_extensions(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -189,7 +229,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_server_error_propagates(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -225,11 +265,11 @@ class TestRestTransportExtensions:
             mock_event_source
         )
 
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(A2AClientError) as exc_info:
             async for _ in client.send_message_streaming(request=request):
                 pass
 
-        assert exc_info.value.status_code == 403
+        assert 'HTTP Error 403' in str(exc_info.value)
 
         mock_aconnect_sse.assert_called_once()
 

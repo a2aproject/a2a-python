@@ -39,7 +39,10 @@ async def test_rest_error_handler_server_error():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 400
-    assert result.content == {'message': 'Bad request'}
+    assert result.content == {
+        'message': 'Bad request',
+        'type': 'InvalidRequestError',
+    }
 
 
 @pytest.mark.asyncio
@@ -55,7 +58,10 @@ async def test_rest_error_handler_unknown_exception():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 500
-    assert result.content == {'message': 'unknown exception'}
+    assert result.content == {
+        'message': 'unknown exception',
+        'type': 'Exception',
+    }
 
 
 @pytest.mark.asyncio

@@ -1,12 +1,12 @@
 import json
 import logging
 
-from unittest.mock import AsyncMock, MagicMock, Mock, patch
+from unittest.mock import AsyncMock, MagicMock, Mock
 
 import httpx
 import pytest
 
-from a2a.client import A2ACardResolver, A2AClientHTTPError, A2AClientJSONError
+from a2a.client import A2ACardResolver, AgentCardResolutionError
 from a2a.types import AgentCard
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
 
@@ -218,10 +218,11 @@ class TestGetAgentCard:
         )
         mock_httpx_client.get.return_value = mock_response
 
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
 
         assert exc_info.value.status_code == status_code
+        assert f'HTTP {status_code}' in str(exc_info.value)
         assert 'Failed to fetch agent card' in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -233,7 +234,7 @@ class TestGetAgentCard:
             'Invalid JSON', '', 0
         )
         mock_httpx_client.get.return_value = mock_response
-        with pytest.raises(A2AClientJSONError) as exc_info:
+        with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
         assert 'Failed to parse JSON' in str(exc_info.value)
 
@@ -245,9 +246,8 @@ class TestGetAgentCard:
         mock_httpx_client.get.side_effect = httpx.RequestError(
             'Connection timeout', request=Mock()
         )
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
-        assert exc_info.value.status_code == 503
         assert 'Network communication error' in str(exc_info.value)
 
     @pytest.mark.asyncio
@@ -263,11 +263,11 @@ class TestGetAgentCard:
         return_json = {'invalid': 'data'}
         mock_response.json.return_value = return_json
         mock_httpx_client.get.return_value = mock_response
-        with pytest.raises(A2AClientJSONError) as exc_info:
+        with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
         assert (
             f'Failed to validate agent card structure from {base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}'
-            in exc_info.value.message
+            in str(exc_info.value)
         )
         mock_httpx_client.get.assert_called_once_with(
             f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
@@ -341,9 +341,9 @@ class TestGetAgentCard:
             f'Status {status_code}', request=Mock(), response=mock_response
         )
         mock_httpx_client.get.return_value = mock_response
-        with pytest.raises(A2AClientHTTPError) as exc_info:
+        with pytest.raises(AgentCardResolutionError) as exc_info:
             await resolver.get_agent_card()
-        assert exc_info.value.status_code == status_code
+        assert f'HTTP {status_code}' in str(exc_info.value)
 
     @pytest.mark.asyncio
     async def test_get_agent_card_returns_agent_card_instance(

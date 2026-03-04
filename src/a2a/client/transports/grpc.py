@@ -1,6 +1,11 @@
 import logging
 
 from collections.abc import AsyncGenerator, Callable
+from functools import wraps
+from typing import Any, NoReturn
+
+from a2a.client.errors import A2AClientError, A2AClientTimeoutError
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 try:
@@ -42,6 +47,49 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 logger = logging.getLogger(__name__)
 
+_A2A_ERROR_NAME_TO_CLS = {
+    error_type.__name__: error_type for error_type in JSON_RPC_ERROR_CODE_MAP
+}
+
+
+def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
+    if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+        raise A2AClientTimeoutError('Client Request timed out') from e
+
+    details = e.details()
+    if isinstance(details, str) and ': ' in details:
+        error_type_name, error_message = details.split(': ', 1)
+        # TODO(#723): Resolving imports by name is temporary until proper error handling structure is added in #723.
+        exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type_name)
+        if exception_cls:
+            raise exception_cls(error_message) from e
+    raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e
+
+
+def _handle_grpc_exception(func: Callable[..., Any]) -> Callable[..., Any]:
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            return await func(*args, **kwargs)
+        except grpc.aio.AioRpcError as e:
+            _map_grpc_error(e)
+
+    return wrapper
+
+
+def _handle_grpc_stream_exception(
+    func: Callable[..., Any],
+) -> Callable[..., Any]:
+    @wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            async for item in func(*args, **kwargs):
+                yield item
+        except grpc.aio.AioRpcError as e:
+            _map_grpc_error(e)
+
+    return wrapper
+
 
 @trace_class(kind=SpanKind.CLIENT)
 class GrpcTransport(ClientTransport):
@@ -62,18 +110,6 @@ class GrpcTransport(ClientTransport):
         )
         self.extensions = extensions
 
-    def _get_grpc_metadata(
-        self,
-        extensions: list[str] | None = None,
-    ) -> list[tuple[str, str]] | None:
-        """Creates gRPC metadata for extensions."""
-        extensions_to_use = extensions or self.extensions
-        if extensions_to_use:
-            return [
-                (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
-            ]
-        return None
-
     @classmethod
     def create(
         cls,
@@ -87,6 +123,7 @@ class GrpcTransport(ClientTransport):
             raise ValueError('grpc_channel_factory is required when using gRPC')
         return cls(config.grpc_channel_factory(url), card, config.extensions)
 
+    @_handle_grpc_exception
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -100,6 +137,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_stream_exception
     async def send_message_streaming(
         self,
         request: SendMessageRequest,
@@ -118,6 +156,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield response
 
+    @_handle_grpc_stream_exception
     async def subscribe(
         self,
         request: SubscribeToTaskRequest,
@@ -136,6 +175,7 @@ class GrpcTransport(ClientTransport):
                 break
             yield response
 
+    @_handle_grpc_exception
     async def get_task(
         self,
         request: GetTaskRequest,
@@ -149,6 +189,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def list_tasks(
         self,
         request: ListTasksRequest,
@@ -162,6 +203,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def cancel_task(
         self,
         request: CancelTaskRequest,
@@ -175,6 +217,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
@@ -188,6 +231,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
@@ -201,6 +245,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
@@ -214,6 +259,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
@@ -227,6 +273,7 @@ class GrpcTransport(ClientTransport):
             metadata=self._get_grpc_metadata(extensions),
         )
 
+    @_handle_grpc_exception
     async def get_extended_agent_card(
         self,
         *,
@@ -250,3 +297,15 @@ class GrpcTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the gRPC channel."""
         await self.channel.close()
+
+    def _get_grpc_metadata(
+        self,
+        extensions: list[str] | None = None,
+    ) -> list[tuple[str, str]] | None:
+        """Creates gRPC metadata for extensions."""
+        extensions_to_use = extensions or self.extensions
+        if extensions_to_use:
+            return [
+                (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
+            ]
+        return None
