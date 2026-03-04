@@ -1,8 +1,17 @@
 """DynamoDB-backed implementation of TaskStore for persistent task storage."""
 
+from __future__ import annotations
+
 import logging
 
-from a2a.server.context import ServerCallContext
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    import aioboto3
+
+    from a2a.server.context import ServerCallContext
+
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import Task
 
@@ -13,7 +22,7 @@ logger = logging.getLogger(__name__)
 class DynamoDBTaskStore(TaskStore):
     """DynamoDB-backed implementation of TaskStore.
 
-    Stores Task objects in an AWS DynamoDB table. Task data is serialised as
+    Stores Task objects in an AWS DynamoDB table. Task data is serialized as
     JSON strings using Pydantic's ``model_dump_json`` / ``model_validate_json``.
 
     Requires the ``[aws]`` optional extra::
@@ -22,7 +31,7 @@ class DynamoDBTaskStore(TaskStore):
 
     Table schema:
         Partition key: ``task_id`` (String)
-        Attribute:     ``task_data`` (String — JSON-serialised Task)
+        Attribute:     ``task_data`` (String — JSON-serialized Task)
 
     Example:
         >>> import aioboto3
@@ -42,9 +51,9 @@ class DynamoDBTaskStore(TaskStore):
         table_name: str,
         *,
         region_name: str = 'us-east-1',
-        session: object | None = None,
+        session: aioboto3.Session | None = None,
     ) -> None:
-        """Initialises the DynamoDBTaskStore."""
+        """Initializes the DynamoDBTaskStore."""
         try:
             import aioboto3  # noqa: PLC0415
         except ImportError as exc:

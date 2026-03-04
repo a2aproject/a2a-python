@@ -35,17 +35,17 @@ _KIND_TO_TYPE: dict[str, type[Event]] = {
 }
 
 
-def _serialise_event(
+def _serialize_event(
     event: Event,
     task_id: str,
     instance_id: str,
 ) -> str:
-    """Serialises an event into the SNS wire-format JSON string.
+    """Serializes an event into the SNS wire-format JSON string.
 
     Args:
-        event: The event to serialise.
+        event: The event to serialize.
         task_id: The task ID this event belongs to.
-        instance_id: The originating instance ID (for dedup).
+        instance_id: The originating instance ID (for deduplication).
 
     Returns:
         A JSON string suitable for use as an SNS ``Message`` payload.
@@ -55,13 +55,13 @@ def _serialise_event(
         'task_id': task_id,
         'type': _EVENT_TYPE,
         'event_kind': event.kind,
-        'event_data': json.loads(event.model_dump_json()),
+        'event_data': event.model_dump(mode='json'),
     }
     return json.dumps(payload)
 
 
-def _serialise_close(task_id: str, instance_id: str) -> str:
-    """Serialises a close signal into the SNS wire-format JSON string.
+def _serialize_close(task_id: str, instance_id: str) -> str:
+    """Serializes a close signal into the SNS wire-format JSON string.
 
     Args:
         task_id: The task ID whose queue is being closed.
@@ -78,7 +78,7 @@ def _serialise_close(task_id: str, instance_id: str) -> str:
     return json.dumps(payload)
 
 
-def deserialise_wire_message(
+def deserialize_wire_message(
     raw: str,
 ) -> dict[str, Any]:
     """Parses a raw SNS/SQS wire-format JSON string.
@@ -110,7 +110,7 @@ def decode_event(msg: dict[str, Any]) -> Event | None:
             ``event_data`` fields.
 
     Returns:
-        The decoded Event, or ``None`` if the ``kind`` is unrecognised.
+        The decoded Event, or ``None`` if the ``kind`` is unrecognized.
     """
     kind = msg.get('event_kind')
     event_data = msg.get('event_data')
@@ -138,10 +138,11 @@ class DistributedEventQueue(EventQueue):
 
     Args:
         publish_fn: Async callable ``(message: str) -> None`` that publishes
-            the serialised wire message to SNS. Provided by
+            the serialized wire message to SNS. Provided by
             :class:`SnsQueueManager` and injected at construction time.
         task_id: The task ID this queue serves.
-        instance_id: The unique ID of the local instance (used for dedup).
+        instance_id: The unique ID of the local instance (used for
+            deduplication of self-published messages).
         max_queue_size: Maximum number of events to buffer locally.
             Defaults to ``DEFAULT_MAX_QUEUE_SIZE``.
     """
@@ -154,13 +155,13 @@ class DistributedEventQueue(EventQueue):
         *,
         max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
     ) -> None:
-        """Initialises the DistributedEventQueue."""
+        """Initializes the DistributedEventQueue."""
         super().__init__(max_queue_size=max_queue_size)
         self._publish_fn = publish_fn
         self._task_id = task_id
         self._instance_id = instance_id
         logger.debug(
-            'DistributedEventQueue initialised (task_id=%s, instance=%s).',
+            'DistributedEventQueue initialized (task_id=%s, instance=%s).',
             task_id,
             instance_id,
         )
@@ -204,13 +205,13 @@ class DistributedEventQueue(EventQueue):
         await super().close(immediate=immediate)
 
     async def _publish_event(self, event: Event) -> None:
-        """Fire-and-forget coroutine: serialises and publishes one event.
+        """Fire-and-forget coroutine: serializes and publishes one event.
 
         Args:
             event: The event to publish.
         """
         try:
-            message = _serialise_event(event, self._task_id, self._instance_id)
+            message = _serialize_event(event, self._task_id, self._instance_id)
             await self._publish_fn(message)
             logger.debug(
                 'Event published to SNS (task_id=%s, kind=%s).',
@@ -225,7 +226,7 @@ class DistributedEventQueue(EventQueue):
     async def _publish_close(self) -> None:
         """Fire-and-forget coroutine: publishes the close signal to SNS."""
         try:
-            message = _serialise_close(self._task_id, self._instance_id)
+            message = _serialize_close(self._task_id, self._instance_id)
             await self._publish_fn(message)
             logger.debug(
                 'Close signal published to SNS (task_id=%s).', self._task_id

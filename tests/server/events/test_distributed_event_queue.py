@@ -12,7 +12,7 @@ from a2a.server.events.distributed_event_queue import (
     _CLOSE_TYPE,
     _EVENT_TYPE,
     decode_event,
-    deserialise_wire_message,
+    deserialize_wire_message,
 )
 from a2a.types import Task, TaskState, TaskStatus
 
@@ -130,21 +130,21 @@ async def test_close_does_not_publish_twice(
 # ---------------------------------------------------------------------------
 
 
-def test_deserialise_wire_message_valid() -> None:
+def test_deserialize_wire_message_valid() -> None:
     raw = json.dumps({'type': 'event', 'task_id': 'x', 'instance_id': 'A'})
-    msg = deserialise_wire_message(raw)
+    msg = deserialize_wire_message(raw)
     assert msg['type'] == 'event'
 
 
-def test_deserialise_wire_message_missing_type() -> None:
+def test_deserialize_wire_message_missing_type() -> None:
     raw = json.dumps({'task_id': 'x'})
     with pytest.raises(ValueError, match="missing 'type'"):
-        deserialise_wire_message(raw)
+        deserialize_wire_message(raw)
 
 
-def test_deserialise_wire_message_invalid_json() -> None:
+def test_deserialize_wire_message_invalid_json() -> None:
     with pytest.raises(ValueError, match='Malformed'):
-        deserialise_wire_message('{not-json')
+        deserialize_wire_message('{not-json')
 
 
 def test_decode_event_known_kind() -> None:

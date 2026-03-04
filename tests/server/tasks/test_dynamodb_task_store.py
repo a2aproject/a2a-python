@@ -127,7 +127,7 @@ async def test_delete_nonexistent_is_noop(
 async def test_save_then_get_round_trip(
     mock_session: MagicMock, task: Task
 ) -> None:
-    """Simulate a full round-trip through serialise → deserialise."""
+    """Simulate a full round-trip through serialize → deserialize."""
     stored: dict = {}
 
     async def fake_put_item(**kwargs):

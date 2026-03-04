@@ -1,18 +1,25 @@
 """SnsQueueManager — distributed QueueManager using SNS/SQS fan-out."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import logging
 import uuid
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+
+if TYPE_CHECKING:
+    import aioboto3
+
+    from a2a.server.events.event_queue import EventQueue
 
 from a2a.server.events.distributed_event_queue import (
     DistributedEventQueue,
     decode_event,
-    deserialise_wire_message,
+    deserialize_wire_message,
 )
-from a2a.server.events.event_queue import EventQueue
 from a2a.server.events.queue_manager import (
     NoTaskQueue,
     QueueManager,
@@ -78,12 +85,12 @@ class SnsQueueManager(QueueManager):
         *,
         instance_id: str | None = None,
         region_name: str = 'us-east-1',
-        session: object | None = None,
+        session: aioboto3.Session | None = None,
         poll_interval_seconds: float = 1.0,
         max_messages: int = 10,
         visibility_timeout_seconds: int = 30,
     ) -> None:
-        """Initialises the SnsQueueManager."""
+        """Initializes the SnsQueueManager."""
         try:
             import aioboto3  # noqa: PLC0415
         except ImportError as exc:
@@ -157,7 +164,7 @@ class SnsQueueManager(QueueManager):
     # ------------------------------------------------------------------
 
     async def add(self, task_id: str, queue: EventQueue) -> None:
-        """Adds a pre-existing EventQueue for *task_id*.
+        """Adds an already-created EventQueue for *task_id*.
 
         Raises:
             TaskQueueExists: If a queue for *task_id* already exists.
@@ -233,12 +240,12 @@ class SnsQueueManager(QueueManager):
     # ------------------------------------------------------------------
 
     async def _sns_publish(self, message: str) -> None:
-        """Publishes a serialised wire message to the SNS topic.
+        """Publishes a serialized wire message to the SNS topic.
 
         Args:
             message: JSON string in the distributed wire format.
         """
-        async with self._session.client(  # type: ignore[union-attr]
+        async with self._session.client(
             'sns', region_name=self._region_name
         ) as sns:
             await sns.publish(TopicArn=self._topic_arn, Message=message)
@@ -261,7 +268,7 @@ class SnsQueueManager(QueueManager):
             self._instance_id,
             self._sqs_queue_url,
         )
-        async with self._session.client(  # type: ignore[union-attr]
+        async with self._session.client(
             'sqs', region_name=self._region_name
         ) as sqs:
             while not self._stop_event.is_set():
@@ -332,27 +339,37 @@ class SnsQueueManager(QueueManager):
         Args:
             sqs_msg: A single SQS message dictionary from ReceiveMessage.
         """
+        # Use message ID in warnings to avoid logging potentially sensitive
+        # message body content (PII in Task/Message payloads).
+        msg_id = sqs_msg.get('MessageId', '<no-id>')
         body_str = sqs_msg.get('Body', '{}')
+
         try:
             body: dict[str, Any] = json.loads(body_str)
         except json.JSONDecodeError:
-            logger.warning('SQS message body is not valid JSON: %s', body_str)
+            logger.warning(
+                'SQS message body is not valid JSON (msg_id=%s).', msg_id
+            )
             return
 
         # Unwrap SNS notification envelope if present.
         if body.get('Type') == 'Notification':
             inner_str = body.get('Message', '{}')
             try:
-                wire_msg = deserialise_wire_message(inner_str)
+                wire_msg = deserialize_wire_message(inner_str)
             except ValueError:
-                logger.warning('Malformed inner SNS message: %s', inner_str)
+                logger.warning(
+                    'Malformed inner SNS message (msg_id=%s).', msg_id
+                )
                 return
         else:
             # Raw delivery — body itself is the wire message.
             try:
-                wire_msg = deserialise_wire_message(body_str)
+                wire_msg = deserialize_wire_message(body_str)
             except ValueError:
-                logger.warning('Malformed raw SQS message body: %s', body_str)
+                logger.warning(
+                    'Malformed raw SQS message body (msg_id=%s).', msg_id
+                )
                 return
 
         # Deduplicate: ignore messages we published ourselves.

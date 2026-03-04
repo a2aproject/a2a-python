@@ -1,31 +1,20 @@
 """SQS queue lifecycle manager for per-instance ECS auto-scaling support."""
 
+from __future__ import annotations
+
 import json
 import logging
 import uuid
 
 from dataclasses import dataclass, field
+from typing import TYPE_CHECKING
+
+
+if TYPE_CHECKING:
+    import aioboto3
 
 
 logger = logging.getLogger(__name__)
-
-# SQS policy template granting SNS permission to send messages to the queue.
-_SNS_POLICY_TEMPLATE = json.dumps(
-    {
-        'Version': '2012-10-17',
-        'Statement': [
-            {
-                'Effect': 'Allow',
-                'Principal': {'Service': 'sns.amazonaws.com'},
-                'Action': 'SQS:SendMessage',
-                'Resource': '{queue_arn}',
-                'Condition': {
-                    'ArnEquals': {'aws:SourceArn': '{topic_arn}'},
-                },
-            }
-        ],
-    }
-)
 
 
 @dataclass
@@ -77,7 +66,7 @@ class QueueLifecycleManager:
     queue_name_prefix: str = 'a2a-instance'
     instance_id: str = field(default_factory=lambda: str(uuid.uuid4()))
     region_name: str = 'us-east-1'
-    session: object | None = field(default=None, repr=False)
+    session: aioboto3.Session | None = field(default=None, repr=False)
 
     # Set after provision(); read via properties.
     _provision_result: QueueProvisionResult | None = field(
@@ -163,7 +152,7 @@ class QueueLifecycleManager:
             self.region_name,
         )
 
-        async with self.session.client(  # type: ignore[union-attr]
+        async with self.session.client(
             'sqs', region_name=self.region_name
         ) as sqs:
             # Step 1: Create the SQS queue.
@@ -179,10 +168,27 @@ class QueueLifecycleManager:
             queue_arn: str = attr_resp['Attributes']['QueueArn']
             logger.debug('SQS queue ARN: %s.', queue_arn)
 
-            # Step 3: Attach SNS → SQS access policy.
-            policy = _SNS_POLICY_TEMPLATE.replace(
-                '{queue_arn}', queue_arn
-            ).replace('{topic_arn}', self.topic_arn)
+            # Step 3: Attach SNS → SQS access policy.  ARN values are
+            # set as dict entries so json.dumps() escapes them safely,
+            # preventing any injection via crafted ARN strings.
+            policy = json.dumps(
+                {
+                    'Version': '2012-10-17',
+                    'Statement': [
+                        {
+                            'Effect': 'Allow',
+                            'Principal': {'Service': 'sns.amazonaws.com'},
+                            'Action': 'SQS:SendMessage',
+                            'Resource': queue_arn,
+                            'Condition': {
+                                'ArnEquals': {
+                                    'aws:SourceArn': self.topic_arn,
+                                },
+                            },
+                        }
+                    ],
+                }
+            )
             await sqs.set_queue_attributes(
                 QueueUrl=queue_url,
                 Attributes={'Policy': policy},
@@ -192,7 +198,7 @@ class QueueLifecycleManager:
         # Step 4: Subscribe the SQS queue to the SNS topic.
         subscription_arn = ''
         try:
-            async with self.session.client(  # type: ignore[union-attr]
+            async with self.session.client(
                 'sns', region_name=self.region_name
             ) as sns:
                 sub_resp = await sns.subscribe(
@@ -210,7 +216,7 @@ class QueueLifecycleManager:
                 queue_url,
             )
             try:
-                async with self.session.client(  # type: ignore[union-attr]
+                async with self.session.client(
                     'sqs', region_name=self.region_name
                 ) as sqs:
                     await sqs.delete_queue(QueueUrl=queue_url)
@@ -251,7 +257,7 @@ class QueueLifecycleManager:
 
         # Step 1: Unsubscribe from SNS (best-effort).
         try:
-            async with self.session.client(  # type: ignore[union-attr]
+            async with self.session.client(
                 'sns', region_name=self.region_name
             ) as sns:
                 await sns.unsubscribe(SubscriptionArn=result.subscription_arn)
@@ -266,7 +272,7 @@ class QueueLifecycleManager:
 
         # Step 2: Delete the SQS queue.
         try:
-            async with self.session.client(  # type: ignore[union-attr]
+            async with self.session.client(
                 'sqs', region_name=self.region_name
             ) as sqs:
                 await sqs.delete_queue(QueueUrl=result.queue_url)
@@ -278,7 +284,7 @@ class QueueLifecycleManager:
     # Async context manager
     # ------------------------------------------------------------------
 
-    async def __aenter__(self) -> 'QueueLifecycleManager':  # noqa: PYI034
+    async def __aenter__(self) -> QueueLifecycleManager:  # noqa: PYI034
         """Provisions resources and returns ``self``."""
         await self.provision()
         return self
