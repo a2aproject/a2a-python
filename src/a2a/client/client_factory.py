@@ -11,9 +11,10 @@ from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
 from a2a.client.middleware import ClientCallInterceptor
-from a2a.client.transports.base import ClientTransport, TenantTransportDecorator
+from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
+from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,

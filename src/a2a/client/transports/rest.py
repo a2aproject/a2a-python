@@ -66,10 +66,6 @@ class RestTransport(ClientTransport):
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
         self.extensions = extensions
 
-    def _get_path(self, base_path: str, tenant: str | None) -> str:
-        """Returns the full path, prepending the tenant if provided."""
-        return f'/{tenant}{base_path}' if tenant else base_path
-
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -81,9 +77,8 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
         )
-        path = self._get_path('/v1/message:send', request.tenant)
         response_data = await self._send_post_request(
-            path, payload, modified_kwargs
+            '/v1/message:send', request.tenant, payload, modified_kwargs
         )
         response: SendMessageResponse = ParseDict(
             response_data, SendMessageResponse()
@@ -101,11 +96,10 @@ class RestTransport(ClientTransport):
         payload, modified_kwargs = await self._prepare_send_message(
             request, context, extensions
         )
-        path = self._get_path('/v1/message:stream', request.tenant)
-
         async for event in self._send_stream_request(
             'POST',
-            path,
+            '/v1/message:stream',
+            request.tenant,
             http_kwargs=modified_kwargs,
             json=payload,
         ):
@@ -133,10 +127,9 @@ class RestTransport(ClientTransport):
         if 'id' in params:
             del params['id']  # id is part of the URL path, not query params
 
-        path = self._get_path(f'/v1/tasks/{request.id}', request.tenant)
-
         response_data = await self._send_get_request(
-            path,
+            f'/v1/tasks/{request.id}',
+            request.tenant,
             params,
             modified_kwargs,
         )
@@ -161,10 +154,9 @@ class RestTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
 
-        path = self._get_path('/v1/tasks', request.tenant)
-
         response_data = await self._send_get_request(
-            path,
+            '/v1/tasks',
+            request.tenant,
             _model_to_query_params(request),
             modified_kwargs,
         )
@@ -192,10 +184,11 @@ class RestTransport(ClientTransport):
             context,
         )
 
-        path = self._get_path(f'/v1/tasks/{request.id}:cancel', request.tenant)
-
         response_data = await self._send_post_request(
-            path, payload, modified_kwargs
+            f'/v1/tasks/{request.id}:cancel',
+            request.tenant,
+            payload,
+            modified_kwargs,
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -217,13 +210,9 @@ class RestTransport(ClientTransport):
             payload, modified_kwargs, context
         )
 
-        path = self._get_path(
+        response_data = await self._send_post_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-        )
-
-        response_data = await self._send_post_request(
-            path,
             payload,
             modified_kwargs,
         )
@@ -255,13 +244,9 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
 
-        path = self._get_path(
+        response_data = await self._send_get_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-        )
-
-        response_data = await self._send_get_request(
-            path,
             params,
             modified_kwargs,
         )
@@ -291,13 +276,9 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
 
-        path = self._get_path(
+        response_data = await self._send_get_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-        )
-
-        response_data = await self._send_get_request(
-            path,
             params,
             modified_kwargs,
         )
@@ -329,13 +310,9 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
 
-        path = self._get_path(
+        await self._send_delete_request(
             f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-        )
-
-        await self._send_delete_request(
-            path,
             params,
             modified_kwargs,
         )
@@ -353,13 +330,10 @@ class RestTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
 
-        path = self._get_path(
-            f'/v1/tasks/{request.id}:subscribe', request.tenant
-        )
-
         async for event in self._send_stream_request(
             'GET',
-            f'{path}',
+            f'/v1/tasks/{request.id}:subscribe',
+            request.tenant,
             http_kwargs=modified_kwargs,
         ):
             yield event
@@ -387,7 +361,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_get_request(
-            '/v1/card', {}, modified_kwargs
+            '/v1/card', '', {}, modified_kwargs
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
 
@@ -402,6 +376,10 @@ class RestTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
+
+    def _get_path(self, base_path: str, tenant: str) -> str:
+        """Returns the full path, prepending the tenant if provided."""
+        return f'/{tenant}{base_path}' if tenant else base_path
 
     async def _apply_interceptors(
         self,
@@ -465,16 +443,18 @@ class RestTransport(ClientTransport):
         self,
         method: str,
         target: str,
+        tenant: str,
         http_kwargs: dict[str, Any] | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
         final_kwargs = dict(http_kwargs or {})
         final_kwargs.update(kwargs)
+        path = self._get_path(target, tenant)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
             method,
-            f'{self.url}{target}',
+            f'{self.url}{path}',
             self._handle_http_error,
             **final_kwargs,
         ):
@@ -489,13 +469,15 @@ class RestTransport(ClientTransport):
     async def _send_post_request(
         self,
         target: str,
+        tenant: str,
         rpc_request_payload: dict[str, Any],
         http_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        path = self._get_path(target, tenant)
         return await self._send_request(
             self.httpx_client.build_request(
                 'POST',
-                f'{self.url}{target}',
+                f'{self.url}{path}',
                 json=rpc_request_payload,
                 **(http_kwargs or {}),
             )
@@ -504,13 +486,15 @@ class RestTransport(ClientTransport):
     async def _send_get_request(
         self,
         target: str,
+        tenant: str,
         query_params: dict[str, str],
         http_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        path = self._get_path(target, tenant)
         return await self._send_request(
             self.httpx_client.build_request(
                 'GET',
-                f'{self.url}{target}',
+                f'{self.url}{path}',
                 params=query_params,
                 **(http_kwargs or {}),
             )
@@ -519,13 +503,15 @@ class RestTransport(ClientTransport):
     async def _send_delete_request(
         self,
         target: str,
+        tenant: str,
         query_params: dict[str, Any],
         http_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
+        path = self._get_path(target, tenant)
         return await self._send_request(
             self.httpx_client.build_request(
                 'DELETE',
-                f'{self.url}{target}',
+                f'{self.url}{path}',
                 params=query_params,
                 **(http_kwargs or {}),
             )

@@ -12,8 +12,9 @@ from a2a.client.client_factory import TransportProducer
 from a2a.client.transports import (
     JsonRpcTransport,
     RestTransport,
-    TenantTransportDecorator,
+    ClientTransport,
 )
+from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,

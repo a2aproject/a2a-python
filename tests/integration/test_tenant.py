@@ -10,7 +10,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
 )
 from a2a.client.transports import RestTransport, JsonRpcTransport, GrpcTransport
-from a2a.client.transports.base import TenantTransportDecorator
+from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.client import ClientConfig, ClientFactory
 from a2a.utils.constants import TransportProtocol
 
@@ -79,7 +79,8 @@ async def test_tenant_decorator_rest(agent_card):
 @pytest.mark.asyncio
 async def test_tenant_decorator_jsonrpc(agent_card):
     mock_httpx = AsyncMock(spec=httpx.AsyncClient)
-    mock_httpx.post.return_value = MagicMock(
+    mock_httpx.build_request.return_value = MagicMock()
+    mock_httpx.send.return_value = MagicMock(
         status_code=200,
         json=lambda: {'result': {'message': {}}, 'id': '1', 'jsonrpc': '2.0'},
     )
@@ -97,8 +98,8 @@ async def test_tenant_decorator_jsonrpc(agent_card):
     request = SendMessageRequest(message=Message(parts=[{'text': 'hi'}]))
     await client._transport.send_message(request)
 
-    mock_httpx.post.assert_called()
-    _, kwargs = mock_httpx.post.call_args
+    mock_httpx.build_request.assert_called()
+    _, kwargs = mock_httpx.build_request.call_args
     assert kwargs['json']['params']['tenant'] == 'tenant-2'
 
 

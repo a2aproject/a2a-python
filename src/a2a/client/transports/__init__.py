@@ -1,6 +1,6 @@
 """A2A Client Transports."""
 
-from a2a.client.transports.base import ClientTransport, TenantTransportDecorator
+from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
 
@@ -16,5 +16,4 @@ __all__ = [
     'GrpcTransport',
     'JsonRpcTransport',
     'RestTransport',
-    'TenantTransportDecorator',
 ]

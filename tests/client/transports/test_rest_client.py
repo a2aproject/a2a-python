@@ -315,7 +315,7 @@ class TestRestTransportExtensions:
             await client.get_extended_agent_card(extensions=extensions)
 
         mock_send_get_request.assert_called_once()
-        _, _, mock_kwargs = mock_send_get_request.call_args[0]
+        _, _, _, mock_kwargs = mock_send_get_request.call_args[0]
 
         _assert_extensions_header(
             mock_kwargs,
@@ -524,7 +524,7 @@ class TestRestTransportTenant:
         ],
     )
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_rest_streaming_methods_prepend_tenant(
         self,
         mock_aconnect_sse,
