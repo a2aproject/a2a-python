@@ -102,7 +102,6 @@ class RestTransport(ClientTransport):
             '/v1/message:stream',
             http_kwargs=modified_kwargs,
             json=payload,
-            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -320,7 +319,6 @@ class RestTransport(ClientTransport):
             'GET',
             f'/v1/tasks/{request.id}:subscribe',
             http_kwargs=modified_kwargs,
-            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -430,7 +428,6 @@ class RestTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         final_kwargs = dict(http_kwargs or {})
         final_kwargs.update(kwargs)
-        final_kwargs.setdefault('timeout', None)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,

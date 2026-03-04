@@ -125,7 +125,6 @@ class JsonRpcTransport(ClientTransport):
         async for event in self._send_stream_request(
             payload,
             http_kwargs=modified_kwargs,
-            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -374,7 +373,6 @@ class JsonRpcTransport(ClientTransport):
         async for event in self._send_stream_request(
             payload,
             http_kwargs=modified_kwargs,
-            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -486,7 +484,6 @@ class JsonRpcTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         final_kwargs = dict(http_kwargs or {})
         final_kwargs.update(kwargs)
-        final_kwargs.setdefault('timeout', None)
         headers = dict(self.httpx_client.headers.items())
         headers.update(final_kwargs.get('headers', {}))
         final_kwargs['headers'] = headers
