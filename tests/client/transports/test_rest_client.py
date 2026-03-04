@@ -505,6 +505,37 @@ class TestRestTransportTenant:
         args, _ = mock_httpx_client.build_request.call_args
         assert args[1] == f'http://agent.example.com/api{expected_path}'
 
+    @pytest.mark.asyncio
+    async def test_rest_get_task_prepend_empty_tenant(
+        self,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        request = GetTaskRequest(tenant='', id='task-123')
+
+        # 1. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 2. Call the method
+        await client.get_task(request=request)
+
+        # 3. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == f'http://agent.example.com/api/tasks/task-123'
+
     @pytest.mark.parametrize(
         'method_name, request_obj, expected_path',
         [
