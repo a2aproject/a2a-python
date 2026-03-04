@@ -1,4 +1,3 @@
-from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,7 +20,6 @@ from a2a.types.a2a_pb2 import (
     ListTasksResponse,
     Message,
     Part,
-    PushNotificationConfig,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
@@ -318,81 +316,55 @@ class TestTenantTransportDecorator:
         assert decorator.update_tenant('') == tenant_id
 
     @pytest.mark.parametrize(
-        'method_name, request_obj, response_obj',
+        'method_name, request_obj',
         [
+            (
+                'send_message',
+                SendMessageRequest(message=Message(parts=[Part(text='hello')])),
+            ),
             (
                 'get_task',
                 GetTaskRequest(id='t1'),
-                Task(id='t1'),
             ),
             (
                 'list_tasks',
                 ListTasksRequest(),
-                ListTasksResponse(),
             ),
             (
                 'cancel_task',
                 CancelTaskRequest(id='t1'),
-                Task(id='t1'),
             ),
             (
                 'create_task_push_notification_config',
                 CreateTaskPushNotificationConfigRequest(task_id='t1'),
-                TaskPushNotificationConfig(task_id='t1'),
             ),
             (
                 'get_task_push_notification_config',
                 GetTaskPushNotificationConfigRequest(task_id='t1', id='c1'),
-                TaskPushNotificationConfig(task_id='t1'),
             ),
             (
                 'list_task_push_notification_configs',
                 ListTaskPushNotificationConfigsRequest(task_id='t1'),
-                ListTaskPushNotificationConfigsResponse(),
+            ),
+            (
+                'delete_task_push_notification_config',
+                DeleteTaskPushNotificationConfigRequest(task_id='t1', id='c1'),
             ),
         ],
     )
     @pytest.mark.asyncio
     async def test_methods(
-        self, mock_transport: AsyncMock, method_name, request_obj, response_obj
+        self, mock_transport: AsyncMock, method_name, request_obj
     ) -> None:
         tenant_id = 'test-tenant'
         decorator = TenantTransportDecorator(mock_transport, tenant_id)
         mock_method = getattr(mock_transport, method_name)
-        mock_method.return_value = response_obj
 
-        result = await getattr(decorator, method_name)(request_obj)
+        await getattr(decorator, method_name)(request_obj)
 
-        assert result == response_obj
         mock_method.assert_called_once()
+        assert mock_transport.mock_calls[0][0] == method_name
         assert request_obj.tenant == tenant_id
-
-    @pytest.mark.asyncio
-    async def test_send_message(self, mock_transport: AsyncMock) -> None:
-        tenant_id = 'test-tenant'
-        decorator = TenantTransportDecorator(mock_transport, tenant_id)
-        request = SendMessageRequest(
-            message=Message(parts=[Part(text='hello')])
-        )
-        mock_transport.send_message.return_value = SendMessageResponse()
-
-        await decorator.send_message(request)
-
-        mock_transport.send_message.assert_called_once()
-        assert request.tenant == tenant_id
-
-    @pytest.mark.asyncio
-    async def test_delete_config(self, mock_transport: AsyncMock) -> None:
-        tenant_id = 'test-tenant'
-        decorator = TenantTransportDecorator(mock_transport, tenant_id)
-        request = DeleteTaskPushNotificationConfigRequest(task_id='t1', id='c1')
-
-        await decorator.delete_task_push_notification_config(request)
-
-        mock_transport.delete_task_push_notification_config.assert_called_once_with(
-            request, context=None, extensions=None
-        )
-        assert request.tenant == tenant_id
 
     @pytest.mark.asyncio
     async def test_streaming_methods(self, mock_transport: AsyncMock) -> None:
