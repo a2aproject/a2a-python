@@ -83,8 +83,12 @@ class QueueLifecycleManager:
                 'pip install "a2a-sdk[aws]"'
             ) from exc
 
-        if self.session is None:
-            self.session = aioboto3.Session()
+        # Resolve the session once into a non-optional attribute so that
+        # internal methods can call .client() without optional-access errors.
+        # The public `session` field remains Optional for API convenience.
+        self._resolved_session: aioboto3.Session = (
+            self.session or aioboto3.Session()
+        )
 
         logger.debug(
             'QueueLifecycleManager created (instance_id=%s, topic=%s).',
@@ -152,7 +156,7 @@ class QueueLifecycleManager:
             self.region_name,
         )
 
-        async with self.session.client(
+        async with self._resolved_session.client(
             'sqs', region_name=self.region_name
         ) as sqs:
             # Step 1: Create the SQS queue.
@@ -198,7 +202,7 @@ class QueueLifecycleManager:
         # Step 4: Subscribe the SQS queue to the SNS topic.
         subscription_arn = ''
         try:
-            async with self.session.client(
+            async with self._resolved_session.client(
                 'sns', region_name=self.region_name
             ) as sns:
                 sub_resp = await sns.subscribe(
@@ -216,7 +220,7 @@ class QueueLifecycleManager:
                 queue_url,
             )
             try:
-                async with self.session.client(
+                async with self._resolved_session.client(
                     'sqs', region_name=self.region_name
                 ) as sqs:
                     await sqs.delete_queue(QueueUrl=queue_url)
@@ -257,7 +261,7 @@ class QueueLifecycleManager:
 
         # Step 1: Unsubscribe from SNS (best-effort).
         try:
-            async with self.session.client(
+            async with self._resolved_session.client(
                 'sns', region_name=self.region_name
             ) as sns:
                 await sns.unsubscribe(SubscriptionArn=result.subscription_arn)
@@ -272,7 +276,7 @@ class QueueLifecycleManager:
 
         # Step 2: Delete the SQS queue.
         try:
-            async with self.session.client(
+            async with self._resolved_session.client(
                 'sqs', region_name=self.region_name
             ) as sqs:
                 await sqs.delete_queue(QueueUrl=result.queue_url)

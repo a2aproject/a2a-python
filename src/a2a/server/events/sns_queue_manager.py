@@ -340,7 +340,7 @@ class SnsQueueManager(QueueManager):
             sqs_msg: A single SQS message dictionary from ReceiveMessage.
         """
         # Use message ID in warnings to avoid logging potentially sensitive
-        # message body content (PII in Task/Message payloads).
+        # message body content, which may include personal user data.
         msg_id = sqs_msg.get('MessageId', '<no-id>')
         body_str = sqs_msg.get('Body', '{}')
 
