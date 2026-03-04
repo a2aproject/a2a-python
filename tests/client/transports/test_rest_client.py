@@ -372,7 +372,7 @@ class TestTaskCallback:
         mock_build_request.assert_called_once()
         call_args = mock_build_request.call_args
         assert call_args[0][0] == 'GET'
-        assert f'/v1/tasks/{task_id}/pushNotificationConfigs' in call_args[0][1]
+        assert f'/tasks/{task_id}/pushNotificationConfigs' in call_args[0][1]
 
     @pytest.mark.asyncio
     async def test_delete_task_push_notification_config_success(
@@ -406,7 +406,7 @@ class TestTaskCallback:
         call_args = mock_build_request.call_args
         assert call_args[0][0] == 'DELETE'
         assert (
-            f'/v1/tasks/{task_id}/pushNotificationConfigs/config-1'
+            f'/tasks/{task_id}/pushNotificationConfigs/config-1'
             in call_args[0][1]
         )
 
