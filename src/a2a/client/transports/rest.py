@@ -102,6 +102,7 @@ class RestTransport(ClientTransport):
             '/v1/message:stream',
             http_kwargs=modified_kwargs,
             json=payload,
+            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -319,6 +320,7 @@ class RestTransport(ClientTransport):
             'GET',
             f'/v1/tasks/{request.id}:subscribe',
             http_kwargs=modified_kwargs,
+            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 

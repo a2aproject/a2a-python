@@ -1,7 +1,7 @@
 import logging
 
 from collections.abc import AsyncGenerator, Callable
-from typing import Any, NoReturn, cast
+from typing import Any, cast
 from uuid import uuid4
 
 import httpx
@@ -93,7 +93,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: SendMessageResponse = json_format.ParseDict(
             json_rpc_response.result, SendMessageResponse()
         )
@@ -155,7 +155,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
         return response
 
@@ -185,7 +185,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: ListTasksResponse = json_format.ParseDict(
             json_rpc_response.result, ListTasksResponse()
         )
@@ -217,7 +217,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
         return response
 
@@ -247,7 +247,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
             json_rpc_response.result, TaskPushNotificationConfig()
         )
@@ -279,7 +279,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
             json_rpc_response.result, TaskPushNotificationConfig()
         )
@@ -311,7 +311,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: ListTaskPushNotificationConfigsResponse = (
             json_format.ParseDict(
                 json_rpc_response.result,
@@ -346,7 +346,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
 
     async def subscribe(
         self,
@@ -374,6 +374,7 @@ class JsonRpcTransport(ClientTransport):
         async for event in self._send_stream_request(
             payload,
             http_kwargs=modified_kwargs,
+            timeout=self.httpx_client.timeout.as_dict().get('read', None),
         ):
             yield event
 
@@ -413,7 +414,7 @@ class JsonRpcTransport(ClientTransport):
         )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            self._handle_jsonrpc_error(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: AgentCard = json_format.ParseDict(
             json_rpc_response.result, AgentCard()
         )
@@ -456,16 +457,16 @@ class JsonRpcTransport(ClientTransport):
     ) -> dict[str, Any] | None:
         return context.state.get('http_kwargs') if context else None
 
-    def _handle_jsonrpc_error(self, error_dict: dict[str, Any]) -> NoReturn:
-        """Handles JSON-RPC errors and raises the appropriate A2AError."""
+    def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
+        """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
         code = error_dict.get('code')
         message = error_dict.get('message', str(error_dict))
 
         if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
-            raise _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
+            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
 
         # Fallback to general A2AClientError
-        raise A2AClientError(f'JSON-RPC Error {code}: {message}')
+        return A2AClientError(f'JSON-RPC Error {code}: {message}')
 
     async def _send_request(
         self,
@@ -500,7 +501,7 @@ class JsonRpcTransport(ClientTransport):
         ):
             json_rpc_response = JSONRPC20Response.from_json(sse_data)
             if json_rpc_response.error:
-                self._handle_jsonrpc_error(json_rpc_response.error)
+                raise self._create_jsonrpc_error(json_rpc_response.error)
             response: StreamResponse = json_format.ParseDict(
                 json_rpc_response.result, StreamResponse()
             )
