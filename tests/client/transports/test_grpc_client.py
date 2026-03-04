@@ -5,19 +5,18 @@ import pytest
 
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import a2a_pb2, a2a_pb2_grpc
+from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
-    AgentInterface,
     AgentCard,
+    AgentInterface,
     Artifact,
     AuthenticationInfo,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigsRequest,
-    ListTaskPushNotificationConfigsResponse,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
     PushNotificationConfig,
@@ -30,7 +29,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import get_text_parts, proto_utils
+from a2a.utils import get_text_parts
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 @pytest.fixture
@@ -224,6 +224,29 @@ async def test_send_message_task_response(
     ]
     assert response.HasField('task')
     assert response.task.id == sample_task.id
+
+
+@pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+@pytest.mark.asyncio
+async def test_grpc_mapped_errors(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+    error_cls,
+) -> None:
+    """Test handling of mapped gRPC error responses."""
+    error_details = f'{error_cls.__name__}: Mapped Error'
+
+    # We must trigger it from a standard transport method call, for example `send_message`.
+    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.INTERNAL,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(),
+        details=error_details,
+    )
+
+    with pytest.raises(error_cls):
+        await grpc_transport.send_message(sample_message_send_params)
 
 
 @pytest.mark.asyncio

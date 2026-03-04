@@ -1,4 +1,3 @@
-import json
 import logging
 
 from collections.abc import AsyncGenerator, Callable
@@ -8,17 +7,15 @@ from uuid import uuid4
 import httpx
 
 from google.protobuf import json_format
-from httpx_sse import SSEError, aconnect_sse
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-    A2AClientJSONRPCError,
-    A2AClientTimeoutError,
-)
+from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.client.transports.http_helpers import (
+    send_http_request,
+    send_http_stream_request,
+)
 from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -39,10 +36,15 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
+
+_JSON_RPC_ERROR_CODE_TO_A2A_ERROR = {
+    code: error_type for error_type, code in JSON_RPC_ERROR_CODE_MAP.items()
+}
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -64,34 +66,6 @@ class JsonRpcTransport(ClientTransport):
         self.interceptors = interceptors or []
         self.extensions = extensions
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
-
-    async def _apply_interceptors(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        final_http_kwargs = http_kwargs or {}
-        final_request_payload = request_payload
-
-        for interceptor in self.interceptors:
-            (
-                final_request_payload,
-                final_http_kwargs,
-            ) = await interceptor.intercept(
-                method_name,
-                final_request_payload,
-                final_http_kwargs,
-                self.agent_card,
-                context,
-            )
-        return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
 
     async def send_message(
         self,
@@ -119,7 +93,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: SendMessageResponse = json_format.ParseDict(
             json_rpc_response.result, SendMessageResponse()
         )
@@ -148,68 +122,11 @@ class JsonRpcTransport(ClientTransport):
             modified_kwargs,
             context,
         )
-        modified_kwargs.setdefault(
-            'timeout', self.httpx_client.timeout.as_dict().get('read', None)
-        )
-        headers = dict(self.httpx_client.headers.items())
-        headers.update(modified_kwargs.get('headers', {}))
-        modified_kwargs['headers'] = headers
-
-        async with aconnect_sse(
-            self.httpx_client,
-            'POST',
-            self.url,
-            json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                event_source.response.raise_for_status()
-                async for sse in event_source.aiter_sse():
-                    if not sse.data:
-                        continue
-                    json_rpc_response = JSONRPC20Response.from_json(sse.data)
-                    if json_rpc_response.error:
-                        raise A2AClientJSONRPCError(json_rpc_response.error)
-                    response: StreamResponse = json_format.ParseDict(
-                        json_rpc_response.result, StreamResponse()
-                    )
-                    yield response
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except httpx.HTTPStatusError as e:
-                raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
-
-    async def _send_request(
-        self,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        try:
-            response = await self.httpx_client.post(
-                self.url, json=rpc_request_payload, **(http_kwargs or {})
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException as e:
-            raise A2AClientTimeoutError('Client Request timed out') from e
-        except httpx.HTTPStatusError as e:
-            raise A2AClientHTTPError(e.response.status_code, str(e)) from e
-        except json.JSONDecodeError as e:
-            raise A2AClientJSONError(str(e)) from e
-        except httpx.RequestError as e:
-            raise A2AClientHTTPError(
-                503, f'Network communication error: {e}'
-            ) from e
+        async for event in self._send_stream_request(
+            payload,
+            http_kwargs=modified_kwargs,
+        ):
+            yield event
 
     async def get_task(
         self,
@@ -237,7 +154,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
         return response
 
@@ -267,7 +184,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: ListTasksResponse = json_format.ParseDict(
             json_rpc_response.result, ListTasksResponse()
         )
@@ -299,7 +216,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: Task = json_format.ParseDict(json_rpc_response.result, Task())
         return response
 
@@ -329,7 +246,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
             json_rpc_response.result, TaskPushNotificationConfig()
         )
@@ -361,7 +278,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
             json_rpc_response.result, TaskPushNotificationConfig()
         )
@@ -393,7 +310,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: ListTaskPushNotificationConfigsResponse = (
             json_format.ParseDict(
                 json_rpc_response.result,
@@ -428,7 +345,7 @@ class JsonRpcTransport(ClientTransport):
         response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
 
     async def subscribe(
         self,
@@ -453,36 +370,11 @@ class JsonRpcTransport(ClientTransport):
             modified_kwargs,
             context,
         )
-        modified_kwargs.setdefault('timeout', None)
-
-        async with aconnect_sse(
-            self.httpx_client,
-            'POST',
-            self.url,
-            json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                async for sse in event_source.aiter_sse():
-                    json_rpc_response = JSONRPC20Response.from_json(sse.data)
-                    if json_rpc_response.error:
-                        raise A2AClientJSONRPCError(json_rpc_response.error)
-                    response: StreamResponse = json_format.ParseDict(
-                        json_rpc_response.result, StreamResponse()
-                    )
-                    yield response
-            except httpx.TimeoutException as e:
-                raise A2AClientTimeoutError('Client Request timed out') from e
-            except SSEError as e:
-                raise A2AClientHTTPError(
-                    400, f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientJSONError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientHTTPError(
-                    503, f'Network communication error: {e}'
-                ) from e
+        async for event in self._send_stream_request(
+            payload,
+            http_kwargs=modified_kwargs,
+        ):
+            yield event
 
     async def get_extended_agent_card(
         self,
@@ -520,7 +412,7 @@ class JsonRpcTransport(ClientTransport):
         )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
-            raise A2AClientJSONRPCError(json_rpc_response.error)
+            raise self._create_jsonrpc_error(json_rpc_response.error)
         response: AgentCard = json_format.ParseDict(
             json_rpc_response.result, AgentCard()
         )
@@ -534,3 +426,80 @@ class JsonRpcTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
+
+    async def _apply_interceptors(
+        self,
+        method_name: str,
+        request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None,
+        context: ClientCallContext | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        final_http_kwargs = http_kwargs or {}
+        final_request_payload = request_payload
+
+        for interceptor in self.interceptors:
+            (
+                final_request_payload,
+                final_http_kwargs,
+            ) = await interceptor.intercept(
+                method_name,
+                final_request_payload,
+                final_http_kwargs,
+                self.agent_card,
+                context,
+            )
+        return final_request_payload, final_http_kwargs
+
+    def _get_http_args(
+        self, context: ClientCallContext | None
+    ) -> dict[str, Any] | None:
+        return context.state.get('http_kwargs') if context else None
+
+    def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
+        """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
+        code = error_dict.get('code')
+        message = error_dict.get('message', str(error_dict))
+
+        if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
+            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
+
+        # Fallback to general A2AClientError
+        return A2AClientError(f'JSON-RPC Error {code}: {message}')
+
+    async def _send_request(
+        self,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        request = self.httpx_client.build_request(
+            'POST', self.url, json=rpc_request_payload, **(http_kwargs or {})
+        )
+        return await send_http_request(self.httpx_client, request)
+
+    async def _send_stream_request(
+        self,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[StreamResponse]:
+        final_kwargs = dict(http_kwargs or {})
+        final_kwargs.update(kwargs)
+        headers = dict(self.httpx_client.headers.items())
+        headers.update(final_kwargs.get('headers', {}))
+        final_kwargs['headers'] = headers
+
+        async for sse_data in send_http_stream_request(
+            self.httpx_client,
+            'POST',
+            self.url,
+            None,
+            json=rpc_request_payload,
+            **final_kwargs,
+        ):
+            json_rpc_response = JSONRPC20Response.from_json(sse_data)
+            if json_rpc_response.error:
+                raise self._create_jsonrpc_error(json_rpc_response.error)
+            response: StreamResponse = json_format.ParseDict(
+                json_rpc_response.result, StreamResponse()
+            )
+            yield response

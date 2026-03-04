@@ -86,9 +86,7 @@ class MethodNotFoundError(A2AError):
 # We remove the Pydantic models here.
 
 __all__ = [
-    'A2AError',
-    'AuthenticatedExtendedCardNotConfiguredError',
-    'ContentTypeNotSupportedError',
+    'JSON_RPC_ERROR_CODE_MAP',
     'InternalError',
     'InvalidAgentResponseError',
     'InvalidParamsError',
@@ -99,3 +97,18 @@ __all__ = [
     'TaskNotFoundError',
     'UnsupportedOperationError',
 ]
+
+
+JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
+    TaskNotFoundError: -32001,
+    TaskNotCancelableError: -32002,
+    PushNotificationNotSupportedError: -32003,
+    UnsupportedOperationError: -32004,
+    ContentTypeNotSupportedError: -32005,
+    InvalidAgentResponseError: -32006,
+    AuthenticatedExtendedCardNotConfiguredError: -32007,
+    InvalidParamsError: -32602,
+    InvalidRequestError: -32600,
+    MethodNotFoundError: -32601,
+    InternalError: -32603,
+}
