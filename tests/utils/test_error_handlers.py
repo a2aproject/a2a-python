@@ -58,7 +58,10 @@ async def test_rest_error_handler_unknown_exception():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 500
-    assert result.content == {'message': 'unknown exception', 'type': 'Exception'}
+    assert result.content == {
+        'message': 'unknown exception',
+        'type': 'Exception',
+    }
 
 
 @pytest.mark.asyncio

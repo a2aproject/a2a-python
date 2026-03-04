@@ -23,4 +23,3 @@ class TestA2AClientError:
             raise A2AClientError('Generic client error')
 
         assert str(excinfo.value) == 'Generic client error'
-

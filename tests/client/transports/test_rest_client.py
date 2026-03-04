@@ -93,11 +93,13 @@ class TestRestTransport:
 
         assert 'Client Request timed out' in str(exc_info.value)
 
-
     @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
     @pytest.mark.asyncio
     async def test_rest_mapped_errors(
-        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock, error_cls
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        error_cls,
     ):
         """Test handling of mapped REST HTTP error responses."""
         client = RestTransport(
@@ -116,7 +118,10 @@ class TestRestTransport:
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 500
-        mock_response.json.return_value = {'type': error_cls.__name__, 'message': 'Mapped Error'}
+        mock_response.json.return_value = {
+            'type': error_cls.__name__,
+            'message': 'Mapped Error',
+        }
 
         error = httpx.HTTPStatusError(
             'Server Error',

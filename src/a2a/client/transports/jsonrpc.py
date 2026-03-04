@@ -65,45 +65,6 @@ class JsonRpcTransport(ClientTransport):
         self.extensions = extensions
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
-    async def _apply_interceptors(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        final_http_kwargs = http_kwargs or {}
-        final_request_payload = request_payload
-
-        for interceptor in self.interceptors:
-            (
-                final_request_payload,
-                final_http_kwargs,
-            ) = await interceptor.intercept(
-                method_name,
-                final_request_payload,
-                final_http_kwargs,
-                self.agent_card,
-                context,
-            )
-        return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
-
-    def _handle_jsonrpc_error(self, error_dict: dict[str, Any]) -> NoReturn:
-        """Handles JSON-RPC errors and raises the appropriate A2AError."""
-        code = error_dict.get('code')
-        message = error_dict.get('message', str(error_dict))
-
-        if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
-            raise _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
-
-        # Fallback to general A2AClientError
-        raise A2AClientError(f'JSON-RPC Error {code}: {message}')
-
     async def send_message(
         self,
         request: SendMessageRequest,
@@ -199,28 +160,6 @@ class JsonRpcTransport(ClientTransport):
                 raise A2AClientError(str(e)) from e
             except httpx.RequestError as e:
                 raise A2AClientError(f'Network communication error: {e}') from e
-
-    async def _send_request(
-        self,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        try:
-            response = await self.httpx_client.post(
-                self.url, json=rpc_request_payload, **(http_kwargs or {})
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException as e:
-            raise A2AClientError('Client Request timed out') from e
-        except httpx.HTTPStatusError as e:
-            raise A2AClientError(
-                f'HTTP Error {e.response.status_code}: {e}'
-            ) from e
-        except json.JSONDecodeError as e:
-            raise A2AClientError(str(e)) from e
-        except httpx.RequestError as e:
-            raise A2AClientError(f'Network communication error: {e}') from e
 
     async def get_task(
         self,
@@ -543,3 +482,64 @@ class JsonRpcTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
+
+    async def _apply_interceptors(
+        self,
+        method_name: str,
+        request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None,
+        context: ClientCallContext | None,
+    ) -> tuple[dict[str, Any], dict[str, Any]]:
+        final_http_kwargs = http_kwargs or {}
+        final_request_payload = request_payload
+
+        for interceptor in self.interceptors:
+            (
+                final_request_payload,
+                final_http_kwargs,
+            ) = await interceptor.intercept(
+                method_name,
+                final_request_payload,
+                final_http_kwargs,
+                self.agent_card,
+                context,
+            )
+        return final_request_payload, final_http_kwargs
+
+    def _get_http_args(
+        self, context: ClientCallContext | None
+    ) -> dict[str, Any] | None:
+        return context.state.get('http_kwargs') if context else None
+
+    def _handle_jsonrpc_error(self, error_dict: dict[str, Any]) -> NoReturn:
+        """Handles JSON-RPC errors and raises the appropriate A2AError."""
+        code = error_dict.get('code')
+        message = error_dict.get('message', str(error_dict))
+
+        if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
+            raise _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
+
+        # Fallback to general A2AClientError
+        raise A2AClientError(f'JSON-RPC Error {code}: {message}')
+
+    async def _send_request(
+        self,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        try:
+            response = await self.httpx_client.post(
+                self.url, json=rpc_request_payload, **(http_kwargs or {})
+            )
+            response.raise_for_status()
+            return response.json()
+        except httpx.TimeoutException as e:
+            raise A2AClientError('Client Request timed out') from e
+        except httpx.HTTPStatusError as e:
+            raise A2AClientError(
+                f'HTTP Error {e.response.status_code}: {e}'
+            ) from e
+        except json.JSONDecodeError as e:
+            raise A2AClientError(str(e)) from e
+        except httpx.RequestError as e:
+            raise A2AClientError(f'Network communication error: {e}') from e
