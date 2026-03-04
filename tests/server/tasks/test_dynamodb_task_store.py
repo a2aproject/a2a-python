@@ -48,6 +48,7 @@ def mock_session(dynamodb_client: AsyncMock) -> MagicMock:
 def store(mock_session: MagicMock):
     with patch.dict('sys.modules', {'aioboto3': MagicMock()}):
         from a2a.server.tasks.dynamodb_task_store import DynamoDBTaskStore
+
         s = DynamoDBTaskStore('test-table', session=mock_session)
         return s
 
@@ -145,6 +146,7 @@ async def test_save_then_get_round_trip(
 
     with patch.dict('sys.modules', {'aioboto3': MagicMock()}):
         from a2a.server.tasks.dynamodb_task_store import DynamoDBTaskStore
+
         s = DynamoDBTaskStore('test-table', session=session)
 
     await s.save(task)
@@ -162,6 +164,7 @@ def test_import_error_without_aioboto3() -> None:
         sys.modules['aioboto3'] = None  # type: ignore[assignment]
         from importlib import reload
         import a2a.server.tasks.dynamodb_task_store as mod
+
         reload(mod)
         with pytest.raises(ImportError, match='aws extra'):
             mod.DynamoDBTaskStore('test-table')

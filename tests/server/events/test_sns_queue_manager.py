@@ -292,13 +292,15 @@ async def test_poll_unwraps_sns_notification_envelope(
 ) -> None:
     """SNS notification envelope (non-raw delivery) is properly unwrapped."""
     task_data = json.loads(TASK_OBJ.model_dump_json())
-    inner = json.dumps({
-        'instance_id': 'instance-B',
-        'task_id': 'task-001',
-        'type': 'event',
-        'event_kind': 'task',
-        'event_data': task_data,
-    })
+    inner = json.dumps(
+        {
+            'instance_id': 'instance-B',
+            'task_id': 'task-001',
+            'type': 'event',
+            'event_kind': 'task',
+            'event_data': task_data,
+        }
+    )
     sns_envelope = {
         'Type': 'Notification',
         'MessageId': 'notif-001',
@@ -310,9 +312,7 @@ async def test_poll_unwraps_sns_notification_envelope(
         'ReceiptHandle': 'rh-002',
         'Body': json.dumps(sns_envelope),
     }
-    sqs_client.receive_message = AsyncMock(
-        return_value={'Messages': [sqs_msg]}
-    )
+    sqs_client.receive_message = AsyncMock(return_value={'Messages': [sqs_msg]})
 
     dist_queue = DistributedEventQueue(
         publish_fn=AsyncMock(), task_id='task-001', instance_id='instance-A'

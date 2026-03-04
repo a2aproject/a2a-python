@@ -156,7 +156,7 @@ class QueueLifecycleManager:
             self.region_name,
         )
 
-        async with self._resolved_session.client(
+        async with self._resolved_session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'sqs', region_name=self.region_name
         ) as sqs:
             # Step 1: Create the SQS queue.
@@ -202,7 +202,7 @@ class QueueLifecycleManager:
         # Step 4: Subscribe the SQS queue to the SNS topic.
         subscription_arn = ''
         try:
-            async with self._resolved_session.client(
+            async with self._resolved_session.client(  # pyright: ignore[reportGeneralTypeIssues]
                 'sns', region_name=self.region_name
             ) as sns:
                 sub_resp = await sns.subscribe(
@@ -220,7 +220,7 @@ class QueueLifecycleManager:
                 queue_url,
             )
             try:
-                async with self._resolved_session.client(
+                async with self._resolved_session.client(  # pyright: ignore[reportGeneralTypeIssues]
                     'sqs', region_name=self.region_name
                 ) as sqs:
                     await sqs.delete_queue(QueueUrl=queue_url)
@@ -261,7 +261,7 @@ class QueueLifecycleManager:
 
         # Step 1: Unsubscribe from SNS (best-effort).
         try:
-            async with self._resolved_session.client(
+            async with self._resolved_session.client(  # pyright: ignore[reportGeneralTypeIssues]
                 'sns', region_name=self.region_name
             ) as sns:
                 await sns.unsubscribe(SubscriptionArn=result.subscription_arn)
@@ -276,7 +276,7 @@ class QueueLifecycleManager:
 
         # Step 2: Delete the SQS queue.
         try:
-            async with self._resolved_session.client(
+            async with self._resolved_session.client(  # pyright: ignore[reportGeneralTypeIssues]
                 'sqs', region_name=self.region_name
             ) as sqs:
                 await sqs.delete_queue(QueueUrl=result.queue_url)

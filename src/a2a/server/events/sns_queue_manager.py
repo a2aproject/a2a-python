@@ -245,7 +245,7 @@ class SnsQueueManager(QueueManager):
         Args:
             message: JSON string in the distributed wire format.
         """
-        async with self._session.client(
+        async with self._session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'sns', region_name=self._region_name
         ) as sns:
             await sns.publish(TopicArn=self._topic_arn, Message=message)
@@ -268,7 +268,7 @@ class SnsQueueManager(QueueManager):
             self._instance_id,
             self._sqs_queue_url,
         )
-        async with self._session.client(
+        async with self._session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'sqs', region_name=self._region_name
         ) as sqs:
             while not self._stop_event.is_set():

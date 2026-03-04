@@ -90,9 +90,7 @@ def _make_sqs_session(
     return _make(sqs_client_a), _make(sqs_client_b)
 
 
-def _wire_event(
-    instance_id: str, task_id: str, event: Task
-) -> dict[str, Any]:
+def _wire_event(instance_id: str, task_id: str, event: Task) -> dict[str, Any]:
     task_data = json.loads(event.model_dump_json())
     return {
         'instance_id': instance_id,

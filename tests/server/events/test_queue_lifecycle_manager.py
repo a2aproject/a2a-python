@@ -36,9 +36,7 @@ def _make_sns_client() -> AsyncMock:
     return client
 
 
-def _make_session(
-    sqs_client: AsyncMock, sns_client: AsyncMock
-) -> MagicMock:
+def _make_session(sqs_client: AsyncMock, sns_client: AsyncMock) -> MagicMock:
     session = MagicMock()
 
     def make_ctx(inner_client: AsyncMock) -> MagicMock:

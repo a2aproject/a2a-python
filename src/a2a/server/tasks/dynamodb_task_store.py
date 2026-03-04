@@ -84,7 +84,7 @@ class DynamoDBTaskStore(TaskStore):
             'Saving task %s to DynamoDB table %s.', task.id, self._table_name
         )
         task_data = task.model_dump_json()
-        async with self._session.client(
+        async with self._session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'dynamodb', region_name=self._region_name
         ) as client:
             await client.put_item(
@@ -113,7 +113,7 @@ class DynamoDBTaskStore(TaskStore):
             task_id,
             self._table_name,
         )
-        async with self._session.client(
+        async with self._session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'dynamodb', region_name=self._region_name
         ) as client:
             response = await client.get_item(
@@ -147,7 +147,7 @@ class DynamoDBTaskStore(TaskStore):
             task_id,
             self._table_name,
         )
-        async with self._session.client(
+        async with self._session.client(  # pyright: ignore[reportGeneralTypeIssues]
             'dynamodb', region_name=self._region_name
         ) as client:
             await client.delete_item(
