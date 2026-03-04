@@ -10,3 +10,4 @@ test_venv/
 coverage.xml
 .nox
 spec.json
+.idea
