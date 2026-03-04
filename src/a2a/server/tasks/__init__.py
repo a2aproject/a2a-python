@@ -65,10 +65,33 @@ except ImportError as e:
             ) from _original_error
 
 
+try:
+    from a2a.server.tasks.dynamodb_task_store import (
+        DynamoDBTaskStore,  # type: ignore
+    )
+except ImportError as e:
+    _original_aws_error = e
+    logger.debug(
+        'DynamoDBTaskStore not loaded. '
+        'Install the aws extra to enable it. Error: %s',
+        e,
+    )
+
+    class DynamoDBTaskStore:  # type: ignore
+        """Placeholder for DynamoDBTaskStore when aws extra is not installed."""
+
+        def __init__(self, *args, **kwargs):
+            raise ImportError(
+                'To use DynamoDBTaskStore, install the aws extra: '
+                '\'pip install "a2a-sdk[aws]"\''
+            ) from _original_aws_error
+
+
 __all__ = [
     'BasePushNotificationSender',
     'DatabasePushNotificationConfigStore',
     'DatabaseTaskStore',
+    'DynamoDBTaskStore',
     'InMemoryPushNotificationConfigStore',
     'InMemoryTaskStore',
     'PushNotificationConfigStore',
