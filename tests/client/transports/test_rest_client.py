@@ -423,50 +423,50 @@ class TestRestTransportTenant:
                     tenant='my-tenant',
                     message=create_text_message_object(content='hi'),
                 ),
-                '/my-tenant/v1/message:send',
+                '/my-tenant/message:send',
             ),
             (
                 'list_tasks',
                 ListTasksRequest(tenant='my-tenant'),
-                '/my-tenant/v1/tasks',
+                '/my-tenant/tasks',
             ),
             (
                 'get_task',
                 GetTaskRequest(tenant='my-tenant', id='task-123'),
-                '/my-tenant/v1/tasks/task-123',
+                '/my-tenant/tasks/task-123',
             ),
             (
                 'cancel_task',
                 CancelTaskRequest(tenant='my-tenant', id='task-123'),
-                '/my-tenant/v1/tasks/task-123:cancel',
+                '/my-tenant/tasks/task-123:cancel',
             ),
             (
                 'create_task_push_notification_config',
                 CreateTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123'
                 ),
-                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
+                '/my-tenant/tasks/task-123/pushNotificationConfigs',
             ),
             (
                 'get_task_push_notification_config',
                 GetTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123', id='cfg-1'
                 ),
-                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs/cfg-1',
+                '/my-tenant/tasks/task-123/pushNotificationConfigs/cfg-1',
             ),
             (
                 'list_task_push_notification_configs',
                 ListTaskPushNotificationConfigsRequest(
                     tenant='my-tenant', task_id='task-123'
                 ),
-                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs',
+                '/my-tenant/tasks/task-123/pushNotificationConfigs',
             ),
             (
                 'delete_task_push_notification_config',
                 DeleteTaskPushNotificationConfigRequest(
                     tenant='my-tenant', task_id='task-123', id='cfg-1'
                 ),
-                '/my-tenant/v1/tasks/task-123/pushNotificationConfigs/cfg-1',
+                '/my-tenant/tasks/task-123/pushNotificationConfigs/cfg-1',
             ),
         ],
     )
@@ -511,7 +511,7 @@ class TestRestTransportTenant:
             (
                 'subscribe',
                 SubscribeToTaskRequest(tenant='my-tenant', id='task-123'),
-                '/my-tenant/v1/tasks/task-123:subscribe',
+                '/my-tenant/tasks/task-123:subscribe',
             ),
             (
                 'send_message_streaming',
@@ -519,7 +519,7 @@ class TestRestTransportTenant:
                     tenant='my-tenant',
                     message=create_text_message_object(content='hi'),
                 ),
-                '/my-tenant/v1/message:stream',
+                '/my-tenant/message:stream',
             ),
         ],
     )
