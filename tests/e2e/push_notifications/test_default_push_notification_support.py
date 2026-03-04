@@ -74,7 +74,7 @@ def agent_server(notifications_client: httpx.AsyncClient):
     )
     process.start()
     try:
-        wait_for_server_ready(f'{url}/v1/card')
+        wait_for_server_ready(f'{url}/card')
     except TimeoutError as e:
         process.terminate()
         raise e

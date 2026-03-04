@@ -238,7 +238,7 @@ class RESTHandler:
         request: Request,
         context: ServerCallContext,
     ) -> dict[str, Any]:
-        """Handles the 'v1/tasks/{id}' REST method.
+        """Handles the 'tasks/{id}' REST method.
 
         Args:
             request: The incoming `Request` object.

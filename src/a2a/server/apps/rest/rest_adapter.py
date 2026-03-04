@@ -206,53 +206,53 @@ class RESTAdapter:
             the value is the callable handler for that route.
         """
         routes: dict[tuple[str, str], Callable[[Request], Any]] = {
-            ('/v1/message:send', 'POST'): functools.partial(
+            ('/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
-            ('/v1/message:stream', 'POST'): functools.partial(
+            ('/message:stream', 'POST'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_message_send_stream,
             ),
-            ('/v1/tasks/{id}:cancel', 'POST'): functools.partial(
+            ('/tasks/{id}:cancel', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_cancel_task
             ),
-            ('/v1/tasks/{id}:subscribe', 'GET'): functools.partial(
+            ('/tasks/{id}:subscribe', 'GET'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_subscribe_to_task,
             ),
-            ('/v1/tasks/{id}', 'GET'): functools.partial(
+            ('/tasks/{id}', 'GET'): functools.partial(
                 self._handle_request, self.handler.on_get_task
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs/{push_id}',
+                '/tasks/{id}/pushNotificationConfigs/{push_id}',
                 'GET',
             ): functools.partial(
                 self._handle_request, self.handler.get_push_notification
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs/{push_id}',
+                '/tasks/{id}/pushNotificationConfigs/{push_id}',
                 'DELETE',
             ): functools.partial(
                 self._handle_request, self.handler.delete_push_notification
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs',
+                '/tasks/{id}/pushNotificationConfigs',
                 'POST',
             ): functools.partial(
                 self._handle_request, self.handler.set_push_notification
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs',
+                '/tasks/{id}/pushNotificationConfigs',
                 'GET',
             ): functools.partial(
                 self._handle_request, self.handler.list_push_notifications
             ),
-            ('/v1/tasks', 'GET'): functools.partial(
+            ('/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
         }
         if self.agent_card.capabilities.extended_agent_card:
-            routes[('/v1/card', 'GET')] = functools.partial(
+            routes[('/card', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )
 
