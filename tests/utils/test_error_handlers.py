@@ -1,7 +1,6 @@
 """Tests for a2a.utils.error_handlers module."""
 
 from unittest.mock import patch
-
 import pytest
 
 from a2a.types import (
@@ -14,15 +13,18 @@ from a2a.utils.errors import (
 )
 from a2a.utils.error_handlers import (
     A2AErrorToHttpStatus,
+    A2AErrorToTitle,
+    A2AErrorToTypeURI,
     rest_error_handler,
     rest_stream_error_handler,
 )
 
 
 class MockJSONResponse:
-    def __init__(self, content, status_code):
+    def __init__(self, content, status_code, media_type=None):
         self.content = content
         self.status_code = status_code
+        self.media_type = media_type
 
 
 @pytest.mark.asyncio
@@ -39,9 +41,39 @@ async def test_rest_error_handler_server_error():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 400
+    assert result.media_type == 'application/problem+json'
     assert result.content == {
-        'message': 'Bad request',
-        'type': 'InvalidRequestError',
+        'type': 'about:blank',
+        'title': 'Invalid Request Error',
+        'status': 400,
+        'detail': 'Bad request',
+    }
+
+
+@pytest.mark.asyncio
+async def test_rest_error_handler_with_data_extensions():
+    """Test rest_error_handler maps A2AError.data to extension fields."""
+    error = TaskNotFoundError(message='Task not found')
+    # Dynamically attach data since __init__ no longer accepts it
+    error.data = {'taskId': '123', 'retry': False}
+
+    @rest_error_handler
+    async def failing_func():
+        raise error
+
+    with patch('a2a.utils.error_handlers.JSONResponse', MockJSONResponse):
+        result = await failing_func()
+
+    assert isinstance(result, MockJSONResponse)
+    assert result.status_code == 404
+    assert result.media_type == 'application/problem+json'
+    assert result.content == {
+        'type': 'https://a2a-protocol.org/errors/task-not-found',
+        'title': 'Task Not Found',
+        'status': 404,
+        'detail': 'Task not found',
+        'taskId': '123',
+        'retry': False,
     }
 
 
@@ -58,9 +90,12 @@ async def test_rest_error_handler_unknown_exception():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 500
+    assert result.media_type == 'application/problem+json'
     assert result.content == {
-        'message': 'unknown exception',
-        'type': 'Exception',
+        'type': 'about:blank',
+        'title': 'Internal Error',
+        'status': 500,
+        'detail': 'Unknown exception',
     }
 
 
@@ -91,9 +126,20 @@ async def test_rest_stream_error_handler_reraises_exception():
         await failing_stream()
 
 
-def test_a2a_error_to_http_status_mapping():
-    """Test A2AErrorToHttpStatus mapping."""
+def test_a2a_error_mappings():
+    """Test A2A error mappings."""
+    # HTTP Status
     assert A2AErrorToHttpStatus[InvalidRequestError] == 400
     assert A2AErrorToHttpStatus[MethodNotFoundError] == 404
     assert A2AErrorToHttpStatus[TaskNotFoundError] == 404
     assert A2AErrorToHttpStatus[InternalError] == 500
+
+    # Type URI
+    assert (
+        A2AErrorToTypeURI[TaskNotFoundError]
+        == 'https://a2a-protocol.org/errors/task-not-found'
+    )
+
+    # Title
+    assert A2AErrorToTitle[TaskNotFoundError] == 'Task Not Found'
+    assert A2AErrorToTitle[InvalidRequestError] == 'Invalid Request Error'
