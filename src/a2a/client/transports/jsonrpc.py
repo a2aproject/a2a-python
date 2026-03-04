@@ -120,46 +120,12 @@ class JsonRpcTransport(ClientTransport):
             modified_kwargs,
             context,
         )
-        modified_kwargs.setdefault(
-            'timeout', self.httpx_client.timeout.as_dict().get('read', None)
-        )
-        headers = dict(self.httpx_client.headers.items())
-        headers.update(modified_kwargs.get('headers', {}))
-        modified_kwargs['headers'] = headers
-
-        async with aconnect_sse(
-            self.httpx_client,
-            'POST',
-            self.url,
-            json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                event_source.response.raise_for_status()
-                async for sse in event_source.aiter_sse():
-                    if not sse.data:
-                        continue
-                    json_rpc_response = JSONRPC20Response.from_json(sse.data)
-                    if json_rpc_response.error:
-                        self._handle_jsonrpc_error(json_rpc_response.error)
-                    response: StreamResponse = json_format.ParseDict(
-                        json_rpc_response.result, StreamResponse()
-                    )
-                    yield response
-            except httpx.TimeoutException as e:
-                raise A2AClientError('Client Request timed out') from e
-            except httpx.HTTPStatusError as e:
-                raise A2AClientError(
-                    f'HTTP Error {e.response.status_code}: {e}'
-                ) from e
-            except SSEError as e:
-                raise A2AClientError(
-                    f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientError(f'Network communication error: {e}') from e
+        async for event in self._send_stream_request(
+            payload,
+            http_kwargs=modified_kwargs,
+            timeout=self.httpx_client.timeout.as_dict().get('read', None),
+        ):
+            yield event
 
     async def get_task(
         self,
@@ -403,34 +369,11 @@ class JsonRpcTransport(ClientTransport):
             modified_kwargs,
             context,
         )
-        modified_kwargs.setdefault('timeout', None)
-
-        async with aconnect_sse(
-            self.httpx_client,
-            'POST',
-            self.url,
-            json=payload,
-            **modified_kwargs,
-        ) as event_source:
-            try:
-                async for sse in event_source.aiter_sse():
-                    json_rpc_response = JSONRPC20Response.from_json(sse.data)
-                    if json_rpc_response.error:
-                        self._handle_jsonrpc_error(json_rpc_response.error)
-                    response: StreamResponse = json_format.ParseDict(
-                        json_rpc_response.result, StreamResponse()
-                    )
-                    yield response
-            except httpx.TimeoutException as e:
-                raise A2AClientError('Client Request timed out') from e
-            except SSEError as e:
-                raise A2AClientError(
-                    f'Invalid SSE response or protocol error: {e}'
-                ) from e
-            except json.JSONDecodeError as e:
-                raise A2AClientError(str(e)) from e
-            except httpx.RequestError as e:
-                raise A2AClientError(f'Network communication error: {e}') from e
+        async for event in self._send_stream_request(
+            payload,
+            http_kwargs=modified_kwargs,
+        ):
+            yield event
 
     async def get_extended_agent_card(
         self,
@@ -543,3 +486,53 @@ class JsonRpcTransport(ClientTransport):
             raise A2AClientError(str(e)) from e
         except httpx.RequestError as e:
             raise A2AClientError(f'Network communication error: {e}') from e
+
+    async def _send_stream_request(
+        self,
+        rpc_request_payload: dict[str, Any],
+        http_kwargs: dict[str, Any] | None = None,
+        **kwargs: Any,
+    ) -> AsyncGenerator[StreamResponse]:
+        final_kwargs = dict(http_kwargs or {})
+        final_kwargs.update(kwargs)
+        final_kwargs.setdefault('timeout', None)
+        headers = dict(self.httpx_client.headers.items())
+        headers.update(final_kwargs.get('headers', {}))
+        final_kwargs['headers'] = headers
+
+        try:
+            async with aconnect_sse(
+                self.httpx_client,
+                'POST',
+                self.url,
+                json=rpc_request_payload,
+                **final_kwargs,
+            ) as event_source:
+                try:
+                    event_source.response.raise_for_status()
+                    async for sse in event_source.aiter_sse():
+                        if not sse.data:
+                            continue
+                        json_rpc_response = JSONRPC20Response.from_json(
+                            sse.data
+                        )
+                        if json_rpc_response.error:
+                            self._handle_jsonrpc_error(json_rpc_response.error)
+                        response: StreamResponse = json_format.ParseDict(
+                            json_rpc_response.result, StreamResponse()
+                        )
+                        yield response
+                except httpx.HTTPStatusError as e:
+                    raise A2AClientError(
+                        f'HTTP Error {e.response.status_code}: {e}'
+                    ) from e
+                except SSEError as e:
+                    raise A2AClientError(
+                        f'Invalid SSE response or protocol error: {e}'
+                    ) from e
+        except httpx.TimeoutException as e:
+            raise A2AClientError('Client Request timed out') from e
+        except httpx.RequestError as e:
+            raise A2AClientError(f'Network communication error: {e}') from e
+        except json.JSONDecodeError as e:
+            raise A2AClientError(str(e)) from e
