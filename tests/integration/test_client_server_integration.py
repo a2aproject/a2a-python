@@ -951,7 +951,9 @@ async def test_http_transport_get_authenticated_card(
         agent_card=agent_card,
         url=agent_card.supported_interfaces[0].url,
     )
-    result = await transport.get_extended_agent_card(GetExtendedAgentCardRequest())
+    result = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
     assert result.name == extended_agent_card.name
     assert transport.agent_card is not None
     assert transport.agent_card.name == extended_agent_card.name
@@ -977,7 +979,9 @@ async def test_grpc_transport_get_card(
     # The transport starts with a minimal card, get_extended_agent_card() fetches the full one
     assert transport.agent_card is not None
     transport.agent_card.capabilities.extended_agent_card = True
-    result = await transport.get_extended_agent_card(GetExtendedAgentCardRequest())
+    result = await transport.get_extended_agent_card(
+        GetExtendedAgentCardRequest()
+    )
 
     assert result.name == agent_card.name
     assert transport.agent_card.name == agent_card.name
@@ -1161,8 +1165,7 @@ async def test_json_transport_get_signed_extended_card(
         create_key_provider(public_key), ['HS384', 'ES256']
     )
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(),
-        signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
     )
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
@@ -1241,8 +1244,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
 
     # 3. Fetch extended card via transport
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(),
-        signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
     )
     assert result.name == extended_agent_card.name
     assert len(result.signatures) == 1
@@ -1319,8 +1321,7 @@ async def test_rest_transport_get_signed_card(
 
     # 3. Fetch extended card
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(),
-        signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
     )
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
@@ -1382,8 +1383,7 @@ async def test_grpc_transport_get_signed_card(
             create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
         )
         result = await transport.get_extended_agent_card(
-            GetExtendedAgentCardRequest(),
-            signature_verifier=signature_verifier
+            GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
         )
         assert result.signatures is not None
         assert len(result.signatures) == 1
