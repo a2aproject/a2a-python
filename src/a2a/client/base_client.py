@@ -16,6 +16,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -311,6 +312,7 @@ class BaseClient(Client):
 
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -330,6 +332,7 @@ class BaseClient(Client):
             The `AgentCard` for the agent.
         """
         card = await self._transport.get_extended_agent_card(
+            request,
             context=context,
             extensions=extensions,
             signature_verifier=signature_verifier,

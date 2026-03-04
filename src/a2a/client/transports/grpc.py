@@ -29,6 +29,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -276,6 +277,7 @@ class GrpcTransport(ClientTransport):
     @_handle_grpc_exception
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -283,7 +285,7 @@ class GrpcTransport(ClientTransport):
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = await self.stub.GetExtendedAgentCard(
-            a2a_pb2.GetExtendedAgentCardRequest(),
+            request,
             metadata=self._get_grpc_metadata(extensions),
         )
 

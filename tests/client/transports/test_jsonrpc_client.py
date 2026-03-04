@@ -19,6 +19,7 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -647,6 +648,7 @@ class TestExtensions:
         extended_card.CopyFrom(agent_card)
         extended_card.name = 'Extended'
 
+        request = GetExtendedAgentCardRequest()
         rpc_response = {
             'id': '123',
             'jsonrpc': '2.0',
@@ -656,7 +658,7 @@ class TestExtensions:
             client, '_send_request', new_callable=AsyncMock
         ) as mock_send_request:
             mock_send_request.return_value = rpc_response
-            await client.get_extended_agent_card(extensions=extensions)
+            await client.get_extended_agent_card(request, extensions=extensions)
 
         mock_send_request.assert_called_once()
         _, mock_kwargs = mock_send_request.call_args[0]
