@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn
 
-from a2a.client.errors import A2AClientError
+from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
@@ -53,6 +53,9 @@ _A2A_ERROR_NAME_TO_CLS = {
 
 
 def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
+    if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
+        raise A2AClientTimeoutError('Client Request timed out') from e
+
     details = e.details()
     if isinstance(details, str) and ': ' in details:
         error_type_name, error_message = details.split(': ', 1)

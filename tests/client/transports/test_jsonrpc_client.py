@@ -159,15 +159,15 @@ class TestSendMessage:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = create_send_message_request()
         response = await transport.send_message(request)
 
         assert isinstance(response, SendMessageResponse)
-        mock_httpx_client.post.assert_called_once()
-        call_args = mock_httpx_client.post.call_args
-        assert call_args[0][0] == 'http://test-agent.example.com'
+        mock_httpx_client.build_request.assert_called_once()
+        call_args = mock_httpx_client.build_request.call_args
+        assert call_args[0][1] == 'http://test-agent.example.com'
         payload = call_args[1]['json']
         assert payload['method'] == 'SendMessage'
 
@@ -187,7 +187,7 @@ class TestSendMessage:
             'result': None,
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = create_send_message_request()
 
@@ -198,7 +198,7 @@ class TestSendMessage:
     @pytest.mark.asyncio
     async def test_send_message_timeout(self, transport, mock_httpx_client):
         """Test handling of request timeout."""
-        mock_httpx_client.post.side_effect = httpx.ReadTimeout('Timeout')
+        mock_httpx_client.send.side_effect = httpx.ReadTimeout('Timeout')
 
         request = create_send_message_request()
 
@@ -210,7 +210,7 @@ class TestSendMessage:
         """Test handling of HTTP errors."""
         mock_response = MagicMock()
         mock_response.status_code = 500
-        mock_httpx_client.post.side_effect = httpx.HTTPStatusError(
+        mock_httpx_client.send.side_effect = httpx.HTTPStatusError(
             'Server Error', request=MagicMock(), response=mock_response
         )
 
@@ -227,7 +227,7 @@ class TestSendMessage:
         mock_response = MagicMock()
         mock_response.raise_for_status = MagicMock()
         mock_response.json.side_effect = json.JSONDecodeError('msg', 'doc', 0)
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = create_send_message_request()
 
@@ -253,7 +253,7 @@ class TestGetTask:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         # Proto uses 'name' field for task identifier in request
         request = GetTaskRequest(id=f'{task_id}')
@@ -261,8 +261,8 @@ class TestGetTask:
 
         assert isinstance(response, Task)
         assert response.id == task_id
-        mock_httpx_client.post.assert_called_once()
-        call_args = mock_httpx_client.post.call_args
+        mock_httpx_client.build_request.assert_called_once()
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'GetTask'
 
@@ -281,13 +281,13 @@ class TestGetTask:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = GetTaskRequest(id=f'{task_id}', history_length=10)
         response = await transport.get_task(request)
 
         assert isinstance(response, Task)
-        call_args = mock_httpx_client.post.call_args
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['params']['historyLength'] == 10
 
@@ -310,14 +310,14 @@ class TestCancelTask:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = CancelTaskRequest(id=f'{task_id}')
         response = await transport.cancel_task(request)
 
         assert isinstance(response, Task)
         assert response.status.state == TaskState.TASK_STATE_CANCELED
-        call_args = mock_httpx_client.post.call_args
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'CancelTask'
 
@@ -340,7 +340,7 @@ class TestTaskCallback:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = GetTaskPushNotificationConfigRequest(
             task_id=f'{task_id}',
@@ -349,7 +349,7 @@ class TestTaskCallback:
         response = await transport.get_task_push_notification_config(request)
 
         assert isinstance(response, TaskPushNotificationConfig)
-        call_args = mock_httpx_client.post.call_args
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'GetTaskPushNotificationConfig'
 
@@ -376,7 +376,7 @@ class TestTaskCallback:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = ListTaskPushNotificationConfigsRequest(
             task_id=f'{task_id}',
@@ -385,7 +385,7 @@ class TestTaskCallback:
 
         assert len(response.configs) == 1
         assert response.configs[0].task_id == task_id
-        call_args = mock_httpx_client.post.call_args
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'ListTaskPushNotificationConfigs'
 
@@ -404,7 +404,7 @@ class TestTaskCallback:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = DeleteTaskPushNotificationConfigRequest(
             task_id=f'{task_id}',
@@ -412,9 +412,9 @@ class TestTaskCallback:
         )
         response = await transport.delete_task_push_notification_config(request)
 
-        mock_httpx_client.post.assert_called_once()
+        mock_httpx_client.build_request.assert_called_once()
         assert response is None
-        call_args = mock_httpx_client.post.call_args
+        call_args = mock_httpx_client.build_request.call_args
         payload = call_args[1]['json']
         assert payload['method'] == 'DeleteTaskPushNotificationConfig'
 
@@ -430,7 +430,7 @@ class TestClose:
 
 class TestStreamingErrors:
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_sse_error(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -451,7 +451,7 @@ class TestStreamingErrors:
                 pass
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_request_error(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -474,7 +474,7 @@ class TestStreamingErrors:
                 pass
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_timeout(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -527,7 +527,7 @@ class TestInterceptors:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = create_send_message_request()
 
@@ -567,15 +567,15 @@ class TestExtensions:
             },
         }
         mock_response.raise_for_status = MagicMock()
-        mock_httpx_client.post.return_value = mock_response
+        mock_httpx_client.send.return_value = mock_response
 
         request = create_send_message_request()
 
         await transport.send_message(request)
 
         # Verify request was made with extension headers
-        mock_httpx_client.post.assert_called_once()
-        call_args = mock_httpx_client.post.call_args
+        mock_httpx_client.build_request.assert_called_once()
+        call_args = mock_httpx_client.build_request.call_args
         # Extensions should be in the kwargs
         assert (
             call_args[1].get('headers', {}).get('X-A2A-Extensions')
@@ -583,7 +583,7 @@ class TestExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.jsonrpc.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_server_error_propagates(
         self,
         mock_aconnect_sse: AsyncMock,

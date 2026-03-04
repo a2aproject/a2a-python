@@ -60,7 +60,7 @@ def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
 
 class TestRestTransport:
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_timeout(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -180,7 +180,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_with_new_extensions(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -222,7 +222,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.rest.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
     async def test_send_message_streaming_server_error_propagates(
         self,
         mock_aconnect_sse: AsyncMock,

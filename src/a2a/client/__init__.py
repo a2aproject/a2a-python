@@ -13,6 +13,7 @@ from a2a.client.client import Client, ClientConfig, ClientEvent, Consumer
 from a2a.client.client_factory import ClientFactory, minimal_agent_card
 from a2a.client.errors import (
     A2AClientError,
+    A2AClientTimeoutError,
     AgentCardResolutionError,
 )
 from a2a.client.helpers import create_text_message_object
@@ -25,6 +26,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     'A2ACardResolver',
     'A2AClientError',
+    'A2AClientTimeoutError',
     'AgentCardResolutionError',
     'AuthInterceptor',
     'BaseClient',

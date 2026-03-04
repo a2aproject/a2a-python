@@ -1,4 +1,3 @@
-import json
 import logging
 
 from collections.abc import AsyncGenerator, Callable
@@ -8,12 +7,15 @@ from uuid import uuid4
 import httpx
 
 from google.protobuf import json_format
-from httpx_sse import SSEError, aconnect_sse
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
+from a2a.client.transports.http_helpers import (
+    send_http_request,
+    send_http_stream_request,
+)
 from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -470,22 +472,10 @@ class JsonRpcTransport(ClientTransport):
         rpc_request_payload: dict[str, Any],
         http_kwargs: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
-        try:
-            response = await self.httpx_client.post(
-                self.url, json=rpc_request_payload, **(http_kwargs or {})
-            )
-            response.raise_for_status()
-            return response.json()
-        except httpx.TimeoutException as e:
-            raise A2AClientError('Client Request timed out') from e
-        except httpx.HTTPStatusError as e:
-            raise A2AClientError(
-                f'HTTP Error {e.response.status_code}: {e}'
-            ) from e
-        except json.JSONDecodeError as e:
-            raise A2AClientError(str(e)) from e
-        except httpx.RequestError as e:
-            raise A2AClientError(f'Network communication error: {e}') from e
+        request = self.httpx_client.build_request(
+            'POST', self.url, json=rpc_request_payload, **(http_kwargs or {})
+        )
+        return await send_http_request(self.httpx_client, request)
 
     async def _send_stream_request(
         self,
@@ -500,39 +490,18 @@ class JsonRpcTransport(ClientTransport):
         headers.update(final_kwargs.get('headers', {}))
         final_kwargs['headers'] = headers
 
-        try:
-            async with aconnect_sse(
-                self.httpx_client,
-                'POST',
-                self.url,
-                json=rpc_request_payload,
-                **final_kwargs,
-            ) as event_source:
-                try:
-                    event_source.response.raise_for_status()
-                    async for sse in event_source.aiter_sse():
-                        if not sse.data:
-                            continue
-                        json_rpc_response = JSONRPC20Response.from_json(
-                            sse.data
-                        )
-                        if json_rpc_response.error:
-                            self._handle_jsonrpc_error(json_rpc_response.error)
-                        response: StreamResponse = json_format.ParseDict(
-                            json_rpc_response.result, StreamResponse()
-                        )
-                        yield response
-                except httpx.HTTPStatusError as e:
-                    raise A2AClientError(
-                        f'HTTP Error {e.response.status_code}: {e}'
-                    ) from e
-                except SSEError as e:
-                    raise A2AClientError(
-                        f'Invalid SSE response or protocol error: {e}'
-                    ) from e
-        except httpx.TimeoutException as e:
-            raise A2AClientError('Client Request timed out') from e
-        except httpx.RequestError as e:
-            raise A2AClientError(f'Network communication error: {e}') from e
-        except json.JSONDecodeError as e:
-            raise A2AClientError(str(e)) from e
+        async for sse_data in send_http_stream_request(
+            self.httpx_client,
+            'POST',
+            self.url,
+            None,
+            json=rpc_request_payload,
+            **final_kwargs,
+        ):
+            json_rpc_response = JSONRPC20Response.from_json(sse_data)
+            if json_rpc_response.error:
+                self._handle_jsonrpc_error(json_rpc_response.error)
+            response: StreamResponse = json_format.ParseDict(
+                json_rpc_response.result, StreamResponse()
+            )
+            yield response
