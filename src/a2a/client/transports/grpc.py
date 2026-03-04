@@ -43,6 +43,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -303,11 +304,14 @@ class GrpcTransport(ClientTransport):
     def _get_grpc_metadata(
         self,
         extensions: list[str] | None = None,
-    ) -> list[tuple[str, str]] | None:
+    ) -> list[tuple[str, str]]:
         """Creates gRPC metadata for extensions."""
+        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)]
+
         extensions_to_use = extensions or self.extensions
         if extensions_to_use:
-            return [
+            metadata.append(
                 (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
-            ]
-        return None
+            )
+
+        return metadata
