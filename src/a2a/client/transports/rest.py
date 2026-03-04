@@ -78,7 +78,7 @@ class RestTransport(ClientTransport):
             request, context, extensions
         )
         response_data = await self._send_post_request(
-            '/v1/message:send', payload, modified_kwargs
+            '/message:send', payload, modified_kwargs
         )
         response: SendMessageResponse = ParseDict(
             response_data, SendMessageResponse()
@@ -99,7 +99,7 @@ class RestTransport(ClientTransport):
 
         async for event in self._send_stream_request(
             'POST',
-            '/v1/message:stream',
+            '/message:stream',
             http_kwargs=modified_kwargs,
             json=payload,
         ):
@@ -128,7 +128,7 @@ class RestTransport(ClientTransport):
             del params['id']  # id is part of the URL path, not query params
 
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.id}',
+            f'/tasks/{request.id}',
             params,
             modified_kwargs,
         )
@@ -153,7 +153,7 @@ class RestTransport(ClientTransport):
             extensions if extensions is not None else self.extensions,
         )
         response_data = await self._send_get_request(
-            '/v1/tasks',
+            '/tasks',
             _model_to_query_params(request),
             modified_kwargs,
         )
@@ -181,7 +181,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.id}:cancel', payload, modified_kwargs
+            f'/tasks/{request.id}:cancel', payload, modified_kwargs
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -203,7 +203,7 @@ class RestTransport(ClientTransport):
             payload, modified_kwargs, context
         )
         response_data = await self._send_post_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{request.task_id}/pushNotificationConfigs',
             payload,
             modified_kwargs,
         )
@@ -235,7 +235,7 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             params,
             modified_kwargs,
         )
@@ -265,7 +265,7 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
         response_data = await self._send_get_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{request.task_id}/pushNotificationConfigs',
             params,
             modified_kwargs,
         )
@@ -297,7 +297,7 @@ class RestTransport(ClientTransport):
         if 'task_id' in params:
             del params['task_id']
         await self._send_delete_request(
-            f'/v1/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             params,
             modified_kwargs,
         )
@@ -317,7 +317,7 @@ class RestTransport(ClientTransport):
 
         async for event in self._send_stream_request(
             'GET',
-            f'/v1/tasks/{request.id}:subscribe',
+            f'/tasks/{request.id}:subscribe',
             http_kwargs=modified_kwargs,
         ):
             yield event
@@ -345,7 +345,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_get_request(
-            '/v1/card', {}, modified_kwargs
+            '/card', {}, modified_kwargs
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
 

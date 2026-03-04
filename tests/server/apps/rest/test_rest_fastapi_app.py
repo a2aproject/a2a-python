@@ -200,7 +200,7 @@ async def test_send_message_success_message(
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
     response = await client.post(
-        '/v1/message:send', json=json_format.MessageToDict(request)
+        '/message:send', json=json_format.MessageToDict(request)
     )
     # request should always be successful
     response.raise_for_status()
@@ -249,7 +249,7 @@ async def test_send_message_success_task(
     )
     # To see log output, run pytest with '--log-cli=true --log-cli-level=INFO'
     response = await client.post(
-        '/v1/message:send', json=json_format.MessageToDict(request)
+        '/message:send', json=json_format.MessageToDict(request)
     )
     # request should always be successful
     response.raise_for_status()
@@ -298,7 +298,7 @@ async def test_streaming_message_request_body_consumption(
 
     # This should not hang indefinitely (previously it would due to the deadlock)
     response = await streaming_client.post(
-        '/v1/message:stream',
+        '/message:stream',
         json=json_format.MessageToDict(request),
         headers={'Accept': 'text/event-stream'},
         timeout=10.0,  # Reasonable timeout to prevent hanging in tests
@@ -339,7 +339,7 @@ async def test_streaming_endpoint_with_invalid_content_type(
 
     # Send request without proper event-stream headers
     response = await streaming_client.post(
-        '/v1/message:stream',
+        '/message:stream',
         json=json_format.MessageToDict(request),
         timeout=10.0,
     )
@@ -387,7 +387,7 @@ async def test_send_message_rejected_task(
     )
 
     response = await client.post(
-        '/v1/message:send', json=json_format.MessageToDict(request)
+        '/message:send', json=json_format.MessageToDict(request)
     )
 
     response.raise_for_status()
