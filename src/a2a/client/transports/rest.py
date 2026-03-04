@@ -466,8 +466,9 @@ class RestTransport(ClientTransport):
         )
         modified_kwargs.setdefault('timeout', None)
 
-        tenant = request.tenant
-        path = self._get_path(f'/v1/tasks/{request.id}:subscribe', tenant)
+        path = self._get_path(
+            f'/v1/tasks/{request.id}:subscribe', request.tenant
+        )
 
         async with aconnect_sse(
             self.httpx_client,
