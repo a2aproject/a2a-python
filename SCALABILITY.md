@@ -64,8 +64,8 @@ uv add "a2a-sdk[aws]"
 
 ## ☁️ AWS Prerequisites
 
-The following AWS resources must exist before starting your agent. Terraform /
-CloudFormation examples are shown for reference.
+The following AWS resources must exist before starting your agent. AWS CloudFormation
+examples are shown for reference.
 
 ### DynamoDB Table
 
@@ -389,8 +389,8 @@ SQS Poller (Instance B)
 
 ## 🗂️ DynamoDB Task Store Details
 
-`DynamoDBTaskStore` serializes each `Task` as a Pydantic JSON string under a
-single `task_data` attribute. The table schema is intentionally minimal:
+`DynamoDBTaskStore` serializes each `Task` as a JSON string (via `model_dump_json`)
+under a single `task_data` attribute. The table schema is intentionally minimal:
 
 | Attribute | DynamoDB Type | Description |
 |---|---|---|
@@ -493,12 +493,12 @@ pip install "a2a-sdk[aws,telemetry]"
 - [ ] ECS task role has the IAM policy shown above
 - [ ] `instance_id` resolved from ECS task metadata (not random UUID in prod)
 - [ ] One shared `aioboto3.Session` passed to all three components
-- [ ] `QueueLifecycleManager` used as `async with` — guarantees teardown on SIGTERM
+- [ ] `QueueLifecycleManager` used as `async with` — guarantees teardown on process exit
 - [ ] `SnsQueueManager.stop()` called in `finally` block before context exit
 - [ ] ALB stickiness **disabled** — the distributed stack handles cross-instance routing
 - [ ] ECS task `stopTimeout` set ≥ 30 s to allow graceful SQS drain and queue deletion
-- [ ] DynamoDB point-in-time recovery (PITR) enabled for task durability
-- [ ] SNS dead-letter queue (DLQ) configured for undeliverable messages
+- [ ] DynamoDB point-in-time recovery enabled for task durability
+- [ ] SNS dead-letter queue configured for undeliverable messages
 
 ---
 
