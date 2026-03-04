@@ -324,6 +324,7 @@ class BaseClient(Client):
         client's internal state with the new card.
 
         Args:
+            request: The `GetExtendedAgentCardRequest` object specifying the request.
             context: The client call context.
             extensions: List of extensions to be activated.
             signature_verifier: A callable used to verify the agent card's signatures.

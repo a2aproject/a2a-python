@@ -23,7 +23,7 @@ from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import a2a_pb2, a2a_pb2_grpc
+from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
