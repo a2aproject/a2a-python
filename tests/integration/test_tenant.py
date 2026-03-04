@@ -73,8 +73,7 @@ async def test_tenant_decorator_rest(agent_card):
     )
     args, kwargs = send_call
     assert args[1] == 'http://example.com/rest/tenant-1/v1/message:send'
-    # tenant should NOT be in JSON body as it was popped
-    assert 'tenant' not in kwargs['json']
+    assert 'tenant' in kwargs['json']
 
 
 @pytest.mark.asyncio
