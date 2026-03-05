@@ -1,7 +1,7 @@
 import base64
-import json
 
 import pytest
+
 
 pytest.importorskip(
     'vertexai', reason='Vertex Task Converter tests require vertexai'
@@ -190,11 +190,10 @@ def test_to_sdk_part_file_data() -> None:
     assert sdk_part.root.file.uri == 'gs://bucket/image.jpg'
 
 
-def test_to_sdk_part_empty() -> None:
+def test_to_sdk_part_unsupported() -> None:
     stored_part = vertexai_types.Part()
-    sdk_part = to_sdk_part(stored_part)
-    assert isinstance(sdk_part.root, TextPart)
-    assert sdk_part.root.text == ''
+    with pytest.raises(ValueError, match='Unsupported part:'):
+        to_sdk_part(stored_part)
 
 
 def test_to_stored_artifact() -> None:

@@ -107,7 +107,7 @@ def to_sdk_part(stored_part: vertexai_types.Part) -> Part:
             )
         )
 
-    return Part(root=TextPart(text=''))
+    raise ValueError(f'Unsupported part: {stored_part}')
 
 
 def to_stored_artifact(artifact: Artifact) -> vertexai_types.TaskArtifact:
