@@ -506,6 +506,38 @@ class TestRestTransportTenant:
         # 4. Verify the URL
         args, _ = mock_httpx_client.build_request.call_args
         assert args[1] == f'http://agent.example.com/api{expected_path}'
+    
+    @pytest.mark.asyncio
+    async def test_rest_get_extended_agent_card_prepend_tenant(
+        self,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        mock_agent_card.capabilities.extended_agent_card = True
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        request = GetExtendedAgentCardRequest(tenant='my-tenant')
+
+        # 1. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 2. Call the method
+        await client.get_extended_agent_card(request=request)
+
+        # 3. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == 'http://agent.example.com/api/my-tenant/card'
 
     @pytest.mark.asyncio
     async def test_rest_get_task_prepend_empty_tenant(
