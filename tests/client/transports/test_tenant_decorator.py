@@ -8,6 +8,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -86,12 +87,14 @@ class TestTenantTransportDecorator:
                 'delete_task_push_notification_config',
                 DeleteTaskPushNotificationConfigRequest(task_id='t1', id='c1'),
             ),
+            ('get_extended_agent_card', GetExtendedAgentCardRequest()),
         ],
     )
     @pytest.mark.asyncio
     async def test_methods(
         self, mock_transport: AsyncMock, method_name, request_obj
     ) -> None:
+        """Test that tenant is set on the request for all methods."""
         tenant_id = 'test-tenant'
         decorator = TenantTransportDecorator(mock_transport, tenant_id)
         mock_method = getattr(mock_transport, method_name)
@@ -104,6 +107,7 @@ class TestTenantTransportDecorator:
 
     @pytest.mark.asyncio
     async def test_streaming_methods(self, mock_transport: AsyncMock) -> None:
+        """Test that tenant is set on the request for streaming methods."""
         tenant_id = 'test-tenant'
         decorator = TenantTransportDecorator(mock_transport, tenant_id)
 
@@ -123,18 +127,3 @@ class TestTenantTransportDecorator:
         async for _ in decorator.send_message_streaming(request_msg):
             pass
         assert request_msg.tenant == tenant_id
-
-    @pytest.mark.asyncio
-    async def test_misc(self, mock_transport: AsyncMock) -> None:
-        tenant_id = 'test-tenant'
-        decorator = TenantTransportDecorator(mock_transport, tenant_id)
-
-        # Test get_extended_agent_card
-        card = MagicMock(spec=AgentCard)
-        mock_transport.get_extended_agent_card.return_value = card
-        res = await decorator.get_extended_agent_card()
-        assert res is card
-
-        # Test close
-        await decorator.close()
-        mock_transport.close.assert_called_once()

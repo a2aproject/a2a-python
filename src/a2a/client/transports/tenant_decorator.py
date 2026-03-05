@@ -7,6 +7,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -171,13 +172,16 @@ class TenantTransportDecorator(ClientTransport):
 
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
+        request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.get_extended_agent_card(
+            request,
             context=context,
             extensions=extensions,
             signature_verifier=signature_verifier,
