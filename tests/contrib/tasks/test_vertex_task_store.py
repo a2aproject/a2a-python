@@ -5,9 +5,9 @@ These tests interact with the Vertex AI Agent Engine. They are skipped by defaul
 unless the necessary environment variables are set, which prevents them from failing in GitHub Actions.
 
 To run these tests locally, you can use the provided script:
-    ./scripts/run_vertex_tests.sh
+    ./run_vertex_tests.sh
 
-Alternatively, you can set the environment variables manually and run pytest:
+Be sure to set the following environment variables:
     VERTEX_PROJECT="your-project" \
     VERTEX_LOCATION="your-location" \
     VERTEX_BASE_URL="your-base-url" \
