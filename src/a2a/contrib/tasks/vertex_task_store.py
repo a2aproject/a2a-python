@@ -5,7 +5,7 @@ try:
     import vertexai
 
     from google.genai import errors as genai_errors
-    from vertexai import types
+    from vertexai import types as vertexai_types
 except ImportError as e:
     raise ImportError(
         'VertexTaskStore requires vertexai. '
@@ -57,7 +57,7 @@ class VertexTaskStore(TaskStore):
         await self._client.aio.agent_engines.a2a_tasks.create(
             name=self._agent_engine_resource_id,
             a2a_task_id=sdk_task.id,
-            config=types.CreateAgentEngineTaskConfig(
+            config=vertexai_types.CreateAgentEngineTaskConfig(
                 context_id=stored_task.context_id,
                 metadata=stored_task.metadata,
                 output=stored_task.output,
@@ -66,11 +66,11 @@ class VertexTaskStore(TaskStore):
 
     def _get_status_change_event(
         self, previous_task: Task, task: Task, event_sequence_number: int
-    ) -> types.TaskEvent | None:
+    ) -> vertexai_types.TaskEvent | None:
         if task.status.state != previous_task.status.state:
-            return types.TaskEvent(
-                event_data=types.TaskEventData(
-                    state_change=types.TaskStateChange(
+            return vertexai_types.TaskEvent(
+                event_data=vertexai_types.TaskEventData(
+                    state_change=vertexai_types.TaskStateChange(
                         new_state=vertex_task_converter.to_stored_task_state(
                             task.status.state
                         ),
@@ -82,11 +82,11 @@ class VertexTaskStore(TaskStore):
 
     def _get_metadata_change_event(
         self, previous_task: Task, task: Task, event_sequence_number: int
-    ) -> types.TaskEvent | None:
+    ) -> vertexai_types.TaskEvent | None:
         if task.metadata != previous_task.metadata:
-            return types.TaskEvent(
-                event_data=types.TaskEventData(
-                    metadata_change=types.TaskMetadataChange(
+            return vertexai_types.TaskEvent(
+                event_data=vertexai_types.TaskEventData(
+                    metadata_change=vertexai_types.TaskMetadataChange(
                         new_metadata=task.metadata,
                     )
                 ),
@@ -96,12 +96,12 @@ class VertexTaskStore(TaskStore):
 
     def _get_artifacts_change_event(
         self, previous_task: Task, task: Task, event_sequence_number: int
-    ) -> types.TaskEvent | None:
+    ) -> vertexai_types.TaskEvent | None:
         if task.artifacts != previous_task.artifacts:
-            task_artifact_change = types.TaskArtifactChange()
-            event = types.TaskEvent(
-                event_data=types.TaskEventData(
-                    output_change=types.TaskOutputChange(
+            task_artifact_change = vertexai_types.TaskArtifactChange()
+            event = vertexai_types.TaskEvent(
+                event_data=vertexai_types.TaskEventData(
+                    output_change=vertexai_types.TaskOutputChange(
                         task_artifact_change=task_artifact_change
                     )
                 ),
@@ -140,12 +140,12 @@ class VertexTaskStore(TaskStore):
                     task_artifact_change.updated_artifacts.append(
                         vertex_task_converter.to_stored_artifact(artifact)
                     )
-            if task_artifact_change != types.TaskArtifactChange():
+            if task_artifact_change != vertexai_types.TaskArtifactChange():
                 return event
         return None
 
     async def _update(
-        self, previous_stored_task: types.A2aTask, task: Task
+        self, previous_stored_task: vertexai_types.A2aTask, task: Task
     ) -> None:
         previous_task = vertex_task_converter.to_sdk_task(previous_stored_task)
         events = []
@@ -179,7 +179,9 @@ class VertexTaskStore(TaskStore):
             task_events=events,
         )
 
-    async def _get_stored_task(self, task_id: str) -> types.A2aTask | None:
+    async def _get_stored_task(
+        self, task_id: str
+    ) -> vertexai_types.A2aTask | None:
         try:
             a2a_task = await self._client.aio.agent_engines.a2a_tasks.get(
                 name=self._agent_engine_resource_id + '/a2aTasks/' + task_id,

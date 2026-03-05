@@ -1,5 +1,5 @@
 try:
-    from vertexai import types
+    from vertexai import types as vertexai_types
 except ImportError as e:
     raise ImportError(
         'vertex_task_converter requires vertexai. '
@@ -23,45 +23,41 @@ from a2a.types import (
     TextPart,
 )
 
+_TO_SDK_TASK_STATE = {
+    vertexai_types.State.STATE_UNSPECIFIED: TaskState.unknown,
+    vertexai_types.State.SUBMITTED: TaskState.submitted,
+    vertexai_types.State.WORKING: TaskState.working,
+    vertexai_types.State.COMPLETED: TaskState.completed,
+    vertexai_types.State.CANCELLED: TaskState.canceled,
+    vertexai_types.State.FAILED: TaskState.failed,
+    vertexai_types.State.REJECTED: TaskState.rejected,
+    vertexai_types.State.INPUT_REQUIRED: TaskState.input_required,
+    vertexai_types.State.AUTH_REQUIRED: TaskState.auth_required,
+}
 
-def to_sdk_task_state(stored_state: types.State) -> TaskState:
+_SDK_TO_STORED_TASK_STATE = {v: k for k, v in _TO_SDK_TASK_STATE.items()}
+
+
+def to_sdk_task_state(stored_state: vertexai_types.State) -> TaskState:
     """Converts a proto A2aTask.State to a TaskState enum."""
-    return {
-        types.State.STATE_UNSPECIFIED: TaskState.unknown,
-        types.State.SUBMITTED: TaskState.submitted,
-        types.State.WORKING: TaskState.working,
-        types.State.COMPLETED: TaskState.completed,
-        types.State.CANCELLED: TaskState.canceled,
-        types.State.FAILED: TaskState.failed,
-        types.State.REJECTED: TaskState.rejected,
-        types.State.INPUT_REQUIRED: TaskState.input_required,
-        types.State.AUTH_REQUIRED: TaskState.auth_required,
-    }.get(stored_state, TaskState.unknown)
+    return _TO_SDK_TASK_STATE.get(stored_state, TaskState.unknown)
 
 
-def to_stored_task_state(task_state: TaskState) -> types.State:
+def to_stored_task_state(task_state: TaskState) -> vertexai_types.State:
     """Converts a TaskState enum to a proto A2aTask.State enum value."""
-    return {
-        TaskState.unknown: types.State.STATE_UNSPECIFIED,
-        TaskState.submitted: types.State.SUBMITTED,
-        TaskState.working: types.State.WORKING,
-        TaskState.completed: types.State.COMPLETED,
-        TaskState.canceled: types.State.CANCELLED,
-        TaskState.failed: types.State.FAILED,
-        TaskState.rejected: types.State.REJECTED,
-        TaskState.input_required: types.State.INPUT_REQUIRED,
-        TaskState.auth_required: types.State.AUTH_REQUIRED,
-    }.get(task_state, types.State.STATE_UNSPECIFIED)
+    return _SDK_TO_STORED_TASK_STATE.get(
+        task_state, vertexai_types.State.STATE_UNSPECIFIED
+    )
 
 
-def to_stored_part(part: Part) -> types.Part:
+def to_stored_part(part: Part) -> vertexai_types.Part:
     """Converts a SDK Part to a proto Part."""
     if isinstance(part.root, TextPart):
-        return types.Part(text=part.root.text)
+        return vertexai_types.Part(text=part.root.text)
     if isinstance(part.root, DataPart):
         data_bytes = json.dumps(part.root.data).encode('utf-8')
-        return types.Part(
-            inline_data=types.Blob(
+        return vertexai_types.Part(
+            inline_data=vertexai_types.Blob(
                 mime_type='application/json', data=data_bytes
             )
         )
@@ -69,14 +65,14 @@ def to_stored_part(part: Part) -> types.Part:
         file_content = part.root.file
         if isinstance(file_content, FileWithBytes):
             decoded_bytes = base64.b64decode(file_content.bytes)
-            return types.Part(
-                inline_data=types.Blob(
+            return vertexai_types.Part(
+                inline_data=vertexai_types.Blob(
                     mime_type=file_content.mime_type or '', data=decoded_bytes
                 )
             )
         if isinstance(file_content, FileWithUri):
-            return types.Part(
-                file_data=types.FileData(
+            return vertexai_types.Part(
+                file_data=vertexai_types.FileData(
                     mime_type=file_content.mime_type or '',
                     file_uri=file_content.uri,
                 )
@@ -84,7 +80,7 @@ def to_stored_part(part: Part) -> types.Part:
     raise ValueError(f'Unsupported part type: {type(part.root)}')
 
 
-def to_sdk_part(stored_part: types.Part) -> Part:
+def to_sdk_part(stored_part: vertexai_types.Part) -> Part:
     """Converts a proto Part to a SDK Part."""
     if stored_part.text:
         return Part(root=TextPart(text=stored_part.text))
@@ -113,15 +109,15 @@ def to_sdk_part(stored_part: types.Part) -> Part:
     return Part(root=TextPart(text=''))
 
 
-def to_stored_artifact(artifact: Artifact) -> types.TaskArtifact:
+def to_stored_artifact(artifact: Artifact) -> vertexai_types.TaskArtifact:
     """Converts a SDK Artifact to a proto TaskArtifact."""
-    return types.TaskArtifact(
+    return vertexai_types.TaskArtifact(
         artifact_id=artifact.artifact_id,
         parts=[to_stored_part(part) for part in artifact.parts],
     )
 
 
-def to_sdk_artifact(stored_artifact: types.TaskArtifact) -> Artifact:
+def to_sdk_artifact(stored_artifact: vertexai_types.TaskArtifact) -> Artifact:
     """Converts a proto TaskArtifact to a SDK Artifact."""
     return Artifact(
         artifact_id=stored_artifact.artifact_id,
@@ -129,13 +125,13 @@ def to_sdk_artifact(stored_artifact: types.TaskArtifact) -> Artifact:
     )
 
 
-def to_stored_task(task: Task) -> types.A2aTask:
+def to_stored_task(task: Task) -> vertexai_types.A2aTask:
     """Converts a SDK Task to a proto A2aTask."""
-    return types.A2aTask(
+    return vertexai_types.A2aTask(
         context_id=task.context_id,
         metadata=task.metadata,
         state=to_stored_task_state(task.status.state),
-        output=types.TaskOutput(
+        output=vertexai_types.TaskOutput(
             artifacts=[
                 to_stored_artifact(artifact)
                 for artifact in task.artifacts or []
@@ -144,7 +140,7 @@ def to_stored_task(task: Task) -> types.A2aTask:
     )
 
 
-def to_sdk_task(a2a_task: types.A2aTask) -> Task:
+def to_sdk_task(a2a_task: vertexai_types.A2aTask) -> Task:
     """Converts a proto A2aTask to a SDK Task."""
     return Task(
         id=a2a_task.name.split('/')[-1],
