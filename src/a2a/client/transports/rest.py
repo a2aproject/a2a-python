@@ -347,7 +347,7 @@ class RestTransport(ClientTransport):
             context,
         )
         response_data = await self._send_get_request(
-            '/card', {}, modified_kwargs
+            '/extendedAgentCard', {}, modified_kwargs
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
 
