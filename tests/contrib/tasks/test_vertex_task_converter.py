@@ -282,3 +282,110 @@ def test_to_sdk_task_no_output() -> None:
     assert sdk_task.id == 'task-3'
     assert sdk_task.metadata == {}
     assert sdk_task.artifacts == []
+
+
+def test_sdk_task_state_conversion_round_trip() -> None:
+    for state in TaskState:
+        stored_state = to_stored_task_state(state)
+        round_trip_state = to_sdk_task_state(stored_state)
+        assert round_trip_state == state
+
+
+def test_sdk_part_text_conversion_round_trip() -> None:
+    sdk_part = Part(root=TextPart(text='hello world'))
+    stored_part = to_stored_part(sdk_part)
+    round_trip_sdk_part = to_sdk_part(stored_part)
+    assert round_trip_sdk_part == sdk_part
+
+
+def test_sdk_part_data_conversion_round_trip() -> None:
+    # A DataPart is converted to `inline_data` in Vertex AI, which lacks the original
+    # `DataPart` vs `FilePart` distinction. When reading it back from the stored
+    # protocol format, it becomes a `FilePart` with base64-encoded `FileWithBytes`
+    # and `mime_type="application/json"`.
+    sdk_part = Part(root=DataPart(data={'key': 'value'}))
+    stored_part = to_stored_part(sdk_part)
+    round_trip_sdk_part = to_sdk_part(stored_part)
+
+    expected_b64 = base64.b64encode(b'{"key": "value"}').decode('utf-8')
+    assert round_trip_sdk_part == Part(
+        root=FilePart(
+            file=FileWithBytes(
+                bytes=expected_b64,
+                mime_type='application/json',
+            )
+        )
+    )
+
+
+def test_sdk_part_file_bytes_conversion_round_trip() -> None:
+    encoded_b64 = base64.b64encode(b'test data').decode('utf-8')
+    sdk_part = Part(
+        root=FilePart(
+            file=FileWithBytes(
+                bytes=encoded_b64,
+                mime_type='text/plain',
+            )
+        )
+    )
+    stored_part = to_stored_part(sdk_part)
+    round_trip_sdk_part = to_sdk_part(stored_part)
+    assert round_trip_sdk_part == sdk_part
+
+
+def test_sdk_part_file_uri_conversion_round_trip() -> None:
+    sdk_part = Part(
+        root=FilePart(
+            file=FileWithUri(
+                uri='gs://test-bucket/file.txt',
+                mime_type='text/plain',
+            )
+        )
+    )
+    stored_part = to_stored_part(sdk_part)
+    round_trip_sdk_part = to_sdk_part(stored_part)
+    assert round_trip_sdk_part == sdk_part
+
+
+def test_sdk_artifact_conversion_round_trip() -> None:
+    sdk_artifact = Artifact(
+        artifact_id='art-123',
+        parts=[Part(root=TextPart(text='part_1'))],
+    )
+    stored_artifact = to_stored_artifact(sdk_artifact)
+    round_trip_sdk_artifact = to_sdk_artifact(stored_artifact)
+    assert round_trip_sdk_artifact == sdk_artifact
+
+
+def test_sdk_task_conversion_round_trip() -> None:
+    sdk_task = Task(
+        id='task-1',
+        context_id='ctx-1',
+        status=TaskStatus(state=TaskState.working),
+        metadata={'foo': 'bar'},
+        artifacts=[
+            Artifact(
+                artifact_id='art-1',
+                parts=[Part(root=TextPart(text='stuff'))],
+            )
+        ],
+        history=[
+            # History is not yet implemented and later will be supported
+            # via events.
+        ],
+    )
+    stored_task = to_stored_task(sdk_task)
+    # Simulate Vertex storing the ID in the fully qualified resource name.
+    # The task ID during creation gets appended to the parent name.
+    stored_task.name = (
+        f'projects/p/locations/l/agentEngines/e/tasks/{sdk_task.id}'
+    )
+
+    round_trip_sdk_task = to_sdk_task(stored_task)
+
+    assert round_trip_sdk_task.id == sdk_task.id
+    assert round_trip_sdk_task.context_id == sdk_task.context_id
+    assert round_trip_sdk_task.status == sdk_task.status
+    assert round_trip_sdk_task.metadata == sdk_task.metadata
+    assert round_trip_sdk_task.artifacts == sdk_task.artifacts
+    assert round_trip_sdk_task.history == []
