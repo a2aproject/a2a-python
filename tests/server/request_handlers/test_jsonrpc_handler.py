@@ -1233,11 +1233,22 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         """Test error when authenticated extended agent card is not configured."""
         # Arrange
         mock_request_handler = AsyncMock(spec=DefaultRequestHandler)
-        # Mocking capabilities
-        self.mock_agent_card.capabilities = MagicMock()
-        self.mock_agent_card.capabilities.extended_agent_card = True
+        # We need a proper card here because agent_card_to_dict accesses multiple fields
+        card = AgentCard(
+            name='TestAgent',
+            version='1.0.0',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://localhost',
+                    protocol_binding='JSONRPC',
+                    protocol_version='1.0.0',
+                )
+            ],
+            capabilities=AgentCapabilities(extended_agent_card=True),
+        )
+
         handler = JSONRPCHandler(
-            self.mock_agent_card,
+            card,
             mock_request_handler,
             extended_agent_card=None,
             extended_card_modifier=None,
@@ -1309,7 +1320,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertFalse(is_error_response(response))
         from google.protobuf.json_format import ParseDict
 
-        modified_card = ParseDict(response['result'], AgentCard())
+        modified_card = ParseDict(
+            response['result'], AgentCard(), ignore_unknown_fields=True
+        )
         self.assertEqual(modified_card.name, 'Modified Card')
         self.assertEqual(modified_card.description, 'Modified for context: bar')
         self.assertEqual(modified_card.version, '1.0')
