@@ -252,7 +252,7 @@ class RESTAdapter:
             ),
         }
         if self.agent_card.capabilities.extended_agent_card:
-            routes[('/card', 'GET')] = functools.partial(
+            routes[('/extendedAgentCard', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )
 

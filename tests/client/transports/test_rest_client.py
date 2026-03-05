@@ -537,7 +537,10 @@ class TestRestTransportTenant:
 
         # 3. Verify the URL
         args, _ = mock_httpx_client.build_request.call_args
-        assert args[1] == 'http://agent.example.com/api/my-tenant/card'
+        assert (
+            args[1]
+            == 'http://agent.example.com/api/my-tenant/extendedAgentCard'
+        )
 
     @pytest.mark.asyncio
     async def test_rest_get_task_prepend_empty_tenant(
