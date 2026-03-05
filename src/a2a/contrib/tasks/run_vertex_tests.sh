@@ -8,9 +8,10 @@ for var in VERTEX_PROJECT VERTEX_LOCATION VERTEX_BASE_URL VERTEX_API_VERSION; do
   fi
 done
 
-# Get the directory of this script
-SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
-PROJECT_ROOT="$(dirname "$SCRIPT_DIR")"
 PYTEST_ARGS=("$@")
+
+echo "Running Vertex tests..."
+
+cd $(git rev-parse --show-toplevel)
 
 uv run pytest -v "${PYTEST_ARGS[@]}" tests/contrib/tasks/test_vertex_task_store.py tests/contrib/tasks/test_vertex_task_converter.py
