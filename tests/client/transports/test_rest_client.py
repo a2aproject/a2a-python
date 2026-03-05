@@ -18,6 +18,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -306,13 +307,14 @@ class TestRestTransportExtensions:
         )  # Extended card same for mock
         mock_httpx_client.send.return_value = mock_response
 
+        request = GetExtendedAgentCardRequest()
         with patch.object(
             client, '_send_get_request', new_callable=AsyncMock
         ) as mock_send_get_request:
             mock_send_get_request.return_value = json_format.MessageToDict(
                 agent_card
             )
-            await client.get_extended_agent_card(extensions=extensions)
+            await client.get_extended_agent_card(request, extensions=extensions)
 
         mock_send_get_request.assert_called_once()
         _, _, _, mock_kwargs = mock_send_get_request.call_args[0]

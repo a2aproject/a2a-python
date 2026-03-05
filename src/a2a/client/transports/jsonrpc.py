@@ -378,6 +378,7 @@ class JsonRpcTransport(ClientTransport):
 
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -394,7 +395,6 @@ class JsonRpcTransport(ClientTransport):
         if not card.capabilities.extended_agent_card:
             return card
 
-        request = GetExtendedAgentCardRequest()
         rpc_request = JSONRPC20Request(
             method='GetExtendedAgentCard',
             params=json_format.MessageToDict(request),
