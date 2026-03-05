@@ -1123,6 +1123,13 @@ def to_core_get_task_push_notification_config_request(
     compat_req: types_v03.GetTaskPushNotificationConfigRequest,
 ) -> pb2_v10.GetTaskPushNotificationConfigRequest:
     """Convert get task push notification config request to v1.0 core type."""
+    if isinstance(
+        compat_req.params, types_v03.GetTaskPushNotificationConfigParams
+    ):
+        return pb2_v10.GetTaskPushNotificationConfigRequest(
+            task_id=compat_req.params.id,
+            id=compat_req.params.push_notification_config_id,
+        )
     return pb2_v10.GetTaskPushNotificationConfigRequest(
         task_id=compat_req.params.id
     )
@@ -1133,8 +1140,17 @@ def to_compat_get_task_push_notification_config_request(
     request_id: str | int,
 ) -> types_v03.GetTaskPushNotificationConfigRequest:
     """Convert get task push notification config request to v0.3 compat type."""
+    params: (
+        types_v03.GetTaskPushNotificationConfigParams | types_v03.TaskIdParams
+    )
+    if core_req.id:
+        params = types_v03.GetTaskPushNotificationConfigParams(
+            id=core_req.task_id, push_notification_config_id=core_req.id
+        )
+    else:
+        params = types_v03.TaskIdParams(id=core_req.task_id)
     return types_v03.GetTaskPushNotificationConfigRequest(
-        id=request_id, params=types_v03.TaskIdParams(id=core_req.task_id)
+        id=request_id, params=params
     )
 
 

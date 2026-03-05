@@ -21,8 +21,8 @@ logger = logging.getLogger(__name__)
 
 
 # Regexp patterns for matching
-_TASK_NAME_MATCH = re.compile(r'tasks/([^/]+)')
-_TASK_PUSH_CONFIG_NAME_MATCH = re.compile(
+TASK_NAME_MATCH = re.compile(r'tasks/([^/]+)')
+TASK_PUSH_CONFIG_NAME_MATCH = re.compile(
     r'tasks/([^/]+)/pushNotificationConfigs/([^/]+)'
 )
 
@@ -806,11 +806,11 @@ class FromProto:
         ),
     ) -> types.TaskIdParams:
         if isinstance(request, a2a_pb2.GetTaskPushNotificationConfigRequest):
-            m = _TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
+            m = TASK_PUSH_CONFIG_NAME_MATCH.match(request.name)
             if not m:
                 raise InvalidParamsError(message=f'No task for {request.name}')
             return types.TaskIdParams(id=m.group(1))
-        m = _TASK_NAME_MATCH.match(request.name)
+        m = TASK_NAME_MATCH.match(request.name)
         if not m:
             raise InvalidParamsError(message=f'No task for {request.name}')
         return types.TaskIdParams(id=m.group(1))
@@ -820,7 +820,7 @@ class FromProto:
         cls,
         request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
     ) -> types.TaskPushNotificationConfig:
-        m = _TASK_NAME_MATCH.match(request.parent)
+        m = TASK_NAME_MATCH.match(request.parent)
         if not m:
             raise InvalidParamsError(message=f'No task for {request.parent}')
         return types.TaskPushNotificationConfig(
@@ -835,7 +835,7 @@ class FromProto:
         cls,
         config: a2a_pb2.TaskPushNotificationConfig,
     ) -> types.TaskPushNotificationConfig:
-        m = _TASK_PUSH_CONFIG_NAME_MATCH.match(config.name)
+        m = TASK_PUSH_CONFIG_NAME_MATCH.match(config.name)
         if not m:
             raise InvalidParamsError(
                 message=f'Bad TaskPushNotificationConfig resource name {config.name}'
@@ -903,7 +903,7 @@ class FromProto:
         cls,
         request: a2a_pb2.GetTaskRequest,
     ) -> types.TaskQueryParams:
-        m = _TASK_NAME_MATCH.match(request.name)
+        m = TASK_NAME_MATCH.match(request.name)
         if not m:
             raise InvalidParamsError(message=f'No task for {request.name}')
         return types.TaskQueryParams(
