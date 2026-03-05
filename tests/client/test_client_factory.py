@@ -188,7 +188,7 @@ async def test_client_factory_connect_with_resolver_args(
         )
 
         agent_url = 'http://example.com'
-        relative_path = '/card'
+        relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
         # The resolver args are only passed if an httpx_client is provided in config
@@ -219,7 +219,7 @@ async def test_client_factory_connect_resolver_args_without_client(
         )
 
         agent_url = 'http://example.com'
-        relative_path = '/card'
+        relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
         await ClientFactory.connect(
