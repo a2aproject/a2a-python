@@ -22,6 +22,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -324,6 +325,7 @@ class RestTransport(ClientTransport):
 
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
@@ -340,7 +342,7 @@ class RestTransport(ClientTransport):
         if not card.capabilities.extended_agent_card:
             return card
         _, modified_kwargs = await self._apply_interceptors(
-            {},
+            MessageToDict(request, preserving_proto_field_name=True),
             modified_kwargs,
             context,
         )

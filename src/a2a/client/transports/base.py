@@ -10,6 +10,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -148,6 +149,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,
