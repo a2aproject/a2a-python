@@ -14,6 +14,7 @@ from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
+from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -216,10 +217,10 @@ class ClientFactory:
             TransportProtocol.JSONRPC
         ]
         transport_protocol = None
-        transport_url = None
+        selected_interface = None
         if self._config.use_client_preference:
             for protocol_binding in client_set:
-                supported_interface = next(
+                selected_interface = next(
                     (
                         si
                         for si in card.supported_interfaces
@@ -227,17 +228,16 @@ class ClientFactory:
                     ),
                     None,
                 )
-                if supported_interface:
+                if selected_interface:
                     transport_protocol = protocol_binding
-                    transport_url = supported_interface.url
                     break
         else:
             for supported_interface in card.supported_interfaces:
                 if supported_interface.protocol_binding in client_set:
                     transport_protocol = supported_interface.protocol_binding
-                    transport_url = supported_interface.url
+                    selected_interface = supported_interface
                     break
-        if not transport_protocol or not transport_url:
+        if not transport_protocol or not selected_interface:
             raise ValueError('no compatible transports found.')
         if transport_protocol not in self._registry:
             raise ValueError(f'no client available for {transport_protocol}')
@@ -252,8 +252,13 @@ class ClientFactory:
             self._config.extensions = all_extensions
 
         transport = self._registry[transport_protocol](
-            card, transport_url, self._config, interceptors or []
+            card, selected_interface.url, self._config, interceptors or []
         )
+
+        if selected_interface.tenant:
+            transport = TenantTransportDecorator(
+                transport, selected_interface.tenant
+            )
 
         return BaseClient(
             card,
