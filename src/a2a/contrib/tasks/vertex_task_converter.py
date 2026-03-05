@@ -23,6 +23,7 @@ from a2a.types import (
     TextPart,
 )
 
+
 _TO_SDK_TASK_STATE = {
     vertexai_types.State.STATE_UNSPECIFIED: TaskState.unknown,
     vertexai_types.State.SUBMITTED: TaskState.submitted,

@@ -33,33 +33,60 @@ from a2a.types import (
 
 
 def test_to_sdk_task_state() -> None:
-    assert to_sdk_task_state(vertexai_types.State.STATE_UNSPECIFIED) == TaskState.unknown
-    assert to_sdk_task_state(vertexai_types.State.SUBMITTED) == TaskState.submitted
+    assert (
+        to_sdk_task_state(vertexai_types.State.STATE_UNSPECIFIED)
+        == TaskState.unknown
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.State.SUBMITTED) == TaskState.submitted
+    )
     assert to_sdk_task_state(vertexai_types.State.WORKING) == TaskState.working
-    assert to_sdk_task_state(vertexai_types.State.COMPLETED) == TaskState.completed
-    assert to_sdk_task_state(vertexai_types.State.CANCELLED) == TaskState.canceled
+    assert (
+        to_sdk_task_state(vertexai_types.State.COMPLETED) == TaskState.completed
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.State.CANCELLED) == TaskState.canceled
+    )
     assert to_sdk_task_state(vertexai_types.State.FAILED) == TaskState.failed
-    assert to_sdk_task_state(vertexai_types.State.REJECTED) == TaskState.rejected
+    assert (
+        to_sdk_task_state(vertexai_types.State.REJECTED) == TaskState.rejected
+    )
     assert (
         to_sdk_task_state(vertexai_types.State.INPUT_REQUIRED)
         == TaskState.input_required
     )
     assert (
-        to_sdk_task_state(vertexai_types.State.AUTH_REQUIRED) == TaskState.auth_required
+        to_sdk_task_state(vertexai_types.State.AUTH_REQUIRED)
+        == TaskState.auth_required
     )
     assert to_sdk_task_state(999) == TaskState.unknown  # type: ignore
 
 
 def test_to_stored_task_state() -> None:
     assert (
-        to_stored_task_state(TaskState.unknown) == vertexai_types.State.STATE_UNSPECIFIED
+        to_stored_task_state(TaskState.unknown)
+        == vertexai_types.State.STATE_UNSPECIFIED
     )
-    assert to_stored_task_state(TaskState.submitted) == vertexai_types.State.SUBMITTED
-    assert to_stored_task_state(TaskState.working) == vertexai_types.State.WORKING
-    assert to_stored_task_state(TaskState.completed) == vertexai_types.State.COMPLETED
-    assert to_stored_task_state(TaskState.canceled) == vertexai_types.State.CANCELLED
+    assert (
+        to_stored_task_state(TaskState.submitted)
+        == vertexai_types.State.SUBMITTED
+    )
+    assert (
+        to_stored_task_state(TaskState.working) == vertexai_types.State.WORKING
+    )
+    assert (
+        to_stored_task_state(TaskState.completed)
+        == vertexai_types.State.COMPLETED
+    )
+    assert (
+        to_stored_task_state(TaskState.canceled)
+        == vertexai_types.State.CANCELLED
+    )
     assert to_stored_task_state(TaskState.failed) == vertexai_types.State.FAILED
-    assert to_stored_task_state(TaskState.rejected) == vertexai_types.State.REJECTED
+    assert (
+        to_stored_task_state(TaskState.rejected)
+        == vertexai_types.State.REJECTED
+    )
     assert (
         to_stored_task_state(TaskState.input_required)
         == vertexai_types.State.INPUT_REQUIRED
