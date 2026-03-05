@@ -111,6 +111,9 @@ class RESTAdapter:
         request: Request,
     ) -> Response:
         call_context = self._context_builder.build(request)
+        if 'tenant' in request.path_params:
+            call_context.tenant = request.path_params['tenant']
+
         response = await method(request, call_context)
         return JSONResponse(content=response)
 
@@ -131,6 +134,8 @@ class RESTAdapter:
             ) from e
 
         call_context = self._context_builder.build(request)
+        if 'tenant' in request.path_params:
+            call_context.tenant = request.path_params['tenant']
 
         async def event_generator(
             stream: AsyncIterable[Any],
@@ -250,9 +255,58 @@ class RESTAdapter:
             ('/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
+            # Tenant prefixed routes
+            ('/{tenant}/message:send', 'POST'): functools.partial(
+                self._handle_request,
+                self.handler.on_message_send,
+            ),
+            ('/{tenant}/message:stream', 'POST'): functools.partial(
+                self._handle_streaming_request,
+                self.handler.on_message_send_stream,
+            ),
+            ('/{tenant}/tasks/{id}:cancel', 'POST'): functools.partial(
+                self._handle_request, self.handler.on_cancel_task
+            ),
+            ('/{tenant}/tasks/{id}:subscribe', 'GET'): functools.partial(
+                self._handle_streaming_request,
+                self.handler.on_subscribe_to_task,
+            ),
+            ('/{tenant}/tasks/{id}', 'GET'): functools.partial(
+                self._handle_request, self.handler.on_get_task
+            ),
+            (
+                '/{tenant}/tasks/{id}/pushNotificationConfigs/{push_id}',
+                'GET',
+            ): functools.partial(
+                self._handle_request, self.handler.get_push_notification
+            ),
+            (
+                '/{tenant}/tasks/{id}/pushNotificationConfigs/{push_id}',
+                'DELETE',
+            ): functools.partial(
+                self._handle_request, self.handler.delete_push_notification
+            ),
+            (
+                '/{tenant}/tasks/{id}/pushNotificationConfigs',
+                'POST',
+            ): functools.partial(
+                self._handle_request, self.handler.set_push_notification
+            ),
+            (
+                '/{tenant}/tasks/{id}/pushNotificationConfigs',
+                'GET',
+            ): functools.partial(
+                self._handle_request, self.handler.list_push_notifications
+            ),
+            ('/{tenant}/tasks', 'GET'): functools.partial(
+                self._handle_request, self.handler.list_tasks
+            ),
         }
         if self.agent_card.capabilities.extended_agent_card:
             routes[('/extendedAgentCard', 'GET')] = functools.partial(
+                self._handle_request, self.handle_authenticated_agent_card
+            )
+            routes[('/{tenant}/extendedAgentCard', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )
 
