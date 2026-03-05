@@ -29,7 +29,7 @@ pytest.importorskip(
 import vertexai
 
 
-# Skip the entire test module if required environment variables are not set
+# Skip the real backend tests if required environment variables are not set
 missing_env_vars = not all(
     os.environ.get(var)
     for var in [
@@ -39,13 +39,25 @@ missing_env_vars = not all(
         'VERTEX_API_VERSION',
     ]
 )
-pytestmark = pytest.mark.skipif(
-    missing_env_vars,
-    reason=(
-        'Vertex Task Store tests require VERTEX_PROJECT, VERTEX_LOCATION, '
-        'VERTEX_BASE_URL, and VERTEX_API_VERSION environment variables. '
-    ),
+import sys
+
+
+@pytest.fixture(
+    scope='module',
+    params=[
+        'fake',
+        pytest.param(
+            'real',
+            marks=pytest.mark.skipif(
+                missing_env_vars,
+                reason='Missing required environment variables for real Vertex Task Store.',
+            ),
+        ),
+    ],
 )
+def backend_type(request) -> str:
+    return request.param
+
 
 from a2a.contrib.tasks.vertex_task_store import VertexTaskStore
 from a2a.types import (
@@ -75,12 +87,15 @@ from collections.abc import Generator
 
 
 @pytest.fixture(scope='module')
-def agent_engine_resource_id() -> Generator[str, None, None]:
+def agent_engine_resource_id(backend_type: str) -> Generator[str, None, None]:
     """
     Module-scoped fixture that creates and deletes a single Agent Engine
-    for all the tests. This is on the module scope to speed up the testing
-    process.
+    for all the tests. For fake backend, it yields a mock resource.
     """
+    if backend_type == 'fake':
+        yield 'projects/mock-project/locations/mock-location/agentEngines/mock-engine'
+        return
+
     project = os.environ.get('VERTEX_PROJECT')
     location = os.environ.get('VERTEX_LOCATION')
     base_url = os.environ.get('VERTEX_BASE_URL')
@@ -95,23 +110,30 @@ def agent_engine_resource_id() -> Generator[str, None, None]:
 
 @pytest_asyncio.fixture
 async def vertex_store(
+    backend_type: str,
     agent_engine_resource_id: str,
 ) -> AsyncGenerator[VertexTaskStore, None]:
     """
     Function-scoped fixture providing a fresh VertexTaskStore per test,
-    reusing the module-scoped engine.
+    reusing the module-scoped engine. Uses fake client for 'fake' backend.
     """
-    project = os.environ.get('VERTEX_PROJECT')
-    location = os.environ.get('VERTEX_LOCATION')
-    base_url = os.environ.get('VERTEX_BASE_URL')
-    api_version = os.environ.get('VERTEX_API_VERSION')
+    if backend_type == 'fake':
+        sys.path.append(os.path.dirname(__file__))
+        from fake_vertex_client import FakeVertexClient
 
-    client = vertexai.Client(project=project, location=location)
-    client._api_client._http_options.base_url = base_url
-    client._api_client._http_options.api_version = api_version
+        client = FakeVertexClient()
+    else:
+        project = os.environ.get('VERTEX_PROJECT')
+        location = os.environ.get('VERTEX_LOCATION')
+        base_url = os.environ.get('VERTEX_BASE_URL')
+        api_version = os.environ.get('VERTEX_API_VERSION')
+
+        client = vertexai.Client(project=project, location=location)
+        client._api_client._http_options.base_url = base_url
+        client._api_client._http_options.api_version = api_version
 
     store = VertexTaskStore(
-        client=client,
+        client=client,  # type: ignore
         agent_engine_resource_id=agent_engine_resource_id,
     )
     yield store
