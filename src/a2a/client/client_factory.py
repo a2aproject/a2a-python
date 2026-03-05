@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from typing import Any
+from typing import Any, cast
 
 import httpx
 
@@ -21,6 +21,8 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
 )
 from a2a.utils.constants import (
+    PROTOCOL_VERSION_CURRENT,
+    VERSION_HEADER,
     TransportProtocol,
 )
 
@@ -66,6 +68,11 @@ class ClientFactory:
     ):
         if consumers is None:
             consumers = []
+
+        client = config.httpx_client or httpx.AsyncClient()
+        client.headers.setdefault(VERSION_HEADER, PROTOCOL_VERSION_CURRENT)
+        config.httpx_client = client
+
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
@@ -73,11 +80,12 @@ class ClientFactory:
 
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
+
         if TransportProtocol.JSONRPC in supported or not supported:
             self.register(
                 TransportProtocol.JSONRPC,
                 lambda card, url, config, interceptors: JsonRpcTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
                     interceptors,
@@ -88,7 +96,7 @@ class ClientFactory:
             self.register(
                 TransportProtocol.HTTP_JSON,
                 lambda card, url, config, interceptors: RestTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                    cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
                     interceptors,
