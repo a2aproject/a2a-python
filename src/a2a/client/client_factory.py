@@ -89,7 +89,6 @@ class ClientFactory:
                     card,
                     url,
                     interceptors,
-                    config.extensions or None,
                 ),
             )
         if TransportProtocol.HTTP_JSON in supported:
@@ -100,7 +99,6 @@ class ClientFactory:
                     card,
                     url,
                     interceptors,
-                    config.extensions or None,
                 ),
             )
         if TransportProtocol.GRPC in supported:
@@ -124,7 +122,6 @@ class ClientFactory:
         relative_card_path: str | None = None,
         resolver_http_kwargs: dict[str, Any] | None = None,
         extra_transports: dict[str, TransportProducer] | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> Client:
         """Convenience method for constructing a client.
@@ -155,7 +152,6 @@ class ClientFactory:
             A2AAgentCardResolver.get_agent_card as the http_kwargs parameter.
           extra_transports: Additional transport protocols to enable when
             constructing the client.
-          extensions: List of extensions to be activated.
           signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
@@ -183,7 +179,7 @@ class ClientFactory:
         factory = cls(client_config)
         for label, generator in (extra_transports or {}).items():
             factory.register(label, generator)
-        return factory.create(card, consumers, interceptors, extensions)
+        return factory.create(card, consumers, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:
         """Register a new transport producer for a given transport label."""
@@ -194,7 +190,6 @@ class ClientFactory:
         card: AgentCard,
         consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
-        extensions: list[str] | None = None,
     ) -> Client:
         """Create a new `Client` for the provided `AgentCard`.
 
@@ -204,7 +199,6 @@ class ClientFactory:
           interceptors: A list of interceptors to use for each request. These
             are used for things like attaching credentials or http headers
             to all outbound requests.
-          extensions: List of extensions to be activated.
 
         Returns:
           A `Client` object.
@@ -245,11 +239,6 @@ class ClientFactory:
         all_consumers = self._consumers.copy()
         if consumers:
             all_consumers.extend(consumers)
-
-        all_extensions = self._config.extensions.copy()
-        if extensions:
-            all_extensions.extend(extensions)
-            self._config.extensions = all_extensions
 
         transport = self._registry[transport_protocol](
             card, selected_interface.url, self._config, interceptors or []
