@@ -228,12 +228,14 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            bg_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 
         self.assertEqual(result, sample_message)
         self.assertFalse(interrupted)
+        self.assertIsNone(bg_task)
         self.mock_task_manager.process.assert_not_called()  # Process is not called for the Message if returned directly
         # _continue_consuming should not be called if it's a message interrupt
         # and no auth_required state.
@@ -260,17 +262,21 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Mock _continue_consuming to check if it's called by create_task
         self.aggregator._continue_consuming = AsyncMock()
+        sentinel_task = asyncio.ensure_future(asyncio.sleep(0))
+        mock_create_task.return_value = sentinel_task
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
             result,
             interrupted,
+            bg_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 
         self.assertEqual(result, auth_task)
         self.assertTrue(interrupted)
+        self.assertIsNotNone(bg_task)
         self.mock_task_manager.process.assert_called_once_with(auth_task)
         mock_create_task.assert_called_once()  # Check that create_task was called
         # self.aggregator._continue_consuming is an AsyncMock.
@@ -317,12 +323,14 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            bg_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 
         self.assertEqual(result, current_task_state_after_update)
         self.assertTrue(interrupted)
+        self.assertIsNotNone(bg_task)
         self.mock_task_manager.process.assert_called_once_with(
             auth_status_update
         )
@@ -353,6 +361,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            bg_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
@@ -360,6 +369,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         # If the first event is a Message, it's returned directly.
         self.assertEqual(result, event1)
         self.assertFalse(interrupted)
+        self.assertIsNone(bg_task)
         # process() is NOT called for the Message if it's the one causing the return
         self.mock_task_manager.process.assert_not_called()
         self.mock_task_manager.get_task.assert_not_called()
@@ -415,12 +425,14 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            bg_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer, blocking=False
         )
 
         self.assertEqual(result, first_event)
         self.assertTrue(interrupted)
+        self.assertIsNotNone(bg_task)
         self.mock_task_manager.process.assert_called_once_with(first_event)
         mock_create_task.assert_called_once()
         # The background task should be created with the remaining stream
@@ -468,7 +480,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         # Call the main method that triggers _continue_consuming via create_task
-        _, _ = await self.aggregator.consume_and_break_on_interrupt(
+        _, _, _ = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 
