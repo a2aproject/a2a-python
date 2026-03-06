@@ -75,6 +75,23 @@ class TestA2AFastAPIApplicationOptionalDeps:
         ):
             _app = A2AFastAPIApplication(**mock_app_params)
 
+    def test_stream_send_timeout_parameter(self, mock_app_params: dict):
+        try:
+            app_default = A2AFastAPIApplication(**mock_app_params)
+            assert app_default.stream_send_timeout is None
+
+            app_custom = A2AFastAPIApplication(
+                **mock_app_params, stream_send_timeout=30.0
+            )
+            assert app_custom.stream_send_timeout == 30.0
+
+            app_none = A2AFastAPIApplication(
+                **mock_app_params, stream_send_timeout=None
+            )
+            assert app_none.stream_send_timeout is None
+        except ImportError:
+            pytest.skip('FastAPI dependencies not available')
+
 
 if __name__ == '__main__':
     pytest.main([__file__])
