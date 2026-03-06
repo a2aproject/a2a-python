@@ -1063,6 +1063,20 @@ class FromProto:
         raise ValueError('Unsupported StreamResponse type')
 
     @classmethod
+    def list_task_push_notification_config_response(
+        cls, response: a2a_pb2.ListTaskPushNotificationConfigResponse
+    ) -> types.ListTaskPushNotificationConfigResponse:
+        return types.ListTaskPushNotificationConfigResponse(
+            root=types.ListTaskPushNotificationConfigSuccessResponse(
+                result=[
+                    cls.task_push_notification_config(c)
+                    for c in response.configs
+                ],
+                id=None,
+            )
+        )
+
+    @classmethod
     def skill(cls, skill: a2a_pb2.AgentSkill) -> types.AgentSkill:
         return types.AgentSkill(
             id=skill.id,
