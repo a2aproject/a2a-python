@@ -231,6 +231,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            _background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
@@ -268,6 +269,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            _background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
@@ -322,6 +324,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            _background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
@@ -358,6 +361,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            _background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
@@ -420,6 +424,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         (
             result,
             interrupted,
+            _background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer, blocking=False
         )
@@ -474,7 +479,7 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         # Call the main method that triggers _continue_consuming via create_task
-        _, _ = await self.aggregator.consume_and_break_on_interrupt(
+        _, _, _ = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 

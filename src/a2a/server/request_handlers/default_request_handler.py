@@ -290,7 +290,7 @@ class DefaultRequestHandler(RequestHandler):
 
         queue = await self._queue_manager.create_or_tap(task_id)
         result_aggregator = ResultAggregator(task_manager)
-        # TODO: to manage the non-blocking flows.
+
         producer_task = asyncio.create_task(
             self._run_event_stream(request_context, queue)
         )
@@ -355,11 +355,15 @@ class DefaultRequestHandler(RequestHandler):
             (
                 result,
                 interrupted_or_non_blocking,
+                background_task,
             ) = await result_aggregator.consume_and_break_on_interrupt(
                 consumer,
                 blocking=blocking,
                 event_callback=push_notification_callback,
             )
+
+            if background_task:
+                self._track_background_task(background_task)
 
         except Exception:
             logger.exception('Agent execution failed')
