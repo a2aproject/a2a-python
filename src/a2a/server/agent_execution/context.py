@@ -161,6 +161,11 @@ class RequestContext:
             self._call_context.activated_extensions.add(uri)
 
     @property
+    def tenant(self) -> str:
+        """The tenant associated with this request."""
+        return self._call_context.tenant if self._call_context else ''
+
+    @property
     def requested_extensions(self) -> set[str]:
         """Extensions that the client requested to activate."""
         return (

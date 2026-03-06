@@ -7,6 +7,7 @@ from uuid import uuid4
 import httpx
 
 from google.protobuf import json_format
+from google.protobuf.json_format import ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
@@ -413,8 +414,13 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: AgentCard = json_format.ParseDict(
-            json_rpc_response.result, AgentCard()
+        # Validate type of the response
+        if not isinstance(json_rpc_response.result, dict):
+            raise A2AClientError(
+                f'Invalid response type: {type(json_rpc_response.result)}'
+            )
+        response: AgentCard = ParseDict(
+            cast('dict[str, Any]', json_rpc_response.result), AgentCard()
         )
         if signature_verifier:
             signature_verifier(response)
@@ -452,8 +458,11 @@ class JsonRpcTransport(ClientTransport):
 
     def _get_http_args(
         self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
+    ) -> dict[str, Any]:
+        http_kwargs: dict[str, Any] = {}
+        if context and context.timeout is not None:
+            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        return http_kwargs
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""

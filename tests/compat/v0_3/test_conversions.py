@@ -1541,3 +1541,390 @@ def test_get_extended_agent_card_request_conversion():
         v10_req, request_id='conv'
     )
     assert v03_restored == v03_req
+
+
+def test_get_task_push_notification_config_request_conversion_full_params():
+    v03_req = types_v03.GetTaskPushNotificationConfigRequest(
+        id='conv',
+        params=types_v03.GetTaskPushNotificationConfigParams(
+            id='t1', push_notification_config_id='p1'
+        ),
+    )
+    v10_expected = pb2_v10.GetTaskPushNotificationConfigRequest(
+        task_id='t1', id='p1'
+    )
+    v10_req = to_core_get_task_push_notification_config_request(v03_req)
+    assert v10_req == v10_expected
+    v03_restored = to_compat_get_task_push_notification_config_request(
+        v10_req, request_id='conv'
+    )
+    assert v03_restored == v03_req
+
+
+def test_send_message_response_conversion_message():
+    v03_msg = types_v03.Message(
+        message_id='m1',
+        role=types_v03.Role.agent,
+        parts=[types_v03.Part(root=types_v03.TextPart(text='Hi'))],
+    )
+    v03_res = types_v03.SendMessageResponse(
+        root=types_v03.SendMessageSuccessResponse(id='conv', result=v03_msg)
+    )
+    v10_expected = pb2_v10.SendMessageResponse(
+        message=pb2_v10.Message(
+            message_id='m1',
+            role=pb2_v10.Role.ROLE_AGENT,
+            parts=[pb2_v10.Part(text='Hi')],
+        )
+    )
+    v10_res = to_core_send_message_response(v03_res)
+    assert v10_res == v10_expected
+    v03_restored = to_compat_send_message_response(v10_res, request_id='conv')
+    assert v03_restored == v03_res
+
+
+def test_stream_response_conversion_status_update():
+    v03_status_event = types_v03.TaskStatusUpdateEvent(
+        task_id='t1',
+        context_id='c1',
+        status=types_v03.TaskStatus(state=types_v03.TaskState.working),
+        final=False,
+    )
+    v03_res = types_v03.SendStreamingMessageSuccessResponse(
+        id='conv', result=v03_status_event
+    )
+    v10_expected = pb2_v10.StreamResponse(
+        status_update=pb2_v10.TaskStatusUpdateEvent(
+            task_id='t1',
+            context_id='c1',
+            status=pb2_v10.TaskStatus(
+                state=pb2_v10.TaskState.TASK_STATE_WORKING
+            ),
+        )
+    )
+    v10_res = to_core_stream_response(v03_res)
+    assert v10_res == v10_expected
+    v03_restored = to_compat_stream_response(v10_res, request_id='conv')
+    assert v03_restored == v03_res
+
+
+def test_stream_response_conversion_artifact_update():
+    v03_art = types_v03.Artifact(
+        artifact_id='a1',
+        parts=[types_v03.Part(root=types_v03.TextPart(text='d'))],
+    )
+    v03_artifact_event = types_v03.TaskArtifactUpdateEvent(
+        task_id='t1', context_id='c1', artifact=v03_art
+    )
+    v03_res = types_v03.SendStreamingMessageSuccessResponse(
+        id='conv', result=v03_artifact_event
+    )
+    v10_expected = pb2_v10.StreamResponse(
+        artifact_update=pb2_v10.TaskArtifactUpdateEvent(
+            task_id='t1',
+            context_id='c1',
+            artifact=pb2_v10.Artifact(
+                artifact_id='a1', parts=[pb2_v10.Part(text='d')]
+            ),
+        )
+    )
+    v10_res = to_core_stream_response(v03_res)
+    assert v10_res == v10_expected
+    v03_restored = to_compat_stream_response(v10_res, request_id='conv')
+    # restored artifact update has default append=False, last_chunk=False
+    v03_expected = types_v03.SendStreamingMessageSuccessResponse(
+        id='conv',
+        result=types_v03.TaskArtifactUpdateEvent(
+            task_id='t1',
+            context_id='c1',
+            artifact=v03_art,
+            append=False,
+            last_chunk=False,
+        ),
+    )
+    assert v03_restored == v03_expected
+
+
+def test_oauth_flows_conversion_priority():
+    # v03 allows multiple, v10 allows one (oneof)
+    v03_flows = types_v03.OAuthFlows(
+        authorization_code=types_v03.AuthorizationCodeOAuthFlow(
+            authorization_url='http://auth',
+            token_url='http://token',  # noqa: S106
+            scopes={'a': 'b'},
+        ),
+        client_credentials=types_v03.ClientCredentialsOAuthFlow(
+            token_url='http://token2',  # noqa: S106
+            scopes={'c': 'd'},
+        ),
+    )
+
+    core_flows = to_core_oauth_flows(v03_flows)
+    # The last one set wins in proto oneof. In conversions.py order is:
+    # authorization_code, client_credentials, implicit, password.
+    # So client_credentials should win over authorization_code.
+    assert core_flows.WhichOneof('flow') == 'client_credentials'
+    assert core_flows.client_credentials.token_url == 'http://token2'  # noqa: S105
+
+
+def test_to_core_part_data_part_with_metadata_not_compat():
+    v03_part = types_v03.Part(
+        root=types_v03.DataPart(
+            data={'foo': 'bar'}, metadata={'other_key': 'val'}
+        )
+    )
+    core_part = to_core_part(v03_part)
+    assert core_part.data.struct_value['foo'] == 'bar'
+    assert core_part.metadata['other_key'] == 'val'
+
+
+def test_to_core_part_file_with_bytes_minimal():
+    v03_part = types_v03.Part(
+        root=types_v03.FilePart(
+            file=types_v03.FileWithBytes(bytes='YmFzZTY0')
+            # missing mime_type and name
+        )
+    )
+    core_part = to_core_part(v03_part)
+    assert core_part.raw == b'base64'
+    assert not core_part.media_type
+    assert not core_part.filename
+
+
+def test_to_core_part_file_with_uri_minimal():
+    v03_part = types_v03.Part(
+        root=types_v03.FilePart(
+            file=types_v03.FileWithUri(uri='http://test')
+            # missing mime_type and name
+        )
+    )
+    core_part = to_core_part(v03_part)
+    assert core_part.url == 'http://test'
+    assert not core_part.media_type
+    assert not core_part.filename
+
+
+def test_to_compat_part_unknown_content():
+    core_part = pb2_v10.Part()
+    # It has no content set (WhichOneof returns None)
+    with pytest.raises(ValueError, match='Unknown part content type: None'):
+        to_compat_part(core_part)
+
+
+def test_to_core_message_unspecified_role():
+    v03_msg = types_v03.Message(
+        message_id='m1',
+        role=types_v03.Role.user,  # Required by pydantic model, bypass to None for test
+        parts=[],
+    )
+    v03_msg.role = None
+    core_msg = to_core_message(v03_msg)
+    assert core_msg.role == pb2_v10.Role.ROLE_UNSPECIFIED
+
+
+def test_to_core_task_status_missing_state():
+    v03_status = types_v03.TaskStatus.model_construct(state=None)
+    core_status = to_core_task_status(v03_status)
+    assert core_status.state == pb2_v10.TaskState.TASK_STATE_UNSPECIFIED
+
+
+def test_to_core_task_status_update_event_missing_status():
+    v03_event = types_v03.TaskStatusUpdateEvent.model_construct(
+        task_id='t1', context_id='c1', status=None, final=False
+    )
+    core_event = to_core_task_status_update_event(v03_event)
+    assert not core_event.HasField('status')
+
+
+def test_to_core_task_artifact_update_event_missing_artifact():
+    v03_event = types_v03.TaskArtifactUpdateEvent.model_construct(
+        task_id='t1', context_id='c1', artifact=None
+    )
+    core_event = to_core_task_artifact_update_event(v03_event)
+    assert not core_event.HasField('artifact')
+
+
+def test_to_core_agent_card_with_security_and_signatures():
+    v03_card = types_v03.AgentCard.model_construct(
+        name='test',
+        description='test',
+        version='1.0',
+        url='http://url',
+        capabilities=types_v03.AgentCapabilities(),
+        security_schemes={
+            'scheme1': types_v03.SecurityScheme(
+                root=types_v03.MutualTLSSecurityScheme.model_construct(
+                    description='mtls'
+                )
+            )
+        },
+        signatures=[
+            types_v03.AgentCardSignature.model_construct(
+                protected='prot', signature='sig'
+            )
+        ],
+        default_input_modes=[],
+        default_output_modes=[],
+        skills=[],
+    )
+    core_card = to_core_agent_card(v03_card)
+    assert 'scheme1' in core_card.security_schemes
+    assert len(core_card.signatures) == 1
+    assert core_card.signatures[0].signature == 'sig'
+
+
+def test_to_core_send_message_request_no_configuration():
+    v03_req = types_v03.SendMessageRequest.model_construct(
+        id=1,
+        params=types_v03.MessageSendParams.model_construct(
+            message=None, configuration=None, metadata=None
+        ),
+    )
+    core_req = to_core_send_message_request(v03_req)
+    # Default is True if configuration is absent
+    assert core_req.configuration.blocking is True
+    assert not core_req.HasField('message')
+
+
+def test_to_core_list_task_push_notification_config_response_error():
+    v03_res = types_v03.ListTaskPushNotificationConfigResponse(
+        root=types_v03.JSONRPCErrorResponse(
+            id=1, error=types_v03.JSONRPCError(code=-32000, message='Error')
+        )
+    )
+    core_res = to_core_list_task_push_notification_config_response(v03_res)
+    assert len(core_res.configs) == 0
+
+
+def test_to_core_send_message_response_error():
+    v03_res = types_v03.SendMessageResponse(
+        root=types_v03.JSONRPCErrorResponse(
+            id=1, error=types_v03.JSONRPCError(code=-32000, message='Error')
+        )
+    )
+    core_res = to_core_send_message_response(v03_res)
+    assert not core_res.HasField('message')
+    assert not core_res.HasField('task')
+
+
+def test_stream_response_task_variant():
+    v03_task = types_v03.Task(
+        id='t1',
+        context_id='c1',
+        status=types_v03.TaskStatus(state=types_v03.TaskState.working),
+    )
+    v03_res = types_v03.SendStreamingMessageSuccessResponse(
+        id=1, result=v03_task
+    )
+    core_res = to_core_stream_response(v03_res)
+    assert core_res.HasField('task')
+    assert core_res.task.id == 't1'
+
+    v03_restored = to_compat_stream_response(core_res, request_id=1)
+    assert isinstance(v03_restored.result, types_v03.Task)
+    assert v03_restored.result.id == 't1'
+
+
+def test_to_compat_stream_response_unknown():
+    core_res = pb2_v10.StreamResponse()
+    with pytest.raises(
+        ValueError, match='Unknown stream response event type: None'
+    ):
+        to_compat_stream_response(core_res)
+
+
+def test_to_core_part_file_part_with_metadata():
+    v03_part = types_v03.Part(
+        root=types_v03.FilePart(
+            file=types_v03.FileWithBytes(
+                bytes='YmFzZTY0', mime_type='test/test', name='test.txt'
+            ),
+            metadata={'test': 'val'},
+        )
+    )
+    core_part = to_core_part(v03_part)
+    assert core_part.metadata['test'] == 'val'
+
+
+def test_to_core_part_file_part_invalid_file_type():
+    v03_part = types_v03.Part.model_construct(
+        root=types_v03.FilePart.model_construct(
+            file=None,  # Not FileWithBytes or FileWithUri
+            metadata=None,
+        )
+    )
+    core_part = to_core_part(v03_part)
+    # Should fall through to the end and return an empty part
+    assert not core_part.HasField('raw')
+
+
+def test_to_core_task_missing_status():
+    v03_task = types_v03.Task.model_construct(
+        id='t1', context_id='c1', status=None
+    )
+    core_task = to_core_task(v03_task)
+    assert not core_task.HasField('status')
+
+
+def test_to_core_security_scheme_unknown_type():
+    v03_scheme = types_v03.SecurityScheme.model_construct(root=None)
+    core_scheme = to_core_security_scheme(v03_scheme)
+    # Returns an empty SecurityScheme
+    assert core_scheme.WhichOneof('scheme') is None
+
+
+def test_to_core_agent_extension_minimal():
+    v03_ext = types_v03.AgentExtension.model_construct(
+        uri='', description=None, required=None, params=None
+    )
+    core_ext = to_core_agent_extension(v03_ext)
+    assert core_ext.uri == ''
+
+
+def test_to_core_task_push_notification_config_missing_config():
+    v03_config = types_v03.TaskPushNotificationConfig.model_construct(
+        task_id='t1', push_notification_config=None
+    )
+    core_config = to_core_task_push_notification_config(v03_config)
+    assert not core_config.HasField('push_notification_config')
+
+
+def test_to_core_create_task_push_notification_config_request_missing_config():
+    v03_req = types_v03.SetTaskPushNotificationConfigRequest.model_construct(
+        id=1,
+        params=types_v03.TaskPushNotificationConfig.model_construct(
+            task_id='t1', push_notification_config=None
+        ),
+    )
+    core_req = to_core_create_task_push_notification_config_request(v03_req)
+    assert not core_req.HasField('config')
+
+
+def test_to_core_list_task_push_notification_config_request_missing_id():
+    v03_req = types_v03.ListTaskPushNotificationConfigRequest.model_construct(
+        id=1,
+        params=types_v03.ListTaskPushNotificationConfigParams.model_construct(
+            id=''
+        ),
+    )
+    core_req = to_core_list_task_push_notification_config_request(v03_req)
+    assert core_req.task_id == ''
+
+
+def test_to_core_stream_response_unknown_result():
+    v03_res = types_v03.SendStreamingMessageSuccessResponse.model_construct(
+        id=1, result=None
+    )
+    core_res = to_core_stream_response(v03_res)
+    assert core_res.WhichOneof('payload') is None
+
+
+def test_to_core_part_unknown_part():
+    # If the root of the part is somehow none of TextPart, DataPart, or FilePart,
+    # it should just return an empty core Part.
+    v03_part = types_v03.Part.model_construct(root=None)
+    core_part = to_core_part(v03_part)
+    assert not core_part.HasField('text')
+    assert not core_part.HasField('data')
+    assert not core_part.HasField('raw')
+    assert not core_part.HasField('url')

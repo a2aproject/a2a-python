@@ -9,17 +9,20 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
-from a2a.types import a2a_pb2
 from a2a.server.apps.rest import fastapi_app, rest_adapter
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksResponse,
     Message,
     Part,
     Role,
     Task,
+    TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
 )
@@ -36,6 +39,8 @@ async def agent_card() -> AgentCard:
     # Mock the capabilities object with streaming disabled
     mock_capabilities = MagicMock()
     mock_capabilities.streaming = False
+    mock_capabilities.push_notifications = True
+    mock_capabilities.extended_agent_card = True
     mock_agent_card.capabilities = mock_capabilities
 
     return mock_agent_card
@@ -61,6 +66,11 @@ async def request_handler() -> RequestHandler:
 
 
 @pytest.fixture
+async def extended_card_modifier() -> MagicMock | None:
+    return None
+
+
+@pytest.fixture
 async def streaming_app(
     streaming_agent_card: AgentCard, request_handler: RequestHandler
 ) -> FastAPI:
@@ -81,13 +91,17 @@ async def streaming_client(streaming_app: FastAPI) -> AsyncClient:
 
 @pytest.fixture
 async def app(
-    agent_card: AgentCard, request_handler: RequestHandler
+    agent_card: AgentCard,
+    request_handler: RequestHandler,
+    extended_card_modifier: MagicMock | None,
 ) -> FastAPI:
     """Builds the FastAPI application for testing."""
 
-    return A2ARESTFastAPIApplication(agent_card, request_handler).build(
-        agent_card_url='/well-known/agent.json', rpc_url=''
-    )
+    return A2ARESTFastAPIApplication(
+        agent_card,
+        request_handler,
+        extended_card_modifier=extended_card_modifier,
+    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
 
 
 @pytest.fixture
@@ -394,6 +408,142 @@ async def test_send_message_rejected_task(
     actual_response = a2a_pb2.SendMessageResponse()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+@pytest.mark.anyio
+class TestTenantExtraction:
+    @pytest.fixture(autouse=True)
+    def configure_mocks(self, request_handler: MagicMock) -> None:
+        # Setup default return values for all handlers
+        request_handler.on_message_send.return_value = Message(
+            message_id='test',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='response message')],
+        )
+        request_handler.on_cancel_task.return_value = Task(id='1')
+        request_handler.on_get_task.return_value = Task(id='1')
+        request_handler.on_list_tasks.return_value = ListTasksResponse()
+        request_handler.on_create_task_push_notification_config.return_value = (
+            TaskPushNotificationConfig()
+        )
+        request_handler.on_get_task_push_notification_config.return_value = (
+            TaskPushNotificationConfig()
+        )
+        request_handler.on_list_task_push_notification_configs.return_value = (
+            ListTaskPushNotificationConfigsResponse()
+        )
+        request_handler.on_delete_task_push_notification_config.return_value = (
+            None
+        )
+
+    @pytest.fixture
+    def extended_card_modifier(self) -> MagicMock:
+        modifier = MagicMock()
+        modifier.return_value = AgentCard()
+        return modifier
+
+    @pytest.mark.parametrize(
+        'path_template, method, handler_method_name, json_body',
+        [
+            ('/message:send', 'POST', 'on_message_send', {'message': {}}),
+            ('/tasks/1:cancel', 'POST', 'on_cancel_task', None),
+            ('/tasks/1', 'GET', 'on_get_task', None),
+            ('/tasks', 'GET', 'on_list_tasks', None),
+            (
+                '/tasks/1/pushNotificationConfigs/p1',
+                'GET',
+                'on_get_task_push_notification_config',
+                None,
+            ),
+            (
+                '/tasks/1/pushNotificationConfigs/p1',
+                'DELETE',
+                'on_delete_task_push_notification_config',
+                None,
+            ),
+            (
+                '/tasks/1/pushNotificationConfigs',
+                'POST',
+                'on_create_task_push_notification_config',
+                {'config': {'url': 'http://foo'}},
+            ),
+            (
+                '/tasks/1/pushNotificationConfigs',
+                'GET',
+                'on_list_task_push_notification_configs',
+                None,
+            ),
+        ],
+    )
+    async def test_tenant_extraction_parametrized(
+        self,
+        client: AsyncClient,
+        request_handler: MagicMock,
+        path_template: str,
+        method: str,
+        handler_method_name: str,
+        json_body: dict | None,
+    ) -> None:
+        """Test tenant extraction for standard REST endpoints."""
+        # Test with tenant
+        tenant = 'my-tenant'
+        tenant_path = f'/{tenant}{path_template}'
+
+        response = await client.request(method, tenant_path, json=json_body)
+        response.raise_for_status()
+
+        # Verify handler call
+        handler_mock = getattr(request_handler, handler_method_name)
+
+        assert handler_mock.called
+        args, _ = handler_mock.call_args
+        context = args[1]
+        assert context.tenant == tenant
+
+        # Reset mock for non-tenant test
+        handler_mock.reset_mock()
+
+        # Test without tenant
+        response = await client.request(method, path_template, json=json_body)
+        response.raise_for_status()
+
+        # Verify context.tenant == ""
+        assert handler_mock.called
+        args, _ = handler_mock.call_args
+        context = args[1]
+        assert context.tenant == ''
+
+    async def test_tenant_extraction_extended_agent_card(
+        self,
+        client: AsyncClient,
+        extended_card_modifier: MagicMock,
+    ) -> None:
+        """Test tenant extraction specifically for extendedAgentCard endpoint."""
+        # Test with tenant
+        tenant = 'my-tenant'
+        tenant_path = f'/{tenant}/extendedAgentCard'
+
+        response = await client.get(tenant_path)
+        response.raise_for_status()
+
+        # Verify extended_card_modifier called with tenant context
+        assert extended_card_modifier.called
+        args, _ = extended_card_modifier.call_args
+        context = args[1]
+        assert context.tenant == tenant
+
+        # Reset mock for non-tenant test
+        extended_card_modifier.reset_mock()
+
+        # Test without tenant
+        response = await client.get('/extendedAgentCard')
+        response.raise_for_status()
+
+        # Verify extended_card_modifier called with empty tenant context
+        assert extended_card_modifier.called
+        args, _ = extended_card_modifier.call_args
+        context = args[1]
+        assert context.tenant == ''
 
 
 if __name__ == '__main__':
