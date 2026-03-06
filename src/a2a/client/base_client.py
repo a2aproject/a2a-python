@@ -33,6 +33,9 @@ from a2a.types.a2a_pb2 import (
 )
 
 
+# TODO: Implement RequestOptions if needed
+
+
 class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic."""
 
