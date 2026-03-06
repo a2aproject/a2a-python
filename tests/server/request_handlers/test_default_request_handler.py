@@ -541,6 +541,7 @@ async def test_on_message_send_with_push_notification():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -643,6 +644,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         initial_task,
         True,  # interrupted = True for non-blocking
+        None,
     )
 
     # Mock the current_result async property to return the final task
@@ -666,7 +668,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         event_callback_received = event_callback
         if event_callback_received:
             await event_callback_received(final_task)
-        return initial_task, True  # interrupted = True for non-blocking
+        return initial_task, True, None  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
         mock_consume_and_break_on_interrupt
@@ -758,6 +760,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -815,6 +818,7 @@ async def test_on_message_send_no_result_from_aggregator():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         None,
         False,
+        None,
     )
 
     with (
@@ -864,6 +868,7 @@ async def test_on_message_send_task_id_mismatch():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         mismatched_task,
         False,
+        None,
     )
 
     with (
@@ -1071,6 +1076,7 @@ async def test_on_message_send_interrupted_flow():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
         True,
+        None,
     )  # Interrupted = True
 
     # Collect coroutines passed to create_task so we can close them
