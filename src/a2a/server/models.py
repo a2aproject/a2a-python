@@ -331,7 +331,7 @@ _LEGACY_CONVERSIONS: dict[type, tuple[type[BaseModel], Callable]] | None = None
 
 def _get_legacy_conversions() -> dict[type, tuple[type[BaseModel], Callable]]:
     """Lazily load and return legacy conversion mapping."""
-    global _LEGACY_CONVERSIONS  # noqa: PLW0603
+    global _LEGACY_CONVERSIONS
     if _LEGACY_CONVERSIONS is None:
         try:
             # Lazy imports to avoid circular dependencies and unnecessary overhead
