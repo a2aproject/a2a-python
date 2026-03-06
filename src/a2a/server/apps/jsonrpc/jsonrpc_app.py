@@ -385,6 +385,7 @@ class JSONRPCApplication(ABC):
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
+            call_context.tenant = getattr(specific_request, 'tenant', '')
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
 
