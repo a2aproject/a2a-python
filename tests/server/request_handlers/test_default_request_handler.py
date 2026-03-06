@@ -542,7 +542,11 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         nonlocal event_callback_passed, event_callback_received
         event_callback_passed = event_callback is not None
         event_callback_received = event_callback
-        return initial_task, True, MagicMock(spec=asyncio.Task)  # interrupted = True for non-blocking
+        return (
+            initial_task,
+            True,
+            MagicMock(spec=asyncio.Task),
+        )  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
         mock_consume_and_break_on_interrupt

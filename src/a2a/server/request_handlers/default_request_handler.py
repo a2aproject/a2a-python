@@ -330,9 +330,7 @@ class DefaultRequestHandler(RequestHandler):
             )
 
             if bg_consume_task is not None:
-                bg_consume_task.set_name(
-                    f'continue_consuming:{task_id}'
-                )
+                bg_consume_task.set_name(f'continue_consuming:{task_id}')
                 self._track_background_task(bg_consume_task)
 
         except Exception:
