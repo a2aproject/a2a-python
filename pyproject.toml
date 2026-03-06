@@ -176,6 +176,7 @@ omit = [
     "*/__init__.py",
     "src/a2a/types/a2a_pb2.py",
     "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/*/*_pb2*.py",
 ]
 
 [tool.coverage.report]

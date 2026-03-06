@@ -3,15 +3,17 @@ import unittest
 from google.protobuf.json_format import MessageToDict
 
 from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
     build_error_response,
     prepare_response_object,
 )
-from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
     InvalidParamsError,
     TaskNotFoundError,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
     Task,
     TaskState,
     TaskStatus,
@@ -19,6 +21,29 @@ from a2a.types.a2a_pb2 import (
 
 
 class TestResponseHelpers(unittest.TestCase):
+    def test_agent_card_to_dict_without_extended_card(self) -> None:
+        card = AgentCard(
+            name='Test Agent',
+            description='Test Description',
+            version='1.0',
+            capabilities=AgentCapabilities(extended_agent_card=False),
+        )
+        result = agent_card_to_dict(card)
+        self.assertNotIn('supportsAuthenticatedExtendedCard', result)
+        self.assertEqual(result['name'], 'Test Agent')
+
+    def test_agent_card_to_dict_with_extended_card(self) -> None:
+        card = AgentCard(
+            name='Test Agent',
+            description='Test Description',
+            version='1.0',
+            capabilities=AgentCapabilities(extended_agent_card=True),
+        )
+        result = agent_card_to_dict(card)
+        self.assertIn('supportsAuthenticatedExtendedCard', result)
+        self.assertTrue(result['supportsAuthenticatedExtendedCard'])
+        self.assertEqual(result['name'], 'Test Agent')
+
     def test_build_error_response_with_a2a_error(self) -> None:
         request_id = 'req1'
         specific_error = TaskNotFoundError()

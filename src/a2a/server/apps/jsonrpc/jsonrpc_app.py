@@ -9,7 +9,7 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.auth.user import UnauthenticatedUser
@@ -29,7 +29,10 @@ from a2a.server.jsonrpc_models import (
 )
 from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.response_helpers import build_error_response
+from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
+    build_error_response,
+)
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -382,6 +385,7 @@ class JSONRPCApplication(ABC):
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
+            call_context.tenant = getattr(specific_request, 'tenant', '')
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
 
@@ -575,9 +579,8 @@ class JSONRPCApplication(ABC):
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return JSONResponse(
-            MessageToDict(
+            agent_card_to_dict(
                 card_to_serve,
-                preserving_proto_field_name=False,
             )
         )
 

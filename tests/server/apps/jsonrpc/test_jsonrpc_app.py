@@ -72,6 +72,57 @@ class TestStarletteUserProxy:
 # --- JSONRPCApplication Tests (Selected) ---
 
 
+@pytest.fixture
+def mock_handler():
+    handler = AsyncMock(spec=RequestHandler)
+    # Return a proto Message object directly - the handler wraps it in SendMessageResponse
+    handler.on_message_send.return_value = Message(
+        message_id='test',
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='response message')],
+    )
+    return handler
+
+
+@pytest.fixture
+def test_app(mock_handler):
+    mock_agent_card = MagicMock(spec=AgentCard)
+    mock_agent_card.url = 'http://mockurl.com'
+    # Set up capabilities.streaming to avoid validation issues
+    mock_agent_card.capabilities = MagicMock()
+    mock_agent_card.capabilities.streaming = False
+    return A2AStarletteApplication(
+        agent_card=mock_agent_card, http_handler=mock_handler
+    )
+
+
+@pytest.fixture
+def client(test_app):
+    return TestClient(test_app.build())
+
+
+def _make_send_message_request(
+    text: str = 'hi', tenant: str | None = None
+) -> dict:
+    """Helper to create a JSON-RPC send message request."""
+    params = {
+        'message': {
+            'messageId': '1',
+            'role': 'ROLE_USER',
+            'parts': [{'text': text}],
+        }
+    }
+    if tenant is not None:
+        params['tenant'] = tenant
+
+    return {
+        'jsonrpc': '2.0',
+        'id': '1',
+        'method': 'SendMessage',
+        'params': params,
+    }
+
+
 class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
     def test_jsonrpc_app_build_method_abstract_raises_typeerror(
         self,
@@ -178,55 +229,13 @@ class TestJSONRPCApplicationOptionalDeps:
             _app = MockJSONRPCApp(**mock_app_params)
 
 
-class TestJSONRPCExtensions:
-    @pytest.fixture
-    def mock_handler(self):
-        handler = AsyncMock(spec=RequestHandler)
-        # Return a proto Message object directly - the handler wraps it in SendMessageResponse
-        handler.on_message_send.return_value = Message(
-            message_id='test',
-            role=Role.ROLE_AGENT,
-            parts=[Part(text='response message')],
-        )
-        return handler
-
-    @pytest.fixture
-    def test_app(self, mock_handler):
-        mock_agent_card = MagicMock(spec=AgentCard)
-        mock_agent_card.url = 'http://mockurl.com'
-        # Set up capabilities.streaming to avoid validation issues
-        mock_agent_card.capabilities = MagicMock()
-        mock_agent_card.capabilities.streaming = False
-
-        return A2AStarletteApplication(
-            agent_card=mock_agent_card, http_handler=mock_handler
-        )
-
-    @pytest.fixture
-    def client(self, test_app):
-        return TestClient(test_app.build())
-
-    def _make_send_message_request(self, text: str = 'hi') -> dict:
-        """Helper to create a JSON-RPC send message request."""
-        return {
-            'jsonrpc': '2.0',
-            'id': '1',
-            'method': 'SendMessage',
-            'params': {
-                'message': {
-                    'messageId': '1',
-                    'role': 'ROLE_USER',
-                    'parts': [{'text': text}],
-                }
-            },
-        }
-
+class TestJSONRPCApplicationExtensions:
     def test_request_with_single_extension(self, client, mock_handler):
         headers = {HTTP_EXTENSION_HEADER: 'foo'}
         response = client.post(
             '/',
             headers=headers,
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -242,7 +251,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -260,7 +269,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -271,7 +280,7 @@ class TestJSONRPCExtensions:
     def test_method_added_to_call_context_state(self, client, mock_handler):
         response = client.post(
             '/',
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -289,7 +298,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -312,7 +321,7 @@ class TestJSONRPCExtensions:
 
         response = client.post(
             '/',
-            json=self._make_send_message_request(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -322,6 +331,33 @@ class TestJSONRPCExtensions:
             'foo',
             'baz',
         }
+
+
+class TestJSONRPCApplicationTenant:
+    def test_tenant_extraction_from_params(self, client, mock_handler):
+        tenant_id = 'my-tenant-123'
+        response = client.post(
+            '/',
+            json=_make_send_message_request(tenant=tenant_id),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.tenant == tenant_id
+
+    def test_no_tenant_extraction(self, client, mock_handler):
+        response = client.post(
+            '/',
+            json=_make_send_message_request(tenant=None),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.tenant == ''
 
 
 if __name__ == '__main__':
