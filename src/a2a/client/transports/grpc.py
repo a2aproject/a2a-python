@@ -345,6 +345,6 @@ class GrpcTransport(ClientTransport):
         )
         while True:
             response = await stream.read()
-            if response == grpc.aio.EOF:
+            if response == grpc.aio.EOF:  # pyright: ignore[reportAttributeAccessIssue]
                 break
             yield response
