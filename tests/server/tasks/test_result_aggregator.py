@@ -262,8 +262,6 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Mock _continue_consuming to check if it's called by create_task
         self.aggregator._continue_consuming = AsyncMock()
-        sentinel_task = asyncio.ensure_future(asyncio.sleep(0))
-        mock_create_task.return_value = sentinel_task
         mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
 
         (
