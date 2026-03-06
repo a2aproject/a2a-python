@@ -264,17 +264,20 @@ class TestResultAggregator(unittest.IsolatedAsyncioTestCase):
 
         # Mock _continue_consuming to check if it's called by create_task
         self.aggregator._continue_consuming = AsyncMock()  # type: ignore[method-assign]
-        mock_create_task.side_effect = lambda coro: asyncio.ensure_future(coro)
+        mock_bg_task = MagicMock()
+        mock_create_task.return_value = mock_bg_task
 
         (
             result,
             interrupted,
-            _background_task,
+            background_task,
         ) = await self.aggregator.consume_and_break_on_interrupt(
             self.mock_event_consumer
         )
 
+
         self.assertEqual(result, auth_task)
+        self.assertIs(background_task, mock_bg_task)
         self.assertTrue(interrupted)
         self.mock_task_manager.process.assert_called_once_with(auth_task)
         mock_create_task.assert_called_once()  # Check that create_task was called

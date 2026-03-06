@@ -1073,10 +1073,12 @@ async def test_on_message_send_interrupted_flow():
     interrupt_task_result = create_sample_task(
         task_id=task_id, status_state=TaskState.TASK_STATE_AUTH_REQUIRED
     )
+    mock_bg_task = MagicMock()
+    mock_bg_task.get_name.return_value = 'mock_bg_task'
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
         True,
-        None,
+        mock_bg_task,
     )  # Interrupted = True
 
     # Collect coroutines passed to create_task so we can close them
@@ -1103,6 +1105,13 @@ async def test_on_message_send_interrupted_flow():
         result = await request_handler.on_message_send(
             params, create_server_call_context()
         )
+
+    # Verify background task was tracked
+    assert mock_bg_task in request_handler._background_tasks
+    mock_bg_task.add_done_callback.assert_called_once()
+
+    # Cleanup: manually discard to avoid side effects in other tests if handler is reused (it's not, but good practice)
+    request_handler._background_tasks.discard(mock_bg_task)
 
     assert result == interrupt_task_result
     assert (
