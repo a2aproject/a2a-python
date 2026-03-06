@@ -141,7 +141,7 @@ class JSONRPCHandler:
     async def on_message_send(
         self,
         request: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'message/send' JSON-RPC method.
 
@@ -174,7 +174,7 @@ class JSONRPCHandler:
     async def on_message_send_stream(
         self,
         request: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncIterable[dict[str, Any]]:
         """Handles the 'message/stream' JSON-RPC method.
 
@@ -208,7 +208,7 @@ class JSONRPCHandler:
     async def on_cancel_task(
         self,
         request: CancelTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/cancel' JSON-RPC method.
 
@@ -234,7 +234,7 @@ class JSONRPCHandler:
     async def on_subscribe_to_task(
         self,
         request: SubscribeToTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncIterable[dict[str, Any]]:
         """Handles the 'SubscribeToTask' JSON-RPC method.
 
@@ -268,7 +268,7 @@ class JSONRPCHandler:
     async def get_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/get' JSON-RPC method.
 
@@ -298,7 +298,7 @@ class JSONRPCHandler:
     async def set_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/set' JSON-RPC method.
 
@@ -331,7 +331,7 @@ class JSONRPCHandler:
     async def on_get_task(
         self,
         request: GetTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/get' JSON-RPC method.
 
@@ -357,7 +357,7 @@ class JSONRPCHandler:
     async def list_tasks(
         self,
         request: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/list' JSON-RPC method.
 
@@ -381,7 +381,7 @@ class JSONRPCHandler:
     async def list_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'ListTaskPushNotificationConfigs' JSON-RPC method.
 
@@ -406,7 +406,7 @@ class JSONRPCHandler:
     async def delete_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'tasks/pushNotificationConfig/delete' JSON-RPC method.
 
@@ -429,7 +429,7 @@ class JSONRPCHandler:
     async def get_authenticated_extended_card(
         self,
         request: GetExtendedAgentCardRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> dict[str, Any]:
         """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method.
 
