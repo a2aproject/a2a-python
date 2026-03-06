@@ -1,7 +1,7 @@
 import logging
 
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -23,6 +23,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils.errors import InternalError
 
 
 logger = logging.getLogger(__name__)
@@ -394,6 +395,55 @@ async def test_send_message_rejected_task(
     actual_response = a2a_pb2.SendMessageResponse()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+@pytest.mark.anyio
+async def test_global_http_exception_handler_returns_problem_details(
+    client: AsyncClient,
+) -> None:
+    """Test that a standard FastAPI 404 is transformed into RFC 9457 format."""
+
+    # Send a request to an endpoint that does not exist
+    response = await client.get('/non-existent-route')
+
+    # Verify it returns a 404, but in the new RFC 9457 format
+    assert response.status_code == 404
+    assert response.headers.get('content-type') == 'application/problem+json'
+
+    data = response.json()
+    assert data['type'] == 'about:blank'
+    assert data['title'] == 'HTTP Error'
+    assert data['status'] == 404
+    assert 'Not Found' in data['detail']
+
+
+@pytest.mark.anyio
+async def test_get_agent_card_error_handling(
+    client: AsyncClient,
+) -> None:
+    """Test that the agent card endpoint properly catches and formats A2A errors."""
+
+    # Mock the REST adapter to simulate an internal failure when fetching the card
+    with patch(
+        'a2a.server.apps.rest.rest_adapter.RESTAdapter.handle_get_agent_card',
+        side_effect=InternalError(
+            message='Failed to load customized agent card'
+        ),
+    ):
+        # In the fixtures, the agent card URL is set to /well-known/agent.json
+        response = await client.get('/well-known/agent.json')
+
+        # Verify the error was caught and serialized cleanly
+        assert response.status_code == 500
+        assert (
+            response.headers.get('content-type') == 'application/problem+json'
+        )
+
+        data = response.json()
+        assert data['type'] == 'about:blank'
+        assert data['title'] == 'Internal Error'
+        assert data['status'] == 500
+        assert data['detail'] == 'Failed to load customized agent card'
 
 
 if __name__ == '__main__':

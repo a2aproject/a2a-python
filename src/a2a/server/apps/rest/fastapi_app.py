@@ -24,12 +24,15 @@ else:
         _package_fastapi_installed = False
 
 
+from starlette.exceptions import HTTPException as StarletteHTTPException
+
 from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+from a2a.utils.error_handlers import rest_error_handler
 
 
 logger = logging.getLogger(__name__)
@@ -111,10 +114,28 @@ class A2ARESTFastAPIApplication:
                 f'{rpc_url}{route[0]}', callback, methods=[route[1]]
             )
 
+        # Catch exceptions thrown by card modifiers.
         @router.get(f'{rpc_url}{agent_card_url}')
+        @rest_error_handler
         async def get_agent_card(request: Request) -> Response:
             card = await self._adapter.handle_get_agent_card(request)
             return JSONResponse(card)
 
         app.include_router(router)
+
+        @app.exception_handler(StarletteHTTPException)
+        async def http_exception_handler(
+            request: Request, exc: StarletteHTTPException
+        ) -> JSONResponse:
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    'type': 'about:blank',
+                    'title': 'HTTP Error',
+                    'status': exc.status_code,
+                    'detail': exc.detail,
+                },
+                media_type='application/problem+json',
+            )
+
         return app
