@@ -1,13 +1,14 @@
 """
 Tests for the VertexTaskStore.
 
-These tests interact with the Vertex AI Agent Engine. They are skipped by default
-unless the necessary environment variables are set, which prevents them from failing in GitHub Actions.
+These tests can be run with a real or fake Vertex AI Agent Engine as a backend.
+The real ones are skipped by default unless the necessary environment variables\
+are set, which prevents them from failing in GitHub Actions.
 
 To run these tests locally, you can use the provided script:
     ./run_vertex_tests.sh
 
-Be sure to set the following environment variables:
+The following environment variables are required for the real backend:
     VERTEX_PROJECT="your-project" \
     VERTEX_LOCATION="your-location" \
     VERTEX_BASE_URL="your-base-url" \
