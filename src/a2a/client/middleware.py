@@ -19,6 +19,7 @@ class ClientCallContext(BaseModel):
     """
 
     state: MutableMapping[str, Any] = Field(default_factory=dict)
+    timeout: float | None = None
 
 
 class ClientCallInterceptor(ABC):

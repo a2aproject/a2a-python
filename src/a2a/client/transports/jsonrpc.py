@@ -458,8 +458,11 @@ class JsonRpcTransport(ClientTransport):
 
     def _get_http_args(
         self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
+    ) -> dict[str, Any]:
+        http_kwargs: dict[str, Any] = {}
+        if context and context.timeout is not None:
+            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        return http_kwargs
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""

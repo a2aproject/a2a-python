@@ -235,6 +235,32 @@ class TestSendMessage:
         with pytest.raises(A2AClientError):
             await transport.send_message(request)
 
+    @pytest.mark.asyncio
+    async def test_send_message_with_timeout_context(
+        self, transport, mock_httpx_client
+    ):
+        """Test that send_message passes context timeout to build_request."""
+        from a2a.client.middleware import ClientCallContext
+
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {},
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        context = ClientCallContext(timeout=15.0)
+
+        await transport.send_message(request, context=context)
+
+        mock_httpx_client.build_request.assert_called_once()
+        _, kwargs = mock_httpx_client.build_request.call_args
+        assert 'timeout' in kwargs
+        assert kwargs['timeout'] == httpx.Timeout(15.0)
+
 
 class TestGetTask:
     """Tests for the get_task method."""
