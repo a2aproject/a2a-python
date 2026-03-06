@@ -43,6 +43,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -100,7 +101,6 @@ class GrpcTransport(ClientTransport):
         self,
         channel: Channel,
         agent_card: AgentCard | None,
-        extensions: list[str] | None = None,
     ):
         """Initializes the GrpcTransport."""
         self.agent_card = agent_card
@@ -109,7 +109,6 @@ class GrpcTransport(ClientTransport):
         self._needs_extended_card = (
             agent_card.capabilities.extended_agent_card if agent_card else True
         )
-        self.extensions = extensions
 
     @classmethod
     def create(
@@ -122,7 +121,7 @@ class GrpcTransport(ClientTransport):
         """Creates a gRPC transport for the A2A client."""
         if config.grpc_channel_factory is None:
             raise ValueError('grpc_channel_factory is required when using gRPC')
-        return cls(config.grpc_channel_factory(url), card, config.extensions)
+        return cls(config.grpc_channel_factory(url), card)
 
     @_handle_grpc_exception
     async def send_message(
@@ -295,7 +294,7 @@ class GrpcTransport(ClientTransport):
     def _get_grpc_metadata(
         self, context: ClientCallContext | None
     ) -> list[tuple[str, str]]:
-        metadata = []
+        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)]
         if context and context.service_parameters:
             for key, value in context.service_parameters.items():
                 metadata.append((key.lower(), value))

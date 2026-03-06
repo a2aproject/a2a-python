@@ -64,24 +64,7 @@ class BaseClient(Client):
         Yields:
             An async iterator of `ClientEvent`
         """
-        if request.configuration:
-            if not request.configuration.blocking and self._config.polling:
-                request.configuration.blocking = self._config.polling
-            if (
-                not request.configuration.push_notification_config
-                and self._config.push_notification_configs
-            ):
-                request.configuration.push_notification_config = (
-                    self._config.push_notification_configs[0]
-                )
-            if (
-                not request.configuration.accepted_output_modes
-                and self._config.accepted_output_modes
-            ):
-                request.configuration.accepted_output_modes.extend(
-                    self._config.accepted_output_modes
-                )
-
+        self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
                 request, context=context
@@ -110,6 +93,24 @@ class BaseClient(Client):
         )
         async for client_event in self._process_stream(stream):
             yield client_event
+
+    def _apply_client_config(self, request: SendMessageRequest):
+        if not request.configuration.blocking and self._config.polling:
+            request.configuration.blocking = self._config.polling
+        if (
+            not request.configuration.HasField('push_notification_config')
+            and self._config.push_notification_configs
+        ):
+            request.configuration.push_notification_config.CopyFrom(
+                self._config.push_notification_configs[0]
+            )
+        if (
+            not request.configuration.accepted_output_modes
+            and self._config.accepted_output_modes
+        ):
+            request.configuration.accepted_output_modes.extend(
+                self._config.accepted_output_modes
+            )
 
     async def _process_stream(
         self, stream: AsyncIterator[StreamResponse]

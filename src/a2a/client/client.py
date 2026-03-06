@@ -76,9 +76,6 @@ class ClientConfig:
     )
     """Push notification configurations to use for every request."""
 
-    extensions: list[str] = dataclasses.field(default_factory=list)
-    """A list of extension URIs the client supports."""
-
 
 ClientEvent = tuple[StreamResponse, Task | None]
 

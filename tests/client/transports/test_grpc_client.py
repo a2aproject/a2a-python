@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, MagicMock
 import grpc
 import pytest
 
+from a2a.client.middleware import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.utils.constants import VERSION_HEADER, PROTOCOL_VERSION_CURRENT
@@ -78,10 +79,6 @@ def grpc_transport(
     transport = GrpcTransport(
         channel=channel,
         agent_card=sample_agent_card,
-        extensions=[
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ],
     )
     transport.stub = mock_grpc_stub
     return transport
@@ -212,7 +209,11 @@ async def test_send_message_task_response(
 
     response = await grpc_transport.send_message(
         sample_message_send_params,
-        extensions=['https://example.com/test-ext/v3'],
+        context=ClientCallContext(
+            service_parameters={
+                HTTP_EXTENSION_HEADER: 'https://example.com/test-ext/v3'
+            }
+        ),
     )
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
@@ -295,10 +296,6 @@ async def test_send_message_message_response(
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
         (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-        (
-            HTTP_EXTENSION_HEADER.lower(),
-            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-        ),
     ]
     assert response.HasField('message')
     assert response.message.message_id == sample_message.message_id
@@ -345,10 +342,6 @@ async def test_send_message_streaming(  # noqa: PLR0913
     _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
     assert kwargs['metadata'] == [
         (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-        (
-            HTTP_EXTENSION_HEADER.lower(),
-            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-        ),
     ]
     # Responses are StreamResponse proto objects
     assert responses[0].HasField('message')
@@ -381,10 +374,6 @@ async def test_get_task(
         a2a_pb2.GetTaskRequest(id=f'{sample_task.id}', history_length=None),
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -411,10 +400,6 @@ async def test_list_tasks(
         params,
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -440,10 +425,6 @@ async def test_get_task_with_history(
         ),
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -460,11 +441,15 @@ async def test_cancel_task(
         status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
     )
     mock_grpc_stub.CancelTask.return_value = cancelled_task
-    extensions = [
-        'https://example.com/test-ext/v3',
-    ]
+    extensions = 'https://example.com/test-ext/v3'
+
     request = a2a_pb2.CancelTaskRequest(id=f'{sample_task.id}')
-    response = await grpc_transport.cancel_task(request, extensions=extensions)
+    response = await grpc_transport.cancel_task(
+        request,
+        context=ClientCallContext(
+            service_parameters={HTTP_EXTENSION_HEADER: extensions}
+        ),
+    )
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
         a2a_pb2.CancelTaskRequest(id=f'{sample_task.id}'),
@@ -501,10 +486,6 @@ async def test_create_task_push_notification_config_with_valid_task(
         request,
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -565,10 +546,6 @@ async def test_get_task_push_notification_config_with_valid_task(
         ),
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -620,10 +597,6 @@ async def test_list_task_push_notification_configs(
         a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id='task-1'),
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
@@ -654,72 +627,47 @@ async def test_delete_task_push_notification_config(
         ),
         metadata=[
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            ),
         ],
         timeout=None,
     )
 
 
 @pytest.mark.parametrize(
-    'initial_extensions, input_extensions, expected_metadata',
+    'input_extensions, expected_metadata',
     [
         (
             None,
-            None,
-            [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)],
-        ),  # Case 1: No initial, No input
+            [],
+        ),
         (
-            ['ext1'],
-            None,
-            [
-                (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-                (HTTP_EXTENSION_HEADER.lower(), 'ext1'),
-            ],
-        ),  # Case 2: Initial, No input
-        (
-            None,
             ['ext2'],
             [
-                (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
                 (HTTP_EXTENSION_HEADER.lower(), 'ext2'),
             ],
-        ),  # Case 3: No initial, Input
+        ),
         (
-            ['ext1'],
-            ['ext2'],
-            [
-                (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-                (HTTP_EXTENSION_HEADER.lower(), 'ext2'),
-            ],
-        ),  # Case 4: Initial, Input (override)
-        (
-            ['ext1'],
             ['ext2', 'ext3'],
             [
-                (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
                 (HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3'),
             ],
-        ),  # Case 5: Initial, Multiple inputs (override)
-        (
-            ['ext1', 'ext2'],
-            ['ext3'],
-            [
-                (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
-                (HTTP_EXTENSION_HEADER.lower(), 'ext3'),
-            ],
-        ),  # Case 6: Multiple initial, Single input (override)
+        ),
     ],
 )
 def test_get_grpc_metadata(
     grpc_transport: GrpcTransport,
-    initial_extensions: list[str] | None,
     input_extensions: list[str] | None,
     expected_metadata: list[tuple[str, str]] | None,
 ) -> None:
-    """Tests _get_grpc_metadata for correct metadata generation and self.extensions update."""
-    grpc_transport.extensions = initial_extensions
-    metadata = grpc_transport._get_grpc_metadata(input_extensions)
-    assert metadata == expected_metadata
+    """Tests _get_grpc_metadata for correct metadata generation."""
+    context = None
+    if input_extensions:
+        context = ClientCallContext(
+            service_parameters={
+                HTTP_EXTENSION_HEADER: ','.join(input_extensions)
+            }
+        )
+
+    metadata = grpc_transport._get_grpc_metadata(context)
+    # Filter out a2a-version as it's not being tested here directly and simplifies the assertion
+    filtered_metadata = [m for m in metadata if m[0] != VERSION_HEADER.lower()]
+    assert filtered_metadata == expected_metadata

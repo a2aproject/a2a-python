@@ -12,27 +12,27 @@ class ServiceParametersFactory:
     """Factory for creating ServiceParameters."""
 
     @staticmethod
-    def create(*updates: ServiceParametersUpdate) -> ServiceParameters:
+    def create(updates: list[ServiceParametersUpdate]) -> ServiceParameters:
         """Create ServiceParameters from a list of updates.
 
         Args:
-            *updates: Variable number of update functions to apply.
+            updates: List of update functions to apply.
 
         Returns:
             The created ServiceParameters dictionary.
         """
-        return ServiceParametersFactory.create_from(None, *updates)
+        return ServiceParametersFactory.create_from(None, updates)
 
     @staticmethod
     def create_from(
         service_parameters: ServiceParameters | None,
-        *updates: ServiceParametersUpdate,
+        updates: list[ServiceParametersUpdate],
     ) -> ServiceParameters:
         """Create new ServiceParameters from existing ones and apply updates.
 
         Args:
             service_parameters: Optional existing ServiceParameters to start from.
-            *updates: Variable number of update functions to apply.
+            updates: List of update functions to apply.
 
         Returns:
             New ServiceParameters dictionary.
@@ -43,11 +43,11 @@ class ServiceParametersFactory:
         return result
 
 
-def with_a2a_extensions(*extensions: str) -> ServiceParametersUpdate:
+def with_a2a_extensions(extensions: list[str]) -> ServiceParametersUpdate:
     """Create a ServiceParametersUpdate that adds A2A extensions.
 
     Args:
-        *extensions: Variable number of extension strings.
+        extensions: List of extension strings.
 
     Returns:
         A function that updates ServiceParameters with the extensions header.

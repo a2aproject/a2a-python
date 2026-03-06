@@ -140,7 +140,8 @@ class TestClientTransport:
         mock_transport.send_message_streaming.return_value = create_stream()
 
         meta = {'test': 1}
-        stream = base_client.send_message(sample_message, request_metadata=meta)
+        request = SendMessageRequest(message=sample_message, metadata=meta)
+        stream = base_client.send_message(request)
         events = [event async for event in stream]
 
         mock_transport.send_message_streaming.assert_called_once()
@@ -174,7 +175,8 @@ class TestClientTransport:
         mock_transport.send_message.return_value = response
 
         meta = {'test': 1}
-        stream = base_client.send_message(sample_message, request_metadata=meta)
+        request = SendMessageRequest(message=sample_message, metadata=meta)
+        stream = base_client.send_message(request)
         events = [event async for event in stream]
 
         mock_transport.send_message.assert_called_once()
@@ -203,9 +205,8 @@ class TestClientTransport:
         response.task.CopyFrom(task)
         mock_transport.send_message.return_value = response
 
-        events = [
-            event async for event in base_client.send_message(sample_message)
-        ]
+        request = SendMessageRequest(message=sample_message)
+        events = [event async for event in base_client.send_message(request)]
 
         mock_transport.send_message.assert_called_once()
         assert not mock_transport.send_message_streaming.called
@@ -237,12 +238,8 @@ class TestClientTransport:
             blocking=False,
             accepted_output_modes=['application/json'],
         )
-        events = [
-            event
-            async for event in base_client.send_message(
-                sample_message, configuration=cfg
-            )
-        ]
+        request = SendMessageRequest(message=sample_message, configuration=cfg)
+        events = [event async for event in base_client.send_message(request)]
 
         mock_transport.send_message.assert_called_once()
         assert not mock_transport.send_message_streaming.called
@@ -284,12 +281,8 @@ class TestClientTransport:
             blocking=True,
             accepted_output_modes=['text/plain'],
         )
-        events = [
-            event
-            async for event in base_client.send_message(
-                sample_message, configuration=cfg
-            )
-        ]
+        request = SendMessageRequest(message=sample_message, configuration=cfg)
+        events = [event async for event in base_client.send_message(request)]
 
         mock_transport.send_message_streaming.assert_called_once()
         assert not mock_transport.send_message.called

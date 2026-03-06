@@ -91,12 +91,14 @@ class RestTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         http_kwargs = self._get_http_args(context)
+        payload = MessageToDict(request)
+
         async for event in self._send_stream_request(
             'POST',
             '/message:stream',
             request.tenant,
             http_kwargs=http_kwargs,
-            json=MessageToDict(request),
+            json=payload,
         ):
             yield event
 
@@ -371,6 +373,7 @@ class RestTransport(ClientTransport):
     ) -> dict[str, Any]:
         path = self._get_path(target, tenant)
         http_kwargs = self._get_http_args(context)
+        payload = payload or {}
 
         headers = http_kwargs.get('headers')
         timeout = http_kwargs.get('timeout', httpx.USE_CLIENT_DEFAULT)
