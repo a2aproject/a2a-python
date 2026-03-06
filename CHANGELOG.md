@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.25](https://github.com/a2aproject/a2a-python/compare/v0.3.24...v0.3.25) (2026-03-06)
+
+
+### Features
+
+* Implement a vertex based task store ([#752](https://github.com/a2aproject/a2a-python/issues/752)) ([fa14dbf](https://github.com/a2aproject/a2a-python/commit/fa14dbf46b603f288a1f1c474401483bf53950e4))
+
+
+### Documentation
+
+* GEMINI.md updates ([#729](https://github.com/a2aproject/a2a-python/issues/729)) ([3ad2503](https://github.com/a2aproject/a2a-python/commit/3ad2503107dd1faa71ab6b56da9017141e24e34c))
+
 ## [0.3.24](https://github.com/a2aproject/a2a-python/compare/v0.3.23...v0.3.24) (2026-02-20)
 
 
