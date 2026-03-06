@@ -11,10 +11,12 @@ else:
         return func
 
 
-from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.json_format import MessageToDict, ParseDict, ParseError
 from google.protobuf.message import Message as ProtoMessage
-from pydantic import BaseModel
+from pydantic import BaseModel, ValidationError
 
+from a2a.compat.v0_3 import conversions
+from a2a.compat.v0_3 import types as types_v03
 from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
@@ -81,7 +83,19 @@ class PydanticType(TypeDecorator[T], Generic[T]):
         if isinstance(self.pydantic_type, type) and issubclass(
             self.pydantic_type, ProtoMessage
         ):
-            return ParseDict(value, self.pydantic_type())  # type: ignore[return-value]
+            try:
+                return ParseDict(value, self.pydantic_type())  # type: ignore[return-value]
+            except (ParseError, ValueError):
+                # Try legacy conversion
+                legacy_map = _get_legacy_conversions()
+                if self.pydantic_type in legacy_map:
+                    legacy_type, convert_func = legacy_map[self.pydantic_type]
+                    try:
+                        legacy_instance = legacy_type.model_validate(value)
+                        return convert_func(legacy_instance)
+                    except ValidationError:
+                        pass
+                raise
         # Assume it's a Pydantic model
         return self.pydantic_type.model_validate(value)  # type: ignore[attr-defined]
 
@@ -130,7 +144,24 @@ class PydanticListType(TypeDecorator, Generic[T]):
         if isinstance(self.pydantic_type, type) and issubclass(
             self.pydantic_type, ProtoMessage
         ):
-            return [ParseDict(item, self.pydantic_type()) for item in value]  # type: ignore[misc]
+            result = []
+            legacy_map = _get_legacy_conversions()
+            legacy_info = legacy_map.get(self.pydantic_type)
+
+            for item in value:
+                try:
+                    result.append(ParseDict(item, self.pydantic_type()))
+                except (ParseError, ValueError):  # noqa: PERF203
+                    if legacy_info:
+                        legacy_type, convert_func = legacy_info
+                        try:
+                            legacy_instance = legacy_type.model_validate(item)
+                            result.append(convert_func(legacy_instance))
+                            continue
+                        except ValidationError:
+                            pass
+                    raise
+            return result  # type: ignore[return-value]
         # Assume it's a Pydantic model
         return [self.pydantic_type.model_validate(item) for item in value]  # type: ignore[attr-defined]
 
@@ -292,3 +323,15 @@ class PushNotificationConfigModel(PushNotificationConfigMixin, Base):
     """Default push notification config model with standard table name."""
 
     __tablename__ = 'push_notification_configs'
+
+
+def _get_legacy_conversions() -> dict[type, tuple[type, Any]]:
+    """Get the mapping of current types to their legacy counterparts and conversion functions."""
+    return {
+        TaskStatus: (
+            types_v03.TaskStatus,
+            conversions.to_core_task_status,
+        ),
+        Message: (types_v03.Message, conversions.to_core_message),
+        Artifact: (types_v03.Artifact, conversions.to_core_artifact),
+    }
