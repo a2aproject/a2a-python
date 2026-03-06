@@ -228,6 +228,32 @@ async def test_send_message_task_response(
     assert response.task.id == sample_task.id
 
 
+@pytest.mark.asyncio
+async def test_send_message_with_timeout_context(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+    sample_task: Task,
+) -> None:
+    """Test send_message passes context timeout to grpc stub."""
+    from a2a.client.middleware import ClientCallContext
+
+    mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
+        task=sample_task
+    )
+    context = ClientCallContext(timeout=12.5)
+
+    await grpc_transport.send_message(
+        sample_message_send_params,
+        context=context,
+    )
+
+    mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert 'timeout' in kwargs
+    assert kwargs['timeout'] == 12.5
+
+
 @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
 @pytest.mark.asyncio
 async def test_grpc_mapped_errors(
@@ -360,6 +386,7 @@ async def test_get_task(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
     assert response.id == sample_task.id
 
@@ -389,6 +416,7 @@ async def test_list_tasks(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
     assert result.total_size == 2
     assert not result.next_page_token
@@ -417,6 +445,7 @@ async def test_get_task_with_history(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
 
 
@@ -443,6 +472,7 @@ async def test_cancel_task(
             (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
             (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3'),
         ],
+        timeout=None,
     )
     assert response.status.state == TaskState.TASK_STATE_CANCELED
 
@@ -476,6 +506,7 @@ async def test_create_task_push_notification_config_with_valid_task(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -539,6 +570,7 @@ async def test_get_task_push_notification_config_with_valid_task(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
@@ -593,6 +625,7 @@ async def test_list_task_push_notification_configs(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
     assert len(response.configs) == 1
     assert response.configs[0].task_id == 'task-1'
@@ -626,6 +659,7 @@ async def test_delete_task_push_notification_config(
                 'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
             ),
         ],
+        timeout=None,
     )
 
 

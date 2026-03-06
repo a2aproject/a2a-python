@@ -396,8 +396,11 @@ class RestTransport(ClientTransport):
 
     def _get_http_args(
         self, context: ClientCallContext | None
-    ) -> dict[str, Any] | None:
-        return context.state.get('http_kwargs') if context else None
+    ) -> dict[str, Any]:
+        http_kwargs: dict[str, Any] = {}
+        if context and context.timeout is not None:
+            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        return http_kwargs
 
     async def _prepare_send_message(
         self,
