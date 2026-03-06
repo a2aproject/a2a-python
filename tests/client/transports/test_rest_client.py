@@ -135,6 +135,39 @@ class TestRestTransport:
         with pytest.raises(error_cls):
             await client.send_message(request=params)
 
+    @pytest.mark.asyncio
+    async def test_send_message_with_timeout_context(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Test that send_message passes context timeout to build_request."""
+        from a2a.client.middleware import ClientCallContext
+
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        params = SendMessageRequest(
+            message=create_text_message_object(content='Hello')
+        )
+        context = ClientCallContext(timeout=10.0)
+
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_httpx_client.send.return_value = mock_response
+
+        await client.send_message(request=params, context=context)
+
+        mock_build_request.assert_called_once()
+        _, kwargs = mock_build_request.call_args
+        assert 'timeout' in kwargs
+        assert kwargs['timeout'] == httpx.Timeout(10.0)
+
 
 class TestRestTransportExtensions:
     @pytest.mark.asyncio
