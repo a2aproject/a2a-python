@@ -142,7 +142,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         try:
             # Construct the server context object
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             task_or_message = await self.request_handler.on_message_send(
                 request, server_context
             )
@@ -177,7 +177,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent)
             or gRPC error responses if an A2AError is raised.
         """
-        server_context = self.context_builder.build(context)
+        server_context = self._build_call_context(context, request)
         try:
             async for event in self.request_handler.on_message_send_stream(
                 request, server_context
@@ -203,7 +203,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `Task` object containing the updated Task or a gRPC error.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             task = await self.request_handler.on_cancel_task(
                 request, server_context
             )
@@ -236,7 +236,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             `StreamResponse` objects containing streaming events
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             async for event in self.request_handler.on_subscribe_to_task(
                 request,
                 server_context,
@@ -260,7 +260,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `TaskPushNotificationConfig` object containing the config.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             return (
                 await self.request_handler.on_get_task_push_notification_config(
                     request,
@@ -296,7 +296,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 (due to the `@validate` decorator).
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             return await self.request_handler.on_create_task_push_notification_config(
                 request,
                 server_context,
@@ -320,7 +320,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `ListTaskPushNotificationConfigsResponse` object containing the configs.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             return await self.request_handler.on_list_task_push_notification_configs(
                 request,
                 server_context,
@@ -344,7 +344,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             An empty `Empty` object.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             await self.request_handler.on_delete_task_push_notification_config(
                 request,
                 server_context,
@@ -369,7 +369,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `Task` object.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             task = await self.request_handler.on_get_task(
                 request, server_context
             )
@@ -395,7 +395,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             A `ListTasksResponse` object.
         """
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._build_call_context(context, request)
             return await self.request_handler.on_list_tasks(
                 request, server_context
             )
@@ -442,3 +442,12 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                     for e in sorted(server_context.activated_extensions)
                 ]
             )
+
+    def _build_call_context(
+        self,
+        context: grpc.aio.ServicerContext,
+        request: a2a_pb2.SendMessageRequest,
+    ) -> ServerCallContext:
+        server_context = self.context_builder.build(context)
+        server_context.tenant = getattr(request, 'tenant', '')
+        return server_context
