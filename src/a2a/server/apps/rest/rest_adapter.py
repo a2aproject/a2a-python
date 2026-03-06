@@ -110,9 +110,7 @@ class RESTAdapter:
         method: Callable[[Request, ServerCallContext], Awaitable[Any]],
         request: Request,
     ) -> Response:
-        call_context = self._context_builder.build(request)
-        if 'tenant' in request.path_params:
-            call_context.tenant = request.path_params['tenant']
+        call_context = self._build_call_context(request)
 
         response = await method(request, call_context)
         return JSONResponse(content=response)
@@ -133,9 +131,7 @@ class RESTAdapter:
                 message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = self._context_builder.build(request)
-        if 'tenant' in request.path_params:
-            call_context.tenant = request.path_params['tenant']
+        call_context = self._build_call_context(request)
 
         async def event_generator(
             stream: AsyncIterable[Any],
@@ -210,7 +206,7 @@ class RESTAdapter:
             A dictionary where each key is a tuple of (path, http_method) and
             the value is the callable handler for that route.
         """
-        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+        base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
             ('/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
@@ -255,59 +251,23 @@ class RESTAdapter:
             ('/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
-            # Tenant prefixed routes
-            ('/{tenant}/message:send', 'POST'): functools.partial(
-                self._handle_request,
-                self.handler.on_message_send,
-            ),
-            ('/{tenant}/message:stream', 'POST'): functools.partial(
-                self._handle_streaming_request,
-                self.handler.on_message_send_stream,
-            ),
-            ('/{tenant}/tasks/{id}:cancel', 'POST'): functools.partial(
-                self._handle_request, self.handler.on_cancel_task
-            ),
-            ('/{tenant}/tasks/{id}:subscribe', 'GET'): functools.partial(
-                self._handle_streaming_request,
-                self.handler.on_subscribe_to_task,
-            ),
-            ('/{tenant}/tasks/{id}', 'GET'): functools.partial(
-                self._handle_request, self.handler.on_get_task
-            ),
-            (
-                '/{tenant}/tasks/{id}/pushNotificationConfigs/{push_id}',
-                'GET',
-            ): functools.partial(
-                self._handle_request, self.handler.get_push_notification
-            ),
-            (
-                '/{tenant}/tasks/{id}/pushNotificationConfigs/{push_id}',
-                'DELETE',
-            ): functools.partial(
-                self._handle_request, self.handler.delete_push_notification
-            ),
-            (
-                '/{tenant}/tasks/{id}/pushNotificationConfigs',
-                'POST',
-            ): functools.partial(
-                self._handle_request, self.handler.set_push_notification
-            ),
-            (
-                '/{tenant}/tasks/{id}/pushNotificationConfigs',
-                'GET',
-            ): functools.partial(
-                self._handle_request, self.handler.list_push_notifications
-            ),
-            ('/{tenant}/tasks', 'GET'): functools.partial(
-                self._handle_request, self.handler.list_tasks
-            ),
         }
+
         if self.agent_card.capabilities.extended_agent_card:
-            routes[('/extendedAgentCard', 'GET')] = functools.partial(
-                self._handle_request, self.handle_authenticated_agent_card
-            )
-            routes[('/{tenant}/extendedAgentCard', 'GET')] = functools.partial(
+            base_routes[('/extendedAgentCard', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )
 
+        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+            (p, method): handler
+            for (path, method), handler in base_routes.items()
+            for p in (path, f'/{{tenant}}{path}')
+        }
+
         return routes
+
+    def _build_call_context(self, request: Request) -> ServerCallContext:
+        call_context = self._context_builder.build(request)
+        if 'tenant' in request.path_params:
+            call_context.tenant = request.path_params['tenant']
+        return call_context
