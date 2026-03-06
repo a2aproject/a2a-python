@@ -126,6 +126,7 @@ class ResultAggregator:
         """
         event_stream = consumer.consume_all()
         interrupted = False
+        background_task = None
         async for event in event_stream:
             if isinstance(event, Message):
                 self._message = event
@@ -160,7 +161,6 @@ class ResultAggregator:
                 )
                 should_interrupt = True
 
-            background_task = None
             if should_interrupt:
                 # Continue consuming the rest of the events in the background.
                 background_task = asyncio.create_task(
