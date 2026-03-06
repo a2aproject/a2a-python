@@ -10,6 +10,7 @@ from a2a.client.client import (
 )
 from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.middleware import ClientCallInterceptor
+from a2a.client.service_parameters import ServiceParameters
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -33,7 +34,14 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-# TODO: Implement RequestOptions if needed
+@dataclasses.dataclass
+class RequestOptions:
+    """Options for configuring A2A client requests."""
+
+    service_parameters: ServiceParameters | None = None
+
+    context: ClientCallContext | None = None
+
 
 
 class BaseClient(Client):
@@ -54,12 +62,9 @@ class BaseClient(Client):
 
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration: SendMessageConfiguration | None = None,
-        context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the agent.
 
@@ -77,27 +82,19 @@ class BaseClient(Client):
         Yields:
             An async iterator of `ClientEvent`
         """
-        config = SendMessageConfiguration(
-            accepted_output_modes=self._config.accepted_output_modes,
-            blocking=not self._config.polling,
-            push_notification_config=(
-                self._config.push_notification_configs[0]
-                if self._config.push_notification_configs
-                else None
-            ),
-        )
-
-        if configuration:
-            config.MergeFrom(configuration)
-            config.blocking = configuration.blocking
-
-        send_message_request = SendMessageRequest(
-            message=request, configuration=config, metadata=request_metadata
-        )
+        if request.configuration:
+            if not request.configuration.blocking and self._config.polling:
+                request.configuration.blocking = self._config.blocking
+            if not request.configuration.push_notification_config and self._config.push_notification_configs:
+                request.configuration.push_notification_config = self._config.push_notification_configs[0]
+            if not request.configuration.accepted_output_modes and self._config.accepted_output_modes:
+                request.configuration.accepted_output_modes = self._config.accepted_output_modes
+            if not request.configuration.history_length and self._config.history_length:
+                request.configuration.history_length = self._config.history_length
 
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
-                send_message_request, context=context, extensions=extensions
+                request, context=options.context, extensions=options.extensions
             )
 
             # In non-streaming case we convert to a StreamResponse so that the
@@ -119,7 +116,7 @@ class BaseClient(Client):
             return
 
         stream = self._transport.send_message_streaming(
-            send_message_request, context=context, extensions=extensions
+            request, context=context, extensions=extensions
         )
         async for client_event in self._process_stream(stream):
             yield client_event
@@ -149,8 +146,7 @@ class BaseClient(Client):
         self,
         request: GetTaskRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task.
 
@@ -170,7 +166,7 @@ class BaseClient(Client):
         self,
         request: ListTasksRequest,
         *,
-        context: ClientCallContext | None = None,
+        options: RequestOptions | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
         return await self._transport.list_tasks(request, context=context)
@@ -200,8 +196,7 @@ class BaseClient(Client):
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task.
 
@@ -221,8 +216,7 @@ class BaseClient(Client):
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task.
 
@@ -242,8 +236,7 @@ class BaseClient(Client):
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task.
 
@@ -263,8 +256,7 @@ class BaseClient(Client):
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task.
 
@@ -281,8 +273,7 @@ class BaseClient(Client):
         self,
         request: SubscribeToTaskRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream.
 
@@ -317,8 +308,7 @@ class BaseClient(Client):
         self,
         request: GetExtendedAgentCardRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.

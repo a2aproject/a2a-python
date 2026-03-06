@@ -11,6 +11,7 @@ import httpx
 from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.base_client import RequestOptions
 from a2a.client.optionals import Channel
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -20,6 +21,7 @@ from a2a.types.a2a_pb2 import (
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    SendMessageRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
@@ -130,12 +132,9 @@ class Client(ABC):
     @abstractmethod
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration: SendMessageConfiguration | None = None,
-        context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the server.
 
@@ -153,8 +152,7 @@ class Client(ABC):
         self,
         request: GetTaskRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -163,7 +161,7 @@ class Client(ABC):
         self,
         request: ListTasksRequest,
         *,
-        context: ClientCallContext | None = None,
+        options: RequestOptions | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
 
@@ -172,8 +170,7 @@ class Client(ABC):
         self,
         request: CancelTaskRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -182,8 +179,7 @@ class Client(ABC):
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -192,8 +188,7 @@ class Client(ABC):
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -202,8 +197,7 @@ class Client(ABC):
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
 
@@ -212,8 +206,7 @@ class Client(ABC):
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
 
@@ -222,8 +215,7 @@ class Client(ABC):
         self,
         request: SubscribeToTaskRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
         return
@@ -234,8 +226,7 @@ class Client(ABC):
         self,
         request: GetExtendedAgentCardRequest,
         *,
-        context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+        options: RequestOptions | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
