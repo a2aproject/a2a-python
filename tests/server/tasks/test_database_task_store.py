@@ -769,7 +769,7 @@ async def test_get_0_3_task_detailed(
             artifacts=legacy_data['artifacts'],
             task_metadata=legacy_data['metadata'],
             kind='task',
-            last_updated=datetime.now(timezone.utc),
+            last_updated=None,
         )
         await session.execute(stmt)
 

@@ -1,4 +1,3 @@
-from collections.abc import Callable
 from datetime import datetime
 from typing import TYPE_CHECKING, Any, Generic, TypeVar
 
@@ -326,23 +325,13 @@ class PushNotificationConfigModel(PushNotificationConfigMixin, Base):
     __tablename__ = 'push_notification_configs'
 
 
-_LEGACY_CONVERSIONS: dict[type, tuple[type[BaseModel], Callable]] | None = None
-
-
-def _get_legacy_conversions() -> dict[type, tuple[type[BaseModel], Callable]]:
-    """Lazily load and return legacy conversion mapping."""
-    global _LEGACY_CONVERSIONS
-    if _LEGACY_CONVERSIONS is None:
-        try:
-            # Lazy imports to avoid circular dependencies and unnecessary overhead
-            _LEGACY_CONVERSIONS = {
-                TaskStatus: (
-                    types_v03.TaskStatus,
-                    conversions.to_core_task_status,
-                ),
-                Message: (types_v03.Message, conversions.to_core_message),
-                Artifact: (types_v03.Artifact, conversions.to_core_artifact),
-            }
-        except ImportError:
-            _LEGACY_CONVERSIONS = {}
-    return _LEGACY_CONVERSIONS
+def _get_legacy_conversions() -> dict[type, tuple[type, Any]]:
+    """Get the mapping of current types to their legacy counterparts and conversion functions."""
+    return {
+        TaskStatus: (
+            types_v03.TaskStatus,
+            conversions.to_core_task_status,
+        ),
+        Message: (types_v03.Message, conversions.to_core_message),
+        Artifact: (types_v03.Artifact, conversions.to_core_artifact),
+    }
