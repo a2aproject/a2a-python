@@ -178,24 +178,40 @@ def running_servers():
 
 @pytest.mark.timeout(10)
 @pytest.mark.parametrize(
-    'server_script, client_script, client_deps',
+    'server_script, client_script, client_deps, protocols',
     [
         # Run 0.3 Server <-> 0.3 Client
         (
             'server_0_3.py',
             'client_0_3.py',
             ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            ['grpc', 'jsonrpc', 'rest'],
         ),
         # Run 1.0 Server <-> 0.3 Client
         (
             'server_1_0.py',
             'client_0_3.py',
             ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            ['grpc'],
+        ),
+        # Run 1.0 Server <-> 1.0 Client
+        (
+            'server_1_0.py',
+            'client_1_0.py',
+            [],
+            ['grpc', 'jsonrpc', 'rest'],
+        ),
+        # Run 0.3 Server <-> 1.0 Client
+        (
+            'server_0_3.py',
+            'client_1_0.py',
+            [],
+            ['grpc'],
         ),
     ],
 )
 def test_cross_version(
-    running_servers, server_script, client_script, client_deps
+    running_servers, server_script, client_script, client_deps, protocols
 ):
     http_port = running_servers[server_script]
     uv_path = running_servers['uv_path']
@@ -210,8 +226,8 @@ def test_cross_version(
             '--url',
             card_url,
             '--protocols',
-            'grpc',  # "rest", "grpc"
         ]
+        + protocols
     )
 
     client_result = subprocess.Popen(
