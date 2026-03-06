@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn
 
-from a2a.client.errors import A2AClientError, A2AClientTimeoutError
+from a2a.client.middleware import ClientCallContext
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
@@ -19,10 +19,10 @@ except ImportError as e:
 
 
 from a2a.client.client import ClientConfig
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.errors import A2AClientError, A2AClientTimeoutError
+from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -43,7 +43,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -131,11 +130,12 @@ class GrpcTransport(ClientTransport):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
         return await self._call_grpc(
-            self.stub.SendMessage, request, context, extensions
+            self.stub.SendMessage,
+            request,
+            context,
         )
 
     @_handle_grpc_stream_exception
@@ -144,11 +144,12 @@ class GrpcTransport(ClientTransport):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         async for response in self._call_grpc_stream(
-            self.stub.SendStreamingMessage, request, context, extensions
+            self.stub.SendStreamingMessage,
+            request,
+            context,
         ):
             yield response
 
@@ -158,11 +159,12 @@ class GrpcTransport(ClientTransport):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         async for response in self._call_grpc_stream(
-            self.stub.SubscribeToTask, request, context, extensions
+            self.stub.SubscribeToTask,
+            request,
+            context,
         ):
             yield response
 
@@ -172,11 +174,12 @@ class GrpcTransport(ClientTransport):
         request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         return await self._call_grpc(
-            self.stub.GetTask, request, context, extensions
+            self.stub.GetTask,
+            request,
+            context,
         )
 
     @_handle_grpc_exception
@@ -185,11 +188,12 @@ class GrpcTransport(ClientTransport):
         request: ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
         return await self._call_grpc(
-            self.stub.ListTasks, request, context, extensions
+            self.stub.ListTasks,
+            request,
+            context,
         )
 
     @_handle_grpc_exception
@@ -198,11 +202,12 @@ class GrpcTransport(ClientTransport):
         request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         return await self._call_grpc(
-            self.stub.CancelTask, request, context, extensions
+            self.stub.CancelTask,
+            request,
+            context,
         )
 
     @_handle_grpc_exception
@@ -211,14 +216,12 @@ class GrpcTransport(ClientTransport):
         request: CreateTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         return await self._call_grpc(
             self.stub.CreateTaskPushNotificationConfig,
             request,
             context,
-            extensions,
         )
 
     @_handle_grpc_exception
@@ -227,14 +230,12 @@ class GrpcTransport(ClientTransport):
         request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         return await self._call_grpc(
             self.stub.GetTaskPushNotificationConfig,
             request,
             context,
-            extensions,
         )
 
     @_handle_grpc_exception
@@ -243,14 +244,12 @@ class GrpcTransport(ClientTransport):
         request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         return await self._call_grpc(
             self.stub.ListTaskPushNotificationConfigs,
             request,
             context,
-            extensions,
         )
 
     @_handle_grpc_exception
@@ -259,14 +258,12 @@ class GrpcTransport(ClientTransport):
         request: DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
         await self._call_grpc(
             self.stub.DeleteTaskPushNotificationConfig,
             request,
             context,
-            extensions,
         )
 
     @_handle_grpc_exception
@@ -275,12 +272,13 @@ class GrpcTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = await self._call_grpc(
-            self.stub.GetExtendedAgentCard, request, context, extensions
+            self.stub.GetExtendedAgentCard,
+            request,
+            context,
         )
 
         if signature_verifier:
@@ -295,36 +293,32 @@ class GrpcTransport(ClientTransport):
         await self.channel.close()
 
     def _get_grpc_metadata(
-        self,
-        extensions: list[str] | None = None,
+        self, context: ClientCallContext | None
     ) -> list[tuple[str, str]]:
-        """Creates gRPC metadata for extensions."""
-        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)]
-
-        extensions_to_use = extensions or self.extensions
-        if extensions_to_use:
-            metadata.append(
-                (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
-            )
-
+        metadata = []
+        if context and context.service_parameters:
+            for key, value in context.service_parameters.items():
+                metadata.append((key.lower(), value))
         return metadata
 
     def _get_grpc_timeout(
         self, context: ClientCallContext | None
     ) -> float | None:
-        return context.timeout if context else None
+        if context:
+            return context.timeout
+        return None
 
     async def _call_grpc(
         self,
         method: Callable[..., Any],
         request: Any,
         context: ClientCallContext | None,
-        extensions: list[str] | None,
         **kwargs: Any,
     ) -> Any:
+
         return await method(
             request,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
             timeout=self._get_grpc_timeout(context),
             **kwargs,
         )
@@ -334,12 +328,12 @@ class GrpcTransport(ClientTransport):
         method: Callable[..., Any],
         request: Any,
         context: ClientCallContext | None,
-        extensions: list[str] | None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
+
         stream = method(
             request,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
             timeout=self._get_grpc_timeout(context),
             **kwargs,
         )

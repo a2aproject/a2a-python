@@ -11,7 +11,6 @@ import httpx
 from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
-from a2a.client.base_client import RequestOptions
 from a2a.client.optionals import Channel
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -21,14 +20,12 @@ from a2a.types.a2a_pb2 import (
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
-    SendMessageRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
-    Message,
     PushNotificationConfig,
-    SendMessageConfiguration,
+    SendMessageRequest,
     StreamResponse,
     SubscribeToTaskRequest,
     Task,
@@ -134,7 +131,7 @@ class Client(ABC):
         self,
         request: SendMessageRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the server.
 
@@ -152,7 +149,7 @@ class Client(ABC):
         self,
         request: GetTaskRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -161,7 +158,7 @@ class Client(ABC):
         self,
         request: ListTasksRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
 
@@ -170,7 +167,7 @@ class Client(ABC):
         self,
         request: CancelTaskRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -179,7 +176,7 @@ class Client(ABC):
         self,
         request: CreateTaskPushNotificationConfigRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -188,7 +185,7 @@ class Client(ABC):
         self,
         request: GetTaskPushNotificationConfigRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -197,7 +194,7 @@ class Client(ABC):
         self,
         request: ListTaskPushNotificationConfigsRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
 
@@ -206,7 +203,7 @@ class Client(ABC):
         self,
         request: DeleteTaskPushNotificationConfigRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
 
@@ -215,7 +212,7 @@ class Client(ABC):
         self,
         request: SubscribeToTaskRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
         return
@@ -226,7 +223,7 @@ class Client(ABC):
         self,
         request: GetExtendedAgentCardRequest,
         *,
-        options: RequestOptions | None = None,
+        context: ClientCallContext | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
