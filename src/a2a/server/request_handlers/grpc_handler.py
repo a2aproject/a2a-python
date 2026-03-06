@@ -18,7 +18,7 @@ except ImportError as e:
 
 from collections.abc import Callable
 
-from google.protobuf import empty_pb2
+from google.protobuf import empty_pb2, message
 
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
@@ -446,7 +446,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     def _build_call_context(
         self,
         context: grpc.aio.ServicerContext,
-        request: a2a_pb2.SendMessageRequest,
+        request: message.Message,
     ) -> ServerCallContext:
         server_context = self.context_builder.build(context)
         server_context.tenant = getattr(request, 'tenant', '')
