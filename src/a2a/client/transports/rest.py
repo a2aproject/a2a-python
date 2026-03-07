@@ -75,8 +75,8 @@ class RestTransport(ClientTransport):
             'POST',
             '/message:send',
             request.tenant,
-            MessageToDict(request),
             context=context,
+            json=MessageToDict(request),
         )
         response: SendMessageResponse = ParseDict(
             response_data, SendMessageResponse()
@@ -90,14 +90,13 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
-        http_kwargs = self._get_http_args(context)
         payload = MessageToDict(request)
 
         async for event in self._send_stream_request(
             'POST',
             '/message:stream',
             request.tenant,
-            http_kwargs=http_kwargs,
+            context=context,
             json=payload,
         ):
             yield event
@@ -117,8 +116,8 @@ class RestTransport(ClientTransport):
             'GET',
             f'/tasks/{request.id}',
             request.tenant,
-            params,
             context=context,
+            params=params,
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -134,8 +133,8 @@ class RestTransport(ClientTransport):
             'GET',
             '/tasks',
             request.tenant,
-            _model_to_query_params(request),
             context=context,
+            params=MessageToDict(request),
         )
         response: ListTasksResponse = ParseDict(
             response_data, ListTasksResponse()
@@ -153,8 +152,8 @@ class RestTransport(ClientTransport):
             'POST',
             f'/tasks/{request.id}:cancel',
             request.tenant,
-            MessageToDict(request),
             context=context,
+            json=MessageToDict(request),
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -170,8 +169,8 @@ class RestTransport(ClientTransport):
             'POST',
             f'/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-            MessageToDict(request),
             context=context,
+            json=MessageToDict(request),
         )
         response: TaskPushNotificationConfig = ParseDict(
             response_data, TaskPushNotificationConfig()
@@ -195,8 +194,8 @@ class RestTransport(ClientTransport):
             'GET',
             f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-            params,
             context=context,
+            params=params,
         )
         response: TaskPushNotificationConfig = ParseDict(
             response_data, TaskPushNotificationConfig()
@@ -218,8 +217,8 @@ class RestTransport(ClientTransport):
             'GET',
             f'/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-            params,
             context=context,
+            params=params,
         )
         response: ListTaskPushNotificationConfigsResponse = ParseDict(
             response_data, ListTaskPushNotificationConfigsResponse()
@@ -243,8 +242,8 @@ class RestTransport(ClientTransport):
             'DELETE',
             f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-            params,
             context=context,
+            params=params,
         )
 
     async def subscribe(
@@ -254,13 +253,11 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        http_kwargs = self._get_http_args(context)
-
         async for event in self._send_stream_request(
             'GET',
             f'/tasks/{request.id}:subscribe',
             request.tenant,
-            http_kwargs=http_kwargs,
+            context=context,
         ):
             yield event
 
@@ -278,7 +275,7 @@ class RestTransport(ClientTransport):
             return card
 
         response_data = await self._execute_request(
-            'GET', '/extendedAgentCard', request.tenant, {}, context
+            'GET', '/extendedAgentCard', request.tenant, context=context
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
 
@@ -338,22 +335,19 @@ class RestTransport(ClientTransport):
         target: str,
         tenant: str,
         context: ClientCallContext | None = None,
-        **kwargs: Any,
+        *,
+        json: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        http_kwargs = self._get_http_args(context)
-        headers = http_kwargs.get('headers')
-        timeout = http_kwargs.get('timeout', httpx.USE_CLIENT_DEFAULT)
-
         path = self._get_path(target, tenant)
+        http_kwargs = self._get_http_args(context)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
             method,
             f'{self.url}{path}',
             self._handle_http_error,
-            headers=headers,
-            timeout=timeout,
-            **kwargs,
+            json=json,
+            **http_kwargs,
         ):
             event: StreamResponse = Parse(sse_data, StreamResponse())
             yield event
@@ -368,26 +362,20 @@ class RestTransport(ClientTransport):
         method: str,
         target: str,
         tenant: str,
-        payload: dict[str, Any] | None = None,
         context: ClientCallContext | None = None,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = self._get_path(target, tenant)
         http_kwargs = self._get_http_args(context)
-        payload = payload or {}
-
-        headers = http_kwargs.get('headers')
-        timeout = http_kwargs.get('timeout', httpx.USE_CLIENT_DEFAULT)
-
-        json_payload = payload if method == 'POST' else None
-        params = payload if method != 'POST' else None
 
         request = self.httpx_client.build_request(
             method,
             f'{self.url}{path}',
-            json=json_payload,
+            json=json,
             params=params,
-            headers=headers,  # type: ignore[arg-type]
-            timeout=timeout,  # type: ignore[arg-type]
+            **http_kwargs,
         )
         return await self._send_request(request)
 

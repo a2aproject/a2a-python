@@ -363,13 +363,11 @@ class TestRestTransportExtensions:
             await client.get_extended_agent_card(request, context=context)
 
         mock_execute_request.assert_called_once()
-        # _execute_request(method, target, tenant, payload, context)
+        # _execute_request(method, target, tenant, context)
         call_args = mock_execute_request.call_args
-        assert (
-            call_args[1].get('context') == context or call_args[0][4] == context
-        )
+        assert call_args[1].get('context') == context or call_args[0][3] == context
 
-        _context = call_args[1].get('context') or call_args[0][4]
+        _context = call_args[1].get('context') or call_args[0][3]
         assert _context.service_parameters == {
             HTTP_EXTENSION_HEADER: extensions_str
         }

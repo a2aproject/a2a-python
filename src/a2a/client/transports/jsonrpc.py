@@ -349,6 +349,7 @@ class JsonRpcTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> dict[str, Any]:
         http_kwargs = self._get_http_args(context)
+        
         request = self.httpx_client.build_request(
             'POST', self.url, json=payload, **(http_kwargs or {})
         )
@@ -358,14 +359,8 @@ class JsonRpcTransport(ClientTransport):
         self,
         rpc_request_payload: dict[str, Any],
         context: ClientCallContext | None = None,
-        **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
         http_kwargs = self._get_http_args(context)
-        final_kwargs = dict(http_kwargs or {})
-        final_kwargs.update(kwargs)
-        headers = dict(self.httpx_client.headers.items())
-        headers.update(final_kwargs.get('headers', {}))
-        final_kwargs['headers'] = headers
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
@@ -373,7 +368,7 @@ class JsonRpcTransport(ClientTransport):
             self.url,
             None,
             json=rpc_request_payload,
-            **final_kwargs,
+            **http_kwargs,
         ):
             json_rpc_response = JSONRPC20Response.from_json(sse_data)
             if json_rpc_response.error:
