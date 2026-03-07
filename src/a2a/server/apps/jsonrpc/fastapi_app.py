@@ -1,16 +1,18 @@
 import logging
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+    from fastapi.params import Depends
 
     _package_fastapi_installed = True
 else:
     try:
         from fastapi import FastAPI
+        from fastapi.params import Depends
 
         _package_fastapi_installed = True
     except ImportError:
@@ -121,6 +123,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
         extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
+        dependencies: Sequence[Depends] | None = None,
     ) -> None:
         """Adds the routes to the FastAPI application.
 
@@ -129,7 +132,16 @@ class A2AFastAPIApplication(JSONRPCApplication):
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            dependencies: Optional sequence of FastAPI dependencies (e.g.
+                `[Security(get_current_active_user, scopes=["a2a"])]`)
+                applied to the RPC endpoint and the authenticated extended
+                agent card endpoint. The public agent card endpoint is left
+                unprotected.
         """
+        route_deps: dict[str, Any] = {}
+        if dependencies:
+            route_deps['dependencies'] = list(dependencies)
+
         app.post(
             rpc_url,
             openapi_extra={
@@ -145,6 +157,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
                     'description': 'A2ARequest',
                 }
             },
+            **route_deps,
         )(self._handle_requests)
         app.get(agent_card_url)(self._handle_get_agent_card)
 
@@ -156,7 +169,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
             )
 
         if self.agent_card.supports_authenticated_extended_card:
-            app.get(extended_agent_card_url)(
+            app.get(extended_agent_card_url, **route_deps)(
                 self._handle_get_authenticated_extended_agent_card
             )
 
@@ -165,6 +178,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
         extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
+        dependencies: Sequence[Depends] | None = None,
         **kwargs: Any,
     ) -> FastAPI:
         """Builds and returns the FastAPI application instance.
@@ -173,6 +187,10 @@ class A2AFastAPIApplication(JSONRPCApplication):
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            dependencies: Optional sequence of FastAPI dependencies (e.g.
+                `[Security(get_current_active_user, scopes=["a2a"])]`)
+                applied to authenticated routes. See
+                :meth:`add_routes_to_app`.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:
@@ -181,7 +199,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         app = A2AFastAPI(**kwargs)
 
         self.add_routes_to_app(
-            app, agent_card_url, rpc_url, extended_agent_card_url
+            app, agent_card_url, rpc_url, extended_agent_card_url, dependencies
         )
 
         return app
