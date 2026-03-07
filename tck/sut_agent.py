@@ -15,6 +15,7 @@ from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -124,8 +125,8 @@ class SUTAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(final_update)
 
 
-def main() -> None:
-    """Main entrypoint."""
+def serve(task_store: TaskStore) -> None:
+    """Sets up the A2A service and starts the HTTP server."""
     http_port = int(os.environ.get('HTTP_PORT', '41241'))
 
     agent_card = AgentCard(
@@ -168,7 +169,7 @@ def main() -> None:
 
     request_handler = DefaultRequestHandler(
         agent_executor=SUTAgentExecutor(),
-        task_store=InMemoryTaskStore(),
+        task_store=task_store,
     )
 
     server = A2AStarletteApplication(
@@ -180,6 +181,11 @@ def main() -> None:
 
     logger.info('Starting HTTP server on port %s...', http_port)
     uvicorn.run(app, host='127.0.0.1', port=http_port, log_level='info')
+
+
+def main() -> None:
+    """Main entrypoint."""
+    serve(InMemoryTaskStore())
 
 
 if __name__ == '__main__':
