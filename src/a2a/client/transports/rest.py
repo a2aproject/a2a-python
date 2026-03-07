@@ -337,14 +337,12 @@ class RestTransport(ClientTransport):
         method: str,
         target: str,
         tenant: str,
-        http_kwargs: dict[str, Any] | None = None,
+        context: ClientCallContext | None = None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
-        final_kwargs = dict(http_kwargs or {})
-        final_kwargs.update(kwargs)
-        headers = dict(self.httpx_client.headers.items())
-        headers.update(final_kwargs.get('headers', {}))
-        final_kwargs['headers'] = headers
+        http_kwargs = self._get_http_args(context)
+        headers = http_kwargs.get('headers')
+        timeout = http_kwargs.get('timeout', httpx.USE_CLIENT_DEFAULT)
 
         path = self._get_path(target, tenant)
 
@@ -353,7 +351,9 @@ class RestTransport(ClientTransport):
             method,
             f'{self.url}{path}',
             self._handle_http_error,
-            **final_kwargs,
+            headers=headers,
+            timeout=timeout,
+            **kwargs,
         ):
             event: StreamResponse = Parse(sse_data, StreamResponse())
             yield event

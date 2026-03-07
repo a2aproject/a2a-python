@@ -77,7 +77,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -99,7 +101,7 @@ class JsonRpcTransport(ClientTransport):
             _id=str(uuid4()),
         )
         async for event in self._send_stream_request(
-            rpc_request.data,
+            dict(rpc_request.data),
             context,
         ):
             yield event
@@ -116,7 +118,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -135,7 +139,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -156,7 +162,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -175,7 +183,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -196,7 +206,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -217,7 +229,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -241,7 +255,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        response_data = await self._send_request(rpc_request.data, context)
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
+        )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -259,7 +275,7 @@ class JsonRpcTransport(ClientTransport):
             _id=str(uuid4()),
         )
         async for event in self._send_stream_request(
-            rpc_request.data,
+            dict(rpc_request.data),
             context,
         ):
             yield event
@@ -283,7 +299,7 @@ class JsonRpcTransport(ClientTransport):
             _id=str(uuid4()),
         )
         response_data = await self._send_request(
-            rpc_request.data,
+            dict(rpc_request.data),
             context,
         )
         json_rpc_response = JSONRPC20Response(**response_data)
