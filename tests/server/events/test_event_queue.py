@@ -71,6 +71,28 @@ def test_constructor_invalid_max_queue_size() -> None:
 
 
 @pytest.mark.asyncio
+async def test_event_queue_async_context_manager(
+    event_queue: EventQueue,
+) -> None:
+    """Test that EventQueue can be used as an async context manager."""
+    async with event_queue as q:
+        assert q is event_queue
+        assert event_queue.is_closed() is False
+    assert event_queue.is_closed() is True
+
+
+@pytest.mark.asyncio
+async def test_event_queue_async_context_manager_on_exception(
+    event_queue: EventQueue,
+) -> None:
+    """Test that close() is called even when an exception occurs inside the context."""
+    with pytest.raises(RuntimeError, match='boom'):
+        async with event_queue:
+            raise RuntimeError('boom')
+    assert event_queue.is_closed() is True
+
+
+@pytest.mark.asyncio
 async def test_enqueue_and_dequeue_event(event_queue: EventQueue) -> None:
     """Test that an event can be enqueued and dequeued."""
     event = Message(**MESSAGE_PAYLOAD)
