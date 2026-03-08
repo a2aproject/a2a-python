@@ -16,6 +16,7 @@ from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     send_http_request,
     send_http_stream_request,
+    get_http_args,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -322,16 +323,6 @@ class JsonRpcTransport(ClientTransport):
         """Closes the httpx client."""
         await self.httpx_client.aclose()
 
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any]:
-        http_kwargs: dict[str, Any] = {}
-        if context and context.service_parameters:
-            http_kwargs['headers'] = context.service_parameters.copy()
-        if context and context.timeout is not None:
-            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
-        return http_kwargs
-
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
         code = error_dict.get('code')
@@ -348,7 +339,7 @@ class JsonRpcTransport(ClientTransport):
         payload: dict[str, Any],
         context: ClientCallContext | None = None,
     ) -> dict[str, Any]:
-        http_kwargs = self._get_http_args(context)
+        http_kwargs = get_http_args(context)
         
         request = self.httpx_client.build_request(
             'POST', self.url, json=payload, **(http_kwargs or {})
@@ -360,7 +351,7 @@ class JsonRpcTransport(ClientTransport):
         rpc_request_payload: dict[str, Any],
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        http_kwargs = self._get_http_args(context)
+        http_kwargs = get_http_args(context)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,

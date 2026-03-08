@@ -15,6 +15,7 @@ from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     send_http_request,
     send_http_stream_request,
+    get_http_args,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -295,16 +296,6 @@ class RestTransport(ClientTransport):
         """Returns the full path, prepending the tenant if provided."""
         return f'/{tenant}{base_path}' if tenant else base_path
 
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any]:
-        http_kwargs: dict[str, Any] = {}
-        if context and context.service_parameters:
-            http_kwargs['headers'] = context.service_parameters.copy()
-        if context and context.timeout is not None:
-            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
-        return http_kwargs
-
     def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
@@ -339,7 +330,7 @@ class RestTransport(ClientTransport):
         json: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         path = self._get_path(target, tenant)
-        http_kwargs = self._get_http_args(context)
+        http_kwargs = get_http_args(context)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
@@ -368,7 +359,7 @@ class RestTransport(ClientTransport):
         params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = self._get_path(target, tenant)
-        http_kwargs = self._get_http_args(context)
+        http_kwargs = get_http_args(context)
 
         request = self.httpx_client.build_request(
             method,
