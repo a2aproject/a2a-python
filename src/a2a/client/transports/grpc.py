@@ -270,15 +270,14 @@ class GrpcTransport(ClientTransport):
     ) -> AgentCard:
         """Retrieves the agent's card."""
         card = self.agent_card
-        if not card.capabilities.extended_agent_card:
+        if card and not card.capabilities.extended_agent_card:
             return card
-        
-        card = await self._call_grpc(
+
+        return await self._call_grpc(
             self.stub.GetExtendedAgentCard,
             request,
             context,
         )
-        return card
 
     async def close(self) -> None:
         """Closes the gRPC channel."""

@@ -219,6 +219,7 @@ class Client(ABC):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
 
