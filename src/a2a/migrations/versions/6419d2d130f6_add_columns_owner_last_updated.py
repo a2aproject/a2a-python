@@ -69,7 +69,7 @@ def upgrade() -> None:
         )
         add_index(
             push_notification_configs_table,
-            f'idx_{push_notification_configs_table}_owner',
+            f'ix_{push_notification_configs_table}_owner',
             ['owner'],
         )
     else:
@@ -100,7 +100,7 @@ def downgrade() -> None:
     if table_exists(push_notification_configs_table):
         drop_index(
             push_notification_configs_table,
-            f'idx_{push_notification_configs_table}_owner',
+            f'ix_{push_notification_configs_table}_owner',
         )
         drop_column(push_notification_configs_table, 'owner')
     else:

@@ -61,21 +61,13 @@ def add_column(
 ) -> None:
     """Add a column to a table if it doesn't already exist."""
     if not column_exists(table, column_name):
-        # Handle string default values safely to prevent SQL injection
-        # and ensure proper quoting in the rendered SQL.
-        server_default = default
-        if isinstance(default, str):
-            # Escape single quotes and wrap in single quotes using sa.text
-            escaped_default = default.replace("'", "''")
-            server_default = sa.text(f"'{escaped_default}'")
-
         op.add_column(
             table,
             sa.Column(
                 column_name,
                 type_,
                 nullable=nullable,
-                server_default=server_default,
+                server_default=default,
             ),
         )
     else:
