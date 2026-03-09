@@ -110,7 +110,8 @@ class RESTAdapter:
         method: Callable[[Request, ServerCallContext], Awaitable[Any]],
         request: Request,
     ) -> Response:
-        call_context = self._context_builder.build(request)
+        call_context = self._build_call_context(request)
+
         response = await method(request, call_context)
         return JSONResponse(content=response)
 
@@ -130,7 +131,7 @@ class RESTAdapter:
                 message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = self._context_builder.build(request)
+        call_context = self._build_call_context(request)
 
         async def event_generator(
             stream: AsyncIterable[Any],
@@ -185,7 +186,7 @@ class RESTAdapter:
             card_to_serve = self.agent_card
 
         if self.extended_card_modifier:
-            context = self._context_builder.build(request)
+            context = self._build_call_context(request)
             card_to_serve = await maybe_await(
                 self.extended_card_modifier(card_to_serve, context)
             )
@@ -205,7 +206,7 @@ class RESTAdapter:
             A dictionary where each key is a tuple of (path, http_method) and
             the value is the callable handler for that route.
         """
-        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+        base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
             ('/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
@@ -251,9 +252,22 @@ class RESTAdapter:
                 self._handle_request, self.handler.list_tasks
             ),
         }
+
         if self.agent_card.capabilities.extended_agent_card:
-            routes[('/card', 'GET')] = functools.partial(
+            base_routes[('/extendedAgentCard', 'GET')] = functools.partial(
                 self._handle_request, self.handle_authenticated_agent_card
             )
 
+        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+            (p, method): handler
+            for (path, method), handler in base_routes.items()
+            for p in (path, f'/{{tenant}}{path}')
+        }
+
         return routes
+
+    def _build_call_context(self, request: Request) -> ServerCallContext:
+        call_context = self._context_builder.build(request)
+        if 'tenant' in request.path_params:
+            call_context.tenant = request.path_params['tenant']
+        return call_context

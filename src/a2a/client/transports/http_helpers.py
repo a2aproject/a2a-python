@@ -9,6 +9,7 @@ import httpx
 from httpx_sse import SSEError, aconnect_sse
 
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
+from a2a.client.middleware import ClientCallContext
 
 
 @contextmanager
@@ -39,6 +40,16 @@ def handle_http_exceptions(
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
         raise A2AClientError(f'JSON Decode Error: {e}') from e
+
+
+def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
+    """Extracts HTTP arguments from the client call context."""
+    http_kwargs: dict[str, Any] = {}
+    if context and context.service_parameters:
+        http_kwargs['headers'] = context.service_parameters.copy()
+    if context and context.timeout is not None:
+        http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+    return http_kwargs
 
 
 async def send_http_request(

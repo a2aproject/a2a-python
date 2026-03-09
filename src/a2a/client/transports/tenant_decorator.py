@@ -1,10 +1,7 @@
-from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
-from types import TracebackType
-
-from typing_extensions import Self
 
 from a2a.client.middleware import ClientCallContext
+from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -26,43 +23,44 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-class ClientTransport(ABC):
-    """Abstract base class for a client transport."""
+class TenantTransportDecorator(ClientTransport):
+    """A transport decorator that attaches a tenant to all requests."""
 
-    async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the transport itself."""
-        return self
+    def __init__(self, base: ClientTransport, tenant: str):
+        self._base = base
+        self._tenant = tenant
 
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exits the async context manager, ensuring close() is called."""
-        await self.close()
+    def _resolve_tenant(self, tenant: str) -> str:
+        """If tenant is not provided, use the default tenant.
 
-    @abstractmethod
+        Returns:
+            The tenant used for the request.
+        """
+        return tenant or self._tenant
+
     async def send_message(
         self,
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
     ) -> SendMessageResponse:
-        """Sends a non-streaming message request to the agent."""
+        """Sends a streaming message request to the agent and yields responses as they arrive."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.send_message(request, context=context)
 
-    @abstractmethod
     async def send_message_streaming(
         self,
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        """Sends a streaming message request to the agent and yields responses as they arrive."""
-        return
-        yield
+        """Sends a streaming message request to the agent and yields responses."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        async for event in self._base.send_message_streaming(
+            request, context=context
+        ):
+            yield event
 
-    @abstractmethod
     async def get_task(
         self,
         request: GetTaskRequest,
@@ -70,8 +68,9 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.get_task(request, context=context)
 
-    @abstractmethod
     async def list_tasks(
         self,
         request: ListTasksRequest,
@@ -79,8 +78,9 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.list_tasks(request, context=context)
 
-    @abstractmethod
     async def cancel_task(
         self,
         request: CancelTaskRequest,
@@ -88,8 +88,9 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.cancel_task(request, context=context)
 
-    @abstractmethod
     async def create_task_push_notification_config(
         self,
         request: CreateTaskPushNotificationConfigRequest,
@@ -97,8 +98,11 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.create_task_push_notification_config(
+            request, context=context
+        )
 
-    @abstractmethod
     async def get_task_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
@@ -106,8 +110,11 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.get_task_push_notification_config(
+            request, context=context
+        )
 
-    @abstractmethod
     async def list_task_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
@@ -115,8 +122,11 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.list_task_push_notification_configs(
+            request, context=context
+        )
 
-    @abstractmethod
     async def delete_task_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,
@@ -124,8 +134,11 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        await self._base.delete_task_push_notification_config(
+            request, context=context
+        )
 
-    @abstractmethod
     async def subscribe(
         self,
         request: SubscribeToTaskRequest,
@@ -133,10 +146,10 @@ class ClientTransport(ABC):
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        return
-        yield
+        request.tenant = self._resolve_tenant(request.tenant)
+        async for event in self._base.subscribe(request, context=context):
+            yield event
 
-    @abstractmethod
     async def get_extended_agent_card(
         self,
         request: GetExtendedAgentCardRequest,
@@ -145,7 +158,13 @@ class ClientTransport(ABC):
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
+        request.tenant = self._resolve_tenant(request.tenant)
+        return await self._base.get_extended_agent_card(
+            request,
+            context=context,
+            signature_verifier=signature_verifier,
+        )
 
-    @abstractmethod
     async def close(self) -> None:
         """Closes the transport."""
+        await self._base.close()

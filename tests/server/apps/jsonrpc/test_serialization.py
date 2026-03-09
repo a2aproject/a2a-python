@@ -55,7 +55,7 @@ def agent_card_with_api_key():
     """Provides an AgentCard with an APIKeySecurityScheme for testing serialization."""
     api_key_scheme = APIKeySecurityScheme(
         name='X-API-KEY',
-        location='IN_HEADER',
+        location='header',
     )
 
     security_scheme = SecurityScheme(api_key_security_scheme=api_key_scheme)
