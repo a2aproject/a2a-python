@@ -1,7 +1,7 @@
 import json
 import logging
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 
 import httpx
@@ -61,7 +61,6 @@ class RestTransport(ClientTransport):
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.interceptors = interceptors or []
-        self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
     async def send_message(
         self,
@@ -265,26 +264,17 @@ class RestTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
         card = self.agent_card
-
         if not card.capabilities.extended_agent_card:
             return card
 
         response_data = await self._execute_request(
             'GET', '/extendedAgentCard', request.tenant, context=context
         )
-        response: AgentCard = ParseDict(response_data, AgentCard())
 
-        if signature_verifier:
-            signature_verifier(response)
-
-        # Update the transport's agent_card
-        self.agent_card = response
-        self._needs_extended_card = False
-        return response
+        return ParseDict(response_data, AgentCard())
 
     async def close(self) -> None:
         """Closes the httpx client."""

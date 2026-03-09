@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from types import TracebackType
 
 from typing_extensions import Self
@@ -141,7 +141,6 @@ class ClientTransport(ABC):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
 
