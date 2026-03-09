@@ -88,7 +88,8 @@ class CompatGrpcTransport(ClientTransport):
     def __init__(
         self,
         channel: Channel,
-        agent_card: a2a_pb2.AgentCard | None,):
+        agent_card: a2a_pb2.AgentCard | None,
+    ):
         """Initializes the CompatGrpcTransport."""
         self.agent_card = agent_card
         self.channel = channel
@@ -363,7 +364,9 @@ class CompatGrpcTransport(ClientTransport):
         """Closes the gRPC channel."""
         await self.channel.close()
 
-    def _get_grpc_metadata(self, context: ClientCallContext | None = None) -> list[tuple[str, str]]:
+    def _get_grpc_metadata(
+        self, context: ClientCallContext | None = None
+    ) -> list[tuple[str, str]]:
         """Creates gRPC metadata for extensions."""
         metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)]
 
