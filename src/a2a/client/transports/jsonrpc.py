@@ -7,16 +7,15 @@ from uuid import uuid4
 import httpx
 
 from google.protobuf import json_format
-from google.protobuf.json_format import ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
+    get_http_args,
     send_http_request,
     send_http_stream_request,
-    get_http_args,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -311,7 +310,9 @@ class JsonRpcTransport(ClientTransport):
             raise A2AClientError(
                 f'Invalid response type: {type(json_rpc_response.result)}'
             )
-        response: AgentCard = ParseDict(json_rpc_response.result, AgentCard())
+        response: AgentCard = json_format.ParseDict(
+            json_rpc_response.result, AgentCard()
+        )
         if signature_verifier:
             signature_verifier(response)
 
@@ -340,7 +341,7 @@ class JsonRpcTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> dict[str, Any]:
         http_kwargs = get_http_args(context)
-        
+
         request = self.httpx_client.build_request(
             'POST', self.url, json=payload, **(http_kwargs or {})
         )

@@ -13,9 +13,9 @@ from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
+    get_http_args,
     send_http_request,
     send_http_stream_request,
-    get_http_args,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -348,7 +348,7 @@ class RestTransport(ClientTransport):
             self.httpx_client, request, self._handle_http_error
         )
 
-    async def _execute_request(
+    async def _execute_request(  # noqa: PLR0913
         self,
         method: str,
         target: str,

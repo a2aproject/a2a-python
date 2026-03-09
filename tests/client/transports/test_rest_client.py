@@ -365,7 +365,9 @@ class TestRestTransportExtensions:
         mock_execute_request.assert_called_once()
         # _execute_request(method, target, tenant, context)
         call_args = mock_execute_request.call_args
-        assert call_args[1].get('context') == context or call_args[0][3] == context
+        assert (
+            call_args[1].get('context') == context or call_args[0][3] == context
+        )
 
         _context = call_args[1].get('context') or call_args[0][3]
         assert _context.service_parameters == {
