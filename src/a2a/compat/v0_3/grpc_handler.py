@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 TResponse = TypeVar('TResponse')
 
 
-class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
+class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):   # placeholder comment
     """Backward compatible gRPC handler for A2A v0.3."""
 
     def __init__(
