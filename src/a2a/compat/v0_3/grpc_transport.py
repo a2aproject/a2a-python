@@ -85,11 +85,7 @@ def _handle_grpc_stream_exception(
 class CompatGrpcTransport(ClientTransport):
     """A backward compatible gRPC transport for A2A v0.3."""
 
-    def __init__(
-        self,
-        channel: Channel,
-        agent_card: a2a_pb2.AgentCard | None
-    ):
+    def __init__(self, channel: Channel, agent_card: a2a_pb2.AgentCard | None):
         """Initializes the CompatGrpcTransport."""
         self.agent_card = agent_card
         self.channel = channel
