@@ -25,7 +25,8 @@ from a2a.types.a2a_pb2 import (
     Part,
     TaskPushNotificationConfig,
     Role,
-    TaskPushNotificationConfig,
+    SendMessageConfiguration,
+    SendMessageRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -120,10 +121,12 @@ async def test_notification_triggering_with_in_message_config_e2e(
     responses = [
         response
         async for response in a2a_client.send_message(
-            Message(
-                message_id='hello-agent',
-                parts=[Part(text='Hello Agent!')],
-                role=Role.ROLE_USER,
+            SendMessageRequest(
+                message=Message(
+                    message_id='hello-agent',
+                    parts=[Part(text='Hello Agent!')],
+                    role=Role.ROLE_USER,
+                )
             )
         )
     ]
@@ -175,10 +178,13 @@ async def test_notification_triggering_after_config_change_e2e(
     responses = [
         response
         async for response in a2a_client.send_message(
-            Message(
-                message_id='how-are-you',
-                parts=[Part(text='How are you?')],
-                role=Role.ROLE_USER,
+            SendMessageRequest(
+                message=Message(
+                    message_id='how-are-you',
+                    parts=[Part(text='How are you?')],
+                    role=Role.ROLE_USER,
+                ),
+                configuration=SendMessageConfiguration(blocking=True),
             )
         )
     ]
@@ -212,11 +218,14 @@ async def test_notification_triggering_after_config_change_e2e(
     responses = [
         response
         async for response in a2a_client.send_message(
-            Message(
-                task_id=task.id,
-                message_id='good',
-                parts=[Part(text='Good')],
-                role=Role.ROLE_USER,
+            SendMessageRequest(
+                message=Message(
+                    task_id=task.id,
+                    message_id='good',
+                    parts=[Part(text='Good')],
+                    role=Role.ROLE_USER,
+                ),
+                configuration=SendMessageConfiguration(blocking=True),
             )
         )
     ]

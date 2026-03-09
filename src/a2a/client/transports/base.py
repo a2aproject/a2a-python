@@ -47,7 +47,6 @@ class ClientTransport(ABC):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
 
@@ -57,7 +56,6 @@ class ClientTransport(ABC):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         return
@@ -69,7 +67,6 @@ class ClientTransport(ABC):
         request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
@@ -79,7 +76,6 @@ class ClientTransport(ABC):
         request: ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
 
@@ -89,7 +85,6 @@ class ClientTransport(ABC):
         request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
@@ -99,7 +94,6 @@ class ClientTransport(ABC):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
@@ -109,7 +103,6 @@ class ClientTransport(ABC):
         request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
@@ -119,7 +112,6 @@ class ClientTransport(ABC):
         request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
 
@@ -129,7 +121,6 @@ class ClientTransport(ABC):
         request: DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
 
@@ -139,7 +130,6 @@ class ClientTransport(ABC):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         return
@@ -151,7 +141,6 @@ class ClientTransport(ABC):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""

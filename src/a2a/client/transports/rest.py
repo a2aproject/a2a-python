@@ -7,16 +7,15 @@ from typing import Any, NoReturn
 import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
-from google.protobuf.message import Message
 
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
+    get_http_args,
     send_http_request,
     send_http_stream_request,
 )
-from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -56,7 +55,6 @@ class RestTransport(ClientTransport):
         agent_card: AgentCard,
         url: str,
         interceptors: list[ClientCallInterceptor] | None = None,
-        extensions: list[str] | None = None,
     ):
         """Initializes the RestTransport."""
         self.url = url.removesuffix('/')
@@ -64,21 +62,20 @@ class RestTransport(ClientTransport):
         self.agent_card = agent_card
         self.interceptors = interceptors or []
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
-        self.extensions = extensions
 
     async def send_message(
         self,
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
-        payload, modified_kwargs = await self._prepare_send_message(
-            request, context, extensions
-        )
-        response_data = await self._send_post_request(
-            '/message:send', request.tenant, payload, modified_kwargs
+        response_data = await self._execute_request(
+            'POST',
+            '/message:send',
+            request.tenant,
+            context=context,
+            json=MessageToDict(request),
         )
         response: SendMessageResponse = ParseDict(
             response_data, SendMessageResponse()
@@ -90,17 +87,15 @@ class RestTransport(ClientTransport):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
-        payload, modified_kwargs = await self._prepare_send_message(
-            request, context, extensions
-        )
+        payload = MessageToDict(request)
+
         async for event in self._send_stream_request(
             'POST',
             '/message:stream',
             request.tenant,
-            http_kwargs=modified_kwargs,
+            context=context,
             json=payload,
         ):
             yield event
@@ -110,28 +105,18 @@ class RestTransport(ClientTransport):
         request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         params = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        _payload, modified_kwargs = await self._apply_interceptors(
-            params,
-            modified_kwargs,
-            context,
-        )
-
         if 'id' in params:
-            del params['id']  # id is part of the URL path, not query params
+            del params['id']  # id is part of the URL path
 
-        response_data = await self._send_get_request(
+        response_data = await self._execute_request(
+            'GET',
             f'/tasks/{request.id}',
             request.tenant,
-            params,
-            modified_kwargs,
+            context=context,
+            params=params,
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -141,24 +126,14 @@ class RestTransport(ClientTransport):
         request: ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
-        _, modified_kwargs = await self._apply_interceptors(
-            MessageToDict(request, preserving_proto_field_name=True),
-            self._get_http_args(context),
-            context,
-        )
-        modified_kwargs = update_extension_header(
-            modified_kwargs,
-            extensions if extensions is not None else self.extensions,
-        )
-
-        response_data = await self._send_get_request(
+        response_data = await self._execute_request(
+            'GET',
             '/tasks',
             request.tenant,
-            _model_to_query_params(request),
-            modified_kwargs,
+            context=context,
+            params=MessageToDict(request),
         )
         response: ListTasksResponse = ParseDict(
             response_data, ListTasksResponse()
@@ -170,25 +145,14 @@ class RestTransport(ClientTransport):
         request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
-        payload = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
-            modified_kwargs,
-            context,
-        )
-
-        response_data = await self._send_post_request(
+        response_data = await self._execute_request(
+            'POST',
             f'/tasks/{request.id}:cancel',
             request.tenant,
-            payload,
-            modified_kwargs,
+            context=context,
+            json=MessageToDict(request),
         )
         response: Task = ParseDict(response_data, Task())
         return response
@@ -198,23 +162,14 @@ class RestTransport(ClientTransport):
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
-        payload = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload, modified_kwargs, context
-        )
-
-        response_data = await self._send_post_request(
+        response_data = await self._execute_request(
+            'POST',
             f'/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-            payload,
-            modified_kwargs,
+            context=context,
+            json=MessageToDict(request),
         )
         response: TaskPushNotificationConfig = ParseDict(
             response_data, TaskPushNotificationConfig()
@@ -226,29 +181,20 @@ class RestTransport(ClientTransport):
         request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         params = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        params, modified_kwargs = await self._apply_interceptors(
-            params,
-            modified_kwargs,
-            context,
-        )
         if 'id' in params:
             del params['id']
         if 'task_id' in params:
             del params['task_id']
 
-        response_data = await self._send_get_request(
+        response_data = await self._execute_request(
+            'GET',
             f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-            params,
-            modified_kwargs,
+            context=context,
+            params=params,
         )
         response: TaskPushNotificationConfig = ParseDict(
             response_data, TaskPushNotificationConfig()
@@ -260,27 +206,18 @@ class RestTransport(ClientTransport):
         request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         params = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        params, modified_kwargs = await self._apply_interceptors(
-            params,
-            modified_kwargs,
-            context,
-        )
         if 'task_id' in params:
             del params['task_id']
 
-        response_data = await self._send_get_request(
+        response_data = await self._execute_request(
+            'GET',
             f'/tasks/{request.task_id}/pushNotificationConfigs',
             request.tenant,
-            params,
-            modified_kwargs,
+            context=context,
+            params=params,
         )
         response: ListTaskPushNotificationConfigsResponse = ParseDict(
             response_data, ListTaskPushNotificationConfigsResponse()
@@ -292,29 +229,20 @@ class RestTransport(ClientTransport):
         request: DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
         params = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        params, modified_kwargs = await self._apply_interceptors(
-            params,
-            modified_kwargs,
-            context,
-        )
         if 'id' in params:
             del params['id']
         if 'task_id' in params:
             del params['task_id']
 
-        await self._send_delete_request(
+        await self._execute_request(
+            'DELETE',
             f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
             request.tenant,
-            params,
-            modified_kwargs,
+            context=context,
+            params=params,
         )
 
     async def subscribe(
@@ -322,19 +250,13 @@ class RestTransport(ClientTransport):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-
         async for event in self._send_stream_request(
             'GET',
             f'/tasks/{request.id}:subscribe',
             request.tenant,
-            http_kwargs=modified_kwargs,
+            context=context,
         ):
             yield event
 
@@ -343,26 +265,16 @@ class RestTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-
         card = self.agent_card
 
         if not card.capabilities.extended_agent_card:
             return card
-        _, modified_kwargs = await self._apply_interceptors(
-            MessageToDict(request, preserving_proto_field_name=True),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_get_request(
-            '/extendedAgentCard', request.tenant, {}, modified_kwargs
+
+        response_data = await self._execute_request(
+            'GET', '/extendedAgentCard', request.tenant, context=context
         )
         response: AgentCard = ParseDict(response_data, AgentCard())
 
@@ -381,43 +293,6 @@ class RestTransport(ClientTransport):
     def _get_path(self, base_path: str, tenant: str) -> str:
         """Returns the full path, prepending the tenant if provided."""
         return f'/{tenant}{base_path}' if tenant else base_path
-
-    async def _apply_interceptors(
-        self,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        final_http_kwargs = http_kwargs or {}
-        final_request_payload = request_payload
-        # TODO: Implement interceptors for other transports
-        return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any]:
-        http_kwargs: dict[str, Any] = {}
-        if context and context.timeout is not None:
-            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
-        return http_kwargs
-
-    async def _prepare_send_message(
-        self,
-        request: SendMessageRequest,
-        context: ClientCallContext | None,
-        extensions: list[str] | None = None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        payload = MessageToDict(request)
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            payload,
-            modified_kwargs,
-            context,
-        )
-        return payload, modified_kwargs
 
     def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
@@ -448,19 +323,20 @@ class RestTransport(ClientTransport):
         method: str,
         target: str,
         tenant: str,
-        http_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
+        context: ClientCallContext | None = None,
+        *,
+        json: dict[str, Any] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        final_kwargs = dict(http_kwargs or {})
-        final_kwargs.update(kwargs)
         path = self._get_path(target, tenant)
+        http_kwargs = get_http_args(context)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
             method,
             f'{self.url}{path}',
             self._handle_http_error,
-            **final_kwargs,
+            json=json,
+            **http_kwargs,
         ):
             event: StreamResponse = Parse(sse_data, StreamResponse())
             yield event
@@ -470,71 +346,24 @@ class RestTransport(ClientTransport):
             self.httpx_client, request, self._handle_http_error
         )
 
-    async def _send_post_request(
+    async def _execute_request(  # noqa: PLR0913
         self,
+        method: str,
         target: str,
         tenant: str,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
+        context: ClientCallContext | None = None,
+        *,
+        json: dict[str, Any] | None = None,
+        params: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         path = self._get_path(target, tenant)
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'POST',
-                f'{self.url}{path}',
-                json=rpc_request_payload,
-                **(http_kwargs or {}),
-            )
+        http_kwargs = get_http_args(context)
+
+        request = self.httpx_client.build_request(
+            method,
+            f'{self.url}{path}',
+            json=json,
+            params=params,
+            **http_kwargs,
         )
-
-    async def _send_get_request(
-        self,
-        target: str,
-        tenant: str,
-        query_params: dict[str, str],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        path = self._get_path(target, tenant)
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'GET',
-                f'{self.url}{path}',
-                params=query_params,
-                **(http_kwargs or {}),
-            )
-        )
-
-    async def _send_delete_request(
-        self,
-        target: str,
-        tenant: str,
-        query_params: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-    ) -> dict[str, Any]:
-        path = self._get_path(target, tenant)
-        return await self._send_request(
-            self.httpx_client.build_request(
-                'DELETE',
-                f'{self.url}{path}',
-                params=query_params,
-                **(http_kwargs or {}),
-            )
-        )
-
-
-def _model_to_query_params(instance: Message) -> dict[str, str]:
-    data = MessageToDict(instance, preserving_proto_field_name=True)
-    return _json_to_query_params(data)
-
-
-def _json_to_query_params(data: dict[str, Any]) -> dict[str, str]:
-    query_dict = {}
-    for key, value in data.items():
-        if isinstance(value, list):
-            query_dict[key] = ','.join(map(str, value))
-        elif isinstance(value, bool):
-            query_dict[key] = str(value).lower()
-        else:
-            query_dict[key] = str(value)
-
-    return query_dict
+        return await self._send_request(request)
