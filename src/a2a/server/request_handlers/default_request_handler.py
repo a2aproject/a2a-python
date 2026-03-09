@@ -123,7 +123,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_get_task(
         self,
         params: GetTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
         validate_history_length(params)
@@ -138,7 +138,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_list_tasks(
         self,
         params: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
         validate_history_length(params)
@@ -159,7 +159,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_cancel_task(
         self,
         params: CancelTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/cancel'.
 
@@ -231,7 +231,7 @@ class DefaultRequestHandler(RequestHandler):
     async def _setup_message_execution(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None,
+        context: ServerCallContext,
     ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
         """Common setup logic for both streaming and non-streaming message handling.
 
@@ -322,7 +322,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_message_send(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Message | Task:
         """Default handler for 'message/send' interface (non-streaming).
 
@@ -388,7 +388,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event]:
         """Default handler for 'message/stream' (streaming).
 
@@ -476,7 +476,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_create_task_push_notification_config(
         self,
         params: CreateTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/create'.
 
@@ -504,7 +504,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'.
 
@@ -538,7 +538,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
         """Default handler for 'SubscribeToTask'.
 
@@ -580,7 +580,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Default handler for 'ListTaskPushNotificationConfigs'.
 
@@ -611,7 +611,7 @@ class DefaultRequestHandler(RequestHandler):
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         """Default handler for 'tasks/pushNotificationConfig/delete'.
 

@@ -33,7 +33,7 @@ class RequestHandler(ABC):
     async def on_get_task(
         self,
         params: GetTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Task | None:
         """Handles the 'tasks/get' method.
 
@@ -49,7 +49,7 @@ class RequestHandler(ABC):
 
     @abstractmethod
     async def on_list_tasks(
-        self, params: ListTasksRequest, context: ServerCallContext | None = None
+        self, params: ListTasksRequest, context: ServerCallContext
     ) -> ListTasksResponse:
         """Handles the tasks/list method.
 
@@ -68,7 +68,7 @@ class RequestHandler(ABC):
     async def on_cancel_task(
         self,
         params: CancelTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Task | None:
         """Handles the 'tasks/cancel' method.
 
@@ -86,7 +86,7 @@ class RequestHandler(ABC):
     async def on_message_send(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> Task | Message:
         """Handles the 'message/send' method (non-streaming).
 
@@ -105,7 +105,7 @@ class RequestHandler(ABC):
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event]:
         """Handles the 'message/stream' method (streaming).
 
@@ -129,7 +129,7 @@ class RequestHandler(ABC):
     async def on_create_task_push_notification_config(
         self,
         params: CreateTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/create' method.
 
@@ -147,7 +147,7 @@ class RequestHandler(ABC):
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Handles the 'tasks/pushNotificationConfig/get' method.
 
@@ -165,7 +165,7 @@ class RequestHandler(ABC):
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event]:
         """Handles the 'SubscribeToTask' method.
 
@@ -188,7 +188,7 @@ class RequestHandler(ABC):
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Handles the 'ListTaskPushNotificationConfigs' method.
 
@@ -206,7 +206,7 @@ class RequestHandler(ABC):
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> None:
         """Handles the 'tasks/pushNotificationConfig/delete' method.
 
