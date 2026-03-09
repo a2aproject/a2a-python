@@ -33,7 +33,11 @@ config.set_main_option('sqlalchemy.url', db_url)
 
 # Interpret the config file for Python logging.
 # This line sets up loggers basically.
-if config.config_file_name is not None:
+if (
+    config.config_file_name is not None
+    and os.path.exists(config.config_file_name)
+    and config.config_file_name.endswith('.ini')
+):
     fileConfig(config.config_file_name)
 
 if config.get_main_option('verbose') == 'true':
