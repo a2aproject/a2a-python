@@ -1,6 +1,7 @@
 import argparse
 import logging
 import os
+import re
 
 from importlib.resources import files
 
@@ -13,6 +14,27 @@ except ImportError as e:
     raise ImportError(
         "CLI requires Alembic. Install with: 'pip install a2a-sdk[db-cli]'."
     ) from e
+
+
+def _validate_table_name(name: str) -> str:
+    """Validate that a table name is a safe SQL identifier.
+
+    Args:
+        name: The table name to validate.
+
+    Returns:
+        The validated table name.
+
+    Raises:
+        argparse.ArgumentTypeError: If the table name is invalid.
+    """
+    if not re.match(r'^[a-zA-Z_][a-zA-Z0-9_]*$', name):
+        raise argparse.ArgumentTypeError(
+            f"Invalid table name '{name}'. Table names must start with a letter "
+            'or underscore and only contain alphanumeric characters and '
+            'underscores.'
+        )
+    return name
 
 
 def _add_shared_args(
@@ -28,11 +50,13 @@ def _add_shared_args(
     parser.add_argument(
         '--tasks-table',
         dest=f'{prefix}tasks_table',
+        type=_validate_table_name,
         help='Custom tasks table to update. If not set, the default is "tasks".',
     )
     parser.add_argument(
         '--push-notification-configs-table',
         dest=f'{prefix}push_notification_configs_table',
+        type=_validate_table_name,
         help='Custom push notification configs table to update. If not set, the default is "push_notification_configs".',
     )
     parser.add_argument(

@@ -47,7 +47,7 @@ def upgrade() -> None:
     )
 
     if table_exists(tasks_table):
-        add_column(tasks_table, 'owner', False, sa.String(128), owner)
+        add_column(tasks_table, 'owner', False, sa.String(255), owner)
         add_column(tasks_table, 'last_updated', True, sa.DateTime())
         add_index(
             tasks_table,
@@ -64,8 +64,13 @@ def upgrade() -> None:
             push_notification_configs_table,
             'owner',
             False,
-            sa.String(128),
+            sa.String(255),
             owner,
+        )
+        add_index(
+            push_notification_configs_table,
+            f'idx_{push_notification_configs_table}_owner',
+            ['owner'],
         )
     else:
         logging.warning(
@@ -93,6 +98,10 @@ def downgrade() -> None:
         )
 
     if table_exists(push_notification_configs_table):
+        drop_index(
+            push_notification_configs_table,
+            f'idx_{push_notification_configs_table}_owner',
+        )
         drop_column(push_notification_configs_table, 'owner')
     else:
         logging.warning(

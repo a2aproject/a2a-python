@@ -149,7 +149,7 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(128), nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=False)
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
