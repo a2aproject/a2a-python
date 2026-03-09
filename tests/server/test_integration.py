@@ -418,10 +418,8 @@ def test_set_push_notification_config(
             'method': 'CreateTaskPushNotificationConfig',
             'params': {
                 'task_id': 't2',
-                'config': {
-                    'url': 'https://example.com',
-                    'token': 'secret-token',
-                },
+                'url': 'https://example.com',
+                'token': 'secret-token',
             },
         },
     )
@@ -429,7 +427,7 @@ def test_set_push_notification_config(
     # Verify response
     assert response.status_code == 200
     data = response.json()
-    assert data['result']['pushNotificationConfig']['token'] == 'secret-token'
+    assert data['result']['token'] == 'secret-token'
 
     # Verify handler was called
     handler.on_create_task_push_notification_config.assert_awaited_once()
@@ -463,7 +461,7 @@ def test_get_push_notification_config(
     # Verify response
     assert response.status_code == 200
     data = response.json()
-    assert data['result']['pushNotificationConfig']['token'] == 'secret-token'
+    assert data['result']['token'] == 'secret-token'
 
     # Verify handler was called
     handler.on_get_task_push_notification_config.assert_awaited_once()

@@ -1022,9 +1022,9 @@ def to_compat_task_push_notification_config(
     """Convert task push notification config to v0.3 compat type."""
     return types_v03.TaskPushNotificationConfig(
         task_id=core_config.task_id,
-        push_notification_config=to_compat_push_notification_config(core_config)
-        if core_config.url
-        else types_v03.PushNotificationConfig(url=''),
+        push_notification_config=to_compat_push_notification_config(
+            core_config
+        ),
     )
 
 
@@ -1202,9 +1202,7 @@ def to_compat_create_task_push_notification_config_request(
             task_id=core_req.task_id,
             push_notification_config=to_compat_push_notification_config(
                 core_req
-            )
-            if core_req.url
-            else types_v03.PushNotificationConfig(url=''),
+            ),
         ),
     )
 
