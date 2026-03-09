@@ -1230,6 +1230,3 @@ async def test_client_get_signed_base_and_extended_cards(
 
     if hasattr(transport, 'close'):
         await transport.close()
-
-
-
