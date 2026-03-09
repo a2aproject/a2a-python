@@ -968,7 +968,7 @@ async def test_json_transport_base_client_send_message_with_extensions(
         config=ClientConfig(streaming=False),
         transport=transport,
         consumers=[],
-        middleware=[],
+        interceptors=[],
     )
 
     message_to_send = Message(
@@ -1130,7 +1130,7 @@ async def test_client_get_signed_extended_card(
         config=ClientConfig(streaming=False),
         transport=transport,
         consumers=[],
-        middleware=[],
+        interceptors=[],
     )
 
     signature_verifier = create_signature_verifier(
@@ -1217,7 +1217,7 @@ async def test_client_get_signed_base_and_extended_cards(
         config=ClientConfig(streaming=False),
         transport=transport,
         consumers=[],
-        middleware=[],
+        interceptors=[],
     )
 
     # 3. Fetch extended card via client

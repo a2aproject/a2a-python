@@ -60,7 +60,6 @@ class JsonRpcTransport(ClientTransport):
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self.interceptors = interceptors or []
 
     async def send_message(
         self,

@@ -73,7 +73,7 @@ def base_client(
         config=config,
         transport=mock_transport,
         consumers=[],
-        middleware=[],
+        interceptors=[],
     )
 
 

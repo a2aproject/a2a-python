@@ -59,7 +59,6 @@ class RestTransport(ClientTransport):
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self.interceptors = interceptors or []
 
     async def send_message(
         self,

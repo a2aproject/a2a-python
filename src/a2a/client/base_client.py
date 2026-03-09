@@ -104,10 +104,34 @@ class BaseClient(Client):
             yield client_event
             return
 
-        stream = self._transport.send_message_streaming(
-            request, context=context
+        before_args = BeforeArgs(
+            input=MethodInput(method='send_message_streaming', value=request),
+            agent_card=self._card,
+            context=context,
         )
-        async for client_event in self._process_stream(stream):
+        before_result = await self._intercept_before(before_args)
+
+        if before_result is not None:
+            after_args = AfterArgs(
+                result=MethodResult(
+                    method=before_args.input.method,
+                    value=before_result['early_return'].value,
+                ),
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(after_args, before_result['executed'])
+            yield after_args.result.value
+            return
+
+        stream = self._transport.send_message_streaming(
+            before_args.input.value, context=before_args.context
+        )
+
+        async for client_event in self._process_stream(
+            stream,
+            before_args=before_args,
+        ):
             yield client_event
 
     def _apply_client_config(self, request: SendMessageRequest) -> None:
@@ -129,23 +153,34 @@ class BaseClient(Client):
             )
 
     async def _process_stream(
-        self, stream: AsyncIterator[StreamResponse]
+        self,
+        stream: AsyncIterator[StreamResponse],
+        before_args: BeforeArgs,
     ) -> AsyncGenerator[ClientEvent]:
         tracker = ClientTaskManager()
         async for stream_response in stream:
+            after_args = AfterArgs(
+                result=MethodResult(
+                    method=before_args.input.method, value=stream_response
+                ),
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(after_args)
+            intercepted_response = after_args.result.value
             client_event: ClientEvent
             # When we get a message in the stream then we don't expect any
             # further messages so yield and return
-            if stream_response.HasField('message'):
-                client_event = (stream_response, None)
+            if intercepted_response.HasField('message'):
+                client_event = (intercepted_response, None)
                 await self.consume(client_event, self._card)
                 yield client_event
                 return
 
             # Otherwise track the task / task update then yield to the client
-            await tracker.process(stream_response)
+            await tracker.process(intercepted_response)
             updated_task = tracker.get_task_or_raise()
-            client_event = (stream_response, updated_task)
+            client_event = (intercepted_response, updated_task)
             await self.consume(client_event, self._card)
             yield client_event
 
@@ -341,10 +376,34 @@ class BaseClient(Client):
             )
 
         # Note: resubscribe can only be called on an existing task. As such,
-        # we should never see Message updates, despite the typing of the service
-        # definition indicating it may be possible.
-        stream = self._transport.subscribe(request, context=context)
-        async for client_event in self._process_stream(stream):
+        before_args = BeforeArgs(
+            input=MethodInput(method='subscribe', value=request),
+            agent_card=self._card,
+            context=context,
+        )
+        before_result = await self._intercept_before(before_args)
+
+        if before_result is not None:
+            after_args = AfterArgs(
+                result=MethodResult(
+                    method=before_args.input.method,
+                    value=before_result['early_return'].value,
+                ),
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(after_args, before_result['executed'])
+            yield after_args.result.value
+            return
+
+        stream = self._transport.subscribe(
+            before_args.input.value, context=before_args.context
+        )
+
+        async for client_event in self._process_stream(
+            stream,
+            before_args=before_args,
+        ):
             yield client_event
 
     async def get_extended_agent_card(
@@ -367,9 +426,14 @@ class BaseClient(Client):
         Returns:
             The `AgentCard` for the agent.
         """
-        card = await self._transport.get_extended_agent_card(
-            request,
+        card = await self._execute_with_interceptors(
+            input_data=MethodInput(
+                method='get_extended_agent_card', value=request
+            ),
             context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.get_extended_agent_card(req, context=ctx)
+            ),
         )
         if signature_verifier:
             signature_verifier(card)
