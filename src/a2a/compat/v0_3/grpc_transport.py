@@ -88,7 +88,7 @@ class CompatGrpcTransport(ClientTransport):
     def __init__(
         self,
         channel: Channel,
-        agent_card: a2a_pb2.AgentCard | None,
+        agent_card: a2a_pb2.AgentCard | None
     ):
         """Initializes the CompatGrpcTransport."""
         self.agent_card = agent_card
