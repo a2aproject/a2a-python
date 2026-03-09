@@ -7,7 +7,6 @@ from typing import Any, NoReturn
 import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
-from google.protobuf.message import Message
 
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
@@ -369,21 +368,3 @@ class RestTransport(ClientTransport):
             **http_kwargs,
         )
         return await self._send_request(request)
-
-
-def _model_to_query_params(instance: Message) -> dict[str, str]:
-    data = MessageToDict(instance, preserving_proto_field_name=True)
-    return _json_to_query_params(data)
-
-
-def _json_to_query_params(data: dict[str, Any]) -> dict[str, str]:
-    query_dict = {}
-    for key, value in data.items():
-        if isinstance(value, list):
-            query_dict[key] = ','.join(map(str, value))
-        elif isinstance(value, bool):
-            query_dict[key] = str(value).lower()
-        else:
-            query_dict[key] = str(value)
-
-    return query_dict

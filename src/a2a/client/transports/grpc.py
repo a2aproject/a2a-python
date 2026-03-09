@@ -303,9 +303,7 @@ class GrpcTransport(ClientTransport):
     def _get_grpc_timeout(
         self, context: ClientCallContext | None
     ) -> float | None:
-        if context:
-            return context.timeout
-        return None
+        return context.timeout if context else None
 
     async def _call_grpc(
         self,
