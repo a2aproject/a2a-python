@@ -12,7 +12,7 @@ from grpc.aio import Channel
 
 from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
-from a2a.client.middleware import ClientCallContext
+from a2a.client.interceptors import ClientCallContext
 from a2a.client.service_parameters import (
     ServiceParametersFactory,
     with_a2a_extensions,

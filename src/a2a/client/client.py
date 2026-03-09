@@ -10,7 +10,7 @@ import httpx
 
 from typing_extensions import Self
 
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallContext, ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -95,20 +95,20 @@ class Client(ABC):
     def __init__(
         self,
         consumers: list[Consumer] | None = None,
-        middleware: list[ClientCallInterceptor] | None = None,
+        interceptors: list[ClientCallInterceptor] | None = None,
     ):
-        """Initializes the client with consumers and middleware.
+        """Initializes the client with consumers and interceptors.
 
         Args:
             consumers: A list of callables to process events from the agent.
-            middleware: A list of interceptors to process requests and responses.
+            interceptors: A list of interceptors to process requests and responses.
         """
-        if middleware is None:
-            middleware = []
+        if interceptors is None:
+            interceptors = []
         if consumers is None:
             consumers = []
         self._consumers = consumers
-        self._middleware = middleware
+        self._interceptors = interceptors
 
     async def __aenter__(self) -> Self:
         """Enters the async context manager."""
@@ -229,11 +229,9 @@ class Client(ABC):
         """Attaches additional consumers to the `Client`."""
         self._consumers.append(consumer)
 
-    async def add_request_middleware(
-        self, middleware: ClientCallInterceptor
-    ) -> None:
-        """Attaches additional middleware to the `Client`."""
-        self._middleware.append(middleware)
+    async def add_interceptor(self, interceptor: ClientCallInterceptor) -> None:
+        """Attaches additional interceptors to the `Client`."""
+        self._interceptors.append(interceptor)
 
     async def consume(
         self,

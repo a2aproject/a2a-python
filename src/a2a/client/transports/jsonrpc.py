@@ -10,7 +10,7 @@ from google.protobuf import json_format
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallContext
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
@@ -56,13 +56,11 @@ class JsonRpcTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard,
         url: str,
-        interceptors: list[ClientCallInterceptor] | None = None,
     ):
         """Initializes the JsonRpcTransport."""
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self.interceptors = interceptors or []
         self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
     async def send_message(

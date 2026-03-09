@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 
-from a2a.client.middleware import ClientCallContext
+from a2a.client.interceptors import ClientCallContext
 
 
 class CredentialService(ABC):

@@ -12,7 +12,7 @@ from packaging.version import InvalidVersion, Version
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
-from a2a.client.middleware import ClientCallInterceptor
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
@@ -98,7 +98,6 @@ class ClientFactory:
                     cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
                 ),
             )
         if TransportProtocol.HTTP_JSON in supported:
@@ -108,7 +107,6 @@ class ClientFactory:
                     cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
                 ),
             )
         if TransportProtocol.GRPC in supported:
@@ -146,17 +144,13 @@ class ClientFactory:
                             <= v
                             < Version(PROTOCOL_VERSION_1_0)
                         ):
-                            return compat_transport.create(
-                                card, url, config, interceptors
-                            )
+                            return compat_transport.create(card, url, config)
                     except InvalidVersion:
                         pass
 
                 grpc_transport = GrpcTransport
                 if grpc_transport is not None:
-                    return grpc_transport.create(
-                        card, url, config, interceptors
-                    )
+                    return grpc_transport.create(card, url, config)
 
                 raise ImportError(
                     'GrpcTransport is not available. '

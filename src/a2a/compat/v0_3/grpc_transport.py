@@ -19,7 +19,7 @@ except ImportError as e:
 
 
 from a2a.client.client import ClientConfig
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallContext
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.compat.v0_3 import (
@@ -97,7 +97,6 @@ class CompatGrpcTransport(ClientTransport):
         card: a2a_pb2.AgentCard,
         url: str,
         config: ClientConfig,
-        interceptors: list[ClientCallInterceptor],
     ) -> 'CompatGrpcTransport':
         """Creates a gRPC transport for the A2A client."""
         if config.grpc_channel_factory is None:

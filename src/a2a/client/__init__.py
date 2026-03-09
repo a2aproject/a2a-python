@@ -17,7 +17,7 @@ from a2a.client.errors import (
     AgentCardResolutionError,
 )
 from a2a.client.helpers import create_text_message_object
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallContext, ClientCallInterceptor
 
 
 logger = logging.getLogger(__name__)
@@ -30,9 +30,9 @@ __all__ = [
     'AgentCardResolutionError',
     'AuthInterceptor',
     'BaseClient',
+    'CallInterceptor',
     'Client',
     'ClientCallContext',
-    'ClientCallInterceptor',
     'ClientConfig',
     'ClientEvent',
     'ClientFactory',
