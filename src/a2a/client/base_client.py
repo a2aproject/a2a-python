@@ -12,7 +12,6 @@ from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -98,10 +97,10 @@ class BaseClient(Client):
         if not request.configuration.blocking and self._config.polling:
             request.configuration.blocking = not self._config.polling
         if (
-            not request.configuration.HasField('push_notification_config')
+            not request.configuration.HasField('task_push_notification_config')
             and self._config.push_notification_configs
         ):
-            request.configuration.push_notification_config.CopyFrom(
+            request.configuration.task_push_notification_config.CopyFrom(
                 self._config.push_notification_configs[0]
             )
         if (
@@ -178,7 +177,7 @@ class BaseClient(Client):
 
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:

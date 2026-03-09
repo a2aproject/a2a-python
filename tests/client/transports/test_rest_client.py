@@ -16,7 +16,7 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -395,10 +395,8 @@ class TestTaskCallback:
             'configs': [
                 {
                     'taskId': task_id,
-                    'pushNotificationConfig': {
-                        'id': 'config-1',
-                        'url': 'https://example.com',
-                    },
+                    'id': 'config-1',
+                    'url': 'https://example.com',
                 }
             ]
         }
@@ -491,7 +489,7 @@ class TestRestTransportTenant:
             ),
             (
                 'create_task_push_notification_config',
-                CreateTaskPushNotificationConfigRequest(
+                TaskPushNotificationConfig(
                     tenant='my-tenant', task_id='task-123'
                 ),
                 '/my-tenant/tasks/task-123/pushNotificationConfigs',

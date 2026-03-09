@@ -41,11 +41,11 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageRequest,
     SendMessageRequest,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTaskPushNotificationConfigsResponse,
@@ -89,9 +89,9 @@ CANCEL_TASK_RESPONSE = Task(
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
     task_id='task-callback-123',
-    push_notification_config=PushNotificationConfig(
-        id='pnc-abc', url='http://callback.example.com', token=''
-    ),
+    id='pnc-abc',
+    url='http://callback.example.com',
+    token='',
 )
 
 RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
@@ -600,28 +600,17 @@ async def test_http_transport_create_task_push_notification_config(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    # Create CreateTaskPushNotificationConfigRequest with required fields
-    params = CreateTaskPushNotificationConfigRequest(
+    # Create TaskPushNotificationConfig with required fields
+    params = TaskPushNotificationConfig(
         task_id='task-callback-123',
-        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.create_task_push_notification_config(
         request=params
     )
 
-    # TaskPushNotificationConfig has 'push_notification_config'
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_create_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
@@ -641,28 +630,17 @@ async def test_grpc_transport_create_task_push_notification_config(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # Create CreateTaskPushNotificationConfigRequest with required fields
-    params = CreateTaskPushNotificationConfigRequest(
+    # Create TaskPushNotificationConfig with required fields
+    params = TaskPushNotificationConfig(
         task_id='task-callback-123',
-        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.create_task_push_notification_config(
         request=params
     )
 
-    # TaskPushNotificationConfig has 'push_notification_config'
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_create_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
@@ -688,20 +666,13 @@ async def test_http_transport_get_task_push_notification_config(
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
     params = GetTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     result = await transport.get_task_push_notification_config(request=params)
 
-    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_get_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
@@ -724,20 +695,13 @@ async def test_grpc_transport_get_task_push_notification_config(
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
     params = GetTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     result = await transport.get_task_push_notification_config(request=params)
 
-    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_get_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
@@ -817,7 +781,7 @@ async def test_http_transport_delete_task_push_notification_config(
 
     params = DeleteTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     await transport.delete_task_push_notification_config(request=params)
 
@@ -842,7 +806,7 @@ async def test_grpc_transport_delete_task_push_notification_config(
 
     params = DeleteTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     await transport.delete_task_push_notification_config(request=params)
 

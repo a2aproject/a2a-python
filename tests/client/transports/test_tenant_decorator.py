@@ -6,7 +6,7 @@ from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -73,7 +73,7 @@ class TestTenantTransportDecorator:
             ),
             (
                 'create_task_push_notification_config',
-                CreateTaskPushNotificationConfigRequest(task_id='t1'),
+                TaskPushNotificationConfig(task_id='t1'),
             ),
             (
                 'get_task_push_notification_config',

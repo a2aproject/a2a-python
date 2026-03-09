@@ -251,7 +251,7 @@ class CompatGrpcTransport(ClientTransport):
     @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
-        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
+        request: a2a_pb2.TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
     ) -> a2a_pb2.TaskPushNotificationConfig:
