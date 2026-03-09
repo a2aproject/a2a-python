@@ -37,7 +37,6 @@ from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -46,6 +45,7 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     SendMessageRequest,
     SubscribeToTaskRequest,
+    TaskPushNotificationConfig,
 )
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
@@ -183,7 +183,7 @@ class JSONRPCApplication(ABC):
         'GetTask': GetTaskRequest,
         'ListTasks': ListTasksRequest,
         'CancelTask': CancelTaskRequest,
-        'CreateTaskPushNotificationConfig': CreateTaskPushNotificationConfigRequest,
+        'CreateTaskPushNotificationConfig': TaskPushNotificationConfig,
         'GetTaskPushNotificationConfig': GetTaskPushNotificationConfigRequest,
         'ListTaskPushNotificationConfigs': ListTaskPushNotificationConfigsRequest,
         'DeleteTaskPushNotificationConfig': DeleteTaskPushNotificationConfigRequest,
@@ -482,7 +482,7 @@ class JSONRPCApplication(ABC):
                 handler_result = await self.handler.list_tasks(
                     request_obj, context
                 )
-            case CreateTaskPushNotificationConfigRequest():
+            case TaskPushNotificationConfig():
                 handler_result = (
                     await self.handler.set_push_notification_config(
                         request_obj,

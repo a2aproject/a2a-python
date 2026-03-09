@@ -27,7 +27,6 @@ from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -208,7 +207,7 @@ class GrpcTransport(ClientTransport):
     @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,

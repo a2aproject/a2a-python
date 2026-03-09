@@ -383,7 +383,7 @@ def test_push_notification_config_conversion():
         authentication=v03_auth,
     )
 
-    v10_expected = pb2_v10.PushNotificationConfig(
+    v10_expected = pb2_v10.TaskPushNotificationConfig(
         id='c1',
         url='http://test.com',
         token='tok',  # noqa: S106
@@ -399,7 +399,7 @@ def test_push_notification_config_conversion():
 
 def test_push_notification_config_conversion_minimal():
     v03_config = types_v03.PushNotificationConfig(url='http://test.com')
-    v10_expected = pb2_v10.PushNotificationConfig(url='http://test.com')
+    v10_expected = pb2_v10.TaskPushNotificationConfig(url='http://test.com')
 
     v10_config = to_core_push_notification_config(v03_config)
     assert v10_config == v10_expected
@@ -428,7 +428,7 @@ def test_send_message_configuration_conversion():
         accepted_output_modes=['text/plain', 'application/json'],
         history_length=10,
         blocking=True,
-        push_notification_config=pb2_v10.PushNotificationConfig(
+        task_push_notification_config=pb2_v10.TaskPushNotificationConfig(
             url='http://test',
             authentication=pb2_v10.AuthenticationInfo(scheme='Basic'),
         ),
@@ -1244,12 +1244,10 @@ def test_task_push_notification_config_conversion():
     )
     v10_expected = pb2_v10.TaskPushNotificationConfig(
         task_id='t1',
-        push_notification_config=pb2_v10.PushNotificationConfig(
-            id='c1',
-            url='http://url',
-            token='tok',  # noqa: S106
-            authentication=pb2_v10.AuthenticationInfo(scheme='Basic'),
-        ),
+        id='c1',
+        url='http://url',
+        token='tok',  # noqa: S106
+        authentication=pb2_v10.AuthenticationInfo(scheme='Basic'),
     )
     v10_cfg = to_core_task_push_notification_config(v03_cfg)
     assert v10_cfg == v10_expected
@@ -1275,10 +1273,7 @@ def test_task_push_notification_config_conversion_minimal():
         ),
     )
     v10_expected = pb2_v10.TaskPushNotificationConfig(
-        task_id='t1',
-        push_notification_config=pb2_v10.PushNotificationConfig(
-            url='http://url'
-        ),
+        task_id='t1', url='http://url'
     )
     v10_cfg = to_core_task_push_notification_config(v03_cfg)
     assert v10_cfg == v10_expected
@@ -1380,9 +1375,7 @@ def test_create_task_push_notification_config_request_conversion():
     v03_req = types_v03.SetTaskPushNotificationConfigRequest(
         id='conv', params=v03_cfg
     )
-    v10_expected = pb2_v10.CreateTaskPushNotificationConfigRequest(
-        task_id='t1', config=pb2_v10.PushNotificationConfig(url='u')
-    )
+    v10_expected = pb2_v10.TaskPushNotificationConfig(task_id='t1', url='u')
     v10_req = to_core_create_task_push_notification_config_request(v03_req)
     assert v10_req == v10_expected
     v03_restored = to_compat_create_task_push_notification_config_request(
@@ -1478,14 +1471,7 @@ def test_list_task_push_notification_config_response_conversion():
         )
     )
     v10_expected = pb2_v10.ListTaskPushNotificationConfigsResponse(
-        configs=[
-            pb2_v10.TaskPushNotificationConfig(
-                task_id='t1',
-                push_notification_config=pb2_v10.PushNotificationConfig(
-                    url='u'
-                ),
-            )
-        ]
+        configs=[pb2_v10.TaskPushNotificationConfig(task_id='t1', url='u')]
     )
     v10_res = to_core_list_task_push_notification_config_response(v03_res)
     assert v10_res == v10_expected
@@ -1886,7 +1872,7 @@ def test_to_core_task_push_notification_config_missing_config():
         task_id='t1', push_notification_config=None
     )
     core_config = to_core_task_push_notification_config(v03_config)
-    assert not core_config.HasField('push_notification_config')
+    assert not core_config.url
 
 
 def test_to_core_create_task_push_notification_config_request_missing_config():
@@ -1897,7 +1883,7 @@ def test_to_core_create_task_push_notification_config_request_missing_config():
         ),
     )
     core_req = to_core_create_task_push_notification_config_request(v03_req)
-    assert not core_req.HasField('config')
+    assert not core_req.url
 
 
 def test_to_core_list_task_push_notification_config_request_missing_id():

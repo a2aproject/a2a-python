@@ -19,16 +19,13 @@ from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     Artifact,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     Message,
     Part,
-    PushNotificationConfig,
     Role,
     SecurityScheme,
     SendMessageRequest,
-    CreateTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
@@ -324,15 +321,12 @@ def test_subscribe_to_task_request():
 
 def test_set_task_push_notification_config_request():
     """Test CreateTaskPushNotificationConfigRequest proto construction."""
-    config = PushNotificationConfig(
+    request = TaskPushNotificationConfig(
+        task_id='task-123',
         url='https://example.com/webhook',
     )
-    request = CreateTaskPushNotificationConfigRequest(
-        task_id='task-123',
-        config=config,
-    )
     assert request.task_id == 'task-123'
-    assert request.config.url == 'https://example.com/webhook'
+    assert request.url == 'https://example.com/webhook'
 
 
 def test_get_task_push_notification_config_request():

@@ -41,7 +41,7 @@ from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageResponse,
     Task,
@@ -403,10 +403,7 @@ def test_set_push_notification_config(
     """Test setting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        task_id='t2',
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='secret-token'
-        ),
+        task_id='t2', url='https://example.com', token='secret-token'
     )
     handler.on_create_task_push_notification_config.return_value = (
         task_push_config
@@ -444,10 +441,7 @@ def test_get_push_notification_config(
     """Test getting push notification configuration."""
     # Setup mock response
     task_push_config = TaskPushNotificationConfig(
-        task_id='task1',
-        push_notification_config=PushNotificationConfig(
-            url='https://example.com', token='secret-token'
-        ),
+        task_id='task1', url='https://example.com', token='secret-token'
     )
 
     handler.on_get_task_push_notification_config.return_value = task_push_config

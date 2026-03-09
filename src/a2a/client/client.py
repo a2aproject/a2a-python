@@ -15,7 +15,6 @@ from a2a.client.optionals import Channel
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -25,7 +24,6 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     ListTasksResponse,
     Message,
-    PushNotificationConfig,
     SendMessageConfiguration,
     StreamResponse,
     SubscribeToTaskRequest,
@@ -72,8 +70,8 @@ class ClientConfig:
     accepted_output_modes: list[str] = dataclasses.field(default_factory=list)
     """The set of accepted output modes for the client."""
 
-    push_notification_configs: list[PushNotificationConfig] = dataclasses.field(
-        default_factory=list
+    push_notification_configs: list[TaskPushNotificationConfig] = (
+        dataclasses.field(default_factory=list)
     )
     """Push notification configurations to use for every request."""
 
@@ -180,7 +178,7 @@ class Client(ABC):
     @abstractmethod
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
         extensions: list[str] | None = None,

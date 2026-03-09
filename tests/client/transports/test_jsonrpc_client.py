@@ -394,10 +394,8 @@ class TestTaskCallback:
                 'configs': [
                     {
                         'task_id': f'{task_id}',
-                        'push_notification_config': {
-                            'id': 'config-1',
-                            'url': 'https://example.com',
-                        },
+                        'id': 'config-1',
+                        'url': 'https://example.com',
                     }
                 ]
             },
