@@ -421,6 +421,7 @@ async def test_on_message_send_with_push_notification():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result property to return the final task result
@@ -520,6 +521,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         initial_task,
         True,  # interrupted = True for non-blocking
+        MagicMock(spec=asyncio.Task),  # background task
     )
 
     # Mock the current_result property to return the final task
@@ -540,7 +542,11 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         nonlocal event_callback_passed, event_callback_received
         event_callback_passed = event_callback is not None
         event_callback_received = event_callback
-        return initial_task, True  # interrupted = True for non-blocking
+        return (
+            initial_task,
+            True,
+            MagicMock(spec=asyncio.Task),
+        )  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
         mock_consume_and_break_on_interrupt
@@ -631,6 +637,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result property to return the final task result
@@ -689,6 +696,7 @@ async def test_on_message_send_no_result_from_aggregator():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         None,
         False,
+        None,
     )
 
     from a2a.utils.errors import ServerError  # Local import
@@ -740,6 +748,7 @@ async def test_on_message_send_task_id_mismatch():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         mismatched_task,
         False,
+        None,
     )
 
     from a2a.utils.errors import ServerError  # Local import
@@ -950,6 +959,7 @@ async def test_on_message_send_interrupted_flow():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
         True,
+        MagicMock(spec=asyncio.Task),  # background task
     )  # Interrupted = True
 
     # Patch asyncio.create_task to verify _cleanup_producer is scheduled
