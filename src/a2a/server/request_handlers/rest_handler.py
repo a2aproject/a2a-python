@@ -222,7 +222,7 @@ class RESTHandler:
         """
         task_id = request.path_params['id']
         body = await request.body()
-        params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
+        params = a2a_pb2.TaskPushNotificationConfig()
         Parse(body, params)
         # Set the parent to the task resource name format
         params.task_id = task_id

@@ -14,14 +14,14 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     Artifact,
     AuthenticationInfo,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageRequest,
     Task,
@@ -172,26 +172,16 @@ def sample_authentication_info() -> AuthenticationInfo:
 
 
 @pytest.fixture
-def sample_push_notification_config(
-    sample_authentication_info: AuthenticationInfo,
-) -> PushNotificationConfig:
-    """Provides a sample PushNotificationConfig object."""
-    return PushNotificationConfig(
-        id='config-1',
-        url='https://example.com/notify',
-        token='example-token',
-        authentication=sample_authentication_info,
-    )
-
-
-@pytest.fixture
 def sample_task_push_notification_config(
-    sample_push_notification_config: PushNotificationConfig,
+    sample_authentication_info: AuthenticationInfo,
 ) -> TaskPushNotificationConfig:
     """Provides a sample TaskPushNotificationConfig object."""
     return TaskPushNotificationConfig(
         task_id='task-1',
-        push_notification_config=sample_push_notification_config,
+        id='config-1',
+        url='https://example.com/notify',
+        token='example-token',
+        authentication=sample_authentication_info,
     )
 
 
@@ -474,9 +464,9 @@ async def test_create_task_push_notification_config_with_valid_task(
     )
 
     # Create the request object expected by the transport
-    request = CreateTaskPushNotificationConfigRequest(
+    request = TaskPushNotificationConfig(
         task_id='task-1',
-        config=sample_task_push_notification_config.push_notification_config,
+        url='https://example.com/notify',
     )
     response = await grpc_transport.create_task_push_notification_config(
         request
@@ -496,20 +486,22 @@ async def test_create_task_push_notification_config_with_valid_task(
 async def test_create_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
-    sample_push_notification_config: PushNotificationConfig,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test setting a task push notification config with an invalid task name format."""
     # Return a config with an invalid name format
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
         a2a_pb2.TaskPushNotificationConfig(
             task_id='invalid-path-to-task-1',
-            push_notification_config=sample_push_notification_config,
+            id='config-1',
+            url='https://example.com/notify',
         )
     )
 
-    request = CreateTaskPushNotificationConfigRequest(
+    request = TaskPushNotificationConfig(
         task_id='task-1',
-        config=sample_push_notification_config,
+        id='config-1',
+        url='https://example.com/notify',
     )
 
     # Note: The transport doesn't validate the response name format
@@ -530,7 +522,7 @@ async def test_get_task_push_notification_config_with_valid_task(
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
         sample_task_push_notification_config
     )
-    config_id = sample_task_push_notification_config.push_notification_config.id
+    config_id = sample_task_push_notification_config.id
 
     response = await grpc_transport.get_task_push_notification_config(
         GetTaskPushNotificationConfigRequest(
@@ -556,13 +548,14 @@ async def test_get_task_push_notification_config_with_valid_task(
 async def test_get_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
-    sample_push_notification_config: PushNotificationConfig,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test retrieving a task push notification config with an invalid task name."""
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
         a2a_pb2.TaskPushNotificationConfig(
             task_id='invalid-path-to-task-1',
-            push_notification_config=sample_push_notification_config,
+            id='config-1',
+            url='https://example.com/notify',
         )
     )
 

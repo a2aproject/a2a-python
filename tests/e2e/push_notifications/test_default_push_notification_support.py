@@ -23,10 +23,9 @@ from a2a.utils.constants import TransportProtocol
 from a2a.types.a2a_pb2 import (
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageConfiguration,
-    CreateTaskPushNotificationConfigRequest,
     SendMessageRequest,
     Task,
     TaskPushNotificationConfig,
@@ -109,7 +108,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
         ClientConfig(
             supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
             push_notification_configs=[
-                PushNotificationConfig(
+                TaskPushNotificationConfig(
                     id='in-message-config',
                     url=f'{notifications_server}/notifications',
                     token=token,
@@ -207,13 +206,11 @@ async def test_notification_triggering_after_config_change_e2e(
     # Set the push notification config.
     token = uuid.uuid4().hex
     await a2a_client.create_task_push_notification_config(
-        CreateTaskPushNotificationConfigRequest(
+        TaskPushNotificationConfig(
             task_id=f'{task.id}',
-            config=PushNotificationConfig(
-                id='after-config-change',
-                url=f'{notifications_server}/notifications',
-                token=token,
-            ),
+            id='after-config-change',
+            url=f'{notifications_server}/notifications',
+            token=token,
         )
     )
 

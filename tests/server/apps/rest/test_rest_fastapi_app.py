@@ -465,7 +465,7 @@ class TestTenantExtraction:
                 '/tasks/1/pushNotificationConfigs',
                 'POST',
                 'on_create_task_push_notification_config',
-                {'config': {'url': 'http://foo'}},
+                {'url': 'http://foo'},
             ),
             (
                 '/tasks/1/pushNotificationConfigs',

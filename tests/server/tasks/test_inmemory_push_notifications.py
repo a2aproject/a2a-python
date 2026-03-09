@@ -14,7 +14,7 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.types.a2a_pb2 import (
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     StreamResponse,
     Task,
     TaskState,
@@ -41,8 +41,8 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
-) -> PushNotificationConfig:
-    return PushNotificationConfig(id=config_id, url=url, token=token)
+) -> TaskPushNotificationConfig:
+    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
 
 
 class SampleUser(User):
@@ -112,7 +112,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_info_without_config_id(self) -> None:
         task_id = 'task1'
-        initial_config = PushNotificationConfig(
+        initial_config = TaskPushNotificationConfig(
             url='http://initial.url/callback'
         )
         await self.config_store.set_info(
@@ -124,7 +124,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         )
         assert retrieved[0].id == task_id
 
-        updated_config = PushNotificationConfig(
+        updated_config = TaskPushNotificationConfig(
             url='http://initial.url/callback_new'
         )
         await self.config_store.set_info(
@@ -344,16 +344,16 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
 
         # Create configs for different owners
-        task1_u1_config1 = PushNotificationConfig(
+        task1_u1_config1 = TaskPushNotificationConfig(
             id='t1-u1-c1', url='http://u1.com/1'
         )
-        task1_u1_config2 = PushNotificationConfig(
+        task1_u1_config2 = TaskPushNotificationConfig(
             id='t1-u1-c2', url='http://u1.com/2'
         )
-        task1_u2_config1 = PushNotificationConfig(
+        task1_u2_config1 = TaskPushNotificationConfig(
             id='t1-u2-c1', url='http://u2.com/1'
         )
-        task2_u1_config1 = PushNotificationConfig(
+        task2_u1_config1 = TaskPushNotificationConfig(
             id='t2-u1-c1', url='http://u1.com/3'
         )
 
