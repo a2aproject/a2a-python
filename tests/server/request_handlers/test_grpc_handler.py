@@ -5,6 +5,7 @@ import grpc
 import grpc.aio
 import pytest
 
+from google.rpc import error_details_pb2, status_pb2
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
@@ -99,7 +100,7 @@ async def test_send_message_server_error(
     await grpc_handler.SendMessage(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.INVALID_ARGUMENT, 'InvalidParamsError: Bad params'
+        grpc.StatusCode.INVALID_ARGUMENT, 'Bad params'
     )
 
 
@@ -138,7 +139,7 @@ async def test_get_task_not_found(
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.NOT_FOUND, 'TaskNotFoundError: Task not found'
+        grpc.StatusCode.NOT_FOUND, 'Task not found'
     )
 
 
@@ -157,7 +158,7 @@ async def test_cancel_task_server_error(
 
     mock_grpc_context.abort.assert_awaited_once_with(
         grpc.StatusCode.UNIMPLEMENTED,
-        'TaskNotCancelableError: Task cannot be canceled',
+        'Task cannot be canceled',
     )
 
 
@@ -379,7 +380,44 @@ async def test_abort_context_error_mapping(  # noqa: PLR0913
     mock_grpc_context.abort.assert_awaited_once()
     call_args, _ = mock_grpc_context.abort.call_args
     assert call_args[0] == grpc_status_code
-    assert error_message_part in call_args[1]
+
+    # We shouldn't rely on the legacy ExceptionName: message string format
+    # But for backward compatability fallback it shouldn't fail
+    mock_grpc_context.set_trailing_metadata.assert_called_once()
+    metadata = mock_grpc_context.set_trailing_metadata.call_args[0][0]
+
+    assert any(key == 'grpc-status-details-bin' for key, _ in metadata)
+
+
+@pytest.mark.asyncio
+async def test_abort_context_rich_error_format(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+) -> None:
+
+    error = types.TaskNotFoundError('Could not find the task')
+    mock_request_handler.on_get_task.side_effect = error
+    request_proto = a2a_pb2.GetTaskRequest(id='any')
+    await grpc_handler.GetTask(request_proto, mock_grpc_context)
+
+    mock_grpc_context.set_trailing_metadata.assert_called_once()
+    metadata = mock_grpc_context.set_trailing_metadata.call_args[0][0]
+
+    bin_values = [v for k, v in metadata if k == 'grpc-status-details-bin']
+    assert len(bin_values) == 1
+
+    status = status_pb2.Status.FromString(bin_values[0])
+    assert status.code == grpc.StatusCode.NOT_FOUND.value[0]
+    assert status.message == 'Could not find the task'
+
+    assert len(status.details) == 1
+
+    error_info = error_details_pb2.ErrorInfo()
+    status.details[0].Unpack(error_info)
+
+    assert error_info.reason == 'TASK_NOT_FOUND'
+    assert error_info.domain == 'a2a-protocol.org'
 
 
 @pytest.mark.asyncio

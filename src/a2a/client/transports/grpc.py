@@ -1,11 +1,12 @@
 import logging
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator, Callable, Iterable
 from functools import wraps
-from typing import Any, NoReturn
+from typing import Any, NoReturn, cast
 
+from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 from a2a.client.middleware import ClientCallContext
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, A2AError
 
 
 try:
@@ -18,8 +19,12 @@ except ImportError as e:
     ) from e
 
 
+from google.rpc import (  # type: ignore[reportMissingModuleSource]
+    error_details_pb2,
+    status_pb2,
+)
+
 from a2a.client.client import ClientConfig
-from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
@@ -44,6 +49,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
+from a2a.utils.errors import A2A_REASON_TO_ERROR
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -54,14 +60,44 @@ _A2A_ERROR_NAME_TO_CLS = {
 }
 
 
+def _parse_rich_grpc_error(
+    value: bytes, original_error: grpc.aio.AioRpcError
+) -> None:
+    try:
+        status = status_pb2.Status.FromString(value)
+        for detail in status.details:
+            if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+                error_info = error_details_pb2.ErrorInfo()
+                detail.Unpack(error_info)
+
+                if error_info.domain == 'a2a-protocol.org':
+                    exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
+                    if exception_cls:
+                        raise exception_cls(status.message) from original_error  # noqa: TRY301
+    except Exception as parse_e:
+        # Don't swallow A2A errors generated above
+        if isinstance(parse_e, (A2AError, A2AClientError)):
+            raise parse_e
+        logger.warning(
+            'Failed to parse grpc-status-details-bin', exc_info=parse_e
+        )
+
+
 def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
         raise A2AClientTimeoutError('Client Request timed out') from e
 
+    metadata = e.trailing_metadata()
+    if metadata:
+        iterable_metadata = cast('Iterable[tuple[str, str | bytes]]', metadata)
+        for key, value in iterable_metadata:
+            if key == 'grpc-status-details-bin' and isinstance(value, bytes):
+                _parse_rich_grpc_error(value, e)
+
     details = e.details()
     if isinstance(details, str) and ': ' in details:
         error_type_name, error_message = details.split(': ', 1)
-        # TODO(#723): Resolving imports by name is temporary until proper error handling structure is added in #723.
+        # Leaving as fallback for errors that don't use the rich error details.
         exception_cls = _A2A_ERROR_NAME_TO_CLS.get(error_type_name)
         if exception_cls:
             raise exception_cls(error_message) from e

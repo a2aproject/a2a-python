@@ -3,10 +3,14 @@ from unittest.mock import AsyncMock, MagicMock
 import grpc
 import pytest
 
+from google.protobuf import any_pb2
+from google.rpc import error_details_pb2, status_pb2
+
 from a2a.client.middleware import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.utils.constants import VERSION_HEADER, PROTOCOL_VERSION_CURRENT
+from a2a.utils.errors import A2A_ERROR_REASONS
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -257,16 +261,15 @@ async def test_send_message_with_timeout_context(
 
 @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
 @pytest.mark.asyncio
-async def test_grpc_mapped_errors(
+async def test_grpc_mapped_errors_legacy(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_message_send_params: SendMessageRequest,
     error_cls,
 ) -> None:
-    """Test handling of mapped gRPC error responses."""
+    """Test handling of legacy gRPC error responses."""
     error_details = f'{error_cls.__name__}: Mapped Error'
 
-    # We must trigger it from a standard transport method call, for example `send_message`.
     mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
         code=grpc.StatusCode.INTERNAL,
         initial_metadata=grpc.aio.Metadata(),
@@ -276,6 +279,46 @@ async def test_grpc_mapped_errors(
 
     with pytest.raises(error_cls):
         await grpc_transport.send_message(sample_message_send_params)
+
+
+@pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+@pytest.mark.asyncio
+async def test_grpc_mapped_errors_rich(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+    error_cls,
+) -> None:
+    """Test handling of rich gRPC error responses with Status metadata."""
+
+    reason = A2A_ERROR_REASONS.get(error_cls, 'UNKNOWN_ERROR')
+
+    error_info = error_details_pb2.ErrorInfo(
+        reason=reason,
+        domain='a2a-protocol.org',
+    )
+
+    error_details = f'{error_cls.__name__}: Mapped Error'
+    status = status_pb2.Status(
+        code=grpc.StatusCode.INTERNAL.value[0], message=error_details
+    )
+    detail = any_pb2.Any()
+    detail.Pack(error_info)
+    status.details.append(detail)
+
+    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.INTERNAL,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details='A generic error message',
+    )
+
+    with pytest.raises(error_cls) as excinfo:
+        await grpc_transport.send_message(sample_message_send_params)
+
+    assert str(excinfo.value) == error_details
 
 
 @pytest.mark.asyncio

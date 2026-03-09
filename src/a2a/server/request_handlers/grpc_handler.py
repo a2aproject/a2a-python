@@ -3,7 +3,8 @@ import contextlib
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterable, Awaitable
+from collections.abc import AsyncIterable, Awaitable, Callable
+from typing import cast
 
 
 try:
@@ -16,9 +17,8 @@ except ImportError as e:
         "'pip install a2a-sdk[grpc]'"
     ) from e
 
-from collections.abc import Callable
-
-from google.protobuf import empty_pb2, message
+from google.protobuf import any_pb2, empty_pb2, message
+from google.rpc import error_details_pb2, status_pb2
 
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
@@ -33,7 +33,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.errors import A2AError, TaskNotFoundError
+from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 
 
@@ -419,10 +419,37 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
         code = _ERROR_CODE_MAP.get(type(error))
+
+        status_value = code.value if code else grpc.StatusCode.UNKNOWN.value
+        status_code = (
+            status_value[0] if isinstance(status_value, tuple) else status_value
+        )
+        error_msg = error.message if hasattr(error, 'message') else str(error)
+        status = status_pb2.Status(code=status_code, message=error_msg)
+
+        if code:
+            reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
+
+            error_info = error_details_pb2.ErrorInfo(
+                reason=reason,
+                domain='a2a-protocol.org',
+            )
+
+            detail = any_pb2.Any()
+            detail.Pack(error_info)
+            status.details.append(detail)
+
+        context.set_trailing_metadata(
+            cast(
+                'tuple[tuple[str, str | bytes], ...]',
+                (('grpc-status-details-bin', status.SerializeToString()),),
+            )
+        )
+
         if code:
             await context.abort(
                 code,
-                f'{type(error).__name__}: {error.message}',
+                status.message,
             )
         else:
             await context.abort(

@@ -82,11 +82,26 @@ class MethodNotFoundError(A2AError):
     message = 'Method not found'
 
 
+class ExtensionSupportRequiredError(A2AError):
+    """Exception raised when extension support is required but not present."""
+
+    message = 'Extension support required'
+
+
+class VersionNotSupportedError(A2AError):
+    """Exception raised when the requested version is not supported."""
+
+    message = 'Version not supported'
+
+
 # For backward compatibility if needed, or just aliases for clean refactor
 # We remove the Pydantic models here.
 
 __all__ = [
+    'A2A_ERROR_REASONS',
+    'A2A_REASON_TO_ERROR',
     'JSON_RPC_ERROR_CODE_MAP',
+    'ExtensionSupportRequiredError',
     'InternalError',
     'InvalidAgentResponseError',
     'InvalidParamsError',
@@ -96,6 +111,7 @@ __all__ = [
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
+    'VersionNotSupportedError',
 ]
 
 
@@ -112,3 +128,22 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     MethodNotFoundError: -32601,
     InternalError: -32603,
 }
+
+
+A2A_ERROR_REASONS = {
+    TaskNotFoundError: 'TASK_NOT_FOUND',
+    TaskNotCancelableError: 'TASK_NOT_CANCELABLE',
+    PushNotificationNotSupportedError: 'PUSH_NOTIFICATION_NOT_SUPPORTED',
+    UnsupportedOperationError: 'UNSUPPORTED_OPERATION',
+    ContentTypeNotSupportedError: 'CONTENT_TYPE_NOT_SUPPORTED',
+    InvalidAgentResponseError: 'INVALID_AGENT_RESPONSE',
+    AuthenticatedExtendedCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
+    ExtensionSupportRequiredError: 'EXTENSION_SUPPORT_REQUIRED',
+    VersionNotSupportedError: 'VERSION_NOT_SUPPORTED',
+    InvalidParamsError: 'INVALID_PARAMS',
+    InvalidRequestError: 'INVALID_REQUEST',
+    MethodNotFoundError: 'METHOD_NOT_FOUND',
+    InternalError: 'INTERNAL_ERROR',
+}
+
+A2A_REASON_TO_ERROR = {reason: cls for cls, reason in A2A_ERROR_REASONS.items()}
