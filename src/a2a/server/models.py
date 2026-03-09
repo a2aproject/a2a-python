@@ -162,6 +162,9 @@ class TaskMixin:
     history: Mapped[list[Message] | None] = mapped_column(
         PydanticListType(Message), nullable=True
     )
+    protocol_version: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
 
     # Using declared_attr to avoid conflict with Pydantic's metadata
     @declared_attr
@@ -250,6 +253,9 @@ class PushNotificationConfigMixin:
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    protocol_version: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
 
     @override
     def __repr__(self) -> str:
