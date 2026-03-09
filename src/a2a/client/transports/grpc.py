@@ -105,9 +105,6 @@ class GrpcTransport(ClientTransport):
         self.agent_card = agent_card
         self.channel = channel
         self.stub = a2a_pb2_grpc.A2AServiceStub(channel)
-        self._needs_extended_card = (
-            agent_card.capabilities.extended_agent_card if agent_card else True
-        )
 
     @classmethod
     def create(
@@ -270,21 +267,17 @@ class GrpcTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
-        card = await self._call_grpc(
+        card = self.agent_card
+        if card and not card.capabilities.extended_agent_card:
+            return card
+
+        return await self._call_grpc(
             self.stub.GetExtendedAgentCard,
             request,
             context,
         )
-
-        if signature_verifier:
-            signature_verifier(card)
-
-        self.agent_card = card
-        self._needs_extended_card = False
-        return card
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
