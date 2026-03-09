@@ -51,14 +51,12 @@ def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
             TransportProtocol.JSONRPC,
             TransportProtocol.HTTP_JSON,
         ],
-        extensions=['https://example.com/test-ext/v0'],
     )
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
     assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions  # type: ignore[attr-defined]
 
 
 def test_client_factory_selects_secondary_transport_url(
@@ -79,14 +77,12 @@ def test_client_factory_selects_secondary_transport_url(
             TransportProtocol.JSONRPC,
         ],
         use_client_preference=True,
-        extensions=['https://example.com/test-ext/v0'],
     )
     factory = ClientFactory(config)
     client = factory.create(base_agent_card)
 
     assert isinstance(client._transport, RestTransport)  # type: ignore[attr-defined]
     assert client._transport.url == 'http://secondary-url.com'  # type: ignore[attr-defined]
-    assert ['https://example.com/test-ext/v0'] == client._transport.extensions  # type: ignore[attr-defined]
 
 
 def test_client_factory_server_preference(base_agent_card: AgentCard):

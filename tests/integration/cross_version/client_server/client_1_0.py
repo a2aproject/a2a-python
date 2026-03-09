@@ -15,6 +15,7 @@ from a2a.types import (
     CancelTaskRequest,
     SubscribeToTaskRequest,
     GetExtendedAgentCardRequest,
+    SendMessageRequest,
 )
 
 
@@ -28,7 +29,9 @@ async def test_send_message_stream(client):
     )
     events = []
 
-    async for event in client.send_message(request=msg):
+    async for event in client.send_message(
+        request=SendMessageRequest(message=msg)
+    ):
         events.append(event)
         break
 
@@ -69,7 +72,9 @@ async def test_send_message_sync(url, protocol_enum):
         metadata={'test_key': 'test_value'},
     )
 
-    async for event in client.send_message(request=msg):
+    async for event in client.send_message(
+        request=SendMessageRequest(message=msg)
+    ):
         assert event is not None
         stream_response = event[0]
 

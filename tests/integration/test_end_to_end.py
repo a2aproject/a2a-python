@@ -26,6 +26,7 @@ from a2a.types import (
     Part,
     Role,
     SendMessageConfiguration,
+    SendMessageRequest,
     TaskState,
     a2a_pb2_grpc,
 )
@@ -278,7 +279,9 @@ async def test_end_to_end_send_message_blocking(transport_setups):
     events = [
         event
         async for event in client.send_message(
-            request=message_to_send, configuration=configuration
+            request=SendMessageRequest(
+                message=message_to_send, configuration=configuration
+            )
         )
     ]
     assert len(events) == 1
@@ -314,7 +317,9 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
     events = [
         event
         async for event in client.send_message(
-            request=message_to_send, configuration=configuration
+            request=SendMessageRequest(
+                message=message_to_send, configuration=configuration
+            )
         )
     ]
     assert len(events) == 1
@@ -340,7 +345,10 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     )
 
     events = [
-        event async for event in client.send_message(request=message_to_send)
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(message=message_to_send)
+        )
     ]
 
     assert_events_match(
@@ -376,7 +384,10 @@ async def test_end_to_end_get_task(transport_setups):
         parts=[Part(text='Test Get Task')],
     )
     events = [
-        event async for event in client.send_message(request=message_to_send)
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(message=message_to_send)
+        )
     ]
     _, task = events[-1]
     task_id = task.id
@@ -412,10 +423,12 @@ async def test_end_to_end_list_tasks(transport_setups):
         # One event is enough to get the task ID
         _, task = await anext(
             client.send_message(
-                request=Message(
-                    role=Role.ROLE_USER,
-                    message_id=f'msg-e2e-list-{i}',
-                    parts=[Part(text=f'Test List Tasks {i}')],
+                request=SendMessageRequest(
+                    message=Message(
+                        role=Role.ROLE_USER,
+                        message_id=f'msg-e2e-list-{i}',
+                        parts=[Part(text=f'Test List Tasks {i}')],
+                    )
                 )
             )
         )
@@ -459,7 +472,10 @@ async def test_end_to_end_input_required(transport_setups):
     )
 
     events = [
-        event async for event in client.send_message(request=message_to_send)
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(message=message_to_send)
+        )
     ]
 
     assert_events_match(
@@ -495,7 +511,10 @@ async def test_end_to_end_input_required(transport_setups):
     )
 
     follow_up_events = [
-        event async for event in client.send_message(request=follow_up_message)
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(message=follow_up_message)
+        )
     ]
 
     assert_events_match(

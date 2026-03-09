@@ -12,6 +12,12 @@ from grpc.aio import Channel
 
 from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
+from a2a.client.middleware import ClientCallContext
+from a2a.client.service_parameters import (
+    ServiceParametersFactory,
+    with_a2a_extensions,
+)
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
@@ -37,6 +43,7 @@ from a2a.types.a2a_pb2 import (
     Part,
     PushNotificationConfig,
     Role,
+    SendMessageRequest,
     SendMessageRequest,
     CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -1029,19 +1036,26 @@ async def test_json_transport_base_client_send_message_with_extensions(
             'result': {'task': MessageToDict(TASK_FROM_BLOCKING)},
         }
 
+        service_params = ServiceParametersFactory.create(
+            [with_a2a_extensions(extensions)]
+        )
+        context = ClientCallContext(service_parameters=service_params)
+
         # Call send_message on the BaseClient
         async for _ in client.send_message(
-            request=message_to_send, extensions=extensions
+            request=SendMessageRequest(message=message_to_send), context=context
         ):
             pass
 
         mock_send_request.assert_called_once()
-        call_args, _ = mock_send_request.call_args
-        kwargs = call_args[1]
-        headers = kwargs.get('headers', {})
-        assert 'X-A2A-Extensions' in headers
+        call_args, call_kwargs = mock_send_request.call_args
+        called_context = (
+            call_args[1] if len(call_args) > 1 else call_kwargs.get('context')
+        )
+        service_params = getattr(called_context, 'service_parameters', {})
+        assert 'X-A2A-Extensions' in service_params
         assert (
-            headers['X-A2A-Extensions']
+            service_params['X-A2A-Extensions']
             == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
         )
 
