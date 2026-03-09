@@ -889,10 +889,6 @@ async def test_http_transport_get_card(
     result = transport.agent_card  # type: ignore[attr-defined]
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name  # type: ignore[attr-defined]
-    # Only check _needs_extended_card if the transport supports it
-    if hasattr(transport, '_needs_extended_card'):
-        assert transport._needs_extended_card is False  # type: ignore[attr-defined]
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -926,9 +922,6 @@ async def test_http_transport_get_authenticated_card(
         GetExtendedAgentCardRequest()
     )
     assert result.name == extended_agent_card.name
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -955,8 +948,6 @@ async def test_grpc_transport_get_card(
     )
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name
-    assert transport._needs_extended_card is False
 
     await transport.close()
 
@@ -1084,9 +1075,6 @@ async def test_json_transport_get_signed_base_card(
 
     assert result.name == agent_card.name
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -1143,14 +1131,12 @@ async def test_json_transport_get_signed_extended_card(
         create_key_provider(public_key), ['HS384', 'ES256']
     )
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest()
     )
+    signature_verifier(result)
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -1222,13 +1208,11 @@ async def test_json_transport_get_signed_base_and_extended_cards(
 
     # 3. Fetch extended card via transport
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest()
     )
+    signature_verifier(result)
     assert result.name == extended_agent_card.name
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -1299,14 +1283,12 @@ async def test_rest_transport_get_signed_card(
 
     # 3. Fetch extended card
     result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+        GetExtendedAgentCardRequest()
     )
+    signature_verifier(result)
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -1353,19 +1335,17 @@ async def test_grpc_transport_get_signed_card(
 
         channel = channel_factory(server_address)
         transport = GrpcTransport(channel=channel, agent_card=agent_card)
-        transport.agent_card = None
-        assert transport._needs_extended_card is True
 
         # Get the card, this will trigger verification in get_card
         signature_verifier = create_signature_verifier(
             create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
         )
         result = await transport.get_extended_agent_card(
-            GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+            GetExtendedAgentCardRequest()
         )
+        signature_verifier(result)
         assert result.signatures is not None
         assert len(result.signatures) == 1
-        assert transport._needs_extended_card is False
     finally:
         if transport:
             await transport.close()

@@ -303,8 +303,10 @@ class BaseClient(Client):
         card = await self._transport.get_extended_agent_card(
             request,
             context=context,
-            signature_verifier=signature_verifier,
         )
+        if signature_verifier:
+            signature_verifier(card)
+
         self._card = card
         return card
 
