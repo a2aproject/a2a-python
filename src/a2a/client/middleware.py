@@ -6,6 +6,8 @@ from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel, Field
 
+from a2a.client.service_parameters import ServiceParameters  # noqa: TC001
+
 
 if TYPE_CHECKING:
     from a2a.types.a2a_pb2 import AgentCard
@@ -19,6 +21,8 @@ class ClientCallContext(BaseModel):
     """
 
     state: MutableMapping[str, Any] = Field(default_factory=dict)
+    timeout: float | None = None
+    service_parameters: ServiceParameters | None = None
 
 
 class ClientCallInterceptor(ABC):

@@ -260,7 +260,7 @@ class TestGetAgentCard:
         valid_agent_card_data,
     ):
         """Test A2AClientJSONError is raised on agent card validation error."""
-        return_json = {'invalid': 'data'}
+        return_json = {'name': {'invalid': 'type'}}
         mock_response.json.return_value = return_json
         mock_httpx_client.get.return_value = mock_response
         with pytest.raises(AgentCardResolutionError) as exc_info:

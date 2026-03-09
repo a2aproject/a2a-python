@@ -1,3 +1,4 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
@@ -6,10 +7,9 @@ import pytest
 
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.types import a2a_pb2
 from a2a.server.context import ServerCallContext
-from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
+from a2a.types import a2a_pb2
 
 
 # --- Fixtures ---
@@ -498,3 +498,255 @@ class TestGrpcExtensions:
             (HTTP_EXTENSION_HEADER.lower(), 'foo'),
             (HTTP_EXTENSION_HEADER.lower(), 'baz'),
         }
+
+
+@pytest.mark.asyncio
+class TestTenantExtraction:
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name, return_value',
+        [
+            (
+                'SendMessage',
+                a2a_pb2.SendMessageRequest(tenant='my-tenant'),
+                'on_message_send',
+                types.Message(),
+            ),
+            (
+                'CancelTask',
+                a2a_pb2.CancelTaskRequest(tenant='my-tenant', id='1'),
+                'on_cancel_task',
+                types.Task(id='1'),
+            ),
+            (
+                'GetTask',
+                a2a_pb2.GetTaskRequest(tenant='my-tenant', id='1'),
+                'on_get_task',
+                types.Task(id='1'),
+            ),
+            (
+                'ListTasks',
+                a2a_pb2.ListTasksRequest(tenant='my-tenant'),
+                'on_list_tasks',
+                a2a_pb2.ListTasksResponse(),
+            ),
+            (
+                'GetTaskPushNotificationConfig',
+                a2a_pb2.GetTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='1', id='c1'
+                ),
+                'on_get_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'CreateTaskPushNotificationConfig',
+                a2a_pb2.CreateTaskPushNotificationConfigRequest(
+                    tenant='my-tenant',
+                    task_id='1',
+                    config=a2a_pb2.PushNotificationConfig(),
+                ),
+                'on_create_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'ListTaskPushNotificationConfigs',
+                a2a_pb2.ListTaskPushNotificationConfigsRequest(
+                    tenant='my-tenant', task_id='1'
+                ),
+                'on_list_task_push_notification_configs',
+                a2a_pb2.ListTaskPushNotificationConfigsResponse(),
+            ),
+            (
+                'DeleteTaskPushNotificationConfig',
+                a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='1', id='c1'
+                ),
+                'on_delete_task_push_notification_config',
+                None,
+            ),
+        ],
+    )
+    async def test_non_streaming_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+        return_value: Any,
+    ) -> None:
+        handler_mock = getattr(mock_request_handler, handler_method_name)
+        handler_mock.return_value = return_value
+
+        grpc_method = getattr(grpc_handler, method_name)
+        await grpc_method(request_proto, mock_grpc_context)
+
+        handler_mock.assert_awaited_once()
+        call_args = handler_mock.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == 'my-tenant'
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name',
+        [
+            (
+                'SendStreamingMessage',
+                a2a_pb2.SendMessageRequest(tenant='my-tenant'),
+                'on_message_send_stream',
+            ),
+            (
+                'SubscribeToTask',
+                a2a_pb2.SubscribeToTaskRequest(tenant='my-tenant', id='1'),
+                'on_subscribe_to_task',
+            ),
+        ],
+    )
+    async def test_streaming_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+    ) -> None:
+        async def mock_stream(*args, **kwargs):
+            yield types.Message(message_id='msg-1')
+
+        handler_mock_attr = MagicMock(return_value=mock_stream())
+        setattr(mock_request_handler, handler_method_name, handler_mock_attr)
+
+        grpc_method = getattr(grpc_handler, method_name)
+
+        async for _ in grpc_method(request_proto, mock_grpc_context):
+            pass
+
+        handler_mock_attr.assert_called_once()
+        call_args = handler_mock_attr.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == 'my-tenant'
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name, return_value',
+        [
+            (
+                'SendMessage',
+                a2a_pb2.SendMessageRequest(),
+                'on_message_send',
+                types.Message(),
+            ),
+            (
+                'CancelTask',
+                a2a_pb2.CancelTaskRequest(id='1'),
+                'on_cancel_task',
+                types.Task(id='1'),
+            ),
+            (
+                'GetTask',
+                a2a_pb2.GetTaskRequest(id='1'),
+                'on_get_task',
+                types.Task(id='1'),
+            ),
+            (
+                'ListTasks',
+                a2a_pb2.ListTasksRequest(),
+                'on_list_tasks',
+                a2a_pb2.ListTasksResponse(),
+            ),
+            (
+                'GetTaskPushNotificationConfig',
+                a2a_pb2.GetTaskPushNotificationConfigRequest(
+                    task_id='1', id='c1'
+                ),
+                'on_get_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'CreateTaskPushNotificationConfig',
+                a2a_pb2.CreateTaskPushNotificationConfigRequest(
+                    task_id='1',
+                    config=a2a_pb2.PushNotificationConfig(),
+                ),
+                'on_create_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'ListTaskPushNotificationConfigs',
+                a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id='1'),
+                'on_list_task_push_notification_configs',
+                a2a_pb2.ListTaskPushNotificationConfigsResponse(),
+            ),
+            (
+                'DeleteTaskPushNotificationConfig',
+                a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+                    task_id='1', id='c1'
+                ),
+                'on_delete_task_push_notification_config',
+                None,
+            ),
+        ],
+    )
+    async def test_non_streaming_no_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+        return_value: Any,
+    ) -> None:
+        handler_mock = getattr(mock_request_handler, handler_method_name)
+        handler_mock.return_value = return_value
+
+        grpc_method = getattr(grpc_handler, method_name)
+        await grpc_method(request_proto, mock_grpc_context)
+
+        handler_mock.assert_awaited_once()
+        call_args = handler_mock.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == ''
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name',
+        [
+            (
+                'SendStreamingMessage',
+                a2a_pb2.SendMessageRequest(),
+                'on_message_send_stream',
+            ),
+            (
+                'SubscribeToTask',
+                a2a_pb2.SubscribeToTaskRequest(id='1'),
+                'on_subscribe_to_task',
+            ),
+        ],
+    )
+    async def test_streaming_no_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+    ) -> None:
+        async def mock_stream(*args, **kwargs):
+            yield types.Message(message_id='msg-1')
+
+        handler_mock_attr = MagicMock(return_value=mock_stream())
+        setattr(mock_request_handler, handler_method_name, handler_mock_attr)
+
+        grpc_method = getattr(grpc_handler, method_name)
+
+        async for _ in grpc_method(request_proto, mock_grpc_context):
+            pass
+
+        handler_mock_attr.assert_called_once()
+        call_args = handler_mock_attr.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == ''

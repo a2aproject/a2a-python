@@ -15,10 +15,17 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    CancelTaskRequest,
+    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
+    ListTasksRequest,
+    Message,
     SendMessageRequest,
+    SubscribeToTaskRequest,
 )
 from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
@@ -135,6 +142,39 @@ class TestRestTransport:
         with pytest.raises(error_cls):
             await client.send_message(request=params)
 
+    @pytest.mark.asyncio
+    async def test_send_message_with_timeout_context(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Test that send_message passes context timeout to build_request."""
+        from a2a.client.middleware import ClientCallContext
+
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        params = SendMessageRequest(
+            message=create_text_message_object(content='Hello')
+        )
+        context = ClientCallContext(timeout=10.0)
+
+        mock_build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_httpx_client.build_request = mock_build_request
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        mock_httpx_client.send.return_value = mock_response
+
+        await client.send_message(request=params, context=context)
+
+        mock_build_request.assert_called_once()
+        _, kwargs = mock_build_request.call_args
+        assert 'timeout' in kwargs
+        assert kwargs['timeout'] == httpx.Timeout(10.0)
+
 
 class TestRestTransportExtensions:
     @pytest.mark.asyncio
@@ -142,15 +182,10 @@ class TestRestTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message adds extensions to headers."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
-            extensions=extensions,
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello')
@@ -167,7 +202,14 @@ class TestRestTransportExtensions:
         mock_response.status_code = 200
         mock_httpx_client.send.return_value = mock_response
 
-        await client.send_message(request=params)
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={
+                'X-A2A-Extensions': 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+            }
+        )
+        await client.send_message(request=params, context=context)
 
         mock_build_request.assert_called_once()
         _, kwargs = mock_build_request.call_args
@@ -189,13 +231,10 @@ class TestRestTransportExtensions:
         mock_agent_card: MagicMock,
     ):
         """Test X-A2A-Extensions header in send_message_streaming."""
-        new_extensions = ['https://example.com/test-ext/v2']
-        extensions = ['https://example.com/test-ext/v1']
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
-            extensions=extensions,
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello stream')
@@ -207,8 +246,16 @@ class TestRestTransportExtensions:
             mock_event_source
         )
 
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={
+                'X-A2A-Extensions': 'https://example.com/test-ext/v2'
+            }
+        )
+
         async for _ in client.send_message_streaming(
-            request=params, extensions=new_extensions
+            request=params, context=context
         ):
             pass
 
@@ -273,10 +320,9 @@ class TestRestTransportExtensions:
     ):
         """Test get_extended_agent_card with extensions passed to  call when extended card support is enabled.
         Tests that the extensions are added to the GET request."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
+        extensions_str = (
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+        )
         agent_card = AgentCard(
             name='Test Agent',
             description='Test Agent Description',
@@ -301,24 +347,32 @@ class TestRestTransportExtensions:
         mock_httpx_client.send.return_value = mock_response
 
         request = GetExtendedAgentCardRequest()
+
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={HTTP_EXTENSION_HEADER: extensions_str}
+        )
+
         with patch.object(
-            client, '_send_get_request', new_callable=AsyncMock
-        ) as mock_send_get_request:
-            mock_send_get_request.return_value = json_format.MessageToDict(
+            client, '_execute_request', new_callable=AsyncMock
+        ) as mock_execute_request:
+            mock_execute_request.return_value = json_format.MessageToDict(
                 agent_card
             )
-            await client.get_extended_agent_card(request, extensions=extensions)
+            await client.get_extended_agent_card(request, context=context)
 
-        mock_send_get_request.assert_called_once()
-        _, _, mock_kwargs = mock_send_get_request.call_args[0]
-
-        _assert_extensions_header(
-            mock_kwargs,
-            {
-                'https://example.com/test-ext/v1',
-                'https://example.com/test-ext/v2',
-            },
+        mock_execute_request.assert_called_once()
+        # _execute_request(method, target, tenant, context)
+        call_args = mock_execute_request.call_args
+        assert (
+            call_args[1].get('context') == context or call_args[0][3] == context
         )
+
+        _context = call_args[1].get('context') or call_args[0][3]
+        assert _context.service_parameters == {
+            HTTP_EXTENSION_HEADER: extensions_str
+        }
 
 
 class TestTaskCallback:
@@ -404,3 +458,226 @@ class TestTaskCallback:
             f'/tasks/{task_id}/pushNotificationConfigs/config-1'
             in call_args[0][1]
         )
+
+
+class TestRestTransportTenant:
+    """Tests for tenant path prepending in RestTransport."""
+
+    @pytest.mark.parametrize(
+        'method_name, request_obj, expected_path',
+        [
+            (
+                'send_message',
+                SendMessageRequest(
+                    tenant='my-tenant',
+                    message=create_text_message_object(content='hi'),
+                ),
+                '/my-tenant/message:send',
+            ),
+            (
+                'list_tasks',
+                ListTasksRequest(tenant='my-tenant'),
+                '/my-tenant/tasks',
+            ),
+            (
+                'get_task',
+                GetTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/tasks/task-123',
+            ),
+            (
+                'cancel_task',
+                CancelTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/tasks/task-123:cancel',
+            ),
+            (
+                'create_task_push_notification_config',
+                CreateTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123'
+                ),
+                '/my-tenant/tasks/task-123/pushNotificationConfigs',
+            ),
+            (
+                'get_task_push_notification_config',
+                GetTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123', id='cfg-1'
+                ),
+                '/my-tenant/tasks/task-123/pushNotificationConfigs/cfg-1',
+            ),
+            (
+                'list_task_push_notification_configs',
+                ListTaskPushNotificationConfigsRequest(
+                    tenant='my-tenant', task_id='task-123'
+                ),
+                '/my-tenant/tasks/task-123/pushNotificationConfigs',
+            ),
+            (
+                'delete_task_push_notification_config',
+                DeleteTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='task-123', id='cfg-1'
+                ),
+                '/my-tenant/tasks/task-123/pushNotificationConfigs/cfg-1',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_rest_methods_prepend_tenant(
+        self,
+        method_name,
+        request_obj,
+        expected_path,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        # 1. Get the method dynamically
+        method = getattr(client, method_name)
+
+        # 2. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 3. Call the method
+        await method(request=request_obj)
+
+        # 4. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == f'http://agent.example.com/api{expected_path}'
+
+    @pytest.mark.asyncio
+    async def test_rest_get_extended_agent_card_prepend_tenant(
+        self,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        mock_agent_card.capabilities.extended_agent_card = True
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        request = GetExtendedAgentCardRequest(tenant='my-tenant')
+
+        # 1. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 2. Call the method
+        await client.get_extended_agent_card(request=request)
+
+        # 3. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert (
+            args[1]
+            == 'http://agent.example.com/api/my-tenant/extendedAgentCard'
+        )
+
+    @pytest.mark.asyncio
+    async def test_rest_get_task_prepend_empty_tenant(
+        self,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        request = GetTaskRequest(tenant='', id='task-123')
+
+        # 1. Setup mocks
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        # 2. Call the method
+        await client.get_task(request=request)
+
+        # 3. Verify the URL
+        args, _ = mock_httpx_client.build_request.call_args
+        assert args[1] == f'http://agent.example.com/api/tasks/task-123'
+
+    @pytest.mark.parametrize(
+        'method_name, request_obj, expected_path',
+        [
+            (
+                'subscribe',
+                SubscribeToTaskRequest(tenant='my-tenant', id='task-123'),
+                '/my-tenant/tasks/task-123:subscribe',
+            ),
+            (
+                'send_message_streaming',
+                SendMessageRequest(
+                    tenant='my-tenant',
+                    message=create_text_message_object(content='hi'),
+                ),
+                '/my-tenant/message:stream',
+            ),
+        ],
+    )
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    async def test_rest_streaming_methods_prepend_tenant(
+        self,
+        mock_aconnect_sse,
+        method_name,
+        request_obj,
+        expected_path,
+        mock_httpx_client,
+        mock_agent_card,
+    ):
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        # 1. Get the method dynamically
+        method = getattr(client, method_name)
+
+        # 2. Setup mocks
+        mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.raise_for_status.return_value = None
+
+        async def empty_aiter():
+            if False:
+                yield
+
+        mock_event_source.aiter_sse.return_value = empty_aiter()
+        mock_aconnect_sse.return_value.__aenter__.return_value = (
+            mock_event_source
+        )
+
+        # 3. Call the method
+        async for _ in method(request=request_obj):
+            pass
+
+        # 4. Verify the URL
+        mock_aconnect_sse.assert_called_once()
+        args, _ = mock_aconnect_sse.call_args
+        # url is 3rd positional argument in aconnect_sse(client, method, url, ...)
+        assert args[2] == f'http://agent.example.com/api{expected_path}'
