@@ -13,7 +13,7 @@ from a2a.server.tasks.push_notification_sender import (
     PushNotificationEvent,
     PushNotificationSender,
 )
-from a2a.types.a2a_pb2 import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
 
 
@@ -64,7 +64,7 @@ class BasePushNotificationSender(PushNotificationSender):
     async def _dispatch_notification(
         self,
         event: PushNotificationEvent,
-        push_info: PushNotificationConfig,
+        push_info: TaskPushNotificationConfig,
         task_id: str,
     ) -> bool:
         url = push_info.url

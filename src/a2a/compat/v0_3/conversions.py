@@ -271,9 +271,9 @@ def to_compat_authentication_info(
 
 def to_core_push_notification_config(
     compat_config: types_v03.PushNotificationConfig,
-) -> pb2_v10.PushNotificationConfig:
+) -> pb2_v10.TaskPushNotificationConfig:
     """Convert push notification config to v1.0 core type."""
-    core_config = pb2_v10.PushNotificationConfig(url=compat_config.url)
+    core_config = pb2_v10.TaskPushNotificationConfig(url=compat_config.url)
     if compat_config.id:
         core_config.id = compat_config.id
     if compat_config.token:
@@ -286,11 +286,11 @@ def to_core_push_notification_config(
 
 
 def to_compat_push_notification_config(
-    core_config: pb2_v10.PushNotificationConfig,
+    core_config: pb2_v10.TaskPushNotificationConfig,
 ) -> types_v03.PushNotificationConfig:
     """Convert push notification config to v0.3 compat type."""
     return types_v03.PushNotificationConfig(
-        url=core_config.url,
+        url=core_config.url if core_config.url else '',
         id=core_config.id if core_config.id else None,
         token=core_config.token if core_config.token else None,
         authentication=to_compat_authentication_info(core_config.authentication)
@@ -312,7 +312,7 @@ def to_core_send_message_configuration(
             compat_config.accepted_output_modes
         )
     if compat_config.push_notification_config:
-        core_config.push_notification_config.CopyFrom(
+        core_config.task_push_notification_config.CopyFrom(
             to_core_push_notification_config(
                 compat_config.push_notification_config
             )
@@ -333,9 +333,9 @@ def to_compat_send_message_configuration(
         if core_config.accepted_output_modes
         else None,
         push_notification_config=to_compat_push_notification_config(
-            core_config.push_notification_config
+            core_config.task_push_notification_config
         )
-        if core_config.HasField('push_notification_config')
+        if core_config.HasField('task_push_notification_config')
         else None,
         history_length=core_config.history_length
         if core_config.HasField('history_length')
@@ -1008,7 +1008,7 @@ def to_core_task_push_notification_config(
         task_id=compat_config.task_id
     )
     if compat_config.push_notification_config:
-        core_config.push_notification_config.CopyFrom(
+        core_config.MergeFrom(
             to_core_push_notification_config(
                 compat_config.push_notification_config
             )
@@ -1023,10 +1023,8 @@ def to_compat_task_push_notification_config(
     return types_v03.TaskPushNotificationConfig(
         task_id=core_config.task_id,
         push_notification_config=to_compat_push_notification_config(
-            core_config.push_notification_config
-        )
-        if core_config.HasField('push_notification_config')
-        else types_v03.PushNotificationConfig(url=''),
+            core_config
+        ),
     )
 
 
@@ -1179,13 +1177,13 @@ def to_compat_delete_task_push_notification_config_request(
 
 def to_core_create_task_push_notification_config_request(
     compat_req: types_v03.SetTaskPushNotificationConfigRequest,
-) -> pb2_v10.CreateTaskPushNotificationConfigRequest:
+) -> pb2_v10.TaskPushNotificationConfig:
     """Convert create task push notification config request to v1.0 core type."""
-    core_req = pb2_v10.CreateTaskPushNotificationConfigRequest(
+    core_req = pb2_v10.TaskPushNotificationConfig(
         task_id=compat_req.params.task_id
     )
     if compat_req.params.push_notification_config:
-        core_req.config.CopyFrom(
+        core_req.MergeFrom(
             to_core_push_notification_config(
                 compat_req.params.push_notification_config
             )
@@ -1194,7 +1192,7 @@ def to_core_create_task_push_notification_config_request(
 
 
 def to_compat_create_task_push_notification_config_request(
-    core_req: pb2_v10.CreateTaskPushNotificationConfigRequest,
+    core_req: pb2_v10.TaskPushNotificationConfig,
     request_id: str | int,
 ) -> types_v03.SetTaskPushNotificationConfigRequest:
     """Convert create task push notification config request to v0.3 compat type."""
@@ -1203,10 +1201,8 @@ def to_compat_create_task_push_notification_config_request(
         params=types_v03.TaskPushNotificationConfig(
             task_id=core_req.task_id,
             push_notification_config=to_compat_push_notification_config(
-                core_req.config
-            )
-            if core_req.HasField('config')
-            else types_v03.PushNotificationConfig(url=''),
+                core_req
+            ),
         ),
     )
 

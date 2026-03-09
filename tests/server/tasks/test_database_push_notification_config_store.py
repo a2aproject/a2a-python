@@ -36,7 +36,7 @@ from a2a.server.models import (
 )  # Important: To get Base.metadata
 from a2a.server.tasks import DatabasePushNotificationConfigStore
 from a2a.types.a2a_pb2 import (
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Task,
     TaskState,
     TaskStatus,
@@ -199,7 +199,7 @@ async def test_set_and_get_info_single_config(
 ):
     """Test setting and retrieving a single configuration."""
     task_id = 'task-1'
-    config = PushNotificationConfig(id='config-1', url='http://example.com')
+    config = TaskPushNotificationConfig(id='config-1', url='http://example.com')
 
     await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
     retrieved_configs = await db_store_parameterized.get_info(
@@ -217,8 +217,12 @@ async def test_set_and_get_info_multiple_configs(
     """Test setting and retrieving multiple configurations for a single task."""
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    config2 = PushNotificationConfig(id='config-2', url='http://example.com/2')
+    config1 = TaskPushNotificationConfig(
+        id='config-1', url='http://example.com/1'
+    )
+    config2 = TaskPushNotificationConfig(
+        id='config-2', url='http://example.com/2'
+    )
 
     await db_store_parameterized.set_info(
         task_id, config1, MINIMAL_CALL_CONTEXT
@@ -242,10 +246,10 @@ async def test_set_info_updates_existing_config(
     """Test that setting an existing config ID updates the record."""
     task_id = 'task-1'
     config_id = 'config-1'
-    initial_config = PushNotificationConfig(
+    initial_config = TaskPushNotificationConfig(
         id=config_id, url='http://initial.url'
     )
-    updated_config = PushNotificationConfig(
+    updated_config = TaskPushNotificationConfig(
         id=config_id, url='http://updated.url'
     )
 
@@ -269,7 +273,7 @@ async def test_set_info_defaults_config_id_to_task_id(
 ):
     """Test that config.id defaults to task_id if not provided."""
     task_id = 'task-1'
-    config = PushNotificationConfig(url='http://example.com')  # id is None
+    config = TaskPushNotificationConfig(url='http://example.com')  # id is None
 
     await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
     retrieved_configs = await db_store_parameterized.get_info(
@@ -297,8 +301,8 @@ async def test_delete_info_specific_config(
 ):
     """Test deleting a single, specific configuration."""
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://a.com')
-    config2 = PushNotificationConfig(id='config-2', url='http://b.com')
+    config1 = TaskPushNotificationConfig(id='config-1', url='http://a.com')
+    config2 = TaskPushNotificationConfig(id='config-2', url='http://b.com')
 
     await db_store_parameterized.set_info(
         task_id, config1, MINIMAL_CALL_CONTEXT
@@ -325,8 +329,8 @@ async def test_delete_info_all_for_task(
     """Test deleting all configurations for a task when config_id is None."""
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://a.com')
-    config2 = PushNotificationConfig(id='config-2', url='http://b.com')
+    config1 = TaskPushNotificationConfig(id='config-1', url='http://a.com')
+    config2 = TaskPushNotificationConfig(id='config-2', url='http://b.com')
 
     await db_store_parameterized.set_info(
         task_id, config1, MINIMAL_CALL_CONTEXT
@@ -362,7 +366,7 @@ async def test_data_is_encrypted_in_db(
 ):
     """Verify that the data stored in the database is actually encrypted."""
     task_id = 'encrypted-task'
-    config = PushNotificationConfig(
+    config = TaskPushNotificationConfig(
         id='config-1', url='http://secret.url', token='secret-token'
     )
     plain_json = MessageToJson(config)
@@ -396,7 +400,7 @@ async def test_decryption_error_with_wrong_key(
     # 1. Store with one key
 
     task_id = 'wrong-key-task'
-    config = PushNotificationConfig(id='config-1', url='http://secret.url')
+    config = TaskPushNotificationConfig(id='config-1', url='http://secret.url')
     await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with a different key
@@ -430,7 +434,7 @@ async def test_decryption_error_with_no_key(
     # 1. Store with one key
 
     task_id = 'wrong-key-task'
-    config = PushNotificationConfig(id='config-1', url='http://secret.url')
+    config = TaskPushNotificationConfig(id='config-1', url='http://secret.url')
     await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with no key set
@@ -471,7 +475,9 @@ async def test_custom_table_name(
         )
 
         task_id = 'custom-table-task'
-        config = PushNotificationConfig(id='config-1', url='http://custom.url')
+        config = TaskPushNotificationConfig(
+            id='config-1', url='http://custom.url'
+        )
 
         # This will create the table on first use
         await custom_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
@@ -518,8 +524,12 @@ async def test_set_and_get_info_multiple_configs_no_key(
     await store.initialize()
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    config2 = PushNotificationConfig(id='config-2', url='http://example.com/2')
+    config1 = TaskPushNotificationConfig(
+        id='config-1', url='http://example.com/1'
+    )
+    config2 = TaskPushNotificationConfig(
+        id='config-2', url='http://example.com/2'
+    )
 
     await store.set_info(task_id, config1, MINIMAL_CALL_CONTEXT)
     await store.set_info(task_id, config2, MINIMAL_CALL_CONTEXT)
@@ -544,7 +554,9 @@ async def test_data_is_not_encrypted_in_db_if_no_key_is_set(
     await store.initialize()
 
     task_id = 'task-1'
-    config = PushNotificationConfig(id='config-1', url='http://example.com/1')
+    config = TaskPushNotificationConfig(
+        id='config-1', url='http://example.com/1'
+    )
     plain_json = MessageToJson(config)
 
     await store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
@@ -577,7 +589,7 @@ async def test_decryption_fallback_for_unencrypted_data(
     await unencrypted_store.initialize()
 
     task_id = 'mixed-encryption-task'
-    config = PushNotificationConfig(id='config-1', url='http://plain.url')
+    config = TaskPushNotificationConfig(id='config-1', url='http://plain.url')
     await unencrypted_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with the encryption-enabled store from the fixture
@@ -645,16 +657,16 @@ async def test_owner_resource_scoping(
     context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
 
     # Create configs for different owners
-    task1_u1_config1 = PushNotificationConfig(
+    task1_u1_config1 = TaskPushNotificationConfig(
         id='t1-u1-c1', url='http://u1.com/1'
     )
-    task1_u1_config2 = PushNotificationConfig(
+    task1_u1_config2 = TaskPushNotificationConfig(
         id='t1-u1-c2', url='http://u1.com/2'
     )
-    task1_u2_config1 = PushNotificationConfig(
+    task1_u2_config1 = TaskPushNotificationConfig(
         id='t1-u2-c1', url='http://u2.com/1'
     )
-    task2_u1_config1 = PushNotificationConfig(
+    task2_u1_config1 = TaskPushNotificationConfig(
         id='t2-u1-c1', url='http://u1.com/3'
     )
 

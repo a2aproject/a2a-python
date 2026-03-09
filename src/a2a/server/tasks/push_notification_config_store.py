@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from a2a.server.context import ServerCallContext
-from a2a.types.a2a_pb2 import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 
 class PushNotificationConfigStore(ABC):
@@ -11,7 +11,7 @@ class PushNotificationConfigStore(ABC):
     async def set_info(
         self,
         task_id: str,
-        notification_config: PushNotificationConfig,
+        notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
@@ -21,7 +21,7 @@ class PushNotificationConfigStore(ABC):
         self,
         task_id: str,
         context: ServerCallContext,
-    ) -> list[PushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Retrieves the push notification configuration for a task."""
 
     @abstractmethod
