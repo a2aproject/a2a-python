@@ -250,7 +250,7 @@ class CompatGrpcTransport(ClientTransport):
     @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
-        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
+        request: a2a_pb2.TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
     ) -> a2a_pb2.TaskPushNotificationConfig:
@@ -337,7 +337,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[a2a_pb2.AgentCard], None] | None = None,
     ) -> a2a_pb2.AgentCard:
         """Retrieves the agent's card (v0.3)."""
         req_proto = a2a_v0_3_pb2.GetAgentCardRequest()
@@ -348,9 +347,6 @@ class CompatGrpcTransport(ClientTransport):
         card = conversions.to_core_agent_card(
             proto_utils.FromProto.agent_card(resp_proto)
         )
-
-        if signature_verifier:
-            signature_verifier(card)
 
         self.agent_card = card
         return card

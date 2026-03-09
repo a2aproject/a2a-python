@@ -318,18 +318,17 @@ async def test_create_push_config_success(
     )
     mock_request_handler.on_create_task_push_notification_config.return_value = a2a_pb2.TaskPushNotificationConfig(
         task_id='task-1',
-        push_notification_config=a2a_pb2.PushNotificationConfig(
-            url='http://example.com', id='cfg-1'
-        ),
+        url='http://example.com',
+        id='cfg-1',
     )
 
     response = await handler.CreateTaskPushNotificationConfig(
         request, mock_grpc_context
     )
 
-    expected_req = a2a_pb2.CreateTaskPushNotificationConfigRequest(
+    expected_req = a2a_pb2.TaskPushNotificationConfig(
         task_id='task-1',
-        config=a2a_pb2.PushNotificationConfig(url='http://example.com'),
+        url='http://example.com',
     )
     mock_request_handler.on_create_task_push_notification_config.assert_called_once_with(
         expected_req, ANY
@@ -356,9 +355,8 @@ async def test_get_push_config_success(
     mock_request_handler.on_get_task_push_notification_config.return_value = (
         a2a_pb2.TaskPushNotificationConfig(
             task_id='task-1',
-            push_notification_config=a2a_pb2.PushNotificationConfig(
-                url='http://example.com', id='cfg-1'
-            ),
+            url='http://example.com',
+            id='cfg-1',
         )
     )
 
@@ -395,10 +393,7 @@ async def test_list_push_config_success(
         a2a_pb2.ListTaskPushNotificationConfigsResponse(
             configs=[
                 a2a_pb2.TaskPushNotificationConfig(
-                    task_id='task-1',
-                    push_notification_config=a2a_pb2.PushNotificationConfig(
-                        url='http://example.com', id='cfg-1'
-                    ),
+                    task_id='task-1', url='http://example.com', id='cfg-1'
                 )
             ]
         )
@@ -513,4 +508,4 @@ async def test_event_to_v03_stream_response_invalid(
     handler: compat_grpc_handler.CompatGrpcHandler,
 ):
     with pytest.raises(ValueError, match='Unknown event type'):
-        handler._event_to_v03_stream_response(object())
+        handler._event_to_v03_stream_response(object())  # type: ignore[arg-type]
