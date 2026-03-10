@@ -17,7 +17,7 @@ from a2a.client import (
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.client.interceptors import BeforeArgs, ClientCallInput
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -36,6 +36,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageResponse,
     StringList,
 )
+from a2a.utils.constants import TransportProtocol
 
 
 class HeaderInterceptor(ClientCallInterceptor):
@@ -64,7 +65,6 @@ from google.protobuf import json_format
 
 def build_success_response(request: httpx.Request) -> httpx.Response:
     """Creates a valid JSON-RPC success response based on the request."""
-    from a2a.types.a2a_pb2 import SendMessageResponse
 
     request_payload = json.loads(request.content)
     message = Message(
@@ -120,19 +120,17 @@ async def test_auth_interceptor_skips_when_no_agent_card(
     store: InMemoryContextCredentialStore,
 ) -> None:
     """Tests that the AuthInterceptor does not modify the request when no AgentCard is provided."""
-    request_payload = {'foo': 'bar'}
-    http_kwargs = {'fizz': 'buzz'}
     auth_interceptor = AuthInterceptor(credential_service=store)
-
-    new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='SendMessage',
-        request_payload=request_payload,
-        http_kwargs=http_kwargs,
-        agent_card=None,
-        context=ClientCallContext(state={}),
+    request = SendMessageRequest(message=Message())
+    context = ClientCallContext(state={})
+    args = BeforeArgs(
+        input=ClientCallInput(method='send_message', value=request),
+        agent_card=AgentCard(),
+        context=context,
     )
-    assert new_payload == request_payload
-    assert new_kwargs == http_kwargs
+
+    await auth_interceptor.before(args)
+    assert context.service_parameters is None
 
 
 @pytest.mark.asyncio
@@ -210,14 +208,13 @@ def wrap_security_scheme(scheme: Any) -> SecurityScheme:
     """Wraps a security scheme in the correct SecurityScheme proto field."""
     if isinstance(scheme, APIKeySecurityScheme):
         return SecurityScheme(api_key_security_scheme=scheme)
-    elif isinstance(scheme, HTTPAuthSecurityScheme):
+    if isinstance(scheme, HTTPAuthSecurityScheme):
         return SecurityScheme(http_auth_security_scheme=scheme)
-    elif isinstance(scheme, OAuth2SecurityScheme):
+    if isinstance(scheme, OAuth2SecurityScheme):
         return SecurityScheme(oauth2_security_scheme=scheme)
-    elif isinstance(scheme, OpenIdConnectSecurityScheme):
+    if isinstance(scheme, OpenIdConnectSecurityScheme):
         return SecurityScheme(open_id_connect_security_scheme=scheme)
-    else:
-        raise ValueError(f'Unknown security scheme type: {type(scheme)}')
+    raise ValueError(f'Unknown security scheme type: {type(scheme)}')
 
 
 @dataclass
@@ -363,8 +360,6 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     scheme_name = 'missing'
     session_id = 'session-id'
     credential = 'test-token'
-    request_payload = {'foo': 'bar'}
-    http_kwargs = {'fizz': 'buzz'}
     await store.set_credentials(session_id, scheme_name, credential)
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
@@ -386,13 +381,13 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         ],
         security_schemes={},
     )
-
-    new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='SendMessage',
-        request_payload=request_payload,
-        http_kwargs=http_kwargs,
+    request = SendMessageRequest(message=Message())
+    context = ClientCallContext(state={'sessionId': session_id})
+    args = BeforeArgs(
+        input=ClientCallInput(method='send_message', value=request),
         agent_card=agent_card,
-        context=ClientCallContext(state={'sessionId': session_id}),
+        context=context,
     )
-    assert new_payload == request_payload
-    assert new_kwargs == http_kwargs
+
+    await auth_interceptor.before(args)
+    assert context.service_parameters is None

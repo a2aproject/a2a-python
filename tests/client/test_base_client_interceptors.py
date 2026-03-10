@@ -17,6 +17,8 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    Message,
+    StreamResponse,
 )
 
 
@@ -141,4 +143,102 @@ class TestBaseClientInterceptors:
         after_args = mock_interceptor.after.call_args[0][0]
         assert isinstance(after_args, AfterArgs)
         assert after_args.result.value == 'early_result'
+        assert after_args.context == context
+
+    @pytest.mark.asyncio
+    async def test_execute_stream_with_interceptors_normal_flow(
+        self,
+        base_client: BaseClient,
+        mock_interceptor: AsyncMock,
+    ):
+        input_data = ClientCallInput(
+            method='send_message_streaming', value=MagicMock()
+        )
+        context = MagicMock()
+
+        async def mock_transport_call(*args, **kwargs):
+            yield StreamResponse(message=Message(message_id='1'))
+
+        # Set up mock interceptor to just pass through
+        mock_interceptor.before.return_value = None
+
+        events = [
+            e
+            async for e in base_client._execute_stream_with_interceptors(
+                input_data=input_data,
+                context=context,
+                transport_call=mock_transport_call,
+            )
+        ]
+
+        assert len(events) == 1
+
+        # Verify before was called
+        mock_interceptor.before.assert_called_once()
+        before_args = mock_interceptor.before.call_args[0][0]
+        assert isinstance(before_args, BeforeArgs)
+        assert before_args.input == input_data
+        assert before_args.context == context
+
+        # Verify after was called
+        mock_interceptor.after.assert_called_once()
+        after_args = mock_interceptor.after.call_args[0][0]
+        assert isinstance(after_args, AfterArgs)
+        assert after_args.result.method == 'send_message_streaming'
+
+    @pytest.mark.asyncio
+    async def test_execute_stream_with_interceptors_early_return(
+        self,
+        base_client: BaseClient,
+        mock_interceptor: AsyncMock,
+    ):
+        input_data = ClientCallInput(
+            method='send_message_streaming', value=MagicMock()
+        )
+        context = MagicMock()
+        mock_transport_call = AsyncMock()
+
+        # Set up early return in before
+        early_return_result = ClientCallResult(
+            method='send_message_streaming',
+            value=StreamResponse(message=Message(message_id='2')),
+        )
+
+        async def mock_before_with_early_return(args: BeforeArgs):
+            args.early_return = early_return_result
+            return {
+                'early_return': early_return_result,
+                'executed': [mock_interceptor],
+            }
+
+        mock_interceptor.before.side_effect = mock_before_with_early_return
+
+        # Override BaseClient's _intercept_before to respect our early return setup
+        # as the test's mock interceptor replaces the actual list items
+        base_client._intercept_before = AsyncMock(
+            return_value={
+                'early_return': early_return_result,
+                'executed': [mock_interceptor],
+            }
+        )
+
+        events = [
+            e
+            async for e in base_client._execute_stream_with_interceptors(
+                input_data=input_data,
+                context=context,
+                transport_call=mock_transport_call,
+            )
+        ]
+
+        assert len(events) == 1
+
+        # Verify transport call was NOT made
+        mock_transport_call.assert_not_called()
+
+        # Verify after was called with early return value
+        mock_interceptor.after.assert_called_once()
+        after_args = mock_interceptor.after.call_args[0][0]
+        assert isinstance(after_args, AfterArgs)
+        assert after_args.result.method == 'send_message_streaming'
         assert after_args.context == context

@@ -515,6 +515,7 @@ class BaseClient(Client):
     async def _format_stream_event(
         self, stream_response: StreamResponse, tracker: ClientTaskManager
     ) -> ClientEvent:
+        client_event: ClientEvent
         if stream_response.HasField('message'):
             client_event = (stream_response, None)
             await self.consume(client_event, self._card)
