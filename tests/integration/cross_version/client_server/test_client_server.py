@@ -1,9 +1,10 @@
+import os
+import shutil
+import socket
 import subprocess
 import time
-import socket
+
 import pytest
-import shutil
-import os
 
 
 def get_free_port():
@@ -206,7 +207,7 @@ def running_servers():
             'server_0_3.py',
             'client_1_0.py',
             [],
-            ['grpc'],
+            ['grpc', 'rest', 'jsonrpc'],
         ),
     ],
 )

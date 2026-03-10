@@ -591,7 +591,7 @@ async def test_json_transport_get_signed_base_card(
     agent_card.capabilities.extended_agent_card = False
 
     # Setup signing on the server side
-    key = 'key12345'
+    key = 'testkey12345678901234567890123456789012345678901'
     signer = create_agent_card_signer(
         signing_key=key,
         protected_header={
