@@ -32,7 +32,7 @@ class VertexTaskStore(TaskStore):
 
     def __init__(
         self,
-        client: vertexai.Client,
+        client: vertexai.Client,  # type: ignore
         agent_engine_resource_id: str,
     ) -> None:
         """Initializes the VertexTaskStore.
