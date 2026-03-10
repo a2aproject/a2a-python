@@ -111,11 +111,7 @@ class BaseClient(Client):
             yield client_event
             return
 
-        before_args: BeforeArgs[
-            Literal['send_message_streaming'],
-            SendMessageRequest,
-            StreamResponse,
-        ] = BeforeArgs(
+        before_args = BeforeArgs(
             input=ClientCallInput(
                 method='send_message_streaming', value=request
             ),
@@ -389,9 +385,7 @@ class BaseClient(Client):
             )
 
         # Note: resubscribe can only be called on an existing task. As such,
-        before_args: BeforeArgs[
-            Literal['subscribe'], SubscribeToTaskRequest, StreamResponse
-        ] = BeforeArgs(
+        before_args = BeforeArgs(
             input=ClientCallInput(method='subscribe', value=request),
             agent_card=self._card,
             context=context,
