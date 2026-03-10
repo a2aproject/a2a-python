@@ -22,6 +22,8 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 
+from .fake_vertex_client import FakeVertexClient
+
 
 # Skip the entire test module if vertexai is not installed
 pytest.importorskip(
@@ -40,7 +42,6 @@ missing_env_vars = not all(
         'VERTEX_API_VERSION',
     ]
 )
-import sys
 
 
 @pytest.fixture(
@@ -114,9 +115,6 @@ async def vertex_store(
     reusing the module-scoped engine. Uses fake client for 'fake' backend.
     """
     if backend_type == 'fake':
-        sys.path.append(os.path.dirname(__file__))
-        from fake_vertex_client import FakeVertexClient
-
         client = FakeVertexClient()
     else:
         project = os.environ.get('VERTEX_PROJECT')
