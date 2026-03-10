@@ -122,7 +122,7 @@ class BaseClient(Client):
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(before_args)
+        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
 
         if before_result is not None:
             after_args = AfterArgs(
@@ -133,7 +133,7 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(after_args, before_result['executed'])
+            await self._intercept_after(cast('UnionAfterArgs', after_args), before_result['executed'])
             yield after_args.result.value
             return
 
@@ -179,7 +179,7 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(after_args)
+            await self._intercept_after(cast('UnionAfterArgs', after_args))
             intercepted_response = after_args.result.value
             client_event: ClientEvent
             # When we get a message in the stream then we don't expect any
@@ -396,7 +396,7 @@ class BaseClient(Client):
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(before_args)
+        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
 
         if before_result is not None:
             after_args = AfterArgs(
@@ -407,7 +407,7 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(after_args, before_result['executed'])
+            await self._intercept_after(cast('UnionAfterArgs', after_args), before_result['executed'])
             yield after_args.result.value
             return
 
