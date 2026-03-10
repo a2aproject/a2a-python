@@ -48,17 +48,23 @@ class TaskMixin:
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    status: Mapped[Any] = mapped_column(JSON)
-    artifacts: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
-    history: Mapped[list[Any] | None] = mapped_column(JSON, nullable=True)
+    status: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
+    artifacts: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    history: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        JSON, nullable=True
+    )
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
 
-    # Using 'task_metadata' to avoid conflict with SQLAlchemy's 'Base.metadata'
-    task_metadata: Mapped[dict[str, Any] | None] = mapped_column(
-        JSON, nullable=True, name='metadata'
-    )
+    # Using declared_attr to avoid conflict with Pydantic's metadata
+    @declared_attr
+    @classmethod
+    def task_metadata(cls) -> Mapped[dict[str, Any] | None]:
+        """Define the 'metadata' column, avoiding name conflicts with Pydantic."""
+        return mapped_column(JSON, nullable=True, name='metadata')
 
     @override
     def __repr__(self) -> str:

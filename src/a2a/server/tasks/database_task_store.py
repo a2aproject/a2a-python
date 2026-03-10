@@ -1,6 +1,7 @@
 import logging
 
 from datetime import datetime, timezone
+from typing import Any, cast
 
 
 try:
@@ -118,7 +119,6 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
-        task_dict = MessageToDict(task)
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
@@ -126,29 +126,56 @@ class DatabaseTaskStore(TaskStore):
             owner=owner,
             last_updated=(
                 task.status.timestamp.ToDatetime()
-                if task.HasField('status') and task.status.HasField('timestamp')
+                if task.status.HasField('timestamp')
                 else None
             ),
-            status=task_dict.get('status'),
-            artifacts=task_dict.get('artifacts', []),
-            history=task_dict.get('history', []),
-            task_metadata=task_dict.get('metadata'),
+            status=MessageToDict(task.status),
+            artifacts=[MessageToDict(artifact) for artifact in task.artifacts],
+            history=[MessageToDict(history) for history in task.history],
+            task_metadata=(
+                MessageToDict(task.metadata) if task.metadata.fields else None
+            ),
             protocol_version='1.0',
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        task_dict = {
-            'id': task_model.id,
-            'context_id': task_model.context_id,
-            'status': task_model.status,
-            'artifacts': task_model.artifacts,
-            'history': task_model.history,
-            'metadata': task_model.task_metadata,
-        }
         if task_model.protocol_version == '1.0':
-            return ParseDict(task_dict, Task())
-        legacy_task = types_v03.Task.model_validate(task_dict)
+            task = Task(
+                id=task_model.id,
+                context_id=task_model.context_id,
+            )
+            if task_model.status:
+                ParseDict(
+                    cast('dict[str, Any]', task_model.status), task.status
+                )
+            if task_model.artifacts:
+                for art_dict in cast(
+                    'list[dict[str, Any]]', task_model.artifacts
+                ):
+                    art = task.artifacts.add()
+                    ParseDict(art_dict, art)
+            if task_model.history:
+                for msg_dict in cast(
+                    'list[dict[str, Any]]', task_model.history
+                ):
+                    msg = task.history.add()
+                    ParseDict(msg_dict, msg)
+            if task_model.task_metadata:
+                task.metadata.update(
+                    cast('dict[str, Any]', task_model.task_metadata)
+                )
+            return task
+
+        # Legacy conversion
+        legacy_task = types_v03.Task(
+            id=task_model.id,
+            context_id=task_model.context_id,
+            status=task_model.status,
+            artifacts=task_model.artifacts or [],
+            history=task_model.history or [],
+            metadata=task_model.task_metadata or {},
+        )
         return conversions.to_core_task(legacy_task)
 
     async def save(
