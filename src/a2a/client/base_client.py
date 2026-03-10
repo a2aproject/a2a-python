@@ -15,11 +15,11 @@ from a2a.client.interceptors import (
     ClientCallInput,
     ClientCallInterceptor,
     ClientCallResult,
-    UnionAfterArgs,
-    UnionBeforeArgs,
     M,
     P,
     R,
+    UnionAfterArgs,
+    UnionBeforeArgs,
 )
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
@@ -471,7 +471,9 @@ class BaseClient(Client):
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(cast(UnionBeforeArgs, before_args))
+        before_result = await self._intercept_before(
+            cast('UnionBeforeArgs', before_args)
+        )
 
         if before_result is not None:
             early_after_args: AfterArgs[M, R] = AfterArgs(
@@ -483,7 +485,8 @@ class BaseClient(Client):
                 context=before_args.context,
             )
             await self._intercept_after(
-                cast(UnionAfterArgs, early_after_args), before_result['executed']
+                cast('UnionAfterArgs', early_after_args),
+                before_result['executed'],
             )
             return early_after_args.result.value
 
@@ -496,7 +499,7 @@ class BaseClient(Client):
             agent_card=self._card,
             context=before_args.context,
         )
-        await self._intercept_after(cast(UnionAfterArgs, after_args))
+        await self._intercept_after(cast('UnionAfterArgs', after_args))
 
         return after_args.result.value
 
