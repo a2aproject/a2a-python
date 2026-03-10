@@ -168,13 +168,16 @@ class DatabaseTaskStore(TaskStore):
             return task
 
         # Legacy conversion
-        legacy_task = types_v03.Task(
-            id=task_model.id,
-            context_id=task_model.context_id,
-            status=task_model.status,
-            artifacts=task_model.artifacts or [],
-            history=task_model.history or [],
-            metadata=task_model.task_metadata or {},
+        # Reconstruct legacy task using model_validate to handle dicts and resolve Pyright issues
+        legacy_task = types_v03.Task.model_validate(
+            {
+                'id': task_model.id,
+                'context_id': task_model.context_id,
+                'status': task_model.status,
+                'artifacts': task_model.artifacts,
+                'history': task_model.history,
+                'metadata': task_model.task_metadata,
+            }
         )
         return conversions.to_core_task(legacy_task)
 
