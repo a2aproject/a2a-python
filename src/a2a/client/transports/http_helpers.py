@@ -8,8 +8,8 @@ import httpx
 
 from httpx_sse import SSEError, aconnect_sse
 
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
-from a2a.client.interceptors import ClientCallContext
 
 
 @contextmanager

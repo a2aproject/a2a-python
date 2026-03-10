@@ -229,7 +229,7 @@ class TestSendMessage:
         self, transport, mock_httpx_client
     ):
         """Test that send_message passes context timeout to build_request."""
-        from a2a.client.interceptors import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -544,7 +544,7 @@ class TestExtensions:
 
         request = create_send_message_request()
 
-        from a2a.client.interceptors import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={'X-A2A-Extensions': 'https://example.com/ext1'}
@@ -631,7 +631,7 @@ class TestExtensions:
             'result': json_format.MessageToDict(extended_card),
         }
 
-        from a2a.client.interceptors import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={HTTP_EXTENSION_HEADER: extensions_header_val}

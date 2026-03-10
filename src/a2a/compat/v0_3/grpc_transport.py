@@ -18,8 +18,7 @@ except ImportError as e:
     ) from e
 
 
-from a2a.client.client import ClientConfig
-from a2a.client.interceptors import ClientCallContext
+from a2a.client.client import ClientCallContext, ClientConfig
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.compat.v0_3 import (

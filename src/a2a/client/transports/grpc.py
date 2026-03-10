@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn
 
-from a2a.client.interceptors import ClientCallContext
+from a2a.client.client import ClientCallContext
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 

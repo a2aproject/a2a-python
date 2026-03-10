@@ -4,7 +4,7 @@ from types import TracebackType
 
 from typing_extensions import Self
 
-from a2a.client.interceptors import ClientCallContext
+from a2a.client.client import ClientCallContext
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,

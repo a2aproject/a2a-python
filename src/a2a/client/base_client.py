@@ -1,8 +1,9 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from typing import Any
+from typing import Any, Literal
 
 from a2a.client.client import (
     Client,
+    ClientCallContext,
     ClientConfig,
     ClientEvent,
     Consumer,
@@ -11,10 +12,12 @@ from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.interceptors import (
     AfterArgs,
     BeforeArgs,
-    ClientCallContext,
+    ClientCallInput,
     ClientCallInterceptor,
-    MethodInput,
-    MethodResult,
+    ClientCallResult,
+    M,
+    P,
+    R,
 )
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
@@ -75,7 +78,9 @@ class BaseClient(Client):
         self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._execute_with_interceptors(
-                input_data=MethodInput(method='send_message', value=request),
+                input_data=ClientCallInput(
+                    method='send_message', value=request
+                ),
                 context=context,
                 transport_call=lambda req, ctx: self._transport.send_message(
                     req, context=ctx
@@ -104,8 +109,14 @@ class BaseClient(Client):
             yield client_event
             return
 
-        before_args = BeforeArgs(
-            input=MethodInput(method='send_message_streaming', value=request),
+        before_args: BeforeArgs[
+            Literal['send_message_streaming'],
+            SendMessageRequest,
+            StreamResponse,
+        ] = BeforeArgs(
+            input=ClientCallInput(
+                method='send_message_streaming', value=request
+            ),
             agent_card=self._card,
             context=context,
         )
@@ -113,7 +124,7 @@ class BaseClient(Client):
 
         if before_result is not None:
             after_args = AfterArgs(
-                result=MethodResult(
+                result=ClientCallResult(
                     method=before_args.input.method,
                     value=before_result['early_return'].value,
                 ),
@@ -160,7 +171,7 @@ class BaseClient(Client):
         tracker = ClientTaskManager()
         async for stream_response in stream:
             after_args = AfterArgs(
-                result=MethodResult(
+                result=ClientCallResult(
                     method=before_args.input.method, value=stream_response
                 ),
                 agent_card=self._card,
@@ -200,7 +211,7 @@ class BaseClient(Client):
             A `Task` object representing the current state of the task.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(method='get_task', value=request),
+            input_data=ClientCallInput(method='get_task', value=request),
             context=context,
             transport_call=lambda req, ctx: self._transport.get_task(
                 req, context=ctx
@@ -215,7 +226,7 @@ class BaseClient(Client):
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
         return await self._execute_with_interceptors(
-            input_data=MethodInput(method='list_tasks', value=request),
+            input_data=ClientCallInput(method='list_tasks', value=request),
             context=context,
             transport_call=lambda req, ctx: self._transport.list_tasks(
                 req, context=ctx
@@ -238,7 +249,7 @@ class BaseClient(Client):
             A `Task` object containing the updated task status.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(method='cancel_task', value=request),
+            input_data=ClientCallInput(method='cancel_task', value=request),
             context=context,
             transport_call=lambda req, ctx: self._transport.cancel_task(
                 req, context=ctx
@@ -261,7 +272,7 @@ class BaseClient(Client):
             The created or updated `TaskPushNotificationConfig` object.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(
+            input_data=ClientCallInput(
                 method='create_task_push_notification_config', value=request
             ),
             context=context,
@@ -288,7 +299,7 @@ class BaseClient(Client):
             A `TaskPushNotificationConfig` object containing the configuration.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(
+            input_data=ClientCallInput(
                 method='get_task_push_notification_config', value=request
             ),
             context=context,
@@ -315,7 +326,7 @@ class BaseClient(Client):
             A `ListTaskPushNotificationConfigsResponse` object.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(
+            input_data=ClientCallInput(
                 method='list_task_push_notification_configs', value=request
             ),
             context=context,
@@ -339,7 +350,7 @@ class BaseClient(Client):
             context: Optional client call context.
         """
         return await self._execute_with_interceptors(
-            input_data=MethodInput(
+            input_data=ClientCallInput(
                 method='delete_task_push_notification_config', value=request
             ),
             context=context,
@@ -376,8 +387,10 @@ class BaseClient(Client):
             )
 
         # Note: resubscribe can only be called on an existing task. As such,
-        before_args = BeforeArgs(
-            input=MethodInput(method='subscribe', value=request),
+        before_args: BeforeArgs[
+            Literal['subscribe'], SubscribeToTaskRequest, StreamResponse
+        ] = BeforeArgs(
+            input=ClientCallInput(method='subscribe', value=request),
             agent_card=self._card,
             context=context,
         )
@@ -385,7 +398,7 @@ class BaseClient(Client):
 
         if before_result is not None:
             after_args = AfterArgs(
-                result=MethodResult(
+                result=ClientCallResult(
                     method=before_args.input.method,
                     value=before_result['early_return'].value,
                 ),
@@ -427,7 +440,7 @@ class BaseClient(Client):
             The `AgentCard` for the agent.
         """
         card = await self._execute_with_interceptors(
-            input_data=MethodInput(
+            input_data=ClientCallInput(
                 method='get_extended_agent_card', value=request
             ),
             context=context,
@@ -447,13 +460,11 @@ class BaseClient(Client):
 
     async def _execute_with_interceptors(
         self,
-        input_data: MethodInput,
+        input_data: ClientCallInput[M, P],
         context: ClientCallContext | None,
-        transport_call: Callable[
-            [Any, ClientCallContext | None], Awaitable[Any]
-        ],
-    ) -> Any:
-        before_args = BeforeArgs(
+        transport_call: Callable[[P, ClientCallContext | None], Awaitable[R]],
+    ) -> R:
+        before_args: BeforeArgs[M, P, R] = BeforeArgs(
             input=input_data,
             agent_card=self._card,
             context=context,
@@ -461,8 +472,8 @@ class BaseClient(Client):
         before_result = await self._intercept_before(before_args)
 
         if before_result is not None:
-            after_args = AfterArgs(
-                result=MethodResult(
+            after_args: AfterArgs[M, R] = AfterArgs(
+                result=ClientCallResult(
                     method=input_data.method,
                     value=before_result['early_return'].value,
                 ),
@@ -476,8 +487,8 @@ class BaseClient(Client):
             before_args.input.value, before_args.context
         )
 
-        after_args = AfterArgs(
-            result=MethodResult(method=input_data.method, value=result),
+        after_args: AfterArgs[M, R] = AfterArgs(
+            result=ClientCallResult(method=input_data.method, value=result),
             agent_card=self._card,
             context=before_args.context,
         )
@@ -487,7 +498,7 @@ class BaseClient(Client):
 
     async def _intercept_before(
         self,
-        args: BeforeArgs,
+        args: BeforeArgs[M, P, R],
     ) -> dict[str, Any] | None:
         if not self._interceptors or len(self._interceptors) == 0:
             return None
@@ -504,7 +515,7 @@ class BaseClient(Client):
 
     async def _intercept_after(
         self,
-        args: AfterArgs,
+        args: AfterArgs[M, R],
         interceptors: list[ClientCallInterceptor] | None = None,
     ) -> None:
         interceptors_to_use = (

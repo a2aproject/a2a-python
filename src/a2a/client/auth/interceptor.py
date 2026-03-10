@@ -2,7 +2,8 @@ import logging  # noqa: I001
 from typing import Any
 
 from a2a.client.auth.credentials import CredentialService
-from a2a.client.interceptors import ClientCallContext, ClientCallInterceptor
+from a2a.client.client import ClientCallContext
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.types.a2a_pb2 import AgentCard
 
 logger = logging.getLogger(__name__)

@@ -2,16 +2,18 @@ import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, MutableMapping
 from types import TracebackType
 from typing import Any
 
 import httpx
 
+from pydantic import BaseModel, Field
 from typing_extensions import Self
 
-from a2a.client.interceptors import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.client.optionals import Channel
+from a2a.client.service_parameters import ServiceParameters
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -80,6 +82,18 @@ ClientEvent = tuple[StreamResponse, Task | None]
 # Alias for an event consuming callback. It takes either a (task, update) pair
 # or a message as well as the agent card for the agent this came from.
 Consumer = Callable[[ClientEvent, AgentCard], Coroutine[None, Any, Any]]
+
+
+class ClientCallContext(BaseModel):
+    """A context passed with each client call, allowing for call-specific.
+
+    configuration and data passing. Such as authentication details or
+    request deadlines.
+    """
+
+    state: MutableMapping[str, Any] = Field(default_factory=dict)
+    timeout: float | None = None
+    service_parameters: ServiceParameters | None = None
 
 
 class Client(ABC):
