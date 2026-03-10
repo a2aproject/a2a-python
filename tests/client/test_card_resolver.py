@@ -203,7 +203,23 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
         await resolver.get_agent_card(relative_card_path='/')
-        mock_httpx_client.get.assert_called_once_with(f'{base_url}/')
+        mock_httpx_client.get.assert_called_once_with(f'{base_url}')
+
+    @pytest.mark.asyncio
+    async def test_get_agent_card_with_empty_resolver_agent_card_path(
+        self,
+        base_url,
+        resolver,
+        mock_httpx_client,
+        mock_response,
+        valid_agent_card_data,
+    ):
+        """Test fetching agent card with an empty relative_card_path."""
+        resolver.agent_card_path = ''
+        mock_response.json.return_value = valid_agent_card_data
+        mock_httpx_client.get.return_value = mock_response
+        await resolver.get_agent_card()
+        mock_httpx_client.get.assert_called_once_with(f'{base_url}')
 
     @pytest.mark.asyncio
     async def test_get_agent_card_http_status_error(
