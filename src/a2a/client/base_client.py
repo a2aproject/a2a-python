@@ -507,7 +507,7 @@ class BaseClient(Client):
         self,
         args: UnionBeforeArgs,
     ) -> dict[str, Any] | None:
-        if not self._interceptors or len(self._interceptors) == 0:
+        if not self._interceptors:
             return None
         executed: list[ClientCallInterceptor] = []
         for interceptor in self._interceptors:
@@ -528,8 +528,6 @@ class BaseClient(Client):
         interceptors_to_use = (
             interceptors if interceptors is not None else self._interceptors
         )
-        if not interceptors_to_use:
-            interceptors_to_use = []
 
         reversed_interceptors = list(reversed(interceptors_to_use))
         for interceptor in reversed_interceptors:
