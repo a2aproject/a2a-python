@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from typing import Any, Literal
+from typing import Any, Literal, cast
 
 from a2a.client.client import (
     Client,
@@ -15,6 +15,8 @@ from a2a.client.interceptors import (
     ClientCallInput,
     ClientCallInterceptor,
     ClientCallResult,
+    UnionAfterArgs,
+    UnionBeforeArgs,
     M,
     P,
     R,
@@ -469,10 +471,10 @@ class BaseClient(Client):
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(before_args)
+        before_result = await self._intercept_before(cast(UnionBeforeArgs, before_args))
 
         if before_result is not None:
-            after_args: AfterArgs[M, R] = AfterArgs(
+            early_after_args: AfterArgs[M, R] = AfterArgs(
                 result=ClientCallResult(
                     method=input_data.method,
                     value=before_result['early_return'].value,
@@ -480,8 +482,10 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(after_args, before_result['executed'])
-            return after_args.result.value
+            await self._intercept_after(
+                cast(UnionAfterArgs, early_after_args), before_result['executed']
+            )
+            return early_after_args.result.value
 
         result = await transport_call(
             before_args.input.value, before_args.context
@@ -492,13 +496,13 @@ class BaseClient(Client):
             agent_card=self._card,
             context=before_args.context,
         )
-        await self._intercept_after(after_args)
+        await self._intercept_after(cast(UnionAfterArgs, after_args))
 
         return after_args.result.value
 
     async def _intercept_before(
         self,
-        args: BeforeArgs[M, P, R],
+        args: UnionBeforeArgs,
     ) -> dict[str, Any] | None:
         if not self._interceptors or len(self._interceptors) == 0:
             return None
@@ -515,7 +519,7 @@ class BaseClient(Client):
 
     async def _intercept_after(
         self,
-        args: AfterArgs[M, R],
+        args: UnionAfterArgs,
         interceptors: list[ClientCallInterceptor] | None = None,
     ) -> None:
         interceptors_to_use = (

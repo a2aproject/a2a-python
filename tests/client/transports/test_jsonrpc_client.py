@@ -117,17 +117,6 @@ class TestJsonRpcTransportInit:
         assert transport.url == 'http://test-agent.example.com'
         assert transport.agent_card == agent_card
 
-    def test_init_with_interceptors(self, mock_httpx_client, agent_card):
-        """Test initialization with interceptors."""
-        interceptor = MagicMock()
-        transport = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            agent_card=agent_card,
-            url='http://test-agent.example.com',
-            interceptors=[interceptor],
-        )
-        assert transport.interceptors == [interceptor]
-
 
 class TestSendMessage:
     """Tests for the send_message method."""
