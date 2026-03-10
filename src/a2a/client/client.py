@@ -115,12 +115,8 @@ class Client(ABC):
             consumers: A list of callables to process events from the agent.
             interceptors: A list of interceptors to process requests and responses.
         """
-        if interceptors is None:
-            interceptors = []
-        if consumers is None:
-            consumers = []
-        self._consumers = consumers
-        self._interceptors = interceptors
+        self._consumers = consumers or []
+        self._interceptors = interceptors or []
 
     async def __aenter__(self) -> Self:
         """Enters the async context manager."""
