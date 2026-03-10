@@ -214,7 +214,7 @@ class TestGetAgentCard:
         mock_response,
         valid_agent_card_data,
     ):
-        """Test fetching agent card with an empty relative_card_path."""
+        """Test fetching agent card when the resolver's agent_card_path is empty."""
         resolver.agent_card_path = ''
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
