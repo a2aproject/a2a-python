@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from typing import Any, Literal, cast
+from typing import Any, cast
 
 from a2a.client.client import (
     Client,
@@ -108,9 +108,13 @@ class BaseClient(Client):
             return
 
         async for event in self._execute_stream_with_interceptors(
-            input_data=ClientCallInput(method='send_message_streaming', value=request),
+            input_data=ClientCallInput(
+                method='send_message_streaming', value=request
+            ),
             context=context,
-            transport_call=lambda req, ctx: self._transport.send_message_streaming(req, context=ctx),
+            transport_call=lambda req, ctx: (
+                self._transport.send_message_streaming(req, context=ctx)
+            ),
         ):
             yield event
 
@@ -148,21 +152,12 @@ class BaseClient(Client):
             )
             await self._intercept_after(cast('UnionAfterArgs', after_args))
             intercepted_response = after_args.result.value
-            client_event: ClientEvent
-            # When we get a message in the stream then we don't expect any
-            # further messages so yield and return
-            if intercepted_response.HasField('message'):
-                client_event = (intercepted_response, None)
-                await self.consume(client_event, self._card)
-                yield client_event
-                return
-
-            # Otherwise track the task / task update then yield to the client
-            await tracker.process(intercepted_response)
-            updated_task = tracker.get_task_or_raise()
-            client_event = (intercepted_response, updated_task)
-            await self.consume(client_event, self._card)
+            client_event = await self._format_stream_event(
+                intercepted_response, tracker
+            )
             yield client_event
+            if intercepted_response.HasField('message'):
+                return
 
     async def get_task(
         self,
@@ -358,7 +353,9 @@ class BaseClient(Client):
         async for event in self._execute_stream_with_interceptors(
             input_data=ClientCallInput(method='subscribe', value=request),
             context=context,
-            transport_call=lambda req, ctx: self._transport.subscribe(req, context=ctx),
+            transport_call=lambda req, ctx: self._transport.subscribe(
+                req, context=ctx
+            ),
         ):
             yield event
 
@@ -443,12 +440,14 @@ class BaseClient(Client):
         await self._intercept_after(cast('UnionAfterArgs', after_args))
 
         return after_args.result.value
-    
+
     async def _execute_stream_with_interceptors(
         self,
         input_data: ClientCallInput[M, P],
         context: ClientCallContext | None,
-        transport_call: Callable[[P, ClientCallContext | None], AsyncIterator[StreamResponse]],
+        transport_call: Callable[
+            [P, ClientCallContext | None], AsyncIterator[StreamResponse]
+        ],
     ) -> AsyncIterator[ClientEvent]:
 
         before_args: BeforeArgs[M, P, StreamResponse] = BeforeArgs(
@@ -456,20 +455,24 @@ class BaseClient(Client):
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
+        before_result = await self._intercept_before(
+            cast('UnionBeforeArgs', before_args)
+        )
 
         if before_result:
             after_args: AfterArgs[M, StreamResponse] = AfterArgs(
-                result=before_result.early_return,
+                result=before_result['early_return'],
                 agent_card=self._card,
                 context=before_args.context,
             )
             await self._intercept_after(
-                cast('UnionAfterArgs', after_args), 
-                before_result.executed
+                cast('UnionAfterArgs', after_args), before_result['executed']
             )
-            
-            yield await self._format_stream_event(after_args.result.value)
+
+            tracker = ClientTaskManager()
+            yield await self._format_stream_event(
+                after_args.result.value, tracker
+            )
             return
 
         stream = transport_call(before_args.input.value, before_args.context)
@@ -509,13 +512,17 @@ class BaseClient(Client):
             if args.early_return:
                 return
 
-    async def _format_stream_event(self, stream_response: StreamResponse) -> ClientEvent:
+    async def _format_stream_event(
+        self, stream_response: StreamResponse, tracker: ClientTaskManager
+    ) -> ClientEvent:
         if stream_response.HasField('message'):
             client_event = (stream_response, None)
-        elif stream_response.HasField('task'):
-            client_event = (stream_response, stream_response.task)
-        else:
-            client_event = (stream_response, None)
-            
+            await self.consume(client_event, self._card)
+            return client_event
+
+        await tracker.process(stream_response)
+        updated_task = tracker.get_task_or_raise()
+        client_event = (stream_response, updated_task)
+
         await self.consume(client_event, self._card)
         return client_event
