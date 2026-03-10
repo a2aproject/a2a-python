@@ -107,43 +107,12 @@ class BaseClient(Client):
             yield client_event
             return
 
-        before_args: BeforeArgs[
-            Literal['send_message_streaming'],
-            SendMessageRequest,
-            StreamResponse,
-        ] = BeforeArgs(
-            input=ClientCallInput(
-                method='send_message_streaming', value=request
-            ),
-            agent_card=self._card,
+        async for event in self._execute_stream_with_interceptors(
+            input_data=ClientCallInput(method='send_message_streaming', value=request),
             context=context,
-        )
-        before_result = await self._intercept_before(before_args)
-
-        if before_result is not None:
-            after_args = AfterArgs(
-                result=ClientCallResult(
-                    method=before_args.input.method,
-                    value=before_result['early_return'].value,
-                ),
-                agent_card=self._card,
-                context=before_args.context,
-            )
-            await self._intercept_after(
-                cast('UnionAfterArgs', after_args), before_result['executed']
-            )
-            yield after_args.result.value
-            return
-
-        stream = self._transport.send_message_streaming(
-            before_args.input.value, context=before_args.context
-        )
-
-        async for client_event in self._process_stream(
-            stream,
-            before_args=before_args,
+            transport_call=lambda req, ctx: self._transport.send_message_streaming(req, context=ctx),
         ):
-            yield client_event
+            yield event
 
     def _apply_client_config(self, request: SendMessageRequest) -> None:
         if not request.configuration.blocking and self._config.polling:
@@ -386,40 +355,12 @@ class BaseClient(Client):
                 'client and/or server do not support resubscription.'
             )
 
-        # Note: resubscribe can only be called on an existing task. As such,
-        before_args: BeforeArgs[
-            Literal['subscribe'], SubscribeToTaskRequest, StreamResponse
-        ] = BeforeArgs(
-            input=ClientCallInput(method='subscribe', value=request),
-            agent_card=self._card,
+        async for event in self._execute_stream_with_interceptors(
+            input_data=ClientCallInput(method='subscribe', value=request),
             context=context,
-        )
-        before_result = await self._intercept_before(before_args)
-
-        if before_result is not None:
-            after_args = AfterArgs(
-                result=ClientCallResult(
-                    method=before_args.input.method,
-                    value=before_result['early_return'].value,
-                ),
-                agent_card=self._card,
-                context=before_args.context,
-            )
-            await self._intercept_after(
-                cast('UnionAfterArgs', after_args), before_result['executed']
-            )
-            yield after_args.result.value
-            return
-
-        stream = self._transport.subscribe(
-            before_args.input.value, context=before_args.context
-        )
-
-        async for client_event in self._process_stream(
-            stream,
-            before_args=before_args,
+            transport_call=lambda req, ctx: self._transport.subscribe(req, context=ctx),
         ):
-            yield client_event
+            yield event
 
     async def get_extended_agent_card(
         self,
@@ -502,6 +443,39 @@ class BaseClient(Client):
         await self._intercept_after(cast('UnionAfterArgs', after_args))
 
         return after_args.result.value
+    
+    async def _execute_stream_with_interceptors(
+        self,
+        input_data: ClientCallInput[M, P],
+        context: ClientCallContext | None,
+        transport_call: Callable[[P, ClientCallContext | None], AsyncIterator[StreamResponse]],
+    ) -> AsyncIterator[ClientEvent]:
+
+        before_args: BeforeArgs[M, P, StreamResponse] = BeforeArgs(
+            input=input_data,
+            agent_card=self._card,
+            context=context,
+        )
+        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
+
+        if before_result:
+            after_args: AfterArgs[M, StreamResponse] = AfterArgs(
+                result=before_result.early_return,
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(
+                cast('UnionAfterArgs', after_args), 
+                before_result.executed
+            )
+            
+            yield await self._format_stream_event(after_args.result.value)
+            return
+
+        stream = transport_call(before_args.input.value, before_args.context)
+
+        async for client_event in self._process_stream(stream, before_args):
+            yield client_event
 
     async def _intercept_before(
         self,
@@ -534,3 +508,14 @@ class BaseClient(Client):
             await interceptor.after(args)
             if args.early_return:
                 return
+
+    async def _format_stream_event(self, stream_response: StreamResponse) -> ClientEvent:
+        if stream_response.HasField('message'):
+            client_event = (stream_response, None)
+        elif stream_response.HasField('task'):
+            client_event = (stream_response, stream_response.task)
+        else:
+            client_event = (stream_response, None)
+            
+        await self.consume(client_event, self._card)
+        return client_event
