@@ -207,8 +207,6 @@ async def test_save_and_get_detailed_task(
     assert retrieved_task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert retrieved_task.metadata['key1'] == 'value1'
     assert retrieved_task.metadata['key2'] == 123
-
-    # Pydantic models handle their own serialization for comparison if model_dump is used
     assert retrieved_task.artifacts == test_task.artifacts
 
 
@@ -415,7 +413,7 @@ async def test_update_task_delete_artifact(
 async def test_metadata_field_mapping(
     vertex_store: VertexTaskStore,
 ) -> None:
-    """Test that metadata field is correctly mapped between Pydantic and SQLAlchemy.
+    """Test that metadata field is correctly mapped between the core types and vertex.
 
     This test verifies:
     1. Metadata can be None
