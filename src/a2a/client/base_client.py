@@ -93,14 +93,10 @@ class BaseClient(Client):
             # client always sees the same iterator.
             stream_response = StreamResponse()
             client_event: ClientEvent
-            if getattr(response, 'task', None) or (
-                hasattr(response, 'HasField') and response.HasField('task')
-            ):
+            if response.HasField('task'):
                 stream_response.task.CopyFrom(response.task)
                 client_event = (stream_response, response.task)
-            elif getattr(response, 'message', None) or (
-                hasattr(response, 'HasField') and response.HasField('message')
-            ):
+            elif response.HasField('message'):
                 stream_response.message.CopyFrom(response.message)
                 client_event = (stream_response, None)
             else:
