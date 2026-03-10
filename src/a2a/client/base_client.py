@@ -111,14 +111,18 @@ class BaseClient(Client):
             yield client_event
             return
 
-        before_args = BeforeArgs(
+        before_args: BeforeArgs[
+            Literal['send_message_streaming'],
+            SendMessageRequest,
+            StreamResponse,
+        ] = BeforeArgs(
             input=ClientCallInput(
                 method='send_message_streaming', value=request
             ),
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
+        before_result = await self._intercept_before(before_args)
 
         if before_result is not None:
             after_args = AfterArgs(
@@ -129,7 +133,9 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(cast('UnionAfterArgs', after_args), before_result['executed'])
+            await self._intercept_after(
+                cast('UnionAfterArgs', after_args), before_result['executed']
+            )
             yield after_args.result.value
             return
 
@@ -385,12 +391,14 @@ class BaseClient(Client):
             )
 
         # Note: resubscribe can only be called on an existing task. As such,
-        before_args = BeforeArgs(
+        before_args: BeforeArgs[
+            Literal['subscribe'], SubscribeToTaskRequest, StreamResponse
+        ] = BeforeArgs(
             input=ClientCallInput(method='subscribe', value=request),
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(cast('UnionBeforeArgs', before_args))
+        before_result = await self._intercept_before(before_args)
 
         if before_result is not None:
             after_args = AfterArgs(
@@ -401,7 +409,9 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(cast('UnionAfterArgs', after_args), before_result['executed'])
+            await self._intercept_after(
+                cast('UnionAfterArgs', after_args), before_result['executed']
+            )
             yield after_args.result.value
             return
 
