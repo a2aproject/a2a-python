@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
-from typing import Any, cast
+from typing import Any
 
 from a2a.client.client import (
     Client,
@@ -15,11 +15,6 @@ from a2a.client.interceptors import (
     ClientCallInput,
     ClientCallInterceptor,
     ClientCallResult,
-    M,
-    P,
-    R,
-    UnionAfterArgs,
-    UnionBeforeArgs,
 )
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
@@ -150,7 +145,7 @@ class BaseClient(Client):
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(cast('UnionAfterArgs', after_args))
+            await self._intercept_after(after_args)
             intercepted_response = after_args.result.value
             client_event = await self._format_stream_event(
                 intercepted_response, tracker
@@ -400,21 +395,21 @@ class BaseClient(Client):
 
     async def _execute_with_interceptors(
         self,
-        input_data: ClientCallInput[M, P],
+        input_data: ClientCallInput,
         context: ClientCallContext | None,
-        transport_call: Callable[[P, ClientCallContext | None], Awaitable[R]],
-    ) -> R:
-        before_args: BeforeArgs[M, P, R] = BeforeArgs(
+        transport_call: Callable[
+            [Any, ClientCallContext | None], Awaitable[Any]
+        ],
+    ) -> Any:
+        before_args = BeforeArgs(
             input=input_data,
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(
-            cast('UnionBeforeArgs', before_args)
-        )
+        before_result = await self._intercept_before(before_args)
 
         if before_result is not None:
-            early_after_args: AfterArgs[M, R] = AfterArgs(
+            early_after_args = AfterArgs(
                 result=ClientCallResult(
                     method=input_data.method,
                     value=before_result['early_return'].value,
@@ -423,7 +418,7 @@ class BaseClient(Client):
                 context=before_args.context,
             )
             await self._intercept_after(
-                cast('UnionAfterArgs', early_after_args),
+                early_after_args,
                 before_result['executed'],
             )
             return early_after_args.result.value
@@ -432,42 +427,38 @@ class BaseClient(Client):
             before_args.input.value, before_args.context
         )
 
-        after_args: AfterArgs[M, R] = AfterArgs(
+        after_args = AfterArgs(
             result=ClientCallResult(method=input_data.method, value=result),
             agent_card=self._card,
             context=before_args.context,
         )
-        await self._intercept_after(cast('UnionAfterArgs', after_args))
+        await self._intercept_after(after_args)
 
         return after_args.result.value
 
     async def _execute_stream_with_interceptors(
         self,
-        input_data: ClientCallInput[M, P],
+        input_data: ClientCallInput,
         context: ClientCallContext | None,
         transport_call: Callable[
-            [P, ClientCallContext | None], AsyncIterator[StreamResponse]
+            [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
         ],
     ) -> AsyncIterator[ClientEvent]:
 
-        before_args: BeforeArgs[M, P, StreamResponse] = BeforeArgs(
+        before_args = BeforeArgs(
             input=input_data,
             agent_card=self._card,
             context=context,
         )
-        before_result = await self._intercept_before(
-            cast('UnionBeforeArgs', before_args)
-        )
+        before_result = await self._intercept_before(before_args)
 
         if before_result:
-            after_args: AfterArgs[M, StreamResponse] = AfterArgs(
+            after_args = AfterArgs(
                 result=before_result['early_return'],
                 agent_card=self._card,
                 context=before_args.context,
             )
-            await self._intercept_after(
-                cast('UnionAfterArgs', after_args), before_result['executed']
-            )
+            await self._intercept_after(after_args, before_result['executed'])
 
             tracker = ClientTaskManager()
             yield await self._format_stream_event(
@@ -482,7 +473,7 @@ class BaseClient(Client):
 
     async def _intercept_before(
         self,
-        args: UnionBeforeArgs,
+        args: BeforeArgs,
     ) -> dict[str, Any] | None:
         if not self._interceptors:
             return None
@@ -499,7 +490,7 @@ class BaseClient(Client):
 
     async def _intercept_after(
         self,
-        args: UnionAfterArgs,
+        args: AfterArgs,
         interceptors: list[ClientCallInterceptor] | None = None,
     ) -> None:
         interceptors_to_use = (

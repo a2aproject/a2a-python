@@ -3,9 +3,9 @@ import logging  # noqa: I001
 from a2a.client.auth.credentials import CredentialService
 from a2a.client.client import ClientCallContext
 from a2a.client.interceptors import (
+    AfterArgs,
+    BeforeArgs,
     ClientCallInterceptor,
-    UnionAfterArgs,
-    UnionBeforeArgs,
 )
 
 logger = logging.getLogger(__name__)
@@ -20,7 +20,7 @@ class AuthInterceptor(ClientCallInterceptor):
     def __init__(self, credential_service: CredentialService):
         self._credential_service = credential_service
 
-    async def before(self, args: UnionBeforeArgs) -> None:
+    async def before(self, args: BeforeArgs) -> None:
         """Applies authentication headers to the request if credentials are available."""
         agent_card = args.agent_card
 
@@ -94,5 +94,5 @@ class AuthInterceptor(ClientCallInterceptor):
 
                 # Note: Other cases like API keys in query/cookie are not handled and will be skipped.
 
-    async def after(self, args: UnionAfterArgs) -> None:
+    async def after(self, args: AfterArgs) -> None:
         """Invoked after the method is executed."""
