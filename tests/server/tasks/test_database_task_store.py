@@ -8,6 +8,8 @@ import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
 from a2a.types.a2a_pb2 import ListTasksRequest
+from a2a.compat.v0_3 import types as types_v03
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -693,8 +695,6 @@ async def test_get_0_3_task_detailed(
     (string-based enums, different field names) and verifies that the store
     correctly converts it to the modern Protobuf-based Task model.
     """
-    from a2a.compat.v0_3 import types as types_v03
-    from sqlalchemy import insert
 
     task_id = 'legacy-detailed-1'
     owner = 'legacy_user'
