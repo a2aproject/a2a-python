@@ -5,6 +5,8 @@ from collections.abc import AsyncGenerator
 import pytest
 from a2a.server.context import ServerCallContext
 from a2a.auth.user import User
+from a2a.compat.v0_3 import types as types_v03
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -730,22 +732,22 @@ async def test_get_0_3_push_notification_config_detailed(
     This test simulates a database that already contains legacy v0.3 JSON data
     and verifies that the store correctly converts it to the modern Protobuf model.
     """
-    from a2a.compat.v0_3 import types as types_v03
-    from sqlalchemy import insert
-
     task_id = 'legacy-push-1'
     config_id = 'config-legacy-1'
     owner = 'legacy_user'
     context_user = ServerCallContext(user=SampleUser(user_name=owner))
 
     # 1. Create a legacy PushNotificationConfig using v0.3 models
-    legacy_config = types_v03.PushNotificationConfig(
-        id=config_id,
-        url='https://example.com/push',
-        token='legacy-token',
-        authentication=types_v03.PushNotificationAuthenticationInfo(
-            schemes=['bearer'],
-            credentials='legacy-creds',
+    legacy_config = types_v03.TaskPushNotificationConfig(
+        task_id=task_id,
+        push_notification_config=types_v03.PushNotificationConfig(
+            id=config_id,
+            url='https://example.com/push',
+            token='legacy-token',
+            authentication=types_v03.PushNotificationAuthenticationInfo(
+                schemes=['bearer'],
+                credentials='legacy-creds',
+            ),
         ),
     )
 
@@ -774,6 +776,7 @@ async def test_get_0_3_push_notification_config_detailed(
     # 4. Verify the conversion to modern Protobuf
     assert len(retrieved_configs) == 1
     retrieved = retrieved_configs[0]
+    assert retrieved.task_id == task_id
     assert retrieved.id == config_id
     assert retrieved.url == 'https://example.com/push'
     assert retrieved.token == 'legacy-token'

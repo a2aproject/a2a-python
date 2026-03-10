@@ -774,7 +774,7 @@ async def test_get_0_3_task_detailed(
         await session.execute(stmt)
 
     # 3. Retrieve the task using the standard store.get()
-    # This will trigger the PydanticType/PydanticListType legacy fallback
+    # This will trigger conversion from legacy to 1.0 format in _from_orm method
     retrieved_task = await db_store_parameterized.get(task_id, context_user)
 
     # 4. Verify the conversion to modern Protobuf
@@ -814,6 +814,12 @@ async def test_get_0_3_task_detailed(
 
     # Check Metadata
     assert dict(retrieved_task.metadata) == {'meta_key': 'meta_val'}
+
+    retrieved_tasks = await db_store_parameterized.list(
+        ListTasksRequest(), context_user
+    )
+    assert retrieved_tasks is not None
+    assert retrieved_tasks.tasks == [retrieved_task]
 
     await db_store_parameterized.delete(task_id, context_user)
 

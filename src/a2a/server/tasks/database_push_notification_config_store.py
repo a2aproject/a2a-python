@@ -167,22 +167,6 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             protocol_version='1.0',
         )
 
-    def _parse_config(
-        self, json_payload: str, protocol_version: str | None = None
-    ) -> PushNotificationConfig:
-        """Parses a JSON payload into a PushNotificationConfig proto.
-
-        Uses protocol_version to decide between modern parsing and legacy fallback.
-        """
-        if protocol_version == '1.0':
-            return Parse(json_payload, PushNotificationConfig())
-
-        # Legacy case: no version or older
-        legacy_instance = types_v03.PushNotificationConfig.model_validate_json(
-            json_payload
-        )
-        return conversions.to_core_push_notification_config(legacy_instance)
-
     def _from_orm(
         self, model_instance: PushNotificationConfigModel
     ) -> TaskPushNotificationConfig:
@@ -355,3 +339,22 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     owner,
                     config_id,
                 )
+
+    def _parse_config(
+        self, json_payload: str, protocol_version: str | None = None
+    ) -> TaskPushNotificationConfig:
+        """Parses a JSON payload into a TaskPushNotificationConfig proto.
+
+        Uses protocol_version to decide between modern parsing and legacy fallback.
+        """
+        if protocol_version == '1.0':
+            return Parse(json_payload, TaskPushNotificationConfig())
+
+        legacy_instance = (
+            types_v03.TaskPushNotificationConfig.model_validate_json(
+                json_payload
+            )
+        )
+        return conversions.to_core_task_push_notification_config(
+            legacy_instance
+        )
