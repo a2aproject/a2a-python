@@ -12,6 +12,12 @@ from grpc.aio import Channel
 
 from jwt.api_jwk import PyJWK
 from a2a.client import ClientConfig
+from a2a.client.middleware import ClientCallContext
+from a2a.client.service_parameters import (
+    ServiceParametersFactory,
+    with_a2a_extensions,
+)
+from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.base_client import BaseClient
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.client.transports.base import ClientTransport
@@ -35,10 +41,11 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageRequest,
-    CreateTaskPushNotificationConfigRequest,
+    SendMessageRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTaskPushNotificationConfigsResponse,
@@ -82,9 +89,9 @@ CANCEL_TASK_RESPONSE = Task(
 
 CALLBACK_CONFIG = TaskPushNotificationConfig(
     task_id='task-callback-123',
-    push_notification_config=PushNotificationConfig(
-        id='pnc-abc', url='http://callback.example.com', token=''
-    ),
+    id='pnc-abc',
+    url='http://callback.example.com',
+    token='',
 )
 
 RESUBSCRIBE_EVENT = TaskStatusUpdateEvent(
@@ -593,28 +600,17 @@ async def test_http_transport_create_task_push_notification_config(
     transport = transport_setup.transport
     handler = transport_setup.handler
 
-    # Create CreateTaskPushNotificationConfigRequest with required fields
-    params = CreateTaskPushNotificationConfigRequest(
+    # Create TaskPushNotificationConfig with required fields
+    params = TaskPushNotificationConfig(
         task_id='task-callback-123',
-        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.create_task_push_notification_config(
         request=params
     )
 
-    # TaskPushNotificationConfig has 'push_notification_config'
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_create_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
@@ -634,28 +630,17 @@ async def test_grpc_transport_create_task_push_notification_config(
     channel = channel_factory(server_address)
     transport = GrpcTransport(channel=channel, agent_card=agent_card)
 
-    # Create CreateTaskPushNotificationConfigRequest with required fields
-    params = CreateTaskPushNotificationConfigRequest(
+    # Create TaskPushNotificationConfig with required fields
+    params = TaskPushNotificationConfig(
         task_id='task-callback-123',
-        config=CALLBACK_CONFIG.push_notification_config,
     )
     result = await transport.create_task_push_notification_config(
         request=params
     )
 
-    # TaskPushNotificationConfig has 'push_notification_config'
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_create_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
@@ -681,20 +666,13 @@ async def test_http_transport_get_task_push_notification_config(
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
     params = GetTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     result = await transport.get_task_push_notification_config(request=params)
 
-    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_get_task_push_notification_config.assert_awaited_once()
 
     if hasattr(transport, 'close'):
@@ -717,20 +695,13 @@ async def test_grpc_transport_get_task_push_notification_config(
     # Use GetTaskPushNotificationConfigRequest with name field (resource name)
     params = GetTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     result = await transport.get_task_push_notification_config(request=params)
 
-    # TaskPushNotificationConfig has 'name' and 'push_notification_config'
     assert result.task_id == CALLBACK_CONFIG.task_id
-    assert (
-        result.push_notification_config.id
-        == CALLBACK_CONFIG.push_notification_config.id
-    )
-    assert (
-        result.push_notification_config.url
-        == CALLBACK_CONFIG.push_notification_config.url
-    )
+    assert result.id == CALLBACK_CONFIG.id
+    assert result.url == CALLBACK_CONFIG.url
     handler.on_get_task_push_notification_config.assert_awaited_once()
 
     await transport.close()
@@ -810,7 +781,7 @@ async def test_http_transport_delete_task_push_notification_config(
 
     params = DeleteTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     await transport.delete_task_push_notification_config(request=params)
 
@@ -835,7 +806,7 @@ async def test_grpc_transport_delete_task_push_notification_config(
 
     params = DeleteTaskPushNotificationConfigRequest(
         task_id=f'{CALLBACK_CONFIG.task_id}',
-        id=CALLBACK_CONFIG.push_notification_config.id,
+        id=CALLBACK_CONFIG.id,
     )
     await transport.delete_task_push_notification_config(request=params)
 
@@ -918,10 +889,6 @@ async def test_http_transport_get_card(
     result = transport.agent_card  # type: ignore[attr-defined]
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name  # type: ignore[attr-defined]
-    # Only check _needs_extended_card if the transport supports it
-    if hasattr(transport, '_needs_extended_card'):
-        assert transport._needs_extended_card is False  # type: ignore[attr-defined]
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -955,9 +922,6 @@ async def test_http_transport_get_authenticated_card(
         GetExtendedAgentCardRequest()
     )
     assert result.name == extended_agent_card.name
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
@@ -984,8 +948,6 @@ async def test_grpc_transport_get_card(
     )
 
     assert result.name == agent_card.name
-    assert transport.agent_card.name == agent_card.name
-    assert transport._needs_extended_card is False
 
     await transport.close()
 
@@ -1029,19 +991,26 @@ async def test_json_transport_base_client_send_message_with_extensions(
             'result': {'task': MessageToDict(TASK_FROM_BLOCKING)},
         }
 
+        service_params = ServiceParametersFactory.create(
+            [with_a2a_extensions(extensions)]
+        )
+        context = ClientCallContext(service_parameters=service_params)
+
         # Call send_message on the BaseClient
         async for _ in client.send_message(
-            request=message_to_send, extensions=extensions
+            request=SendMessageRequest(message=message_to_send), context=context
         ):
             pass
 
         mock_send_request.assert_called_once()
-        call_args, _ = mock_send_request.call_args
-        kwargs = call_args[1]
-        headers = kwargs.get('headers', {})
-        assert 'X-A2A-Extensions' in headers
+        call_args, call_kwargs = mock_send_request.call_args
+        called_context = (
+            call_args[1] if len(call_args) > 1 else call_kwargs.get('context')
+        )
+        service_params = getattr(called_context, 'service_parameters', {})
+        assert 'X-A2A-Extensions' in service_params
         assert (
-            headers['X-A2A-Extensions']
+            service_params['X-A2A-Extensions']
             == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
         )
 
@@ -1106,19 +1075,16 @@ async def test_json_transport_get_signed_base_card(
 
     assert result.name == agent_card.name
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
 
 
 @pytest.mark.asyncio
-async def test_json_transport_get_signed_extended_card(
+async def test_client_get_signed_extended_card(
     jsonrpc_setup: TransportSetup, agent_card: AgentCard
 ) -> None:
-    """Tests fetching and verifying an asymmetrically signed extended AgentCard via JSON-RPC.
+    """Tests fetching and verifying an asymmetrically signed extended AgentCard at the client level.
 
     The client has a base card and fetches the extended card, which is signed
     by the server using ES256. The client verifies the signature on the
@@ -1134,7 +1100,7 @@ async def test_json_transport_get_signed_extended_card(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,
+        signing_key=private_key,  # type: ignore[arg-type]
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -1159,30 +1125,35 @@ async def test_json_transport_get_signed_extended_card(
         agent_card=agent_card,
         url=agent_card.supported_interfaces[0].url,
     )
+    client = BaseClient(
+        card=agent_card,
+        config=ClientConfig(streaming=False),
+        transport=transport,
+        consumers=[],
+        middleware=[],
+    )
 
-    # Get the card, this will trigger verification in get_card
     signature_verifier = create_signature_verifier(
         create_key_provider(public_key), ['HS384', 'ES256']
     )
-    result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+    # Get the card, this will trigger verification in get_extended_agent_card
+    result = await client.get_extended_agent_card(
+        GetExtendedAgentCardRequest(),
+        signature_verifier=signature_verifier,
     )
     assert result.name == extended_agent_card.name
     assert result.signatures is not None
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
 
 
 @pytest.mark.asyncio
-async def test_json_transport_get_signed_base_and_extended_cards(
+async def test_client_get_signed_base_and_extended_cards(
     jsonrpc_setup: TransportSetup, agent_card: AgentCard
 ) -> None:
-    """Tests fetching and verifying both base and extended cards via JSON-RPC when no card is initially provided.
+    """Tests fetching and verifying both base and extended cards at the client level when no card is initially provided.
 
     The client starts with no card. It first fetches the base card, which is
     signed. It then fetches the extended card, which is also signed. Both signatures
@@ -1199,7 +1170,7 @@ async def test_json_transport_get_signed_base_and_extended_cards(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,
+        signing_key=private_key,  # type: ignore[arg-type]
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -1241,154 +1212,21 @@ async def test_json_transport_get_signed_base_and_extended_cards(
         agent_card=base_card,
         url=agent_url,
     )
+    client = BaseClient(
+        card=base_card,
+        config=ClientConfig(streaming=False),
+        transport=transport,
+        consumers=[],
+        middleware=[],
+    )
 
-    # 3. Fetch extended card via transport
-    result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
+    # 3. Fetch extended card via client
+    result = await client.get_extended_agent_card(
+        GetExtendedAgentCardRequest(),
+        signature_verifier=signature_verifier,
     )
     assert result.name == extended_agent_card.name
     assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
 
     if hasattr(transport, 'close'):
         await transport.close()
-
-
-@pytest.mark.asyncio
-async def test_rest_transport_get_signed_card(
-    rest_setup: TransportSetup, agent_card: AgentCard
-) -> None:
-    """Tests fetching and verifying signed base and extended cards via REST.
-
-    The client starts with no card. It first fetches the base card, which is
-    signed. It then fetches the extended card, which is also signed. Both signatures
-    are verified independently upon retrieval.
-    """
-    mock_request_handler = rest_setup.handler
-    agent_card.capabilities.extended_agent_card = True
-    extended_agent_card = AgentCard()
-    extended_agent_card.CopyFrom(agent_card)
-    extended_agent_card.name = 'Extended Agent Card'
-
-    # Setup signing on the server side
-    private_key = ec.generate_private_key(ec.SECP256R1())
-    public_key = private_key.public_key()
-    signer = create_agent_card_signer(
-        signing_key=private_key,
-        protected_header={
-            'alg': 'ES256',
-            'kid': 'testkey',
-            'jku': None,
-            'typ': 'JOSE',
-        },
-    )
-
-    app_builder = A2ARESTFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        card_modifier=signer,  # Sign the base card
-        extended_card_modifier=lambda card, ctx: signer(
-            card
-        ),  # Sign the extended card
-    )
-    app = app_builder.build()
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
-
-    agent_url = agent_card.supported_interfaces[0].url
-    signature_verifier = create_signature_verifier(
-        create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
-    )
-
-    resolver = A2ACardResolver(
-        httpx_client=httpx_client,
-        base_url=agent_url,
-    )
-
-    # 1. Fetch base card
-    base_card = await resolver.get_agent_card(
-        signature_verifier=signature_verifier
-    )
-
-    # 2. Create transport with base card
-    transport = RestTransport(
-        httpx_client=httpx_client,
-        agent_card=base_card,
-        url=agent_url,
-    )
-
-    # 3. Fetch extended card
-    result = await transport.get_extended_agent_card(
-        GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
-    )
-    assert result.name == extended_agent_card.name
-    assert result.signatures is not None
-    assert len(result.signatures) == 1
-    assert transport.agent_card is not None
-    assert transport.agent_card.name == extended_agent_card.name
-    assert transport._needs_extended_card is False
-
-    if hasattr(transport, 'close'):
-        await transport.close()
-
-
-@pytest.mark.asyncio
-async def test_grpc_transport_get_signed_card(
-    mock_request_handler: AsyncMock, agent_card: AgentCard
-) -> None:
-    """Tests fetching and verifying a signed AgentCard via gRPC."""
-    # Setup signing on the server side
-    agent_card.capabilities.extended_agent_card = True
-
-    private_key = ec.generate_private_key(ec.SECP256R1())
-    public_key = private_key.public_key()
-    signer = create_agent_card_signer(
-        signing_key=private_key,
-        protected_header={
-            'alg': 'ES256',
-            'kid': 'testkey',
-            'jku': None,
-            'typ': 'JOSE',
-        },
-    )
-
-    server = grpc.aio.server()
-    port = server.add_insecure_port('[::]:0')
-    server_address = f'localhost:{port}'
-    agent_card.supported_interfaces[0].url = server_address
-
-    servicer = GrpcHandler(
-        agent_card,
-        mock_request_handler,
-        card_modifier=signer,
-    )
-    a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
-    await server.start()
-
-    transport = None  # Initialize transport
-    try:
-
-        def channel_factory(address: str) -> Channel:
-            return grpc.aio.insecure_channel(address)
-
-        channel = channel_factory(server_address)
-        transport = GrpcTransport(channel=channel, agent_card=agent_card)
-        transport.agent_card = None
-        assert transport._needs_extended_card is True
-
-        # Get the card, this will trigger verification in get_card
-        signature_verifier = create_signature_verifier(
-            create_key_provider(public_key), ['HS384', 'ES256', 'RS256']
-        )
-        result = await transport.get_extended_agent_card(
-            GetExtendedAgentCardRequest(), signature_verifier=signature_verifier
-        )
-        assert result.signatures is not None
-        assert len(result.signatures) == 1
-        assert transport._needs_extended_card is False
-    finally:
-        if transport:
-            await transport.close()
-        await server.stop(0)  # Gracefully stop the server

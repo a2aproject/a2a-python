@@ -1,20 +1,17 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Callable
-from typing import Any
 
 from a2a.client.client import (
     Client,
-    ClientCallContext,
     ClientConfig,
     ClientEvent,
     Consumer,
 )
 from a2a.client.client_task_manager import ClientTaskManager
-from a2a.client.middleware import ClientCallInterceptor
+from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -23,8 +20,6 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
-    Message,
-    SendMessageConfiguration,
     SendMessageRequest,
     StreamResponse,
     SubscribeToTaskRequest,
@@ -51,12 +46,9 @@ class BaseClient(Client):
 
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration: SendMessageConfiguration | None = None,
         context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the agent.
 
@@ -66,35 +58,15 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
-            configuration: Optional per-call overrides for message sending behavior.
-            context: The client call context.
-            request_metadata: Extensions Metadata attached to the request.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Yields:
             An async iterator of `ClientEvent`
         """
-        config = SendMessageConfiguration(
-            accepted_output_modes=self._config.accepted_output_modes,
-            blocking=not self._config.polling,
-            push_notification_config=(
-                self._config.push_notification_configs[0]
-                if self._config.push_notification_configs
-                else None
-            ),
-        )
-
-        if configuration:
-            config.MergeFrom(configuration)
-            config.blocking = configuration.blocking
-
-        send_message_request = SendMessageRequest(
-            message=request, configuration=config, metadata=request_metadata
-        )
-
+        self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._transport.send_message(
-                send_message_request, context=context, extensions=extensions
+                request, context=context
             )
 
             # In non-streaming case we convert to a StreamResponse so that the
@@ -116,10 +88,28 @@ class BaseClient(Client):
             return
 
         stream = self._transport.send_message_streaming(
-            send_message_request, context=context, extensions=extensions
+            request, context=context
         )
         async for client_event in self._process_stream(stream):
             yield client_event
+
+    def _apply_client_config(self, request: SendMessageRequest) -> None:
+        if not request.configuration.blocking and self._config.polling:
+            request.configuration.blocking = not self._config.polling
+        if (
+            not request.configuration.HasField('task_push_notification_config')
+            and self._config.push_notification_configs
+        ):
+            request.configuration.task_push_notification_config.CopyFrom(
+                self._config.push_notification_configs[0]
+            )
+        if (
+            not request.configuration.accepted_output_modes
+            and self._config.accepted_output_modes
+        ):
+            request.configuration.accepted_output_modes.extend(
+                self._config.accepted_output_modes
+            )
 
     async def _process_stream(
         self, stream: AsyncIterator[StreamResponse]
@@ -147,21 +137,17 @@ class BaseClient(Client):
         request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task.
 
         Args:
             request: The `GetTaskRequest` object specifying the task ID.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             A `Task` object representing the current state of the task.
         """
-        return await self._transport.get_task(
-            request, context=context, extensions=extensions
-        )
+        return await self._transport.get_task(request, context=context)
 
     async def list_tasks(
         self,
@@ -177,41 +163,35 @@ class BaseClient(Client):
         request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task.
 
         Args:
             request: The `CancelTaskRequest` object specifying the task ID.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             A `Task` object containing the updated task status.
         """
-        return await self._transport.cancel_task(
-            request, context=context, extensions=extensions
-        )
+        return await self._transport.cancel_task(request, context=context)
 
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task.
 
         Args:
             request: The `TaskPushNotificationConfig` object with the new configuration.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             The created or updated `TaskPushNotificationConfig` object.
         """
         return await self._transport.create_task_push_notification_config(
-            request, context=context, extensions=extensions
+            request, context=context
         )
 
     async def get_task_push_notification_config(
@@ -219,20 +199,18 @@ class BaseClient(Client):
         request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task.
 
         Args:
             request: The `GetTaskPushNotificationConfigParams` object specifying the task.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             A `TaskPushNotificationConfig` object containing the configuration.
         """
         return await self._transport.get_task_push_notification_config(
-            request, context=context, extensions=extensions
+            request, context=context
         )
 
     async def list_task_push_notification_configs(
@@ -240,20 +218,18 @@ class BaseClient(Client):
         request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task.
 
         Args:
             request: The `ListTaskPushNotificationConfigsRequest` object specifying the request.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             A `ListTaskPushNotificationConfigsResponse` object.
         """
         return await self._transport.list_task_push_notification_configs(
-            request, context=context, extensions=extensions
+            request, context=context
         )
 
     async def delete_task_push_notification_config(
@@ -261,17 +237,15 @@ class BaseClient(Client):
         request: DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task.
 
         Args:
             request: The `DeleteTaskPushNotificationConfigRequest` object specifying the request.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
         """
         await self._transport.delete_task_push_notification_config(
-            request, context=context, extensions=extensions
+            request, context=context
         )
 
     async def subscribe(
@@ -279,7 +253,6 @@ class BaseClient(Client):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream.
 
@@ -287,8 +260,7 @@ class BaseClient(Client):
 
         Args:
             request: Parameters to identify the task to resubscribe to.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Yields:
             An async iterator of `ClientEvent` objects.
@@ -304,9 +276,7 @@ class BaseClient(Client):
         # Note: resubscribe can only be called on an existing task. As such,
         # we should never see Message updates, despite the typing of the service
         # definition indicating it may be possible.
-        stream = self._transport.subscribe(
-            request, context=context, extensions=extensions
-        )
+        stream = self._transport.subscribe(request, context=context)
         async for client_event in self._process_stream(stream):
             yield client_event
 
@@ -315,7 +285,6 @@ class BaseClient(Client):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.
@@ -325,8 +294,7 @@ class BaseClient(Client):
 
         Args:
             request: The `GetExtendedAgentCardRequest` object specifying the request.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
             signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
@@ -335,9 +303,10 @@ class BaseClient(Client):
         card = await self._transport.get_extended_agent_card(
             request,
             context=context,
-            extensions=extensions,
-            signature_verifier=signature_verifier,
         )
+        if signature_verifier:
+            signature_verifier(card)
+
         self._card = card
         return card
 

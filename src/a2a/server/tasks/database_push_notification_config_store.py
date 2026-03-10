@@ -38,7 +38,7 @@ from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types.a2a_pb2 import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 
 if TYPE_CHECKING:
@@ -146,9 +146,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             await self.initialize()
 
     def _to_orm(
-        self, task_id: str, config: PushNotificationConfig, owner: str
+        self, task_id: str, config: TaskPushNotificationConfig, owner: str
     ) -> PushNotificationConfigModel:
-        """Maps a PushNotificationConfig proto to a SQLAlchemy model instance.
+        """Maps a TaskPushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
@@ -185,8 +185,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
     def _from_orm(
         self, model_instance: PushNotificationConfigModel
-    ) -> PushNotificationConfig:
-        """Maps a SQLAlchemy model instance to a PushNotificationConfig proto.
+    ) -> TaskPushNotificationConfig:
+        """Maps a SQLAlchemy model instance to a TaskPushNotificationConfig proto.
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
@@ -262,7 +262,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     async def set_info(
         self,
         task_id: str,
-        notification_config: PushNotificationConfig,
+        notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
@@ -270,7 +270,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         owner = self.owner_resolver(context)
 
         # Create a copy of the config using proto CopyFrom
-        config_to_save = PushNotificationConfig()
+        config_to_save = TaskPushNotificationConfig()
         config_to_save.CopyFrom(notification_config)
         if not config_to_save.id:
             config_to_save.id = task_id
@@ -289,7 +289,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         self,
         task_id: str,
         context: ServerCallContext,
-    ) -> list[PushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Retrieves all push notification configurations for a task, for the given owner."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)

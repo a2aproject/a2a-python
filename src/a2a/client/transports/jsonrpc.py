@@ -1,27 +1,25 @@
 import logging
 
-from collections.abc import AsyncGenerator, Callable
-from typing import Any, cast
+from collections.abc import AsyncGenerator
+from typing import Any
 from uuid import uuid4
 
 import httpx
 
 from google.protobuf import json_format
-from google.protobuf.json_format import ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
 from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
+    get_http_args,
     send_http_request,
     send_http_stream_request,
 )
-from a2a.extensions.common import update_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -58,22 +56,18 @@ class JsonRpcTransport(ClientTransport):
         agent_card: AgentCard,
         url: str,
         interceptors: list[ClientCallInterceptor] | None = None,
-        extensions: list[str] | None = None,
     ):
         """Initializes the JsonRpcTransport."""
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.interceptors = interceptors or []
-        self.extensions = extensions
-        self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
     async def send_message(
         self,
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> SendMessageResponse:
         """Sends a non-streaming message request to the agent."""
         rpc_request = JSONRPC20Request(
@@ -81,17 +75,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'SendMessage',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -105,7 +91,6 @@ class JsonRpcTransport(ClientTransport):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Sends a streaming message request to the agent and yields responses as they arrive."""
         rpc_request = JSONRPC20Request(
@@ -113,19 +98,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'SendStreamingMessage',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
         async for event in self._send_stream_request(
-            payload,
-            http_kwargs=modified_kwargs,
+            dict(rpc_request.data),
+            context,
         ):
             yield event
 
@@ -134,7 +109,6 @@ class JsonRpcTransport(ClientTransport):
         request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
         rpc_request = JSONRPC20Request(
@@ -142,17 +116,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'GetTask',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -164,7 +130,6 @@ class JsonRpcTransport(ClientTransport):
         request: ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
         rpc_request = JSONRPC20Request(
@@ -172,17 +137,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'ListTasks',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -196,7 +153,6 @@ class JsonRpcTransport(ClientTransport):
         request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
         rpc_request = JSONRPC20Request(
@@ -204,17 +160,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'CancelTask',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -223,10 +171,9 @@ class JsonRpcTransport(ClientTransport):
 
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
@@ -234,17 +181,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'CreateTaskPushNotificationConfig',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -258,7 +197,6 @@ class JsonRpcTransport(ClientTransport):
         request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
@@ -266,17 +204,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'GetTaskPushNotificationConfig',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -290,7 +220,6 @@ class JsonRpcTransport(ClientTransport):
         request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         rpc_request = JSONRPC20Request(
@@ -298,17 +227,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'ListTaskPushNotificationConfigs',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -325,7 +246,6 @@ class JsonRpcTransport(ClientTransport):
         request: DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration for a specific task."""
         rpc_request = JSONRPC20Request(
@@ -333,17 +253,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
+        response_data = await self._send_request(
+            dict(rpc_request.data), context
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'DeleteTaskPushNotificationConfig',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
-        response_data = await self._send_request(payload, modified_kwargs)
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
@@ -353,7 +265,6 @@ class JsonRpcTransport(ClientTransport):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         rpc_request = JSONRPC20Request(
@@ -361,19 +272,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'SubscribeToTask',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
         async for event in self._send_stream_request(
-            payload,
-            http_kwargs=modified_kwargs,
+            dict(rpc_request.data),
+            context,
         ):
             yield event
 
@@ -382,17 +283,9 @@ class JsonRpcTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
-        modified_kwargs = update_extension_header(
-            self._get_http_args(context),
-            extensions if extensions is not None else self.extensions,
-        )
-
         card = self.agent_card
-
         if not card.capabilities.extended_agent_card:
             return card
 
@@ -401,15 +294,9 @@ class JsonRpcTransport(ClientTransport):
             params=json_format.MessageToDict(request),
             _id=str(uuid4()),
         )
-        payload, modified_kwargs = await self._apply_interceptors(
-            'GetExtendedAgentCard',
-            cast('dict[str, Any]', rpc_request.data),
-            modified_kwargs,
-            context,
-        )
         response_data = await self._send_request(
-            payload,
-            modified_kwargs,
+            dict(rpc_request.data),
+            context,
         )
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
@@ -419,50 +306,15 @@ class JsonRpcTransport(ClientTransport):
             raise A2AClientError(
                 f'Invalid response type: {type(json_rpc_response.result)}'
             )
-        response: AgentCard = ParseDict(
-            cast('dict[str, Any]', json_rpc_response.result), AgentCard()
+        response: AgentCard = json_format.ParseDict(
+            json_rpc_response.result, AgentCard()
         )
-        if signature_verifier:
-            signature_verifier(response)
 
-        self.agent_card = response
-        self._needs_extended_card = False
         return response
 
     async def close(self) -> None:
         """Closes the httpx client."""
         await self.httpx_client.aclose()
-
-    async def _apply_interceptors(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        final_http_kwargs = http_kwargs or {}
-        final_request_payload = request_payload
-
-        for interceptor in self.interceptors:
-            (
-                final_request_payload,
-                final_http_kwargs,
-            ) = await interceptor.intercept(
-                method_name,
-                final_request_payload,
-                final_http_kwargs,
-                self.agent_card,
-                context,
-            )
-        return final_request_payload, final_http_kwargs
-
-    def _get_http_args(
-        self, context: ClientCallContext | None
-    ) -> dict[str, Any]:
-        http_kwargs: dict[str, Any] = {}
-        if context and context.timeout is not None:
-            http_kwargs['timeout'] = httpx.Timeout(context.timeout)
-        return http_kwargs
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
@@ -477,25 +329,22 @@ class JsonRpcTransport(ClientTransport):
 
     async def _send_request(
         self,
-        rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
+        payload: dict[str, Any],
+        context: ClientCallContext | None = None,
     ) -> dict[str, Any]:
+        http_kwargs = get_http_args(context)
+
         request = self.httpx_client.build_request(
-            'POST', self.url, json=rpc_request_payload, **(http_kwargs or {})
+            'POST', self.url, json=payload, **(http_kwargs or {})
         )
         return await send_http_request(self.httpx_client, request)
 
     async def _send_stream_request(
         self,
         rpc_request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any] | None = None,
-        **kwargs: Any,
+        context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        final_kwargs = dict(http_kwargs or {})
-        final_kwargs.update(kwargs)
-        headers = dict(self.httpx_client.headers.items())
-        headers.update(final_kwargs.get('headers', {}))
-        final_kwargs['headers'] = headers
+        http_kwargs = get_http_args(context)
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
@@ -503,7 +352,7 @@ class JsonRpcTransport(ClientTransport):
             self.url,
             None,
             json=rpc_request_payload,
-            **final_kwargs,
+            **http_kwargs,
         ):
             json_rpc_response = JSONRPC20Response.from_json(sse_data)
             if json_rpc_response.error:

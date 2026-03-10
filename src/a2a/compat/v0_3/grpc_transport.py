@@ -31,7 +31,6 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3 import (
     types as types_v03,
 )
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.types import a2a_pb2
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -86,17 +85,11 @@ def _handle_grpc_stream_exception(
 class CompatGrpcTransport(ClientTransport):
     """A backward compatible gRPC transport for A2A v0.3."""
 
-    def __init__(
-        self,
-        channel: Channel,
-        agent_card: a2a_pb2.AgentCard | None,
-        extensions: list[str] | None = None,
-    ):
+    def __init__(self, channel: Channel, agent_card: a2a_pb2.AgentCard | None):
         """Initializes the CompatGrpcTransport."""
         self.agent_card = agent_card
         self.channel = channel
         self.stub = a2a_v0_3_pb2_grpc.A2AServiceStub(channel)
-        self.extensions = extensions
 
     @classmethod
     def create(
@@ -109,7 +102,7 @@ class CompatGrpcTransport(ClientTransport):
         """Creates a gRPC transport for the A2A client."""
         if config.grpc_channel_factory is None:
             raise ValueError('grpc_channel_factory is required when using gRPC')
-        return cls(config.grpc_channel_factory(url), card, config.extensions)
+        return cls(config.grpc_channel_factory(url), card)
 
     @_handle_grpc_exception
     async def send_message(
@@ -117,7 +110,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.SendMessageResponse:
         """Sends a non-streaming message request to the agent (v0.3)."""
         req_v03 = conversions.to_compat_send_message_request(
@@ -133,7 +125,7 @@ class CompatGrpcTransport(ClientTransport):
 
         resp_proto = await self.stub.SendMessage(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
 
         which = resp_proto.WhichOneof('payload')
@@ -157,7 +149,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[a2a_pb2.StreamResponse]:
         """Sends a streaming message request to the agent (v0.3)."""
         req_v03 = conversions.to_compat_send_message_request(
@@ -173,7 +164,7 @@ class CompatGrpcTransport(ClientTransport):
 
         stream = self.stub.SendStreamingMessage(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         while True:
             response = await stream.read()
@@ -191,7 +182,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> AsyncGenerator[a2a_pb2.StreamResponse]:
         """Reconnects to get task updates (v0.3)."""
         req_proto = a2a_v0_3_pb2.TaskSubscriptionRequest(
@@ -200,7 +190,7 @@ class CompatGrpcTransport(ClientTransport):
 
         stream = self.stub.TaskSubscription(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         while True:
             response = await stream.read()
@@ -218,7 +208,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.Task:
         """Retrieves the current state and history of a specific task (v0.3)."""
         req_proto = a2a_v0_3_pb2.GetTaskRequest(
@@ -227,7 +216,7 @@ class CompatGrpcTransport(ClientTransport):
         )
         resp_proto = await self.stub.GetTask(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         return conversions.to_core_task(proto_utils.FromProto.task(resp_proto))
 
@@ -237,7 +226,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.ListTasksResponse:
         """Retrieves tasks for an agent (v0.3 - NOT SUPPORTED in v0.3)."""
         # v0.3 proto doesn't have ListTasks.
@@ -251,23 +239,21 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.Task:
         """Requests the agent to cancel a specific task (v0.3)."""
         req_proto = a2a_v0_3_pb2.CancelTaskRequest(name=f'tasks/{request.id}')
         resp_proto = await self.stub.CancelTask(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         return conversions.to_core_task(proto_utils.FromProto.task(resp_proto))
 
     @_handle_grpc_exception
     async def create_task_push_notification_config(
         self,
-        request: a2a_pb2.CreateTaskPushNotificationConfigRequest,
+        request: a2a_pb2.TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.TaskPushNotificationConfig:
         """Sets or updates the push notification configuration (v0.3)."""
         req_v03 = (
@@ -284,7 +270,7 @@ class CompatGrpcTransport(ClientTransport):
         )
         resp_proto = await self.stub.CreateTaskPushNotificationConfig(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         return conversions.to_core_task_push_notification_config(
             proto_utils.FromProto.task_push_notification_config(resp_proto)
@@ -296,7 +282,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.TaskPushNotificationConfig:
         """Retrieves the push notification configuration (v0.3)."""
         req_proto = a2a_v0_3_pb2.GetTaskPushNotificationConfigRequest(
@@ -304,7 +289,7 @@ class CompatGrpcTransport(ClientTransport):
         )
         resp_proto = await self.stub.GetTaskPushNotificationConfig(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         return conversions.to_core_task_push_notification_config(
             proto_utils.FromProto.task_push_notification_config(resp_proto)
@@ -316,7 +301,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> a2a_pb2.ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task (v0.3)."""
         req_proto = a2a_v0_3_pb2.ListTaskPushNotificationConfigRequest(
@@ -324,7 +308,7 @@ class CompatGrpcTransport(ClientTransport):
         )
         resp_proto = await self.stub.ListTaskPushNotificationConfig(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         return conversions.to_core_list_task_push_notification_config_response(
             proto_utils.FromProto.list_task_push_notification_config_response(
@@ -338,7 +322,6 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.DeleteTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> None:
         """Deletes the push notification configuration (v0.3)."""
         req_proto = a2a_v0_3_pb2.DeleteTaskPushNotificationConfigRequest(
@@ -346,7 +329,7 @@ class CompatGrpcTransport(ClientTransport):
         )
         await self.stub.DeleteTaskPushNotificationConfig(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
 
     @_handle_grpc_exception
@@ -355,21 +338,16 @@ class CompatGrpcTransport(ClientTransport):
         request: a2a_pb2.GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
-        signature_verifier: Callable[[a2a_pb2.AgentCard], None] | None = None,
     ) -> a2a_pb2.AgentCard:
         """Retrieves the agent's card (v0.3)."""
         req_proto = a2a_v0_3_pb2.GetAgentCardRequest()
         resp_proto = await self.stub.GetAgentCard(
             req_proto,
-            metadata=self._get_grpc_metadata(extensions),
+            metadata=self._get_grpc_metadata(context),
         )
         card = conversions.to_core_agent_card(
             proto_utils.FromProto.agent_card(resp_proto)
         )
-
-        if signature_verifier:
-            signature_verifier(card)
 
         self.agent_card = card
         return card
@@ -379,16 +357,13 @@ class CompatGrpcTransport(ClientTransport):
         await self.channel.close()
 
     def _get_grpc_metadata(
-        self,
-        extensions: list[str] | None = None,
+        self, context: ClientCallContext | None = None
     ) -> list[tuple[str, str]]:
         """Creates gRPC metadata for extensions."""
         metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)]
 
-        extensions_to_use = extensions or self.extensions
-        if extensions_to_use:
-            metadata.append(
-                (HTTP_EXTENSION_HEADER.lower(), ','.join(extensions_to_use))
-            )
+        if context and context.service_parameters:
+            for key, value in context.service_parameters.items():
+                metadata.append((key.lower(), value))
 
         return metadata

@@ -12,7 +12,7 @@ from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -55,8 +55,8 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
-) -> PushNotificationConfig:
-    return PushNotificationConfig(id=config_id, url=url, token=token)
+) -> TaskPushNotificationConfig:
+    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):

@@ -46,16 +46,16 @@ ROLE_USER: Role
 ROLE_AGENT: Role
 
 class SendMessageConfiguration(_message.Message):
-    __slots__ = ("accepted_output_modes", "push_notification_config", "history_length", "blocking")
+    __slots__ = ("accepted_output_modes", "task_push_notification_config", "history_length", "blocking")
     ACCEPTED_OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
-    PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    TASK_PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
     BLOCKING_FIELD_NUMBER: _ClassVar[int]
     accepted_output_modes: _containers.RepeatedScalarFieldContainer[str]
-    push_notification_config: PushNotificationConfig
+    task_push_notification_config: TaskPushNotificationConfig
     history_length: int
     blocking: bool
-    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., blocking: _Optional[bool] = ...) -> None: ...
+    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., task_push_notification_config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., blocking: _Optional[bool] = ...) -> None: ...
 
 class Task(_message.Message):
     __slots__ = ("id", "context_id", "status", "artifacts", "history", "metadata")
@@ -164,18 +164,6 @@ class TaskArtifactUpdateEvent(_message.Message):
     last_chunk: bool
     metadata: _struct_pb2.Struct
     def __init__(self, task_id: _Optional[str] = ..., context_id: _Optional[str] = ..., artifact: _Optional[_Union[Artifact, _Mapping]] = ..., append: _Optional[bool] = ..., last_chunk: _Optional[bool] = ..., metadata: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
-
-class PushNotificationConfig(_message.Message):
-    __slots__ = ("id", "url", "token", "authentication")
-    ID_FIELD_NUMBER: _ClassVar[int]
-    URL_FIELD_NUMBER: _ClassVar[int]
-    TOKEN_FIELD_NUMBER: _ClassVar[int]
-    AUTHENTICATION_FIELD_NUMBER: _ClassVar[int]
-    id: str
-    url: str
-    token: str
-    authentication: AuthenticationInfo
-    def __init__(self, id: _Optional[str] = ..., url: _Optional[str] = ..., token: _Optional[str] = ..., authentication: _Optional[_Union[AuthenticationInfo, _Mapping]] = ...) -> None: ...
 
 class AuthenticationInfo(_message.Message):
     __slots__ = ("scheme", "credentials")
@@ -299,14 +287,20 @@ class AgentCardSignature(_message.Message):
     def __init__(self, protected: _Optional[str] = ..., signature: _Optional[str] = ..., header: _Optional[_Union[_struct_pb2.Struct, _Mapping]] = ...) -> None: ...
 
 class TaskPushNotificationConfig(_message.Message):
-    __slots__ = ("tenant", "task_id", "push_notification_config")
+    __slots__ = ("tenant", "id", "task_id", "url", "token", "authentication")
     TENANT_FIELD_NUMBER: _ClassVar[int]
+    ID_FIELD_NUMBER: _ClassVar[int]
     TASK_ID_FIELD_NUMBER: _ClassVar[int]
-    PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
+    URL_FIELD_NUMBER: _ClassVar[int]
+    TOKEN_FIELD_NUMBER: _ClassVar[int]
+    AUTHENTICATION_FIELD_NUMBER: _ClassVar[int]
     tenant: str
+    id: str
     task_id: str
-    push_notification_config: PushNotificationConfig
-    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., push_notification_config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
+    url: str
+    token: str
+    authentication: AuthenticationInfo
+    def __init__(self, tenant: _Optional[str] = ..., id: _Optional[str] = ..., task_id: _Optional[str] = ..., url: _Optional[str] = ..., token: _Optional[str] = ..., authentication: _Optional[_Union[AuthenticationInfo, _Mapping]] = ...) -> None: ...
 
 class StringList(_message.Message):
     __slots__ = ("list",)
@@ -573,16 +567,6 @@ class DeleteTaskPushNotificationConfigRequest(_message.Message):
     task_id: str
     id: str
     def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., id: _Optional[str] = ...) -> None: ...
-
-class CreateTaskPushNotificationConfigRequest(_message.Message):
-    __slots__ = ("tenant", "task_id", "config")
-    TENANT_FIELD_NUMBER: _ClassVar[int]
-    TASK_ID_FIELD_NUMBER: _ClassVar[int]
-    CONFIG_FIELD_NUMBER: _ClassVar[int]
-    tenant: str
-    task_id: str
-    config: PushNotificationConfig
-    def __init__(self, tenant: _Optional[str] = ..., task_id: _Optional[str] = ..., config: _Optional[_Union[PushNotificationConfig, _Mapping]] = ...) -> None: ...
 
 class SubscribeToTaskRequest(_message.Message):
     __slots__ = ("tenant", "id")

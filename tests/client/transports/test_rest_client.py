@@ -16,7 +16,7 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -182,15 +182,10 @@ class TestRestTransportExtensions:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message adds extensions to headers."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
-            extensions=extensions,
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello')
@@ -207,7 +202,14 @@ class TestRestTransportExtensions:
         mock_response.status_code = 200
         mock_httpx_client.send.return_value = mock_response
 
-        await client.send_message(request=params)
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={
+                'X-A2A-Extensions': 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+            }
+        )
+        await client.send_message(request=params, context=context)
 
         mock_build_request.assert_called_once()
         _, kwargs = mock_build_request.call_args
@@ -229,13 +231,10 @@ class TestRestTransportExtensions:
         mock_agent_card: MagicMock,
     ):
         """Test X-A2A-Extensions header in send_message_streaming."""
-        new_extensions = ['https://example.com/test-ext/v2']
-        extensions = ['https://example.com/test-ext/v1']
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
-            extensions=extensions,
         )
         params = SendMessageRequest(
             message=create_text_message_object(content='Hello stream')
@@ -247,8 +246,16 @@ class TestRestTransportExtensions:
             mock_event_source
         )
 
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={
+                'X-A2A-Extensions': 'https://example.com/test-ext/v2'
+            }
+        )
+
         async for _ in client.send_message_streaming(
-            request=params, extensions=new_extensions
+            request=params, context=context
         ):
             pass
 
@@ -313,10 +320,9 @@ class TestRestTransportExtensions:
     ):
         """Test get_extended_agent_card with extensions passed to  call when extended card support is enabled.
         Tests that the extensions are added to the GET request."""
-        extensions = [
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ]
+        extensions_str = (
+            'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+        )
         agent_card = AgentCard(
             name='Test Agent',
             description='Test Agent Description',
@@ -341,24 +347,32 @@ class TestRestTransportExtensions:
         mock_httpx_client.send.return_value = mock_response
 
         request = GetExtendedAgentCardRequest()
+
+        from a2a.client.middleware import ClientCallContext
+
+        context = ClientCallContext(
+            service_parameters={HTTP_EXTENSION_HEADER: extensions_str}
+        )
+
         with patch.object(
-            client, '_send_get_request', new_callable=AsyncMock
-        ) as mock_send_get_request:
-            mock_send_get_request.return_value = json_format.MessageToDict(
+            client, '_execute_request', new_callable=AsyncMock
+        ) as mock_execute_request:
+            mock_execute_request.return_value = json_format.MessageToDict(
                 agent_card
             )
-            await client.get_extended_agent_card(request, extensions=extensions)
+            await client.get_extended_agent_card(request, context=context)
 
-        mock_send_get_request.assert_called_once()
-        _, _, _, mock_kwargs = mock_send_get_request.call_args[0]
-
-        _assert_extensions_header(
-            mock_kwargs,
-            {
-                'https://example.com/test-ext/v1',
-                'https://example.com/test-ext/v2',
-            },
+        mock_execute_request.assert_called_once()
+        # _execute_request(method, target, tenant, context)
+        call_args = mock_execute_request.call_args
+        assert (
+            call_args[1].get('context') == context or call_args[0][3] == context
         )
+
+        _context = call_args[1].get('context') or call_args[0][3]
+        assert _context.service_parameters == {
+            HTTP_EXTENSION_HEADER: extensions_str
+        }
 
 
 class TestTaskCallback:
@@ -381,10 +395,8 @@ class TestTaskCallback:
             'configs': [
                 {
                     'taskId': task_id,
-                    'pushNotificationConfig': {
-                        'id': 'config-1',
-                        'url': 'https://example.com',
-                    },
+                    'id': 'config-1',
+                    'url': 'https://example.com',
                 }
             ]
         }
@@ -477,7 +489,7 @@ class TestRestTransportTenant:
             ),
             (
                 'create_task_push_notification_config',
-                CreateTaskPushNotificationConfigRequest(
+                TaskPushNotificationConfig(
                     tenant='my-tenant', task_id='task-123'
                 ),
                 '/my-tenant/tasks/task-123/pushNotificationConfigs',
