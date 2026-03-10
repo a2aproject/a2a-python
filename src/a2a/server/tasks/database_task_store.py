@@ -139,42 +139,17 @@ class DatabaseTaskStore(TaskStore):
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        # Data is stored as raw JSON (dicts/lists), so we parse it manually
-        task = Task(
-            id=task_model.id,
-            context_id=task_model.context_id,
-        )
+        task_dict = {
+            'id': task_model.id,
+            'context_id': task_model.context_id,
+            'status': task_model.status,
+            'artifacts': task_model.artifacts,
+            'history': task_model.history,
+            'metadata': task_model.task_metadata,
+        }
         if task_model.protocol_version == '1.0':
-            if task_model.status:
-                ParseDict(
-                    cast('dict[str, Any]', task_model.status), task.status
-                )
-            if task_model.artifacts:
-                for art_dict in cast(
-                    'list[dict[str, Any]]', task_model.artifacts
-                ):
-                    art = task.artifacts.add()
-                    ParseDict(art_dict, art)
-            if task_model.history:
-                for msg_dict in cast(
-                    'list[dict[str, Any]]', task_model.history
-                ):
-                    msg = task.history.add()
-                    ParseDict(msg_dict, msg)
-            if task_model.task_metadata:
-                task.metadata.update(
-                    cast('dict[str, Any]', task_model.task_metadata)
-                )
-            return task
-        # Reconstruct legacy task from raw columns (which are dicts/lists here)
-        legacy_task = types_v03.Task(
-            id=task_model.id,
-            context_id=task_model.context_id,
-            status=cast('dict[str, Any]', task_model.status),
-            artifacts=cast('list[dict[str, Any]]', task_model.artifacts),
-            history=cast('list[dict[str, Any]]', task_model.history),
-            metadata=cast('dict[str, Any]', task_model.task_metadata),
-        )
+            return ParseDict(task_dict, Task())
+        legacy_task = types_v03.Task.model_validate(task_dict)
         return conversions.to_core_task(legacy_task)
 
     async def save(
