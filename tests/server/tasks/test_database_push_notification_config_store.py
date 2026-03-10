@@ -768,7 +768,7 @@ async def test_get_0_3_push_notification_config_detailed(
         await session.execute(stmt)
 
     # 3. Retrieve the config using the standard store.get_info()
-    # This will trigger the DatabasePushNotificationConfigStore._from_orm legacy fallback
+    # This will trigger the DatabasePushNotificationConfigStore._from_orm legacy conversion
     retrieved_configs = await db_store_parameterized.get_info(
         task_id, context_user
     )

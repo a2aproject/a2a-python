@@ -774,7 +774,7 @@ async def test_get_0_3_task_detailed(
         await session.execute(stmt)
 
     # 3. Retrieve the task using the standard store.get()
-    # This will trigger conversion from legacy to 1.0 format in _from_orm method
+    # This will trigger conversion from legacy to 1.0 format in the _from_orm method
     retrieved_task = await db_store_parameterized.get(task_id, context_user)
 
     # 4. Verify the conversion to modern Protobuf
