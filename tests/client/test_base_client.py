@@ -235,7 +235,7 @@ class TestClientTransport:
 
         cfg = SendMessageConfiguration(
             history_length=2,
-            blocking=False,
+            return_immediately=True,
             accepted_output_modes=['application/json'],
         )
         request = SendMessageRequest(message=sample_message, configuration=cfg)
@@ -249,7 +249,7 @@ class TestClientTransport:
 
         params = mock_transport.send_message.call_args[0][0]
         assert params.configuration.history_length == 2
-        assert params.configuration.blocking is False
+        assert params.configuration.return_immediately is True
         assert params.configuration.accepted_output_modes == [
             'application/json'
         ]
@@ -278,7 +278,6 @@ class TestClientTransport:
 
         cfg = SendMessageConfiguration(
             history_length=0,
-            blocking=True,
             accepted_output_modes=['text/plain'],
         )
         request = SendMessageRequest(message=sample_message, configuration=cfg)
@@ -292,5 +291,5 @@ class TestClientTransport:
 
         params = mock_transport.send_message_streaming.call_args[0][0]
         assert params.configuration.history_length == 0
-        assert params.configuration.blocking is True
+        assert params.configuration.return_immediately is False
         assert params.configuration.accepted_output_modes == ['text/plain']
