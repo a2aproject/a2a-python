@@ -8,6 +8,8 @@ import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
 from a2a.types.a2a_pb2 import ListTasksRequest
+from a2a.compat.v0_3 import types as types_v03
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -681,6 +683,145 @@ async def test_owner_resource_scoping(
     # Cleanup remaining tasks
     await task_store.delete('u1-task2', context_user1)
     await task_store.delete('u2-task1', context_user2)
+
+
+@pytest.mark.asyncio
+async def test_get_0_3_task_detailed(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    """Test retrieving a detailed legacy v0.3 task from the database.
+
+    This test simulates a database that already contains legacy v0.3 JSON data
+    (string-based enums, different field names) and verifies that the store
+    correctly converts it to the modern Protobuf-based Task model.
+    """
+
+    task_id = 'legacy-detailed-1'
+    owner = 'legacy_user'
+    context_user = ServerCallContext(user=SampleUser(user_name=owner))
+
+    # 1. Create a detailed legacy Task using v0.3 models
+    legacy_task = types_v03.Task(
+        id=task_id,
+        context_id='legacy-ctx-1',
+        status=types_v03.TaskStatus(
+            state=types_v03.TaskState.working,
+            message=types_v03.Message(
+                message_id='msg-status',
+                role=types_v03.Role.agent,
+                parts=[
+                    types_v03.Part(
+                        root=types_v03.TextPart(text='Legacy status message')
+                    )
+                ],
+            ),
+            timestamp='2023-10-27T10:00:00Z',
+        ),
+        history=[
+            types_v03.Message(
+                message_id='msg-1',
+                role=types_v03.Role.user,
+                parts=[
+                    types_v03.Part(root=types_v03.TextPart(text='Hello legacy'))
+                ],
+            ),
+            types_v03.Message(
+                message_id='msg-2',
+                role=types_v03.Role.agent,
+                parts=[
+                    types_v03.Part(
+                        root=types_v03.DataPart(data={'legacy_key': 'value'})
+                    )
+                ],
+            ),
+        ],
+        artifacts=[
+            types_v03.Artifact(
+                artifact_id='art-1',
+                name='Legacy Artifact',
+                parts=[
+                    types_v03.Part(
+                        root=types_v03.FilePart(
+                            file=types_v03.FileWithUri(
+                                uri='https://example.com/legacy.txt',
+                                mime_type='text/plain',
+                            )
+                        )
+                    )
+                ],
+            )
+        ],
+        metadata={'meta_key': 'meta_val'},
+    )
+
+    # 2. Manually insert the legacy data into the database
+    # We must bypass the store's save() method because it expects Protobuf objects.
+    async with db_store_parameterized.async_session_maker.begin() as session:
+        # Pydantic model_dump(mode='json') produces exactly what would be in the legacy DB
+        legacy_data = legacy_task.model_dump(mode='json')
+
+        stmt = insert(db_store_parameterized.task_model).values(
+            id=task_id,
+            context_id=legacy_task.context_id,
+            owner=owner,
+            status=legacy_data['status'],
+            history=legacy_data['history'],
+            artifacts=legacy_data['artifacts'],
+            task_metadata=legacy_data['metadata'],
+            kind='task',
+            last_updated=None,
+        )
+        await session.execute(stmt)
+
+    # 3. Retrieve the task using the standard store.get()
+    # This will trigger conversion from legacy to 1.0 format in the _from_orm method
+    retrieved_task = await db_store_parameterized.get(task_id, context_user)
+
+    # 4. Verify the conversion to modern Protobuf
+    assert retrieved_task is not None
+    assert retrieved_task.id == task_id
+    assert retrieved_task.context_id == 'legacy-ctx-1'
+
+    # Check Status & State (The most critical part: string 'working' -> enum TASK_STATE_WORKING)
+    assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
+    assert retrieved_task.status.message.message_id == 'msg-status'
+    assert retrieved_task.status.message.role == Role.ROLE_AGENT
+    assert (
+        retrieved_task.status.message.parts[0].text == 'Legacy status message'
+    )
+
+    # Check History
+    assert len(retrieved_task.history) == 2
+    assert retrieved_task.history[0].message_id == 'msg-1'
+    assert retrieved_task.history[0].role == Role.ROLE_USER
+    assert retrieved_task.history[0].parts[0].text == 'Hello legacy'
+
+    assert retrieved_task.history[1].message_id == 'msg-2'
+    assert retrieved_task.history[1].role == Role.ROLE_AGENT
+    assert (
+        MessageToDict(retrieved_task.history[1].parts[0].data)['legacy_key']
+        == 'value'
+    )
+
+    # Check Artifacts
+    assert len(retrieved_task.artifacts) == 1
+    assert retrieved_task.artifacts[0].artifact_id == 'art-1'
+    assert retrieved_task.artifacts[0].name == 'Legacy Artifact'
+    assert (
+        retrieved_task.artifacts[0].parts[0].url
+        == 'https://example.com/legacy.txt'
+    )
+
+    # Check Metadata
+    assert dict(retrieved_task.metadata) == {'meta_key': 'meta_val'}
+
+    retrieved_tasks = await db_store_parameterized.list(
+        ListTasksRequest(), context_user
+    )
+    assert retrieved_tasks is not None
+    assert retrieved_tasks.tasks == [retrieved_task]
+
+    await db_store_parameterized.delete(task_id, context_user)
 
 
 # Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).

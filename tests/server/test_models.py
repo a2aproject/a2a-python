@@ -5,76 +5,9 @@ from unittest.mock import MagicMock
 from sqlalchemy.orm import DeclarativeBase
 
 from a2a.server.models import (
-    PydanticListType,
-    PydanticType,
     create_push_notification_config_model,
     create_task_model,
 )
-from a2a.types.a2a_pb2 import Artifact, Part, TaskState, TaskStatus
-
-
-class TestPydanticType:
-    """Tests for PydanticType SQLAlchemy type decorator."""
-
-    def test_process_bind_param_with_pydantic_model(self):
-        pydantic_type = PydanticType(TaskStatus)
-        status = TaskStatus(state=TaskState.TASK_STATE_WORKING)
-        dialect = MagicMock()
-
-        result = pydantic_type.process_bind_param(status, dialect)
-        assert result is not None
-        assert result['state'] == 'TASK_STATE_WORKING'
-        # message field is optional and not set
-
-    def test_process_bind_param_with_none(self):
-        pydantic_type = PydanticType(TaskStatus)
-        dialect = MagicMock()
-
-        result = pydantic_type.process_bind_param(None, dialect)
-        assert result is None
-
-    def test_process_result_value(self):
-        pydantic_type = PydanticType(TaskStatus)
-        dialect = MagicMock()
-
-        result = pydantic_type.process_result_value(
-            {'state': 'TASK_STATE_COMPLETED'}, dialect
-        )
-        assert isinstance(result, TaskStatus)
-        assert result.state == TaskState.TASK_STATE_COMPLETED
-
-
-class TestPydanticListType:
-    """Tests for PydanticListType SQLAlchemy type decorator."""
-
-    def test_process_bind_param_with_list(self):
-        pydantic_list_type = PydanticListType(Artifact)
-        artifacts = [
-            Artifact(artifact_id='1', parts=[Part(text='Hello')]),
-            Artifact(artifact_id='2', parts=[Part(text='World')]),
-        ]
-        dialect = MagicMock()
-
-        result = pydantic_list_type.process_bind_param(artifacts, dialect)
-        assert result is not None
-        assert len(result) == 2
-        assert result[0]['artifactId'] == '1'  # JSON mode uses camelCase
-        assert result[1]['artifactId'] == '2'
-
-    def test_process_result_value_with_list(self):
-        pydantic_list_type = PydanticListType(Artifact)
-        dialect = MagicMock()
-        data = [
-            {'artifactId': '1', 'parts': [{'text': 'Hello'}]},
-            {'artifactId': '2', 'parts': [{'text': 'World'}]},
-        ]
-
-        result = pydantic_list_type.process_result_value(data, dialect)
-        assert result is not None
-        assert len(result) == 2
-        assert all(isinstance(art, Artifact) for art in result)
-        assert result[0].artifact_id == '1'
-        assert result[1].artifact_id == '2'
 
 
 def test_create_task_model():
