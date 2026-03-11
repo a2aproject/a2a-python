@@ -99,7 +99,7 @@ class ResultAggregator:
         consumer: EventConsumer,
         blocking: bool = True,
         event_callback: Callable[[Event], Awaitable[None]] | None = None,
-    ) -> tuple[Task | Message | None, bool]:
+    ) -> tuple[Task | Message | None, bool, asyncio.Task | None]:
         """Processes the event stream until completion or an interruptible state is encountered.
 
         If `blocking` is False, it returns after the first event that creates a Task or Message.
@@ -119,16 +119,23 @@ class ResultAggregator:
             A tuple containing:
             - The current aggregated result (`Task` or `Message`) at the point of completion or interruption.
             - A boolean indicating whether the consumption was interrupted (`True`) or completed naturally (`False`).
+            - The background ``asyncio.Task`` that continues consuming events
+              after an interruption, or ``None`` when no background work was
+              spawned.  **Callers must hold a strong reference** to this task
+              (e.g. in a ``set``) to prevent the garbage collector from
+              collecting it before it finishes — the event loop only keeps
+              weak references to tasks.
 
         Raises:
             BaseException: If the `EventConsumer` raises an exception during consumption.
         """
         event_stream = consumer.consume_all()
         interrupted = False
+        bg_task: asyncio.Task | None = None
         async for event in event_stream:
             if isinstance(event, Message):
                 self._message = event
-                return event, False
+                return event, False, None
             await self.task_manager.process(event)
 
             if event_callback:
@@ -161,13 +168,13 @@ class ResultAggregator:
 
             if should_interrupt:
                 # Continue consuming the rest of the events in the background.
-                # TODO: We should track all outstanding tasks to ensure they eventually complete.
-                asyncio.create_task(  # noqa: RUF006
+                # The caller is responsible for tracking this task to prevent GC.
+                bg_task = asyncio.create_task(
                     self._continue_consuming(event_stream, event_callback)
                 )
                 interrupted = True
                 break
-        return await self.task_manager.get_task(), interrupted
+        return await self.task_manager.get_task(), interrupted, bg_task
 
     async def _continue_consuming(
         self,
