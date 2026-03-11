@@ -365,6 +365,13 @@ class JSONRPCApplication(ABC):
                             message='Batch requests are not supported'
                         ),
                     )
+                if body.get('jsonrpc') != '2.0':
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message="Invalid request: 'jsonrpc' must be exactly '2.0'"
+                        ),
+                    )
             except Exception as e:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
