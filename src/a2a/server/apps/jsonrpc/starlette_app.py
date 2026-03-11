@@ -59,6 +59,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
+        enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the A2AStarletteApplication.
 
@@ -78,6 +79,7 @@ class A2AStarletteApplication(JSONRPCApplication):
               call context.
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
+            enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -93,6 +95,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
             max_content_length=max_content_length,
+            enable_v0_3_compat=enable_v0_3_compat,
         )
 
     def routes(
