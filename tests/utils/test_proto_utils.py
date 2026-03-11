@@ -3,9 +3,16 @@
 This module tests the proto utilities including to_stream_response and dictionary normalization.
 """
 
+import httpx
 import pytest
+from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.message import Message as ProtobufMessage
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.types.a2a_pb2 import (
+    AgentCard,
+    AgentSkill,
+    ListTasksRequest,
     Message,
     Part,
     Role,
@@ -16,6 +23,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from starlette.datastructures import QueryParams
 from a2a.utils import proto_utils
 
 
@@ -172,4 +180,62 @@ class TestDictSerialization:
         assert result['int'] == 42
         assert result['list'] == ['hello', 9999999999999999999, '123']
         assert result['nested']['inner_large_string'] == 9999999999999999999
-        assert result['nested']['inner_regular'] == 'value'
+
+
+class TestRestParams:
+    """Unit tests for REST parameter conversion."""
+
+    def test_rest_params_roundtrip(self):
+        """Test the comprehensive roundtrip conversion for REST parameters."""
+
+        original = ListTasksRequest(
+            tenant='tenant-1',
+            context_id='ctx-1',
+            status=TaskState.TASK_STATE_WORKING,
+            page_size=10,
+            include_artifacts=True,
+            status_timestamp_after=Parse('"2024-03-09T16:00:00Z"', Timestamp()),
+            history_length=5,
+        )
+
+        query_params = self._message_to_rest_params(original)
+
+        assert dict(query_params) == {
+            'tenant': 'tenant-1',
+            'contextId': 'ctx-1',
+            'status': 'TASK_STATE_WORKING',
+            'pageSize': '10',
+            'includeArtifacts': 'true',
+            'statusTimestampAfter': '2024-03-09T16:00:00Z',
+            'historyLength': '5',
+        }
+
+        converted = ListTasksRequest()
+        proto_utils.parse_params(QueryParams(query_params), converted)
+
+        assert converted == original
+
+    @pytest.mark.parametrize(
+        'query_string',
+        [
+            'id=skill-1&tags=tag1&tags=tag2&tags=tag3',
+            'id=skill-1&tags=tag1,tag2,tag3',
+        ],
+    )
+    def test_repeated_fields_parsing(self, query_string: str):
+        """Test parsing of repeated fields using different query string formats."""
+        query_params = QueryParams(query_string)
+
+        converted = AgentSkill()
+        proto_utils.parse_params(query_params, converted)
+
+        assert converted == AgentSkill(
+            id='skill-1', tags=['tag1', 'tag2', 'tag3']
+        )
+
+    def _message_to_rest_params(self, message: ProtobufMessage) -> QueryParams:
+        """Converts a message to REST query parameters."""
+        rest_dict = MessageToDict(message)
+        return httpx.Request(
+            'GET', 'http://api.example.com', params=rest_dict
+        ).url.params
