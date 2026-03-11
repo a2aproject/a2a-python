@@ -171,11 +171,7 @@ class DatabaseTaskStore(TaskStore):
         legacy_task = types_v03.Task(
             id=task_model.id,
             context_id=task_model.context_id,
-            status=(
-                types_v03.TaskStatus.model_validate(task_model.status)
-                if task_model.status
-                else None
-            ),
+            status=types_v03.TaskStatus.model_validate(task_model.status),
             artifacts=(
                 [
                     types_v03.Artifact.model_validate(a)
