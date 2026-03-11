@@ -345,7 +345,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     ) -> TaskPushNotificationConfig:
         """Parses a JSON payload into a TaskPushNotificationConfig proto.
 
-        Uses protocol_version to decide between modern parsing and legacy fallback.
+        Uses protocol_version to decide between modern parsing and legacy conversion.
         """
         if protocol_version == '1.0':
             return Parse(json_payload, TaskPushNotificationConfig())
