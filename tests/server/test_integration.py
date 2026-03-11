@@ -703,7 +703,23 @@ def test_invalid_request_structure(client: TestClient):
     assert response.status_code == 200
     data = response.json()
     assert 'error' in data
-    # The jsonrpc library returns MethodNotFoundError for unknown methods
+    # The jsonrpc library returns InvalidRequestError for invalid requests format
+    assert data['error']['code'] == InvalidRequestError().code
+
+def test_invalid_request_method(client: TestClient):
+    """Test handling an invalid request method."""
+    response = client.post(
+        '/',
+        json={
+            'jsonrpc': '2.0',  # Missing or wrong required fields
+            'id': '123',
+            'method': 'foo/bar',
+        },
+    )
+    assert response.status_code == 200
+    data = response.json()
+    assert 'error' in data
+    # The jsonrpc library returns MethodNotFoundError for invalid request method
     assert data['error']['code'] == MethodNotFoundError().code
 
 
