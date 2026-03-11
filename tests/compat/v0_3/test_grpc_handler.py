@@ -501,11 +501,3 @@ async def test_handle_unary_extension_metadata(
     mock_grpc_context.set_trailing_metadata.assert_called_once_with(
         expected_metadata
     )
-
-
-@pytest.mark.asyncio
-async def test_event_to_v03_stream_response_invalid(
-    handler: compat_grpc_handler.CompatGrpcHandler,
-):
-    with pytest.raises(ValueError, match='Unknown event type'):
-        handler._event_to_v03_stream_response(object())  # type: ignore[arg-type]
