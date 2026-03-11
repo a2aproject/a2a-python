@@ -574,8 +574,7 @@ async def test_json_transport_base_client_send_message_with_extensions(
             == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
         )
 
-    if hasattr(client, 'close'):
-        await client.close()
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -636,8 +635,7 @@ async def test_json_transport_get_signed_base_card(
     assert result.name == agent_card.name
     assert len(result.signatures) == 1
 
-    if hasattr(transport, 'close'):
-        await transport.close()
+    await transport.close()
 
 
 @pytest.mark.asyncio
@@ -705,8 +703,7 @@ async def test_client_get_signed_extended_card(
     assert result.signatures is not None
     assert len(result.signatures) == 1
 
-    if hasattr(client, 'close'):
-        await client.close()
+    await client.close()
 
 
 @pytest.mark.asyncio
@@ -788,8 +785,7 @@ async def test_client_get_signed_base_and_extended_cards(
     assert result.name == extended_agent_card.name
     assert len(result.signatures) == 1
 
-    if hasattr(client, 'close'):
-        await client.close()
+    await client.close()
 
 
 @pytest.mark.asyncio
