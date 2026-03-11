@@ -5,6 +5,7 @@ import httpx
 import pytest
 
 from google.protobuf import json_format
+from google.protobuf.timestamp_pb2 import Timestamp
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
@@ -16,16 +17,16 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
     CancelTaskRequest,
-    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
-    Message,
     SendMessageRequest,
     SubscribeToTaskRequest,
+    TaskPushNotificationConfig,
+    TaskState,
 )
 from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
@@ -174,6 +175,47 @@ class TestRestTransport:
         _, kwargs = mock_build_request.call_args
         assert 'timeout' in kwargs
         assert kwargs['timeout'] == httpx.Timeout(10.0)
+
+    @pytest.mark.asyncio
+    async def test_url_serialization(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Test that query parameters are correctly serialized to the URL."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+
+        timestamp = Timestamp()
+        timestamp.FromJsonString('2024-03-09T16:00:00Z')
+
+        request = ListTasksRequest(
+            tenant='my-tenant',
+            status=TaskState.TASK_STATE_WORKING,
+            include_artifacts=True,
+            status_timestamp_after=timestamp,
+        )
+
+        # Use real build_request to get actual URL serialization
+        mock_httpx_client.build_request.side_effect = (
+            httpx.AsyncClient().build_request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response, status_code=200, json=lambda: {'tasks': []}
+        )
+
+        await client.list_tasks(request=request)
+
+        mock_httpx_client.send.assert_called_once()
+        sent_request = mock_httpx_client.send.call_args[0][0]
+
+        # Check decoded query parameters for spec compliance
+        params = sent_request.url.params
+        assert params['status'] == 'TASK_STATE_WORKING'
+        assert params['includeArtifacts'] == 'true'
+        assert params['statusTimestampAfter'] == '2024-03-09T16:00:00Z'
+        assert 'tenant' not in params
 
 
 class TestRestTransportExtensions:
@@ -616,7 +658,7 @@ class TestRestTransportTenant:
 
         # 3. Verify the URL
         args, _ = mock_httpx_client.build_request.call_args
-        assert args[1] == f'http://agent.example.com/api/tasks/task-123'
+        assert args[1] == 'http://agent.example.com/api/tasks/task-123'
 
     @pytest.mark.parametrize(
         'method_name, request_obj, expected_path',
