@@ -44,7 +44,7 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
@@ -145,7 +145,7 @@ class PushNotificationConfigMixin:
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
