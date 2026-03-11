@@ -773,3 +773,72 @@ async def test_client_get_signed_base_and_extended_cards(
 
     if hasattr(transport, 'close'):
         await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_jsonrpc_malformed_payload(jsonrpc_setup: TransportSetup) -> None:
+    """Integration test to verify that JSON-RPC malformed payloads don't return 500."""
+    transport = jsonrpc_setup.transport
+    client = transport.httpx_client
+    url = transport.url
+
+    # 1. Invalid JSON
+    response = await client.post(url, content='not a json')
+    assert response.status_code == 200
+    assert response.json()['error']['code'] == -32700  # Parse error
+
+    # 2. Wrong types in params
+    response = await client.post(
+        url,
+        json={
+            'jsonrpc': '2.0',
+            'method': 'SendMessage',
+            'params': {'message': 'should be an object'},
+            'id': 1,
+        },
+    )
+    assert response.status_code == 200
+    assert response.json()['error']['code'] == -32602  # Invalid params
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'method, path, request_kwargs',
+    [
+        pytest.param(
+            'POST',
+            '/message:send',
+            {'content': 'not a json'},
+            id='invalid-json',
+        ),
+        pytest.param(
+            'POST',
+            '/message:send',
+            {'json': {'message': 'should be an object'}},
+            id='wrong-body-type',
+        ),
+        pytest.param(
+            'GET',
+            '/tasks',
+            {'params': {'historyLength': 'not_an_int'}},
+            id='wrong-query-param-type',
+        ),
+    ],
+)
+async def test_rest_malformed_payload(
+    rest_setup: TransportSetup,
+    method: str,
+    path: str,
+    request_kwargs: dict[str, Any],
+) -> None:
+    """Integration test to verify that REST malformed payloads don't return 500."""
+    transport = rest_setup.transport
+    client = transport.httpx_client
+    url = transport.url
+
+    response = await client.request(method, f'{url}{path}', **request_kwargs)
+    assert response.status_code == 400
+
+    await transport.close()
