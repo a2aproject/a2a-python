@@ -274,7 +274,7 @@ async def test_end_to_end_send_message_blocking(transport_setups):
         message_id='msg-e2e-blocking',
         parts=[Part(text='Run dummy agent!')],
     )
-    configuration = SendMessageConfiguration(blocking=True)
+    configuration = SendMessageConfiguration()
 
     events = [
         event
@@ -312,7 +312,7 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
         message_id='msg-e2e-non-blocking',
         parts=[Part(text='Run dummy agent!')],
     )
-    configuration = SendMessageConfiguration(blocking=False)
+    configuration = SendMessageConfiguration(return_immediately=True)
 
     events = [
         event

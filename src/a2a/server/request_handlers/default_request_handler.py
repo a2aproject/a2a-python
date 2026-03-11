@@ -340,9 +340,7 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
-        blocking = True  # Default to blocking behavior
-        if params.configuration and params.configuration.blocking is False:
-            blocking = False
+        blocking = not params.configuration.return_immediately
 
         interrupted_or_non_blocking = False
         try:

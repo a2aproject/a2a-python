@@ -184,7 +184,7 @@ async def test_notification_triggering_after_config_change_e2e(
                     parts=[Part(text='How are you?')],
                     role=Role.ROLE_USER,
                 ),
-                configuration=SendMessageConfiguration(blocking=True),
+                configuration=SendMessageConfiguration(),
             )
         )
     ]
@@ -225,7 +225,7 @@ async def test_notification_triggering_after_config_change_e2e(
                     parts=[Part(text='Good')],
                     role=Role.ROLE_USER,
                 ),
-                configuration=SendMessageConfiguration(blocking=True),
+                configuration=SendMessageConfiguration(),
             )
         )
     ]
