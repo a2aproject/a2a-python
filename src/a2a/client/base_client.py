@@ -94,8 +94,7 @@ class BaseClient(Client):
             yield client_event
 
     def _apply_client_config(self, request: SendMessageRequest) -> None:
-        if not request.configuration.blocking and self._config.polling:
-            request.configuration.blocking = not self._config.polling
+        request.configuration.return_immediately |= self._config.polling
         if (
             not request.configuration.HasField('task_push_notification_config')
             and self._config.push_notification_configs
