@@ -1,5 +1,4 @@
 # ruff: noqa: PLC0415
-import json
 import logging
 
 from typing import TYPE_CHECKING
@@ -27,6 +26,8 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from a2a.compat.v0_3 import conversions
+from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
 from a2a.server.models import (
     Base,
@@ -163,6 +164,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             config_id=config.id,
             owner=owner,
             config_data=data_to_store,
+            protocol_version='1.0',
         )
 
     def _from_orm(
@@ -181,11 +183,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)
-                return Parse(
+                return self._parse_config(
                     decrypted_payload.decode('utf-8'),
-                    TaskPushNotificationConfig(),
+                    model_instance.protocol_version,
                 )
-            except (json.JSONDecodeError, Exception) as e:
+            except Exception as e:
                 if isinstance(e, InvalidToken):
                     # Decryption failed. This could be because the data is not encrypted.
                     # We'll log a warning and try to parse it as plain JSON as a fallback.
@@ -215,7 +217,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 if isinstance(payload, bytes)
                 else payload
             )
-            return Parse(payload_str, TaskPushNotificationConfig())
+            return self._parse_config(
+                payload_str, model_instance.protocol_version
+            )
+
         except Exception as e:
             if self._fernet:
                 logger.exception(
@@ -334,3 +339,22 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     owner,
                     config_id,
                 )
+
+    def _parse_config(
+        self, json_payload: str, protocol_version: str | None = None
+    ) -> TaskPushNotificationConfig:
+        """Parses a JSON payload into a TaskPushNotificationConfig proto.
+
+        Uses protocol_version to decide between modern parsing and legacy conversion.
+        """
+        if protocol_version == '1.0':
+            return Parse(json_payload, TaskPushNotificationConfig())
+
+        legacy_instance = (
+            types_v03.TaskPushNotificationConfig.model_validate_json(
+                json_payload
+            )
+        )
+        return conversions.to_core_task_push_notification_config(
+            legacy_instance
+        )
