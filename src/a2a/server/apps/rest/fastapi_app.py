@@ -24,6 +24,7 @@ else:
         _package_fastapi_installed = False
 
 
+from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
 from a2a.server.apps.rest.rest_adapter import RESTAdapter
 from a2a.server.context import ServerCallContext
@@ -55,6 +56,7 @@ class A2ARESTFastAPIApplication:
             [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
+        enable_v0_3_compat: bool = False,
     ):
         """Initializes the A2ARESTFastAPIApplication.
 
@@ -72,6 +74,8 @@ class A2ARESTFastAPIApplication:
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
+            enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
+              endpoints under the '/v0.3' path prefix using REST03Adapter.
         """
         if not _package_fastapi_installed:
             raise ImportError(
@@ -87,6 +91,18 @@ class A2ARESTFastAPIApplication:
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
         )
+        self.enable_v0_3_compat = enable_v0_3_compat
+        self._v03_adapter = None
+
+        if self.enable_v0_3_compat:
+            self._v03_adapter = REST03Adapter(
+                agent_card=agent_card,
+                http_handler=http_handler,
+                extended_agent_card=extended_agent_card,
+                context_builder=context_builder,
+                card_modifier=card_modifier,
+                extended_card_modifier=extended_card_modifier,
+            )
 
     def build(
         self,
@@ -98,7 +114,7 @@ class A2ARESTFastAPIApplication:
 
         Args:
             agent_card_url: The URL for the agent card endpoint.
-            rpc_url: The URL for the A2A JSON-RPC endpoint.
+            rpc_url: The URL for the A2A REST endpoint base path.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:
@@ -117,4 +133,20 @@ class A2ARESTFastAPIApplication:
             return JSONResponse(card)
 
         app.include_router(router)
+
+        if self.enable_v0_3_compat and self._v03_adapter:
+            v03_adapter = self._v03_adapter
+            v03_router = APIRouter()
+            for route, callback in v03_adapter.routes().items():
+                v03_router.add_api_route(
+                    f'{rpc_url}/v0.3{route[0]}', callback, methods=[route[1]]
+                )
+
+            @v03_router.get(f'{rpc_url}/v0.3{agent_card_url}')
+            async def get_v03_agent_card(request: Request) -> Response:
+                card = await v03_adapter.handle_get_agent_card(request)
+                return JSONResponse(card)
+
+            app.include_router(v03_router)
+
         return app

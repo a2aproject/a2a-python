@@ -18,6 +18,7 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3 import (
     types as types_v03,
 )
+from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.grpc_handler import (
@@ -26,9 +27,8 @@ from a2a.server.request_handlers.grpc_handler import (
     DefaultCallContextBuilder,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.utils.errors import A2AError, InvalidParamsError, TaskNotFoundError
+from a2a.utils.errors import A2AError, InvalidParamsError
 from a2a.utils.helpers import maybe_await
 
 
@@ -60,7 +60,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
               agent card before it is served.
         """
         self.agent_card = agent_card
-        self.request_handler = request_handler
+        self.handler03 = RequestHandler03(request_handler=request_handler)
         self.context_builder = context_builder or DefaultCallContextBuilder()
         self.card_modifier = card_modifier
 
@@ -113,38 +113,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             )
         return m.group(1), m.group(2)
 
-    def _event_to_v03_stream_response(
-        self,
-        event: a2a_pb2.Message
-        | a2a_pb2.Task
-        | a2a_pb2.TaskStatusUpdateEvent
-        | a2a_pb2.TaskArtifactUpdateEvent,
-    ) -> a2a_v0_3_pb2.StreamResponse:
-        """Maps a core streaming event directly to a v0.3 StreamResponse."""
-        if isinstance(event, a2a_pb2.Task):
-            return a2a_v0_3_pb2.StreamResponse(
-                task=proto_utils.ToProto.task(conversions.to_compat_task(event))
-            )
-        if isinstance(event, a2a_pb2.Message):
-            return a2a_v0_3_pb2.StreamResponse(
-                msg=proto_utils.ToProto.message(
-                    conversions.to_compat_message(event)
-                )
-            )
-        if isinstance(event, a2a_pb2.TaskStatusUpdateEvent):
-            return a2a_v0_3_pb2.StreamResponse(
-                status_update=proto_utils.ToProto.task_status_update_event(
-                    conversions.to_compat_task_status_update_event(event)
-                )
-            )
-        if isinstance(event, a2a_pb2.TaskArtifactUpdateEvent):
-            return a2a_v0_3_pb2.StreamResponse(
-                artifact_update=proto_utils.ToProto.task_artifact_update_event(
-                    conversions.to_compat_task_artifact_update_event(event)
-                )
-            )
-        raise ValueError(f'Unknown event type: {type(event)}')
-
     async def abort_context(
         self, error: A2AError, context: grpc.aio.ServicerContext
     ) -> None:
@@ -187,20 +155,15 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             req_v03 = types_v03.SendMessageRequest(
                 id=0, params=proto_utils.FromProto.message_send_params(request)
             )
-            req_v10 = conversions.to_core_send_message_request(req_v03)
-            result = await self.request_handler.on_message_send(
-                req_v10, server_context
+            result = await self.handler03.on_message_send(
+                req_v03, server_context
             )
-            if isinstance(result, a2a_pb2.Task):
+            if isinstance(result, types_v03.Task):
                 return a2a_v0_3_pb2.SendMessageResponse(
-                    task=proto_utils.ToProto.task(
-                        conversions.to_compat_task(result)
-                    )
+                    task=proto_utils.ToProto.task(result)
                 )
             return a2a_v0_3_pb2.SendMessageResponse(
-                msg=proto_utils.ToProto.message(
-                    conversions.to_compat_message(result)
-                )
+                msg=proto_utils.ToProto.message(result)
             )
 
         return await self._handle_unary(
@@ -220,11 +183,12 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             req_v03 = types_v03.SendMessageRequest(
                 id=0, params=proto_utils.FromProto.message_send_params(request)
             )
-            req_v10 = conversions.to_core_send_message_request(req_v03)
-            async for event in self.request_handler.on_message_send_stream(
-                req_v10, server_context
+            async for v03_stream_resp in self.handler03.on_message_send_stream(
+                req_v03, server_context
             ):
-                yield self._event_to_v03_stream_response(event)
+                yield proto_utils.ToProto.stream_response(
+                    v03_stream_resp.result
+                )
 
         async for item in self._handle_stream(context, _handler):
             yield item
@@ -242,13 +206,8 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             req_v03 = types_v03.GetTaskRequest(
                 id=0, params=proto_utils.FromProto.task_query_params(request)
             )
-            req_v10 = conversions.to_core_get_task_request(req_v03)
-            task = await self.request_handler.on_get_task(
-                req_v10, server_context
-            )
-            if not task:
-                raise TaskNotFoundError
-            return proto_utils.ToProto.task(conversions.to_compat_task(task))
+            task = await self.handler03.on_get_task(req_v03, server_context)
+            return proto_utils.ToProto.task(task)
 
         return await self._handle_unary(context, _handler, a2a_v0_3_pb2.Task())
 
@@ -265,13 +224,8 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             req_v03 = types_v03.CancelTaskRequest(
                 id=0, params=proto_utils.FromProto.task_id_params(request)
             )
-            req_v10 = conversions.to_core_cancel_task_request(req_v03)
-            task = await self.request_handler.on_cancel_task(
-                req_v10, server_context
-            )
-            if not task:
-                raise TaskNotFoundError
-            return proto_utils.ToProto.task(conversions.to_compat_task(task))
+            task = await self.handler03.on_cancel_task(req_v03, server_context)
+            return proto_utils.ToProto.task(task)
 
         return await self._handle_unary(context, _handler, a2a_v0_3_pb2.Task())
 
@@ -288,11 +242,12 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             req_v03 = types_v03.TaskResubscriptionRequest(
                 id=0, params=proto_utils.FromProto.task_id_params(request)
             )
-            req_v10 = conversions.to_core_subscribe_to_task_request(req_v03)
-            async for event in self.request_handler.on_subscribe_to_task(
-                req_v10, server_context
+            async for v03_stream_resp in self.handler03.on_subscribe_to_task(
+                req_v03, server_context
             ):
-                yield self._event_to_v03_stream_response(event)
+                yield proto_utils.ToProto.stream_response(
+                    v03_stream_resp.result
+                )
 
         async for item in self._handle_stream(context, _handler):
             yield item
@@ -313,15 +268,12 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
                     request
                 ),
             )
-            req_v10 = conversions.to_core_create_task_push_notification_config_request(
-                req_v03
+            res_v03 = (
+                await self.handler03.on_create_task_push_notification_config(
+                    req_v03, server_context
+                )
             )
-            res_v10 = await self.request_handler.on_create_task_push_notification_config(
-                req_v10, server_context
-            )
-            return proto_utils.ToProto.task_push_notification_config(
-                conversions.to_compat_task_push_notification_config(res_v10)
-            )
+            return proto_utils.ToProto.task_push_notification_config(res_v03)
 
         return await self._handle_unary(
             context, _handler, a2a_v0_3_pb2.TaskPushNotificationConfig()
@@ -344,19 +296,10 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
                     id=task_id, push_notification_config_id=config_id
                 ),
             )
-            req_v10 = (
-                conversions.to_core_get_task_push_notification_config_request(
-                    req_v03
-                )
+            res_v03 = await self.handler03.on_get_task_push_notification_config(
+                req_v03, server_context
             )
-            res_v10 = (
-                await self.request_handler.on_get_task_push_notification_config(
-                    req_v10, server_context
-                )
-            )
-            return proto_utils.ToProto.task_push_notification_config(
-                conversions.to_compat_task_push_notification_config(res_v10)
-            )
+            return proto_utils.ToProto.task_push_notification_config(res_v03)
 
         return await self._handle_unary(
             context, _handler, a2a_v0_3_pb2.TaskPushNotificationConfig()
@@ -379,21 +322,16 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
                     id=task_id
                 ),
             )
-            req_v10 = (
-                conversions.to_core_list_task_push_notification_config_request(
-                    req_v03
+            res_v03 = (
+                await self.handler03.on_list_task_push_notification_configs(
+                    req_v03, server_context
                 )
-            )
-            res_v10 = await self.request_handler.on_list_task_push_notification_configs(
-                req_v10, server_context
             )
 
             return a2a_v0_3_pb2.ListTaskPushNotificationConfigResponse(
                 configs=[
-                    proto_utils.ToProto.task_push_notification_config(
-                        conversions.to_compat_task_push_notification_config(c)
-                    )
-                    for c in res_v10.configs
+                    proto_utils.ToProto.task_push_notification_config(c)
+                    for c in res_v03
                 ]
             )
 
@@ -433,11 +371,8 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
                     id=task_id, push_notification_config_id=config_id
                 ),
             )
-            req_v10 = conversions.to_core_delete_task_push_notification_config_request(
-                req_v03
-            )
-            await self.request_handler.on_delete_task_push_notification_config(
-                req_v10, server_context
+            await self.handler03.on_delete_task_push_notification_config(
+                req_v03, server_context
             )
             return empty_pb2.Empty()
 
