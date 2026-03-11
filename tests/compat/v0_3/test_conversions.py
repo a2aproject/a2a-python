@@ -427,7 +427,6 @@ def test_send_message_configuration_conversion():
     v10_expected = pb2_v10.SendMessageConfiguration(
         accepted_output_modes=['text/plain', 'application/json'],
         history_length=10,
-        blocking=True,
         task_push_notification_config=pb2_v10.TaskPushNotificationConfig(
             url='http://test',
             authentication=pb2_v10.AuthenticationInfo(scheme='Basic'),
@@ -443,7 +442,7 @@ def test_send_message_configuration_conversion():
 
 def test_send_message_configuration_conversion_minimal():
     v03_config = types_v03.MessageSendConfiguration()
-    v10_expected = pb2_v10.SendMessageConfiguration(blocking=True)
+    v10_expected = pb2_v10.SendMessageConfiguration()
 
     v10_config = to_core_send_message_configuration(v03_config)
     assert v10_config == v10_expected
@@ -1306,9 +1305,7 @@ def test_send_message_request_conversion():
             role=pb2_v10.Role.ROLE_USER,
             parts=[pb2_v10.Part(text='Hi')],
         ),
-        configuration=pb2_v10.SendMessageConfiguration(
-            history_length=5, blocking=True
-        ),
+        configuration=pb2_v10.SendMessageConfiguration(history_length=5),
     )
     ParseDict({'k': 'v'}, v10_expected.metadata)
 
@@ -1767,8 +1764,8 @@ def test_to_core_send_message_request_no_configuration():
         ),
     )
     core_req = to_core_send_message_request(v03_req)
-    # Default is True if configuration is absent
-    assert core_req.configuration.blocking is True
+    # Blocking by default (return_immediately=False)
+    assert core_req.configuration.return_immediately is False
     assert not core_req.HasField('message')
 
 

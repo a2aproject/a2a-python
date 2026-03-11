@@ -623,7 +623,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],
-        blocking=False,  # Non-blocking request
+        return_immediately=True,
     )
     params = SendMessageRequest(
         message=Message(
@@ -932,7 +932,7 @@ async def test_on_message_send_non_blocking():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=False, accepted_output_modes=['text/plain']
+            return_immediately=True, accepted_output_modes=['text/plain']
         ),
     )
 
@@ -978,7 +978,6 @@ async def test_on_message_send_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
             history_length=1,
         ),
@@ -1016,7 +1015,6 @@ async def test_on_get_task_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
         ),
     )
