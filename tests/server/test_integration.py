@@ -706,6 +706,7 @@ def test_invalid_request_structure(client: TestClient):
     # The jsonrpc library returns InvalidRequestError for invalid requests format
     assert data['error']['code'] == InvalidRequestError().code
 
+
 def test_invalid_request_method(client: TestClient):
     """Test handling an invalid request method."""
     response = client.post(
