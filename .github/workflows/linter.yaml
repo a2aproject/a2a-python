@@ -45,9 +45,7 @@ jobs:
       - name: Run Pyright (Pylance equivalent)
         id: pyright
         continue-on-error: true
-        uses: jakebailey/pyright-action@v2
-        with:
-          pylance-version: latest-release
+        run: uv run pyright src
 
       - name: Run JSCPD for copy-paste detection
         id: jscpd

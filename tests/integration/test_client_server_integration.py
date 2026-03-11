@@ -789,7 +789,33 @@ async def test_client_get_signed_base_and_extended_cards(
 
 
 @pytest.mark.asyncio
-async def test_jsonrpc_malformed_payload(jsonrpc_setup: TransportSetup) -> None:
+@pytest.mark.parametrize(
+    'request_kwargs, expected_error_code',
+    [
+        pytest.param(
+            {'content': 'not a json'},
+            -32700,  # Parse error
+            id='invalid-json',
+        ),
+        pytest.param(
+            {
+                'json': {
+                    'jsonrpc': '2.0',
+                    'method': 'SendMessage',
+                    'params': {'message': 'should be an object'},
+                    'id': 1,
+                }
+            },
+            -32602,  # Invalid params
+            id='wrong-params-type',
+        ),
+    ],
+)
+async def test_jsonrpc_malformed_payload(
+    jsonrpc_setup: TransportSetup,
+    request_kwargs: dict[str, Any],
+    expected_error_code: int,
+) -> None:
     """Integration test to verify that JSON-RPC malformed payloads don't return 500."""
     client_obj = jsonrpc_setup.client
     assert isinstance(client_obj, BaseClient)
@@ -798,23 +824,9 @@ async def test_jsonrpc_malformed_payload(jsonrpc_setup: TransportSetup) -> None:
     client = transport.httpx_client
     url = transport.url
 
-    # 1. Invalid JSON
-    response = await client.post(url, content='not a json')
+    response = await client.post(url, **request_kwargs)
     assert response.status_code == 200
-    assert response.json()['error']['code'] == -32700  # Parse error
-
-    # 2. Wrong types in params
-    response = await client.post(
-        url,
-        json={
-            'jsonrpc': '2.0',
-            'method': 'SendMessage',
-            'params': {'message': 'should be an object'},
-            'id': 1,
-        },
-    )
-    assert response.status_code == 200
-    assert response.json()['error']['code'] == -32602  # Invalid params
+    assert response.json()['error']['code'] == expected_error_code
 
     await transport.close()
 
