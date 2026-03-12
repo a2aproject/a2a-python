@@ -117,6 +117,12 @@ async def main_async(http_port: int, grpc_port: int):
             AgentInterface(
                 protocol_binding=TransportProtocol.HTTP_JSON,
                 url=f'http://127.0.0.1:{http_port}/rest/',
+                protocol_version='1.0',
+            ),
+            AgentInterface(
+                protocol_binding=TransportProtocol.HTTP_JSON,
+                url=f'http://127.0.0.1:{http_port}/rest/v0.3/',
+                protocol_version='0.3',
             ),
             AgentInterface(
                 protocol_binding=TransportProtocol.GRPC,
@@ -132,18 +138,16 @@ async def main_async(http_port: int, grpc_port: int):
         queue_manager=InMemoryQueueManager(),
     )
 
-    # from a2a.compat.v0_3.middleware import Compat03Middleware
     app = FastAPI()
-    # app.add_middleware(Compat03Middleware)
-
     jsonrpc_app = A2AFastAPIApplication(
-        http_handler=handler, agent_card=agent_card
+        http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
     ).build()
     app.mount('/jsonrpc', jsonrpc_app)
+
     app.mount(
         '/rest',
         A2ARESTFastAPIApplication(
-            http_handler=handler, agent_card=agent_card
+            http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
         ).build(),
     )
 

@@ -6,7 +6,7 @@ from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types.a2a_pb2 import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 
 logger = logging.getLogger(__name__)
@@ -26,19 +26,19 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         """Initializes the InMemoryPushNotificationConfigStore."""
         self.lock = asyncio.Lock()
         self._push_notification_infos: dict[
-            str, dict[str, list[PushNotificationConfig]]
+            str, dict[str, list[TaskPushNotificationConfig]]
         ] = {}
         self.owner_resolver = owner_resolver
 
     def _get_owner_push_notification_infos(
         self, owner: str
-    ) -> dict[str, list[PushNotificationConfig]]:
+    ) -> dict[str, list[TaskPushNotificationConfig]]:
         return self._push_notification_infos.get(owner, {})
 
     async def set_info(
         self,
         task_id: str,
-        notification_config: PushNotificationConfig,
+        notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task in memory."""
@@ -71,7 +71,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         self,
         task_id: str,
         context: ServerCallContext,
-    ) -> list[PushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Retrieves all push notification configurations for a task from memory, for the given owner."""
         owner = self.owner_resolver(context)
         async with self.lock:

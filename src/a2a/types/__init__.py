@@ -15,7 +15,6 @@ from a2a.types.a2a_pb2 import (
     AuthorizationCodeOAuthFlow,
     CancelTaskRequest,
     ClientCredentialsOAuthFlow,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     DeviceCodeOAuthFlow,
     GetExtendedAgentCardRequest,
@@ -34,7 +33,6 @@ from a2a.types.a2a_pb2 import (
     OpenIdConnectSecurityScheme,
     Part,
     PasswordOAuthFlow,
-    PushNotificationConfig,
     Role,
     SecurityRequirement,
     SecurityScheme,
@@ -68,12 +66,11 @@ from a2a.utils.errors import (
 )
 
 
-# Type alias for A2A requests (union of all request types)
 A2ARequest = (
     SendMessageRequest
     | GetTaskRequest
     | CancelTaskRequest
-    | CreateTaskPushNotificationConfigRequest
+    | TaskPushNotificationConfig
     | GetTaskPushNotificationConfigRequest
     | SubscribeToTaskRequest
     | GetExtendedAgentCardRequest
@@ -100,7 +97,6 @@ __all__ = [
     'CancelTaskRequest',
     'ClientCredentialsOAuthFlow',
     'ContentTypeNotSupportedError',
-    'CreateTaskPushNotificationConfigRequest',
     'DeleteTaskPushNotificationConfigRequest',
     'DeviceCodeOAuthFlow',
     'GetExtendedAgentCardRequest',
@@ -124,7 +120,6 @@ __all__ = [
     'OpenIdConnectSecurityScheme',
     'Part',
     'PasswordOAuthFlow',
-    'PushNotificationConfig',
     'PushNotificationNotSupportedError',
     'Role',
     'SecurityRequirement',

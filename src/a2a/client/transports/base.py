@@ -1,5 +1,5 @@
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from types import TracebackType
 
 from typing_extensions import Self
@@ -8,7 +8,6 @@ from a2a.client.middleware import ClientCallContext
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -92,7 +91,7 @@ class ClientTransport(ABC):
     @abstractmethod
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
@@ -142,7 +141,6 @@ class ClientTransport(ABC):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
 

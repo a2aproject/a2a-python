@@ -53,11 +53,11 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    CreateTaskPushNotificationConfigRequest,
+    TaskPushNotificationConfig,
     Task,
     TaskPushNotificationConfig,
     TaskState,
@@ -515,9 +515,9 @@ async def test_on_message_send_with_push_notification():
         request_context_builder=mock_request_context_builder,
     )
 
-    push_config = PushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
     message_config = SendMessageConfiguration(
-        push_notification_config=push_config,
+        task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
@@ -541,6 +541,7 @@ async def test_on_message_send_with_push_notification():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -619,11 +620,11 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     )
 
     # Configure push notification
-    push_config = PushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
     message_config = SendMessageConfiguration(
-        push_notification_config=push_config,
+        task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],
-        blocking=False,  # Non-blocking request
+        return_immediately=True,
     )
     params = SendMessageRequest(
         message=Message(
@@ -643,6 +644,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         initial_task,
         True,  # interrupted = True for non-blocking
+        MagicMock(spec=asyncio.Task),  # background task
     )
 
     # Mock the current_result async property to return the final task
@@ -666,7 +668,11 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         event_callback_received = event_callback
         if event_callback_received:
             await event_callback_received(final_task)
-        return initial_task, True  # interrupted = True for non-blocking
+        return (
+            initial_task,
+            True,
+            MagicMock(spec=asyncio.Task),
+        )  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
         mock_consume_and_break_on_interrupt
@@ -738,9 +744,9 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         request_context_builder=mock_request_context_builder,
     )
 
-    push_config = PushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
     message_config = SendMessageConfiguration(
-        push_notification_config=push_config,
+        task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
@@ -758,6 +764,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -815,6 +822,7 @@ async def test_on_message_send_no_result_from_aggregator():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         None,
         False,
+        None,
     )
 
     with (
@@ -864,6 +872,7 @@ async def test_on_message_send_task_id_mismatch():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         mismatched_task,
         False,
+        None,
     )
 
     with (
@@ -932,7 +941,7 @@ async def test_on_message_send_non_blocking():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=False, accepted_output_modes=['text/plain']
+            return_immediately=True, accepted_output_modes=['text/plain']
         ),
     )
 
@@ -978,7 +987,6 @@ async def test_on_message_send_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
             history_length=1,
         ),
@@ -1016,7 +1024,6 @@ async def test_on_get_task_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
         ),
     )
@@ -1071,6 +1078,7 @@ async def test_on_message_send_interrupted_flow():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
         True,
+        MagicMock(spec=asyncio.Task),  # background task
     )  # Interrupted = True
 
     # Collect coroutines passed to create_task so we can close them
@@ -1159,9 +1167,11 @@ async def test_on_message_send_stream_with_push_notification():
         request_context_builder=mock_request_context_builder,
     )
 
-    push_config = PushNotificationConfig(url='http://callback.stream.com/push')
+    push_config = TaskPushNotificationConfig(
+        url='http://callback.stream.com/push'
+    )
     message_config = SendMessageConfiguration(
-        push_notification_config=push_config,
+        task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
@@ -1960,9 +1970,9 @@ async def test_set_task_push_notification_config_no_notifier():
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,  # Explicitly None
     )
-    params = CreateTaskPushNotificationConfigRequest(
+    params = TaskPushNotificationConfig(
         task_id='task1',
-        config=PushNotificationConfig(url='http://example.com'),
+        url='http://example.com',
     )
 
     with pytest.raises(UnsupportedOperationError):
@@ -1985,9 +1995,9 @@ async def test_set_task_push_notification_config_task_not_found():
         push_config_store=mock_push_store,
         push_sender=mock_push_sender,
     )
-    params = CreateTaskPushNotificationConfigRequest(
+    params = TaskPushNotificationConfig(
         task_id='non_existent_task',
-        config=PushNotificationConfig(url='http://example.com'),
+        url='http://example.com',
     )
 
     context = create_server_call_context()
@@ -2009,7 +2019,7 @@ async def test_get_task_push_notification_config_no_store():
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='task1',
-        id='push_notification_config',
+        id='task_push_notification_config',
     )
 
     with pytest.raises(UnsupportedOperationError):
@@ -2031,7 +2041,7 @@ async def test_get_task_push_notification_config_task_not_found():
         push_config_store=mock_push_store,
     )
     params = GetTaskPushNotificationConfigRequest(
-        task_id='non_existent_task', id='push_notification_config'
+        task_id='non_existent_task', id='task_push_notification_config'
     )
 
     context = create_server_call_context()
@@ -2060,7 +2070,7 @@ async def test_get_task_push_notification_config_info_not_found():
         push_config_store=mock_push_store,
     )
     params = GetTaskPushNotificationConfigRequest(
-        task_id='non_existent_task', id='push_notification_config'
+        task_id='non_existent_task', id='task_push_notification_config'
     )
 
     context = create_server_call_context()
@@ -2088,11 +2098,8 @@ async def test_get_task_push_notification_config_info_with_config():
         push_config_store=push_store,
     )
 
-    set_config_params = CreateTaskPushNotificationConfigRequest(
-        task_id='task_1',
-        config=PushNotificationConfig(
-            id='config_id', url='http://1.example.com'
-        ),
+    set_config_params = TaskPushNotificationConfig(
+        task_id='task_1', id='config_id', url='http://1.example.com'
     )
     context = create_server_call_context()
     await request_handler.on_create_task_push_notification_config(
@@ -2111,8 +2118,8 @@ async def test_get_task_push_notification_config_info_with_config():
 
     assert result is not None
     assert result.task_id == 'task_1'
-    assert result.push_notification_config.url == set_config_params.config.url
-    assert result.push_notification_config.id == 'config_id'
+    assert result.url == set_config_params.url
+    assert result.id == 'config_id'
 
 
 @pytest.mark.asyncio
@@ -2129,9 +2136,9 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         push_config_store=push_store,
     )
 
-    set_config_params = CreateTaskPushNotificationConfigRequest(
+    set_config_params = TaskPushNotificationConfig(
         task_id='task_1',
-        config=PushNotificationConfig(url='http://1.example.com'),
+        url='http://1.example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
@@ -2147,8 +2154,8 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
 
     assert result is not None
     assert result.task_id == 'task_1'
-    assert result.push_notification_config.url == set_config_params.config.url
-    assert result.push_notification_config.id == 'task_1'
+    assert result.url == set_config_params.url
+    assert result.id == 'task_1'
 
 
 @pytest.mark.asyncio
@@ -2306,11 +2313,11 @@ async def test_list_task_push_notification_config_info_with_config():
     sample_task = create_sample_task(task_id='non_existent_task')
     mock_task_store.get.return_value = sample_task
 
-    push_config1 = PushNotificationConfig(
-        id='config_1', url='http://example.com'
+    push_config1 = TaskPushNotificationConfig(
+        task_id='task_1', id='config_1', url='http://example.com'
     )
-    push_config2 = PushNotificationConfig(
-        id='config_2', url='http://example.com'
+    push_config2 = TaskPushNotificationConfig(
+        task_id='task_1', id='config_2', url='http://example.com'
     )
 
     push_store = InMemoryPushNotificationConfigStore()
@@ -2331,9 +2338,9 @@ async def test_list_task_push_notification_config_info_with_config():
 
     assert len(result.configs) == 2
     assert result.configs[0].task_id == 'task_1'
-    assert result.configs[0].push_notification_config == push_config1
+    assert result.configs[0] == push_config1
     assert result.configs[1].task_id == 'task_1'
-    assert result.configs[1].push_notification_config == push_config2
+    assert result.configs[1] == push_config2
 
 
 @pytest.mark.asyncio
@@ -2351,17 +2358,17 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
     )
 
     # multiple calls without config id should replace the existing
-    set_config_params1 = CreateTaskPushNotificationConfigRequest(
+    set_config_params1 = TaskPushNotificationConfig(
         task_id='task_1',
-        config=PushNotificationConfig(url='http://1.example.com'),
+        url='http://1.example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
     )
 
-    set_config_params2 = CreateTaskPushNotificationConfigRequest(
+    set_config_params2 = TaskPushNotificationConfig(
         task_id='task_1',
-        config=PushNotificationConfig(url='http://2.example.com'),
+        url='http://2.example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
@@ -2375,11 +2382,8 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
     assert len(result.configs) == 1
     assert result.configs[0].task_id == 'task_1'
-    assert (
-        result.configs[0].push_notification_config.url
-        == set_config_params2.config.url
-    )
-    assert result.configs[0].push_notification_config.id == 'task_1'
+    assert result.configs[0].url == set_config_params2.url
+    assert result.configs[0].id == 'task_1'
 
 
 @pytest.mark.asyncio
@@ -2438,7 +2442,7 @@ async def test_delete_no_task_push_notification_config_info():
     push_store = InMemoryPushNotificationConfigStore()
     await push_store.set_info(
         'task_2',
-        PushNotificationConfig(id='config_1', url='http://example.com'),
+        TaskPushNotificationConfig(id='config_1', url='http://example.com'),
         create_server_call_context(),
     )
 
@@ -2474,11 +2478,11 @@ async def test_delete_task_push_notification_config_info_with_config():
     sample_task = create_sample_task(task_id='non_existent_task')
     mock_task_store.get.return_value = sample_task
 
-    push_config1 = PushNotificationConfig(
-        id='config_1', url='http://example.com'
+    push_config1 = TaskPushNotificationConfig(
+        task_id='task_1', id='config_1', url='http://example.com'
     )
-    push_config2 = PushNotificationConfig(
-        id='config_2', url='http://example.com'
+    push_config2 = TaskPushNotificationConfig(
+        task_id='task_1', id='config_2', url='http://example.com'
     )
 
     push_store = InMemoryPushNotificationConfigStore()
@@ -2509,7 +2513,7 @@ async def test_delete_task_push_notification_config_info_with_config():
 
     assert len(result2.configs) == 1
     assert result2.configs[0].task_id == 'task_1'
-    assert result2.configs[0].push_notification_config == push_config2
+    assert result2.configs[0] == push_config2
 
 
 @pytest.mark.asyncio
@@ -2520,7 +2524,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
     sample_task = create_sample_task(task_id='non_existent_task')
     mock_task_store.get.return_value = sample_task
 
-    push_config = PushNotificationConfig(url='http://example.com')
+    push_config = TaskPushNotificationConfig(url='http://example.com')
 
     # insertion without id should replace the existing config
     push_store = InMemoryPushNotificationConfigStore()

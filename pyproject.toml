@@ -40,6 +40,7 @@ mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
 db-cli = ["alembic>=1.14.0"]
+vertex = ["google-cloud-aiplatform>=1.140.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -51,6 +52,7 @@ all = [
   "a2a-sdk[telemetry]",
   "a2a-sdk[signing]",
   "a2a-sdk[db-cli]",
+  "a2a-sdk[vertex]",
 ]
 
 [project.urls]
@@ -127,6 +129,7 @@ dev = [
   "trio",
   "uvicorn>=0.35.0",
   "pytest-timeout>=2.4.0",
+  "pyright",
   "a2a-sdk[all]",
 ]
 

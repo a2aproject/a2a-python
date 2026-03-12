@@ -1,5 +1,4 @@
 # ruff: noqa: PLC0415
-import json
 import logging
 
 from typing import TYPE_CHECKING
@@ -27,6 +26,8 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from a2a.compat.v0_3 import conversions
+from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
 from a2a.server.models import (
     Base,
@@ -37,7 +38,7 @@ from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types.a2a_pb2 import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 
 if TYPE_CHECKING:
@@ -145,9 +146,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             await self.initialize()
 
     def _to_orm(
-        self, task_id: str, config: PushNotificationConfig, owner: str
+        self, task_id: str, config: TaskPushNotificationConfig, owner: str
     ) -> PushNotificationConfigModel:
-        """Maps a PushNotificationConfig proto to a SQLAlchemy model instance.
+        """Maps a TaskPushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
@@ -163,12 +164,13 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             config_id=config.id,
             owner=owner,
             config_data=data_to_store,
+            protocol_version='1.0',
         )
 
     def _from_orm(
         self, model_instance: PushNotificationConfigModel
-    ) -> PushNotificationConfig:
-        """Maps a SQLAlchemy model instance to a PushNotificationConfig proto.
+    ) -> TaskPushNotificationConfig:
+        """Maps a SQLAlchemy model instance to a TaskPushNotificationConfig proto.
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
@@ -181,10 +183,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)
-                return Parse(
-                    decrypted_payload.decode('utf-8'), PushNotificationConfig()
+                return self._parse_config(
+                    decrypted_payload.decode('utf-8'),
+                    model_instance.protocol_version,
                 )
-            except (json.JSONDecodeError, Exception) as e:
+            except Exception as e:
                 if isinstance(e, InvalidToken):
                     # Decryption failed. This could be because the data is not encrypted.
                     # We'll log a warning and try to parse it as plain JSON as a fallback.
@@ -214,7 +217,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 if isinstance(payload, bytes)
                 else payload
             )
-            return Parse(payload_str, PushNotificationConfig())
+            return self._parse_config(
+                payload_str, model_instance.protocol_version
+            )
+
         except Exception as e:
             if self._fernet:
                 logger.exception(
@@ -240,7 +246,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     async def set_info(
         self,
         task_id: str,
-        notification_config: PushNotificationConfig,
+        notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
@@ -248,7 +254,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         owner = self.owner_resolver(context)
 
         # Create a copy of the config using proto CopyFrom
-        config_to_save = PushNotificationConfig()
+        config_to_save = TaskPushNotificationConfig()
         config_to_save.CopyFrom(notification_config)
         if not config_to_save.id:
             config_to_save.id = task_id
@@ -267,7 +273,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         self,
         task_id: str,
         context: ServerCallContext,
-    ) -> list[PushNotificationConfig]:
+    ) -> list[TaskPushNotificationConfig]:
         """Retrieves all push notification configurations for a task, for the given owner."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
@@ -333,3 +339,22 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     owner,
                     config_id,
                 )
+
+    def _parse_config(
+        self, json_payload: str, protocol_version: str | None = None
+    ) -> TaskPushNotificationConfig:
+        """Parses a JSON payload into a TaskPushNotificationConfig proto.
+
+        Uses protocol_version to decide between modern parsing and legacy conversion.
+        """
+        if protocol_version == '1.0':
+            return Parse(json_payload, TaskPushNotificationConfig())
+
+        legacy_instance = (
+            types_v03.TaskPushNotificationConfig.model_validate_json(
+                json_payload
+            )
+        )
+        return conversions.to_core_task_push_notification_config(
+            legacy_instance
+        )

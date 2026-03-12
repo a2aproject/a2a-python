@@ -1,9 +1,10 @@
+import os
+import shutil
+import socket
 import subprocess
 import time
-import socket
+
 import pytest
-import shutil
-import os
 
 
 def get_free_port():
@@ -192,7 +193,7 @@ def running_servers():
             'server_1_0.py',
             'client_0_3.py',
             ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
-            ['grpc'],
+            ['grpc', 'jsonrpc', 'rest'],
         ),
         # Run 1.0 Server <-> 1.0 Client
         (
@@ -206,7 +207,7 @@ def running_servers():
             'server_0_3.py',
             'client_1_0.py',
             [],
-            ['grpc'],
+            ['grpc', 'rest', 'jsonrpc'],
         ),
     ],
 )

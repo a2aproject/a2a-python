@@ -149,8 +149,8 @@ async def test_create_rest_adapter_with_missing_deps_raises_importerror(
     with pytest.raises(
         ImportError,
         match=(
-            'Packages `starlette` and `sse-starlette` are required to use'
-            ' the `RESTAdapter`.'
+            r'Packages `starlette` and `sse-starlette` are required to use'
+            r' the `RESTAdapter`.'
         ),
     ):
         _app = RESTAdapter(agent_card, request_handler)
@@ -187,6 +187,19 @@ async def test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror(
         _app = A2ARESTFastAPIApplication(agent_card, request_handler).build(
             agent_card_url='/well-known/agent.json', rpc_url=''
         )
+
+
+@pytest.mark.anyio
+async def test_create_a2a_rest_fastapi_app_with_v0_3_compat(
+    agent_card: AgentCard, request_handler: RequestHandler
+):
+    app = A2ARESTFastAPIApplication(
+        agent_card, request_handler, enable_v0_3_compat=True
+    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
+
+    routes = [getattr(route, 'path', '') for route in app.routes]
+    assert '/v0.3/well-known/agent.json' in routes
+    assert '/v0.3/v1/message:send' in routes
 
 
 @pytest.mark.anyio
@@ -465,7 +478,7 @@ class TestTenantExtraction:
                 '/tasks/1/pushNotificationConfigs',
                 'POST',
                 'on_create_task_push_notification_config',
-                {'config': {'url': 'http://foo'}},
+                {'url': 'http://foo'},
             ),
             (
                 '/tasks/1/pushNotificationConfigs',
@@ -475,7 +488,7 @@ class TestTenantExtraction:
             ),
         ],
     )
-    async def test_tenant_extraction_parametrized(
+    async def test_tenant_extraction_parametrized(  # noqa: PLR0913  # Test parametrization requires many arguments
         self,
         client: AsyncClient,
         request_handler: MagicMock,

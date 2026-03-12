@@ -7,7 +7,6 @@ from google.protobuf.json_format import (
     MessageToDict,
     MessageToJson,
     Parse,
-    ParseDict,
 )
 
 
@@ -27,7 +26,6 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
     GetTaskPushNotificationConfigRequest,
-    GetTaskRequest,
     SubscribeToTaskRequest,
 )
 from a2a.utils import proto_utils
@@ -220,12 +218,11 @@ class RESTHandler:
                 (due to the `@validate` decorator), A2AError if processing error is
                 found.
         """
-        task_id = request.path_params['id']
         body = await request.body()
-        params = a2a_pb2.CreateTaskPushNotificationConfigRequest()
+        params = a2a_pb2.TaskPushNotificationConfig()
         Parse(body, params)
         # Set the parent to the task resource name format
-        params.task_id = task_id
+        params.task_id = request.path_params['id']
         config = (
             await self.request_handler.on_create_task_push_notification_config(
                 params, context
@@ -247,10 +244,9 @@ class RESTHandler:
         Returns:
             A `Task` object containing the Task.
         """
-        task_id = request.path_params['id']
-        history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
-        params = GetTaskRequest(id=task_id, history_length=history_length)
+        params = a2a_pb2.GetTaskRequest()
+        proto_utils.parse_params(request.query_params, params)
+        params.id = request.path_params['id']
         task = await self.request_handler.on_get_task(params, context)
         if task:
             return MessageToDict(task)
@@ -295,12 +291,8 @@ class RESTHandler:
             A list of `dict` representing the `Task` objects.
         """
         params = a2a_pb2.ListTasksRequest()
-        # Parse query params, keeping arrays/repeated fields in mind if there are any
-        # Using a simple ParseDict for now, might need more robust query param parsing
-        # if the request structure contains nested or repeated elements
-        ParseDict(
-            dict(request.query_params), params, ignore_unknown_fields=True
-        )
+        proto_utils.parse_params(request.query_params, params)
+
         result = await self.request_handler.on_list_tasks(params, context)
         return MessageToDict(result)
 
@@ -318,13 +310,9 @@ class RESTHandler:
         Returns:
             A list of `dict` representing the `TaskPushNotificationConfig` objects.
         """
-        task_id = request.path_params['id']
-        params = a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id=task_id)
-
-        # Parse query params, keeping arrays/repeated fields in mind if there are any
-        ParseDict(
-            dict(request.query_params), params, ignore_unknown_fields=True
-        )
+        params = a2a_pb2.ListTaskPushNotificationConfigsRequest()
+        proto_utils.parse_params(request.query_params, params)
+        params.task_id = request.path_params['id']
 
         result = (
             await self.request_handler.on_list_task_push_notification_configs(

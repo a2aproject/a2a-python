@@ -577,10 +577,9 @@ class TestTenantExtraction:
             ),
             (
                 'CreateTaskPushNotificationConfig',
-                a2a_pb2.CreateTaskPushNotificationConfigRequest(
+                a2a_pb2.TaskPushNotificationConfig(
                     tenant='my-tenant',
                     task_id='1',
-                    config=a2a_pb2.PushNotificationConfig(),
                 ),
                 'on_create_task_push_notification_config',
                 a2a_pb2.TaskPushNotificationConfig(),
@@ -703,9 +702,8 @@ class TestTenantExtraction:
             ),
             (
                 'CreateTaskPushNotificationConfig',
-                a2a_pb2.CreateTaskPushNotificationConfigRequest(
+                a2a_pb2.TaskPushNotificationConfig(
                     task_id='1',
-                    config=a2a_pb2.PushNotificationConfig(),
                 ),
                 'on_create_task_push_notification_config',
                 a2a_pb2.TaskPushNotificationConfig(),

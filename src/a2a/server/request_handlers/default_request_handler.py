@@ -29,7 +29,6 @@ from a2a.server.tasks import (
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
@@ -38,7 +37,6 @@ from a2a.types.a2a_pb2 import (
     ListTasksRequest,
     ListTasksResponse,
     Message,
-    PushNotificationConfig,
     SendMessageRequest,
     SubscribeToTaskRequest,
     Task,
@@ -280,11 +278,11 @@ class DefaultRequestHandler(RequestHandler):
         if (
             self._push_config_store
             and params.configuration
-            and params.configuration.push_notification_config
+            and params.configuration.task_push_notification_config
         ):
             await self._push_config_store.set_info(
                 task_id,
-                params.configuration.push_notification_config,
+                params.configuration.task_push_notification_config,
                 context or ServerCallContext(),
             )
 
@@ -342,9 +340,7 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
-        blocking = True  # Default to blocking behavior
-        if params.configuration and params.configuration.blocking is False:
-            blocking = False
+        blocking = not params.configuration.return_immediately
 
         interrupted_or_non_blocking = False
         try:
@@ -355,11 +351,16 @@ class DefaultRequestHandler(RequestHandler):
             (
                 result,
                 interrupted_or_non_blocking,
+                bg_consume_task,
             ) = await result_aggregator.consume_and_break_on_interrupt(
                 consumer,
                 blocking=blocking,
                 event_callback=push_notification_callback,
             )
+
+            if bg_consume_task is not None:
+                bg_consume_task.set_name(f'continue_consuming:{task_id}')
+                self._track_background_task(bg_consume_task)
 
         except Exception:
             logger.exception('Agent execution failed')
@@ -475,7 +476,7 @@ class DefaultRequestHandler(RequestHandler):
 
     async def on_create_task_push_notification_config(
         self,
-        params: CreateTaskPushNotificationConfigRequest,
+        params: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/create'.
@@ -492,14 +493,11 @@ class DefaultRequestHandler(RequestHandler):
 
         await self._push_config_store.set_info(
             task_id,
-            params.config,
+            params,
             context or ServerCallContext(),
         )
 
-        return TaskPushNotificationConfig(
-            task_id=task_id,
-            push_notification_config=params.config,
-        )
+        return params
 
     async def on_get_task_push_notification_config(
         self,
@@ -519,7 +517,7 @@ class DefaultRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
-        push_notification_configs: list[PushNotificationConfig] = (
+        push_notification_configs: list[TaskPushNotificationConfig] = (
             await self._push_config_store.get_info(
                 task_id, context or ServerCallContext()
             )
@@ -528,10 +526,7 @@ class DefaultRequestHandler(RequestHandler):
 
         for config in push_notification_configs:
             if config.id == config_id:
-                return TaskPushNotificationConfig(
-                    task_id=task_id,
-                    push_notification_config=config,
-                )
+                return config
 
         raise InternalError(message='Push notification config not found')
 
@@ -599,13 +594,7 @@ class DefaultRequestHandler(RequestHandler):
         )
 
         return ListTaskPushNotificationConfigsResponse(
-            configs=[
-                TaskPushNotificationConfig(
-                    task_id=task_id,
-                    push_notification_config=config,
-                )
-                for config in push_notification_config_list
-            ]
+            configs=push_notification_config_list
         )
 
     async def on_delete_task_push_notification_config(

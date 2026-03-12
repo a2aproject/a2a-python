@@ -15,6 +15,8 @@ else:
         Response = Any
 
 
+from google.protobuf.json_format import ParseError
+
 from a2a.server.jsonrpc_models import (
     InternalError as JSONRPCInternalError,
 )
@@ -110,6 +112,15 @@ def rest_error_handler(
                     'type': type(error).__name__,
                 },
                 status_code=http_code,
+            )
+        except ParseError as error:
+            logger.warning('Parse error: %s', str(error))
+            return JSONResponse(
+                content={
+                    'message': str(error),
+                    'type': 'ParseError',
+                },
+                status_code=400,
             )
         except Exception:
             logger.exception('Unknown error occurred')

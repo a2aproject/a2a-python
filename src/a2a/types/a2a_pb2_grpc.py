@@ -48,7 +48,7 @@ class A2AServiceStub(object):
                 _registered_method=True)
         self.CreateTaskPushNotificationConfig = channel.unary_unary(
                 '/lf.a2a.v1.A2AService/CreateTaskPushNotificationConfig',
-                request_serializer=a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
+                request_serializer=a2a__pb2.TaskPushNotificationConfig.SerializeToString,
                 response_deserializer=a2a__pb2.TaskPushNotificationConfig.FromString,
                 _registered_method=True)
         self.GetTaskPushNotificationConfig = channel.unary_unary(
@@ -124,6 +124,7 @@ class A2AServiceServicer(object):
     def CreateTaskPushNotificationConfig(self, request, context):
         """(-- api-linter: client-libraries::4232::required-fields=disabled
         api-linter: core::0133::method-signature=disabled
+        api-linter: core::0133::request-message-name=disabled
         aip.dev/not-precedent: method_signature preserved for backwards compatibility --)
         Creates a push notification config for a task.
         """
@@ -194,7 +195,7 @@ def add_A2AServiceServicer_to_server(servicer, server):
             ),
             'CreateTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
                     servicer.CreateTaskPushNotificationConfig,
-                    request_deserializer=a2a__pb2.CreateTaskPushNotificationConfigRequest.FromString,
+                    request_deserializer=a2a__pb2.TaskPushNotificationConfig.FromString,
                     response_serializer=a2a__pb2.TaskPushNotificationConfig.SerializeToString,
             ),
             'GetTaskPushNotificationConfig': grpc.unary_unary_rpc_method_handler(
@@ -406,7 +407,7 @@ class A2AService(object):
             request,
             target,
             '/lf.a2a.v1.A2AService/CreateTaskPushNotificationConfig',
-            a2a__pb2.CreateTaskPushNotificationConfigRequest.SerializeToString,
+            a2a__pb2.TaskPushNotificationConfig.SerializeToString,
             a2a__pb2.TaskPushNotificationConfig.FromString,
             options,
             channel_credentials,

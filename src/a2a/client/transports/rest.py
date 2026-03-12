@@ -1,7 +1,7 @@
 import json
 import logging
 
-from collections.abc import AsyncGenerator, Callable
+from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 
 import httpx
@@ -19,7 +19,6 @@ from a2a.client.transports.http_helpers import (
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
-    CreateTaskPushNotificationConfigRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -62,7 +61,6 @@ class RestTransport(ClientTransport):
         self.httpx_client = httpx_client
         self.agent_card = agent_card
         self.interceptors = interceptors or []
-        self._needs_extended_card = agent_card.capabilities.extended_agent_card
 
     async def send_message(
         self,
@@ -111,6 +109,8 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']  # id is part of the URL path
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -129,12 +129,16 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
+        params = MessageToDict(request)
+        if 'tenant' in params:
+            del params['tenant']
+
         response_data = await self._execute_request(
             'GET',
             '/tasks',
             request.tenant,
             context=context,
-            params=MessageToDict(request),
+            params=params,
         )
         response: ListTasksResponse = ParseDict(
             response_data, ListTasksResponse()
@@ -160,7 +164,7 @@ class RestTransport(ClientTransport):
 
     async def create_task_push_notification_config(
         self,
-        request: CreateTaskPushNotificationConfigRequest,
+        request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
     ) -> TaskPushNotificationConfig:
@@ -187,8 +191,10 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -210,8 +216,10 @@ class RestTransport(ClientTransport):
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         params = MessageToDict(request)
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -235,8 +243,10 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         await self._execute_request(
             'DELETE',
@@ -266,26 +276,17 @@ class RestTransport(ClientTransport):
         request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the Extended AgentCard."""
         card = self.agent_card
-
         if not card.capabilities.extended_agent_card:
             return card
 
         response_data = await self._execute_request(
             'GET', '/extendedAgentCard', request.tenant, context=context
         )
-        response: AgentCard = ParseDict(response_data, AgentCard())
 
-        if signature_verifier:
-            signature_verifier(response)
-
-        # Update the transport's agent_card
-        self.agent_card = response
-        self._needs_extended_card = False
-        return response
+        return ParseDict(response_data, AgentCard())
 
     async def close(self) -> None:
         """Closes the httpx client."""

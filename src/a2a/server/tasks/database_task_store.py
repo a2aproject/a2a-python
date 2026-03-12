@@ -1,7 +1,6 @@
 import logging
 
 from datetime import datetime, timezone
-from typing import Any, cast
 
 
 try:
@@ -31,8 +30,10 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 
+from a2a.compat.v0_3 import conversions
+from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -117,8 +118,6 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
-        # Pass proto objects directly - PydanticType/PydanticListType
-        # handle serialization via process_bind_param
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
@@ -126,36 +125,63 @@ class DatabaseTaskStore(TaskStore):
             owner=owner,
             last_updated=(
                 task.status.timestamp.ToDatetime()
-                if task.HasField('status') and task.status.HasField('timestamp')
+                if task.status.HasField('timestamp')
                 else None
             ),
-            status=task.status if task.HasField('status') else None,
-            artifacts=list(task.artifacts) if task.artifacts else [],
-            history=list(task.history) if task.history else [],
+            status=MessageToDict(task.status),
+            artifacts=[MessageToDict(artifact) for artifact in task.artifacts],
+            history=[MessageToDict(history) for history in task.history],
             task_metadata=(
                 MessageToDict(task.metadata) if task.metadata.fields else None
             ),
+            protocol_version='1.0',
         )
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        # PydanticType/PydanticListType already deserialize to proto objects
-        # via process_result_value, so we can construct the Task directly
-        task = Task(
+        if task_model.protocol_version == '1.0':
+            task = Task(
+                id=task_model.id,
+                context_id=task_model.context_id,
+            )
+            if task_model.status:
+                ParseDict(task_model.status, task.status)
+            if task_model.artifacts:
+                for art_dict in task_model.artifacts:
+                    art = task.artifacts.add()
+                    ParseDict(art_dict, art)
+            if task_model.history:
+                for msg_dict in task_model.history:
+                    msg = task.history.add()
+                    ParseDict(msg_dict, msg)
+            if task_model.task_metadata:
+                task.metadata.update(task_model.task_metadata)
+            return task
+
+        # Legacy conversion
+        legacy_task = types_v03.Task(
             id=task_model.id,
             context_id=task_model.context_id,
+            status=types_v03.TaskStatus.model_validate(task_model.status),
+            artifacts=(
+                [
+                    types_v03.Artifact.model_validate(a)
+                    for a in task_model.artifacts
+                ]
+                if task_model.artifacts
+                else []
+            ),
+            history=(
+                [
+                    types_v03.Message.model_validate(m)
+                    for m in task_model.history
+                ]
+                if task_model.history
+                else []
+            ),
+            metadata=task_model.task_metadata or {},
         )
-        if task_model.status:
-            task.status.CopyFrom(task_model.status)
-        if task_model.artifacts:
-            task.artifacts.extend(task_model.artifacts)
-        if task_model.history:
-            task.history.extend(task_model.history)
-        if task_model.task_metadata:
-            task.metadata.update(
-                cast('dict[str, Any]', task_model.task_metadata)
-            )
-        return task
+        return conversions.to_core_task(legacy_task)
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
