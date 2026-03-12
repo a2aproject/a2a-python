@@ -140,10 +140,6 @@ A2A_ERROR_REASONS = {
     AuthenticatedExtendedCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
     ExtensionSupportRequiredError: 'EXTENSION_SUPPORT_REQUIRED',
     VersionNotSupportedError: 'VERSION_NOT_SUPPORTED',
-    InvalidParamsError: 'INVALID_PARAMS',
-    InvalidRequestError: 'INVALID_REQUEST',
-    MethodNotFoundError: 'METHOD_NOT_FOUND',
-    InternalError: 'INTERNAL_ERROR',
 }
 
 A2A_REASON_TO_ERROR = {reason: cls for cls, reason in A2A_ERROR_REASONS.items()}

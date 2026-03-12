@@ -36,7 +36,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import get_text_parts
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 
 
 @pytest.fixture
@@ -259,29 +258,7 @@ async def test_send_message_with_timeout_context(
     assert kwargs['timeout'] == 12.5
 
 
-@pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
-@pytest.mark.asyncio
-async def test_grpc_mapped_errors_legacy(
-    grpc_transport: GrpcTransport,
-    mock_grpc_stub: AsyncMock,
-    sample_message_send_params: SendMessageRequest,
-    error_cls,
-) -> None:
-    """Test handling of legacy gRPC error responses."""
-    error_details = f'{error_cls.__name__}: Mapped Error'
-
-    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
-        code=grpc.StatusCode.INTERNAL,
-        initial_metadata=grpc.aio.Metadata(),
-        trailing_metadata=grpc.aio.Metadata(),
-        details=error_details,
-    )
-
-    with pytest.raises(error_cls):
-        await grpc_transport.send_message(sample_message_send_params)
-
-
-@pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+@pytest.mark.parametrize('error_cls', list(A2A_ERROR_REASONS.keys()))
 @pytest.mark.asyncio
 async def test_grpc_mapped_errors_rich(
     grpc_transport: GrpcTransport,
@@ -312,7 +289,7 @@ async def test_grpc_mapped_errors_rich(
         trailing_metadata=grpc.aio.Metadata(
             ('grpc-status-details-bin', status.SerializeToString()),
         ),
-        details='A generic error message',
+        details=error_details,
     )
 
     with pytest.raises(error_cls) as excinfo:

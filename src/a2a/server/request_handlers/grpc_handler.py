@@ -4,15 +4,16 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
-from typing import cast
 
 
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
     import grpc.aio  # type: ignore[reportMissingModuleSource]
+
+    from grpc_status import rpc_status
 except ImportError as e:
     raise ImportError(
-        'GrpcHandler requires grpcio and grpcio-tools to be installed. '
+        'GrpcHandler requires grpcio, grpcio-tools, and grpcio-status to be installed. '
         'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
@@ -420,37 +421,40 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """Sets the grpc errors appropriately in the context."""
         code = _ERROR_CODE_MAP.get(type(error))
 
-        status_value = code.value if code else grpc.StatusCode.UNKNOWN.value
-        status_code = (
-            status_value[0] if isinstance(status_value, tuple) else status_value
-        )
-        error_msg = error.message if hasattr(error, 'message') else str(error)
-        status = status_pb2.Status(code=status_code, message=error_msg)
-
         if code:
             reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
-
             error_info = error_details_pb2.ErrorInfo(
                 reason=reason,
                 domain='a2a-protocol.org',
             )
 
+            status_code = (
+                code.value[0] if code else grpc.StatusCode.UNKNOWN.value[0]
+            )
+            error_msg = (
+                error.message if hasattr(error, 'message') else str(error)
+            )
+
+            # Create standard Status and pack the ErrorInfo
+            status = status_pb2.Status(code=status_code, message=error_msg)
             detail = any_pb2.Any()
             detail.Pack(error_info)
             status.details.append(detail)
 
-        context.set_trailing_metadata(
-            cast(
-                'tuple[tuple[str, str | bytes], ...]',
-                (('grpc-status-details-bin', status.SerializeToString()),),
-            )
-        )
+            # Use grpc_status to safely generate standard trailing metadata
+            rich_status = rpc_status.to_status(status)
 
-        if code:
-            await context.abort(
-                code,
-                status.message,
-            )
+            new_metadata: list[tuple[str, str | bytes]] = []
+            trailing = context.trailing_metadata()
+            if trailing:
+                for k, v in trailing:
+                    new_metadata.append((str(k), v))
+
+            for k, v in rich_status.trailing_metadata:
+                new_metadata.append((str(k), v))
+
+            context.set_trailing_metadata(tuple(new_metadata))
+            await context.abort(rich_status.code, rich_status.details)
         else:
             await context.abort(
                 grpc.StatusCode.UNKNOWN,

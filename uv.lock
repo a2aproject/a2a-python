@@ -21,15 +21,13 @@ dependencies = [
 ]
 
 [package.optional-dependencies]
-db-cli = [
-    { name = "alembic" },
-]
 all = [
     { name = "alembic" },
     { name = "cryptography" },
     { name = "fastapi" },
     { name = "grpcio" },
     { name = "grpcio-reflection" },
+    { name = "grpcio-status" },
     { name = "grpcio-tools" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
@@ -38,12 +36,16 @@ all = [
     { name = "sse-starlette" },
     { name = "starlette" },
 ]
+db-cli = [
+    { name = "alembic" },
+]
 encryption = [
     { name = "cryptography" },
 ]
 grpc = [
     { name = "grpcio" },
     { name = "grpcio-reflection" },
+    { name = "grpcio-status" },
     { name = "grpcio-tools" },
 ]
 http-server = [
@@ -97,8 +99,8 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "alembic", marker = "extra == 'db-cli'", specifier = ">=1.14.0" },
     { name = "alembic", marker = "extra == 'all'", specifier = ">=1.14.0" },
+    { name = "alembic", marker = "extra == 'db-cli'", specifier = ">=1.14.0" },
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
     { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
@@ -109,6 +111,8 @@ requires-dist = [
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-reflection", marker = "extra == 'all'", specifier = ">=1.7.0" },
     { name = "grpcio-reflection", marker = "extra == 'grpc'", specifier = ">=1.7.0" },
+    { name = "grpcio-status", marker = "extra == 'all'", specifier = ">=1.60" },
+    { name = "grpcio-status", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -136,7 +140,7 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["db-cli", "all", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
+provides-extras = ["all", "db-cli", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
@@ -958,6 +962,20 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/31/06/337546aae558675f79cae2a8c1ce0c9b1952cbc5c28b01878f68d040f5bb/grpcio_reflection-1.78.0.tar.gz", hash = "sha256:e6e60c0b85dbcdf963b4d4d150c0f1d238ba891d805b575c52c0365d07fc0c40", size = 19098, upload-time = "2026-02-06T10:01:52.225Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/df/6d/4d095d27ccd049865ecdafc467754e9e47ad0f677a30dda969c3590f6582/grpcio_reflection-1.78.0-py3-none-any.whl", hash = "sha256:06fcfde9e6888cdd12e9dd1cf6dc7c440c2e9acf420f696ccbe008672ed05b60", size = 22800, upload-time = "2026-02-06T10:01:33.822Z" },
+]
+
+[[package]]
+name = "grpcio-status"
+version = "1.78.0"
+source = { registry = "https://pypi.org/simple" }
+dependencies = [
+    { name = "googleapis-common-protos" },
+    { name = "grpcio" },
+    { name = "protobuf" },
+]
+sdist = { url = "https://files.pythonhosted.org/packages/8a/cd/89ce482a931b543b92cdd9b2888805518c4620e0094409acb8c81dd4610a/grpcio_status-1.78.0.tar.gz", hash = "sha256:a34cfd28101bfea84b5aa0f936b4b423019e9213882907166af6b3bddc59e189", size = 13808, upload-time = "2026-02-06T10:01:48.034Z" }
+wheels = [
+    { url = "https://files.pythonhosted.org/packages/83/8a/1241ec22c41028bddd4a052ae9369267b4475265ad0ce7140974548dc3fa/grpcio_status-1.78.0-py3-none-any.whl", hash = "sha256:b492b693d4bf27b47a6c32590701724f1d3b9444b36491878fb71f6208857f34", size = 14523, upload-time = "2026-02-06T10:01:32.584Z" },
 ]
 
 [[package]]
