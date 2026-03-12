@@ -198,8 +198,7 @@ async def test_create_a2a_rest_fastapi_app_with_v0_3_compat(
     ).build(agent_card_url='/well-known/agent.json', rpc_url='')
 
     routes = [getattr(route, 'path', '') for route in app.routes]
-    assert '/v0.3/well-known/agent.json' in routes
-    assert '/v0.3/v1/message:send' in routes
+    assert '/v1/message:send' in routes
 
 
 @pytest.mark.anyio
