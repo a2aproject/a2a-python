@@ -17,6 +17,9 @@ from a2a.server.request_handlers.default_request_handler import (
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
 from a2a.server.tasks.task_updater import TaskUpdater
+from a2a.server.tasks.inmemory_push_notification_config_store import (
+    InMemoryPushNotificationConfigStore,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
@@ -25,9 +28,18 @@ from a2a.types import (
     Part,
     TaskState,
     TextPart,
+    FilePart,
     TransportProtocol,
+    FileWithBytes,
+    FileWithUri,
+    DataPart,
 )
 from a2a.grpc import a2a_pb2_grpc
+from starlette.requests import Request
+from starlette.concurrency import iterate_in_threadpool
+import time
+
+from server_common import CustomLoggingMiddleware
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -57,11 +69,34 @@ class MockAgentExecutor(AgentExecutor):
             if context.message and context.message.metadata
             else {}
         )
-        if metadata.get('test_key') != 'test_value':
+        if metadata.get('test_key') not in ('full_message', 'simple_message'):
             print(f'SERVER: WARNING: Missing or incorrect metadata: {metadata}')
             raise ValueError(
                 f'Missing expected metadata from client. Got: {metadata}'
             )
+
+        if metadata.get('test_key') == 'full_message':
+            expected_parts = [
+                Part(root=TextPart(text='stream')),
+                Part(
+                    root=FilePart(
+                        file=FileWithUri(
+                            uri='https://example.com/file.txt',
+                            mime_type='text/plain',
+                        )
+                    )
+                ),
+                Part(
+                    root=FilePart(
+                        file=FileWithBytes(
+                            bytes=b'aGVsbG8=',
+                            mime_type='application/octet-stream',
+                        )
+                    )
+                ),
+                Part(root=DataPart(data={'key': 'value'})),
+            ]
+            assert context.message.parts == expected_parts
 
         print(f"SERVER: request message text='{text}'")
 
@@ -79,13 +114,20 @@ class MockAgentExecutor(AgentExecutor):
                                 [Part(root=TextPart(text='ping'))]
                             ),
                         )
+                        await task_updater.add_artifact(
+                            [Part(root=TextPart(text='artifact-chunk'))],
+                            name='test-artifact',
+                            metadata={'artifact_key': 'artifact_value'},
+                        )
                         await asyncio.sleep(0.1)
                 except asyncio.CancelledError:
                     pass
 
             bg_task = asyncio.create_task(emit_periodic())
+
             await event.wait()
             bg_task.cancel()
+
             print(f'SERVER: stream event triggered for task {context.task_id}')
 
         await task_updater.update_status(
@@ -99,8 +141,8 @@ class MockAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         print(f'SERVER: cancel called for task {context.task_id}')
-        if context.task_id in self.events:
-            self.events[context.task_id].set()
+        assert context.task_id in self.events
+        self.events[context.task_id].set()
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
@@ -121,9 +163,7 @@ async def main_async(http_port: int, grpc_port: int):
         url=f'http://127.0.0.1:{http_port}/jsonrpc/',
         preferred_transport=TransportProtocol.jsonrpc,
         skills=[],
-        capabilities=AgentCapabilities(
-            streaming=True, push_notifications=False
-        ),
+        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         additional_interfaces=[
@@ -144,6 +184,7 @@ async def main_async(http_port: int, grpc_port: int):
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
         queue_manager=InMemoryQueueManager(),
+        push_config_store=InMemoryPushNotificationConfigStore(),
     )
 
     app = FastAPI()
@@ -166,9 +207,11 @@ async def main_async(http_port: int, grpc_port: int):
     server.add_insecure_port(f'127.0.0.1:{grpc_port}')
     await server.start()
 
+    app.add_middleware(CustomLoggingMiddleware)
+
     # Start Uvicorn
     config = uvicorn.Config(
-        app, host='127.0.0.1', port=http_port, log_level='warning'
+        app, host='127.0.0.1', port=http_port, log_level='info', access_log=True
     )
     uvicorn_server = uvicorn.Server(config)
     await uvicorn_server.serve()

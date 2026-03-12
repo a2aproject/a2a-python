@@ -92,7 +92,7 @@ async def test_send_message_success_message_v03(
     )
 
     response = await client.post(
-        '/v0.3/v1/message:send', json=json_format.MessageToDict(request)
+        '/v1/message:send', json=json_format.MessageToDict(request)
     )
     response.raise_for_status()
 
@@ -127,7 +127,7 @@ async def test_send_message_success_task_v03(
     )
 
     response = await client.post(
-        '/v0.3/v1/message:send', json=json_format.MessageToDict(request)
+        '/v1/message:send', json=json_format.MessageToDict(request)
     )
     response.raise_for_status()
 
@@ -155,7 +155,7 @@ async def test_get_task_v03(
         ),
     )
 
-    response = await client.get('/v0.3/v1/tasks/test_task_id')
+    response = await client.get('/v1/tasks/test_task_id')
     response.raise_for_status()
 
     actual_response = a2a_v0_3_pb2.Task()
@@ -182,7 +182,7 @@ async def test_cancel_task_v03(
         ),
     )
 
-    response = await client.post('/v0.3/v1/tasks/test_task_id:cancel')
+    response = await client.post('/v1/tasks/test_task_id:cancel')
     response.raise_for_status()
 
     actual_response = a2a_v0_3_pb2.Task()

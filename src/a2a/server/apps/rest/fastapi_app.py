@@ -121,6 +121,15 @@ class A2ARESTFastAPIApplication:
             A configured FastAPI application instance.
         """
         app = FastAPI(**kwargs)
+        if self.enable_v0_3_compat and self._v03_adapter:
+            v03_adapter = self._v03_adapter
+            v03_router = APIRouter()
+            for route, callback in v03_adapter.routes().items():
+                v03_router.add_api_route(
+                    f'{rpc_url}{route[0]}', callback, methods=[route[1]]
+                )
+            app.include_router(v03_router)
+
         router = APIRouter()
         for route, callback in self._adapter.routes().items():
             router.add_api_route(
@@ -133,20 +142,5 @@ class A2ARESTFastAPIApplication:
             return JSONResponse(card)
 
         app.include_router(router)
-
-        if self.enable_v0_3_compat and self._v03_adapter:
-            v03_adapter = self._v03_adapter
-            v03_router = APIRouter()
-            for route, callback in v03_adapter.routes().items():
-                v03_router.add_api_route(
-                    f'{rpc_url}/v0.3{route[0]}', callback, methods=[route[1]]
-                )
-
-            @v03_router.get(f'{rpc_url}/v0.3{agent_card_url}')
-            async def get_v03_agent_card(request: Request) -> Response:
-                card = await v03_adapter.handle_get_agent_card(request)
-                return JSONResponse(card)
-
-            app.include_router(v03_router)
 
         return app
