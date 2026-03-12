@@ -1,0 +1,8 @@
+{
+  "release-type": "python",
+  "prerelease": true,
+  "prerelease-type": "alpha",
+  "packages": {
+    ".": {}
+  }
+}
