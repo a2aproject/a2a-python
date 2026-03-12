@@ -36,6 +36,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.errors import InvalidParamsError
 
 
 class SampleUser(User):
@@ -380,7 +381,7 @@ async def test_list_tasks_fails(
     for task in tasks_to_create:
         await db_store_parameterized.save(task)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(InvalidParamsError) as excinfo:
         await db_store_parameterized.list(params)
 
     assert expected_error_message in str(excinfo.value)
