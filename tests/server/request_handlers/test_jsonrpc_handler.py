@@ -323,7 +323,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -352,7 +352,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -1021,7 +1021,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Task returned has task_id='task_123' but request_context will have generated UUID
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(),  # No task_id, so UUID is generated
