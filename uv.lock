@@ -29,6 +29,7 @@ all = [
     { name = "google-cloud-aiplatform" },
     { name = "grpcio" },
     { name = "grpcio-reflection" },
+    { name = "grpcio-status" },
     { name = "grpcio-tools" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
@@ -46,6 +47,7 @@ encryption = [
 grpc = [
     { name = "grpcio" },
     { name = "grpcio-reflection" },
+    { name = "grpcio-status" },
     { name = "grpcio-tools" },
 ]
 http-server = [
@@ -117,6 +119,8 @@ requires-dist = [
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-reflection", marker = "extra == 'all'", specifier = ">=1.7.0" },
     { name = "grpcio-reflection", marker = "extra == 'grpc'", specifier = ">=1.7.0" },
+    { name = "grpcio-status", marker = "extra == 'all'", specifier = ">=1.60" },
+    { name = "grpcio-status", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", specifier = ">=0.28.1" },
