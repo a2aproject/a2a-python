@@ -51,7 +51,7 @@ class TaskMixin:
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    status: Mapped[TaskStatus] = mapped_column(JSON, nullable=True)
+    status: Mapped[TaskStatus] = mapped_column(JSON)
     artifacts: Mapped[list[Artifact] | None] = mapped_column(
         JSON, nullable=True
     )
