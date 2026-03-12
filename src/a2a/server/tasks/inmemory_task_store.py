@@ -7,6 +7,7 @@ from a2a.server.tasks.task_store import TaskStore
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import decode_page_token, encode_page_token
 
 
@@ -135,7 +136,9 @@ class InMemoryTaskStore(TaskStore):
                     valid_token = True
                     break
             if not valid_token:
-                raise ValueError(f'Invalid page token: {params.page_token}')
+                raise InvalidParamsError(
+                    f'Invalid page token: {params.page_token}'
+                )
         page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
         end_idx = start_idx + page_size
         next_page_token = (
