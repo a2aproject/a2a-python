@@ -541,6 +541,7 @@ async def test_on_message_send_with_push_notification():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -623,7 +624,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],
-        blocking=False,  # Non-blocking request
+        return_immediately=True,
     )
     params = SendMessageRequest(
         message=Message(
@@ -643,6 +644,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         initial_task,
         True,  # interrupted = True for non-blocking
+        MagicMock(spec=asyncio.Task),  # background task
     )
 
     # Mock the current_result async property to return the final task
@@ -666,7 +668,11 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         event_callback_received = event_callback
         if event_callback_received:
             await event_callback_received(final_task)
-        return initial_task, True  # interrupted = True for non-blocking
+        return (
+            initial_task,
+            True,
+            MagicMock(spec=asyncio.Task),
+        )  # interrupted = True for non-blocking
 
     mock_result_aggregator_instance.consume_and_break_on_interrupt = (
         mock_consume_and_break_on_interrupt
@@ -758,6 +764,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         final_task_result,
         False,
+        None,
     )
 
     # Mock the current_result async property to return the final task result
@@ -815,6 +822,7 @@ async def test_on_message_send_no_result_from_aggregator():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         None,
         False,
+        None,
     )
 
     with (
@@ -864,6 +872,7 @@ async def test_on_message_send_task_id_mismatch():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         mismatched_task,
         False,
+        None,
     )
 
     with (
@@ -932,7 +941,7 @@ async def test_on_message_send_non_blocking():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=False, accepted_output_modes=['text/plain']
+            return_immediately=True, accepted_output_modes=['text/plain']
         ),
     )
 
@@ -978,7 +987,6 @@ async def test_on_message_send_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
             history_length=1,
         ),
@@ -1016,7 +1024,6 @@ async def test_on_get_task_limit_history():
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(
-            blocking=True,
             accepted_output_modes=['text/plain'],
         ),
     )
@@ -1071,6 +1078,7 @@ async def test_on_message_send_interrupted_flow():
     mock_result_aggregator_instance.consume_and_break_on_interrupt.return_value = (
         interrupt_task_result,
         True,
+        MagicMock(spec=asyncio.Task),  # background task
     )  # Interrupted = True
 
     # Collect coroutines passed to create_task so we can close them

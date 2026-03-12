@@ -340,9 +340,7 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
-        blocking = True  # Default to blocking behavior
-        if params.configuration and params.configuration.blocking is False:
-            blocking = False
+        blocking = not params.configuration.return_immediately
 
         interrupted_or_non_blocking = False
         try:
@@ -353,11 +351,16 @@ class DefaultRequestHandler(RequestHandler):
             (
                 result,
                 interrupted_or_non_blocking,
+                bg_consume_task,
             ) = await result_aggregator.consume_and_break_on_interrupt(
                 consumer,
                 blocking=blocking,
                 event_callback=push_notification_callback,
             )
+
+            if bg_consume_task is not None:
+                bg_consume_task.set_name(f'continue_consuming:{task_id}')
+                self._track_background_task(bg_consume_task)
 
         except Exception:
             logger.exception('Agent execution failed')

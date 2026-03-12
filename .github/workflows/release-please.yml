@@ -2,6 +2,7 @@ on:
   push:
     branches:
       - main
+      - 1.0-dev
 
 permissions:
   contents: write
@@ -16,4 +17,6 @@ jobs:
       - uses: googleapis/release-please-action@v4
         with:
           token: ${{ secrets.A2A_BOT_PAT }}
-          release-type: python
+          target-branch: ${{ github.ref_name }}
+          config-file: release-please-config.json
+          manifest-file: .release-please-manifest.json
