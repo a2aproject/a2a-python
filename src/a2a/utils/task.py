@@ -186,9 +186,10 @@ def decode_page_token(page_token: str) -> str:
     missing_padding = len(encoded_str) % 4
     if missing_padding:
         encoded_str += '=' * (4 - missing_padding)
-    print(f'input: {encoded_str}')
     try:
         decoded = b64decode(encoded_str.encode(_ENCODING)).decode(_ENCODING)
     except (binascii.Error, UnicodeDecodeError) as e:
-        raise ValueError('Token is not a valid base64-encoded cursor.') from e
+        raise InvalidParamsError(
+            'Token is not a valid base64-encoded cursor.'
+        ) from e
     return decoded
