@@ -373,7 +373,11 @@ class JSONRPCHandler:
             response = await self.request_handler.on_list_tasks(
                 request, context
             )
-            result = MessageToDict(response, preserving_proto_field_name=False)
+            result = MessageToDict(
+                response,
+                preserving_proto_field_name=False,
+                always_print_fields_with_no_presence=True,
+            )
             return _build_success_response(request_id, result)
         except A2AError as e:
             return _build_error_response(request_id, e)
