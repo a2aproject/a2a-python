@@ -346,22 +346,25 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     def _parse_config(
         self,
         json_payload: str,
-        task_id: str,
+        task_id: str | None = None,
         protocol_version: str | None = None,
     ) -> TaskPushNotificationConfig:
         """Parses a JSON payload into a TaskPushNotificationConfig proto.
 
-        Uses protocol_version to decide between modern parsing and legacy conversion.
+        Args:
+            json_payload: The JSON payload to parse.
+            task_id: The unique identifier of the task. Only required for legacy
+                (0.3) protocol versions.
+            protocol_version: The protocol version used for serialization.
         """
         if protocol_version == '1.0':
             return Parse(json_payload, TaskPushNotificationConfig())
         inner_config = types_v03.PushNotificationConfig.model_validate_json(
             json_payload
         )
-        legacy_instance = types_v03.TaskPushNotificationConfig(
-            task_id=task_id,
-            push_notification_config=inner_config,
-        )
         return conversions.to_core_task_push_notification_config(
-            legacy_instance
+            types_v03.TaskPushNotificationConfig(
+                task_id=task_id or '',
+                push_notification_config=inner_config,
+            )
         )
