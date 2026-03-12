@@ -1,7 +1,6 @@
 import logging
 
 from datetime import datetime, timezone
-from typing import Any, cast
 
 
 try:
@@ -147,25 +146,17 @@ class DatabaseTaskStore(TaskStore):
                 context_id=task_model.context_id,
             )
             if task_model.status:
-                ParseDict(
-                    cast('dict[str, Any]', task_model.status), task.status
-                )
+                ParseDict(task_model.status, task.status)
             if task_model.artifacts:
-                for art_dict in cast(
-                    'list[dict[str, Any]]', task_model.artifacts
-                ):
+                for art_dict in task_model.artifacts:
                     art = task.artifacts.add()
                     ParseDict(art_dict, art)
             if task_model.history:
-                for msg_dict in cast(
-                    'list[dict[str, Any]]', task_model.history
-                ):
+                for msg_dict in task_model.history:
                     msg = task.history.add()
                     ParseDict(msg_dict, msg)
             if task_model.task_metadata:
-                task.metadata.update(
-                    cast('dict[str, Any]', task_model.task_metadata)
-                )
+                task.metadata.update(task_model.task_metadata)
             return task
 
         # Legacy conversion

@@ -58,7 +58,7 @@ def create_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         '--add_columns_owner_last_updated-default-owner',
         dest='owner',
-        help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'unknown'",
+        help="Value for the 'owner' column (used in specific migrations). If not set defaults to 'legacy_v03_no_user_info'",
     )
     _add_shared_args(parser)
 

@@ -11,6 +11,9 @@ else:
         return func
 
 
+from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
+
+
 try:
     from sqlalchemy import JSON, DateTime, Index, LargeBinary, String
     from sqlalchemy.orm import (
@@ -44,17 +47,15 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-    status: Mapped[dict[str, Any] | None] = mapped_column(JSON, nullable=True)
-    artifacts: Mapped[list[dict[str, Any]] | None] = mapped_column(
+    status: Mapped[TaskStatus] = mapped_column(JSON, nullable=False)
+    artifacts: Mapped[list[Artifact] | None] = mapped_column(
         JSON, nullable=True
     )
-    history: Mapped[list[dict[str, Any]] | None] = mapped_column(
-        JSON, nullable=True
-    )
+    history: Mapped[list[Message] | None] = mapped_column(JSON, nullable=True)
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
@@ -145,7 +146,7 @@ class PushNotificationConfigMixin:
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
