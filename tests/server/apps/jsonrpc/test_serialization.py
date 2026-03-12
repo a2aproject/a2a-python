@@ -70,6 +70,7 @@ def test_starlette_agent_card_with_api_key_scheme_alias(
 
     try:
         parsed_card = AgentCard.model_validate(response_data)
+        assert parsed_card.security_schemes is not None
         parsed_scheme_wrapper = parsed_card.security_schemes['api_key_auth']
         assert isinstance(parsed_scheme_wrapper.root, APIKeySecurityScheme)
         assert parsed_scheme_wrapper.root.in_ == In.header

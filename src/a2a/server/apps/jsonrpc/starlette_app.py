@@ -1,11 +1,12 @@
 import logging
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from starlette.applications import Starlette
+    from starlette.middleware import Middleware
     from starlette.routing import Route
 
     _package_starlette_installed = True
@@ -13,11 +14,13 @@ if TYPE_CHECKING:
 else:
     try:
         from starlette.applications import Starlette
+        from starlette.middleware import Middleware
         from starlette.routing import Route
 
         _package_starlette_installed = True
     except ImportError:
         Starlette = Any
+        Middleware = Any
         Route = Any
 
         _package_starlette_installed = False
@@ -102,6 +105,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
         extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
+        middleware: Sequence[Middleware] | None = None,
     ) -> list[Route]:
         """Returns the Starlette Routes for handling A2A requests.
 
@@ -109,16 +113,22 @@ class A2AStarletteApplication(JSONRPCApplication):
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            middleware: Optional sequence of Starlette Middleware (e.g.
+                `[Middleware(AuthenticationMiddleware)]`) applied to the RPC
+                endpoint and the authenticated extended agent card endpoint.
 
         Returns:
             A list of Starlette Route objects.
         """
+        route_mw = list(middleware) if middleware else None
+
         app_routes = [
             Route(
                 rpc_url,
                 self._handle_requests,
                 methods=['POST'],
                 name='a2a_handler',
+                middleware=route_mw,
             ),
             Route(
                 agent_card_url,
@@ -148,6 +158,7 @@ class A2AStarletteApplication(JSONRPCApplication):
                     self._handle_get_authenticated_extended_agent_card,
                     methods=['GET'],
                     name='authenticated_extended_agent_card',
+                    middleware=route_mw,
                 )
             )
         return app_routes
@@ -158,6 +169,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
         extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
+        middleware: Sequence[Middleware] | None = None,
     ) -> None:
         """Adds the routes to the Starlette application.
 
@@ -166,11 +178,13 @@ class A2AStarletteApplication(JSONRPCApplication):
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            middleware: Optional sequence of Starlette Middleware.
         """
         routes = self.routes(
             agent_card_url=agent_card_url,
             rpc_url=rpc_url,
             extended_agent_card_url=extended_agent_card_url,
+            middleware=middleware,
         )
         app.routes.extend(routes)
 
@@ -179,6 +193,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
         extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
+        middleware: Sequence[Middleware] | None = None,
         **kwargs: Any,
     ) -> Starlette:
         """Builds and returns the Starlette application instance.
@@ -187,6 +202,7 @@ class A2AStarletteApplication(JSONRPCApplication):
             agent_card_url: The URL path for the agent card endpoint.
             rpc_url: The URL path for the A2A JSON-RPC endpoint (POST requests).
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            middleware: Optional sequence of Starlette Middleware applied to authenticated routes.
             **kwargs: Additional keyword arguments to pass to the Starlette constructor.
 
         Returns:
@@ -195,7 +211,7 @@ class A2AStarletteApplication(JSONRPCApplication):
         app = Starlette(**kwargs)
 
         self.add_routes_to_app(
-            app, agent_card_url, rpc_url, extended_agent_card_url
+            app, agent_card_url, rpc_url, extended_agent_card_url, middleware
         )
 
         return app

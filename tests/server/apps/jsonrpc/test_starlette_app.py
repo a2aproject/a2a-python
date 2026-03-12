@@ -66,6 +66,30 @@ class TestA2AStarletteApplicationOptionalDeps:
                 ' A2AStarletteApplication instance should not raise ImportError'
             )
 
+    def test_build_a2a_starlette_app_with_middleware_succeeds(
+        self, mock_app_params: dict
+    ):
+        from starlette.middleware import Middleware
+        from starlette.middleware.base import BaseHTTPMiddleware
+
+        class MockMiddleware(BaseHTTPMiddleware):
+            async def dispatch(self, request, call_next):
+                return await call_next(request)
+
+        app = A2AStarletteApplication(**mock_app_params)
+        starlette_app = app.build(middleware=[Middleware(MockMiddleware)])
+
+        from starlette.routing import Route
+
+        # Check that routes have the middleware
+        for route in starlette_app.routes:
+            if getattr(route, 'path', '') in [
+                '/',
+                '/agent/authenticatedExtendedCard',
+            ]:
+                assert isinstance(route, Route)
+                assert isinstance(route.app, MockMiddleware)
+
     def test_create_a2a_starlette_app_with_missing_deps_raises_importerror(
         self,
         mock_app_params: dict,
