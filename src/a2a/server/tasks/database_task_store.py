@@ -41,6 +41,7 @@ from a2a.server.tasks.task_store import TaskStore
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import decode_page_token, encode_page_token
 
 
@@ -285,7 +286,9 @@ class DatabaseTaskStore(TaskStore):
                     )
                 ).scalar_one_or_none()
                 if not start_task:
-                    raise ValueError(f'Invalid page token: {params.page_token}')
+                    raise InvalidParamsError(
+                        f'Invalid page token: {params.page_token}'
+                    )
 
                 start_task_timestamp = start_task.last_updated
                 where_clauses = []

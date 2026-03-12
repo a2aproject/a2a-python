@@ -21,6 +21,7 @@ from a2a.utils.task import (
     encode_page_token,
     new_task,
 )
+from a2a.utils.errors import InvalidParamsError
 
 
 class TestTask(unittest.TestCase):
@@ -214,7 +215,7 @@ class TestTask(unittest.TestCase):
         assert decode_page_token(self.encoded_page_token) == self.page_token
 
     def test_decode_page_token_fails(self):
-        with pytest.raises(ValueError) as excinfo:
+        with pytest.raises(InvalidParamsError) as excinfo:
             decode_page_token('invalid')
 
         assert 'Token is not a valid base64-encoded cursor.' in str(
