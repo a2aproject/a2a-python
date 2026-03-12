@@ -185,6 +185,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 decrypted_payload = self._fernet.decrypt(payload)
                 return self._parse_config(
                     decrypted_payload.decode('utf-8'),
+                    model_instance.task_id,
                     model_instance.protocol_version,
                 )
             except Exception as e:
@@ -218,7 +219,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 else payload
             )
             return self._parse_config(
-                payload_str, model_instance.protocol_version
+                payload_str,
+                model_instance.task_id,
+                model_instance.protocol_version,
             )
 
         except Exception as e:
@@ -341,7 +344,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 )
 
     def _parse_config(
-        self, json_payload: str, protocol_version: str | None = None
+        self,
+        json_payload: str,
+        task_id: str,
+        protocol_version: str | None = None,
     ) -> TaskPushNotificationConfig:
         """Parses a JSON payload into a TaskPushNotificationConfig proto.
 
@@ -349,11 +355,12 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         """
         if protocol_version == '1.0':
             return Parse(json_payload, TaskPushNotificationConfig())
-
-        legacy_instance = (
-            types_v03.TaskPushNotificationConfig.model_validate_json(
-                json_payload
-            )
+        inner_config = types_v03.PushNotificationConfig.model_validate_json(
+            json_payload
+        )
+        legacy_instance = types_v03.TaskPushNotificationConfig(
+            task_id=task_id,
+            push_notification_config=inner_config,
         )
         return conversions.to_core_task_push_notification_config(
             legacy_instance

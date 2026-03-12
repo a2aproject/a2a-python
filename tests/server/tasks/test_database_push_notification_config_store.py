@@ -220,10 +220,10 @@ async def test_set_and_get_info_multiple_configs(
 
     task_id = 'task-1'
     config1 = TaskPushNotificationConfig(
-        id='config-1', url='http://example.com/1'
+        id='config-1', task_id=task_id, url='http://example.com/1'
     )
     config2 = TaskPushNotificationConfig(
-        id='config-2', url='http://example.com/2'
+        id='config-2', task_id=task_id, url='http://example.com/2'
     )
 
     await db_store_parameterized.set_info(
@@ -738,16 +738,13 @@ async def test_get_0_3_push_notification_config_detailed(
     context_user = ServerCallContext(user=SampleUser(user_name=owner))
 
     # 1. Create a legacy PushNotificationConfig using v0.3 models
-    legacy_config = types_v03.TaskPushNotificationConfig(
-        task_id=task_id,
-        push_notification_config=types_v03.PushNotificationConfig(
-            id=config_id,
-            url='https://example.com/push',
-            token='legacy-token',
-            authentication=types_v03.PushNotificationAuthenticationInfo(
-                schemes=['bearer'],
-                credentials='legacy-creds',
-            ),
+    legacy_config = types_v03.PushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+        authentication=types_v03.PushNotificationAuthenticationInfo(
+            schemes=['bearer'],
+            credentials='legacy-creds',
         ),
     )
 
