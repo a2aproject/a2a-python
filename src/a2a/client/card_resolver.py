@@ -72,7 +72,9 @@ class A2ACardResolver:
         else:
             path_segment = relative_card_path.lstrip('/')
 
-        target_url = f'{self.base_url}/{path_segment}'
+        target_url = (
+            f'{self.base_url}/{path_segment}' if path_segment else self.base_url
+        )
 
         try:
             response = await self.httpx_client.get(
