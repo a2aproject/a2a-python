@@ -1,6 +1,7 @@
 {
   "release-type": "python",
   "prerelease": true,
+  "last-release-sha": "697ab8ed094ee053bcaf0c23609f3534b561da05",
   "prerelease-type": "alpha",
   "packages": {
     ".": {}
