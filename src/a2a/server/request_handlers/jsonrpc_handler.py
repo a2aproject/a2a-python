@@ -451,7 +451,7 @@ class JSONRPCHandler:
         request_id = self._get_request_id(context)
         if not self.agent_card.capabilities.extended_agent_card:
             raise ExtendedAgentCardNotConfiguredError(
-                message='Authenticated card not supported'
+                message='The agent does not have an extended agent card configured'
             )
 
         base_card = self.extended_agent_card
