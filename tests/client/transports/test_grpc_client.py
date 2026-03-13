@@ -6,7 +6,7 @@ import pytest
 from google.protobuf import any_pb2
 from google.rpc import error_details_pb2, status_pb2
 
-from a2a.client.middleware import ClientCallContext
+from a2a.client.client import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.utils.constants import VERSION_HEADER, PROTOCOL_VERSION_CURRENT
@@ -230,7 +230,7 @@ async def test_send_message_with_timeout_context(
     sample_task: Task,
 ) -> None:
     """Test send_message passes context timeout to grpc stub."""
-    from a2a.client.middleware import ClientCallContext
+    from a2a.client.client import ClientCallContext
 
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
         task=sample_task

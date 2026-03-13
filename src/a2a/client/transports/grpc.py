@@ -4,8 +4,8 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn, cast
 
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
-from a2a.client.middleware import ClientCallContext
 
 
 try:
@@ -25,7 +25,6 @@ from google.rpc import (  # type: ignore[reportMissingModuleSource]
 )
 
 from a2a.client.client import ClientConfig
-from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.optionals import Channel
 from a2a.client.transports.base import ClientTransport
 from a2a.types import a2a_pb2_grpc
@@ -122,7 +121,6 @@ class GrpcTransport(ClientTransport):
         card: AgentCard,
         url: str,
         config: ClientConfig,
-        interceptors: list[ClientCallInterceptor],
     ) -> 'GrpcTransport':
         """Creates a gRPC transport for the A2A client."""
         if config.grpc_channel_factory is None:

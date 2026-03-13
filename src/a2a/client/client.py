@@ -2,16 +2,18 @@ import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, MutableMapping
 from types import TracebackType
 from typing import Any
 
 import httpx
 
+from pydantic import BaseModel, Field
 from typing_extensions import Self
 
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.client.optionals import Channel
+from a2a.client.service_parameters import ServiceParameters
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -82,6 +84,18 @@ ClientEvent = tuple[StreamResponse, Task | None]
 Consumer = Callable[[ClientEvent, AgentCard], Coroutine[None, Any, Any]]
 
 
+class ClientCallContext(BaseModel):
+    """A context passed with each client call, allowing for call-specific.
+
+    configuration and data passing. Such as authentication details or
+    request deadlines.
+    """
+
+    state: MutableMapping[str, Any] = Field(default_factory=dict)
+    timeout: float | None = None
+    service_parameters: ServiceParameters | None = None
+
+
 class Client(ABC):
     """Abstract base class defining the interface for an A2A client.
 
@@ -93,20 +107,16 @@ class Client(ABC):
     def __init__(
         self,
         consumers: list[Consumer] | None = None,
-        middleware: list[ClientCallInterceptor] | None = None,
+        interceptors: list[ClientCallInterceptor] | None = None,
     ):
-        """Initializes the client with consumers and middleware.
+        """Initializes the client with consumers and interceptors.
 
         Args:
             consumers: A list of callables to process events from the agent.
-            middleware: A list of interceptors to process requests and responses.
+            interceptors: A list of interceptors to process requests and responses.
         """
-        if middleware is None:
-            middleware = []
-        if consumers is None:
-            consumers = []
-        self._consumers = consumers
-        self._middleware = middleware
+        self._consumers = consumers or []
+        self._interceptors = interceptors or []
 
     async def __aenter__(self) -> Self:
         """Enters the async context manager."""
@@ -227,11 +237,9 @@ class Client(ABC):
         """Attaches additional consumers to the `Client`."""
         self._consumers.append(consumer)
 
-    async def add_request_middleware(
-        self, middleware: ClientCallInterceptor
-    ) -> None:
-        """Attaches additional middleware to the `Client`."""
-        self._middleware.append(middleware)
+    async def add_interceptor(self, interceptor: ClientCallInterceptor) -> None:
+        """Attaches additional interceptors to the `Client`."""
+        self._interceptors.append(interceptor)
 
     async def consume(
         self,

@@ -148,7 +148,7 @@ class TestRestTransport:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message passes context timeout to build_request."""
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         client = RestTransport(
             httpx_client=mock_httpx_client,
@@ -244,7 +244,7 @@ class TestRestTransportExtensions:
         mock_response.status_code = 200
         mock_httpx_client.send.return_value = mock_response
 
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={
@@ -288,7 +288,7 @@ class TestRestTransportExtensions:
             mock_event_source
         )
 
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={
@@ -390,7 +390,7 @@ class TestRestTransportExtensions:
 
         request = GetExtendedAgentCardRequest()
 
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={HTTP_EXTENSION_HEADER: extensions_str}

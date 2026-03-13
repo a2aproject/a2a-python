@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
@@ -12,7 +12,6 @@ from packaging.version import InvalidVersion, Version
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
-from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
@@ -31,6 +30,10 @@ from a2a.utils.constants import (
 )
 
 
+if TYPE_CHECKING:
+    from a2a.client.interceptors import ClientCallInterceptor
+
+
 try:
     from a2a.client.transports.grpc import GrpcTransport
 except ImportError:
@@ -46,7 +49,7 @@ logger = logging.getLogger(__name__)
 
 
 TransportProducer = Callable[
-    [AgentCard, str, ClientConfig, list[ClientCallInterceptor]],
+    [AgentCard, str, ClientConfig],
     ClientTransport,
 ]
 
@@ -96,7 +99,6 @@ class ClientFactory:
                 card: AgentCard,
                 url: str,
                 config: ClientConfig,
-                interceptors: list[ClientCallInterceptor],
             ) -> ClientTransport:
                 interface = ClientFactory._find_best_interface(
                     list(card.supported_interfaces),
@@ -118,14 +120,12 @@ class ClientFactory:
                         cast('httpx.AsyncClient', config.httpx_client),
                         card,
                         url,
-                        interceptors,
                     )
 
                 return JsonRpcTransport(
                     cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
                 )
 
             self.register(
@@ -138,7 +138,6 @@ class ClientFactory:
                 card: AgentCard,
                 url: str,
                 config: ClientConfig,
-                interceptors: list[ClientCallInterceptor],
             ) -> ClientTransport:
                 interface = ClientFactory._find_best_interface(
                     list(card.supported_interfaces),
@@ -160,14 +159,12 @@ class ClientFactory:
                         cast('httpx.AsyncClient', config.httpx_client),
                         card,
                         url,
-                        interceptors,
                     )
 
                 return RestTransport(
                     cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
                 )
 
             self.register(
@@ -185,7 +182,6 @@ class ClientFactory:
                 card: AgentCard,
                 url: str,
                 config: ClientConfig,
-                interceptors: list[ClientCallInterceptor],
             ) -> ClientTransport:
                 # The interface has already been selected and passed as `url`.
                 # We determine its version to use the appropriate transport implementation.
@@ -204,12 +200,10 @@ class ClientFactory:
                     ClientFactory._is_legacy_version(version)
                     and CompatGrpcTransport is not None
                 ):
-                    return CompatGrpcTransport.create(
-                        card, url, config, interceptors
-                    )
+                    return CompatGrpcTransport.create(card, url, config)
 
                 if GrpcTransport is not None:
-                    return GrpcTransport.create(card, url, config, interceptors)
+                    return GrpcTransport.create(card, url, config)
 
                 raise ImportError(
                     'GrpcTransport is not available. '
@@ -410,7 +404,7 @@ class ClientFactory:
             all_consumers.extend(consumers)
 
         transport = self._registry[transport_protocol](
-            card, selected_interface.url, self._config, interceptors or []
+            card, selected_interface.url, self._config
         )
 
         if selected_interface.tenant:

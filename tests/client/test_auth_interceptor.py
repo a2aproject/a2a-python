@@ -1,3 +1,4 @@
+# ruff: noqa: INP001, S106
 import json
 
 from collections.abc import Callable
@@ -8,16 +9,17 @@ import httpx
 import pytest
 import respx
 
+from google.protobuf import json_format
+
 from a2a.client import (
     AuthInterceptor,
     Client,
     ClientCallContext,
-    ClientCallInterceptor,
     ClientConfig,
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.client.interceptors import BeforeArgs
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -36,35 +38,11 @@ from a2a.types.a2a_pb2 import (
     SendMessageResponse,
     StringList,
 )
-
-
-class HeaderInterceptor(ClientCallInterceptor):
-    """A simple mock interceptor for testing basic middleware functionality."""
-
-    def __init__(self, header_name: str, header_value: str):
-        self.header_name = header_name
-        self.header_value = header_value
-
-    async def intercept(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any],
-        agent_card: AgentCard | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        headers = http_kwargs.get('headers', {})
-        headers[self.header_name] = self.header_value
-        http_kwargs['headers'] = headers
-        return request_payload, http_kwargs
-
-
-from google.protobuf import json_format
+from a2a.utils.constants import TransportProtocol
 
 
 def build_success_response(request: httpx.Request) -> httpx.Response:
     """Creates a valid JSON-RPC success response based on the request."""
-    from a2a.types.a2a_pb2 import SendMessageResponse
 
     request_payload = json.loads(request.content)
     message = Message(
@@ -120,19 +98,18 @@ async def test_auth_interceptor_skips_when_no_agent_card(
     store: InMemoryContextCredentialStore,
 ) -> None:
     """Tests that the AuthInterceptor does not modify the request when no AgentCard is provided."""
-    request_payload = {'foo': 'bar'}
-    http_kwargs = {'fizz': 'buzz'}
     auth_interceptor = AuthInterceptor(credential_service=store)
-
-    new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='SendMessage',
-        request_payload=request_payload,
-        http_kwargs=http_kwargs,
-        agent_card=None,
-        context=ClientCallContext(state={}),
+    request = SendMessageRequest(message=Message())
+    context = ClientCallContext(state={})
+    args = BeforeArgs(
+        input=request,
+        method='send_message',
+        agent_card=AgentCard(),
+        context=context,
     )
-    assert new_payload == request_payload
-    assert new_kwargs == http_kwargs
+
+    await auth_interceptor.before(args)
+    assert context.service_parameters is None
 
 
 @pytest.mark.asyncio
@@ -172,52 +149,17 @@ async def test_in_memory_context_credential_store(
     assert await store.get_credentials(scheme_name, context) == new_credential
 
 
-@pytest.mark.skip(
-    reason='Interceptors not explicitly being tested as per use request'
-)
-@pytest.mark.asyncio
-@respx.mock
-async def test_client_with_simple_interceptor() -> None:
-    """Ensures that a custom HeaderInterceptor correctly injects a static header into outbound HTTP requests from the A2AClient."""
-    url = 'http://agent.com/rpc'
-    interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
-    card = AgentCard(
-        supported_interfaces=[
-            AgentInterface(url=url, protocol_binding=TransportProtocol.JSONRPC)
-        ],
-        name='testbot',
-        description='test bot',
-        version='1.0',
-        default_input_modes=[],
-        default_output_modes=[],
-        skills=[],
-        capabilities=AgentCapabilities(),
-    )
-
-    async with httpx.AsyncClient() as http_client:
-        config = ClientConfig(
-            httpx_client=http_client,
-            supported_protocol_bindings=[TransportProtocol.JSONRPC],
-        )
-        factory = ClientFactory(config)
-        client = factory.create(card, interceptors=[interceptor])
-
-        request = await send_message(client, url)
-        assert request.headers['x-test-header'] == 'Test-Value-123'
-
-
 def wrap_security_scheme(scheme: Any) -> SecurityScheme:
     """Wraps a security scheme in the correct SecurityScheme proto field."""
     if isinstance(scheme, APIKeySecurityScheme):
         return SecurityScheme(api_key_security_scheme=scheme)
-    elif isinstance(scheme, HTTPAuthSecurityScheme):
+    if isinstance(scheme, HTTPAuthSecurityScheme):
         return SecurityScheme(http_auth_security_scheme=scheme)
-    elif isinstance(scheme, OAuth2SecurityScheme):
+    if isinstance(scheme, OAuth2SecurityScheme):
         return SecurityScheme(oauth2_security_scheme=scheme)
-    elif isinstance(scheme, OpenIdConnectSecurityScheme):
+    if isinstance(scheme, OpenIdConnectSecurityScheme):
         return SecurityScheme(open_id_connect_security_scheme=scheme)
-    else:
-        raise ValueError(f'Unknown security scheme type: {type(scheme)}')
+    raise ValueError(f'Unknown security scheme type: {type(scheme)}')
 
 
 @dataclass
@@ -363,8 +305,6 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     scheme_name = 'missing'
     session_id = 'session-id'
     credential = 'test-token'
-    request_payload = {'foo': 'bar'}
-    http_kwargs = {'fizz': 'buzz'}
     await store.set_credentials(session_id, scheme_name, credential)
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
@@ -386,13 +326,14 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
         ],
         security_schemes={},
     )
-
-    new_payload, new_kwargs = await auth_interceptor.intercept(
-        method_name='SendMessage',
-        request_payload=request_payload,
-        http_kwargs=http_kwargs,
+    request = SendMessageRequest(message=Message())
+    context = ClientCallContext(state={'sessionId': session_id})
+    args = BeforeArgs(
+        input=request,
+        method='send_message',
         agent_card=agent_card,
-        context=ClientCallContext(state={'sessionId': session_id}),
+        context=context,
     )
-    assert new_payload == request_payload
-    assert new_kwargs == http_kwargs
+
+    await auth_interceptor.before(args)
+    assert context.service_parameters is None
