@@ -50,7 +50,24 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import (
+    TransportProtocol,
+)
+from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
+    ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
+    InternalError,
+    InvalidAgentResponseError,
+    InvalidParamsError,
+    InvalidRequestError,
+    MethodNotFoundError,
+    PushNotificationNotSupportedError,
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+    VersionNotSupportedError,
+)
 from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
@@ -784,6 +801,43 @@ async def test_client_get_signed_base_and_extended_cards(
     )
     assert result.name == extended_agent_card.name
     assert len(result.signatures) == 1
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error_cls',
+    [
+        TaskNotFoundError,
+        TaskNotCancelableError,
+        PushNotificationNotSupportedError,
+        UnsupportedOperationError,
+        ContentTypeNotSupportedError,
+        InvalidAgentResponseError,
+        ExtendedAgentCardNotConfiguredError,
+        ExtensionSupportRequiredError,
+        VersionNotSupportedError,
+    ],
+)
+async def test_client_handles_a2a_errors(transport_setups, error_cls) -> None:
+    """Integration test to verify error propagation from handler to client."""
+    client = transport_setups.client
+    handler = transport_setups.handler
+
+    # Mock the handler to raise the error
+    handler.on_get_task.side_effect = error_cls('Test error message')
+
+    params = GetTaskRequest(id='some-id')
+
+    # We expect the client to raise the same error_cls.
+    with pytest.raises(error_cls) as exc_info:
+        await client.get_task(request=params)
+
+    assert 'Test error message' in str(exc_info.value)
+
+    # Reset side_effect for other tests
+    handler.on_get_task.side_effect = None
 
     await client.close()
 

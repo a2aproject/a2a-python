@@ -26,8 +26,9 @@ from a2a.server.jsonrpc_models import (
 )
 from a2a.utils.errors import (
     A2AError,
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -37,6 +38,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 
 
@@ -56,7 +58,9 @@ _A2AErrorType = (
     | type[UnsupportedOperationError]
     | type[ContentTypeNotSupportedError]
     | type[InvalidAgentResponseError]
-    | type[AuthenticatedExtendedCardNotConfiguredError]
+    | type[ExtendedAgentCardNotConfiguredError]
+    | type[ExtensionSupportRequiredError]
+    | type[VersionNotSupportedError]
 )
 
 A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
@@ -73,7 +77,9 @@ A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
     UnsupportedOperationError: 501,
     ContentTypeNotSupportedError: 415,
     InvalidAgentResponseError: 502,
-    AuthenticatedExtendedCardNotConfiguredError: 404,
+    ExtendedAgentCardNotConfiguredError: 400,
+    ExtensionSupportRequiredError: 400,
+    VersionNotSupportedError: 400,
 }
 
 

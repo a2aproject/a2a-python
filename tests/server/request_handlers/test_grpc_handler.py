@@ -144,25 +144,6 @@ async def test_get_task_not_found(
 
 
 @pytest.mark.asyncio
-async def test_cancel_task_server_error(
-    grpc_handler: GrpcHandler,
-    mock_request_handler: AsyncMock,
-    mock_grpc_context: AsyncMock,
-) -> None:
-    """Test CancelTask call when handler raises A2AError."""
-    request_proto = a2a_pb2.CancelTaskRequest(id='task-1')
-    error = types.TaskNotCancelableError()
-    mock_request_handler.on_cancel_task.side_effect = error
-
-    await grpc_handler.CancelTask(request_proto, mock_grpc_context)
-
-    mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.UNIMPLEMENTED,
-        'Task cannot be canceled',
-    )
-
-
-@pytest.mark.asyncio
 async def test_send_streaming_message(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
@@ -340,7 +321,7 @@ async def test_list_tasks_success(
         ),
         (
             types.TaskNotCancelableError(),
-            grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.FAILED_PRECONDITION,
             'TaskNotCancelableError',
         ),
         (
@@ -355,7 +336,7 @@ async def test_list_tasks_success(
         ),
         (
             types.ContentTypeNotSupportedError(),
-            grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.INVALID_ARGUMENT,
             'ContentTypeNotSupportedError',
         ),
         (
