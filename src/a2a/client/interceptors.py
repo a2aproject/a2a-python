@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from abc import abstractmethod
+from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any
 
@@ -49,7 +49,7 @@ class AfterArgs:
     early_return: bool = False
 
 
-class ClientCallInterceptor:
+class ClientCallInterceptor(ABC):
     """An abstract base class for client-side call interceptors.
 
     Interceptors can inspect and modify requests before they are sent,
