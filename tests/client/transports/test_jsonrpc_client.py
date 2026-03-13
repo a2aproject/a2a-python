@@ -117,17 +117,6 @@ class TestJsonRpcTransportInit:
         assert transport.url == 'http://test-agent.example.com'
         assert transport.agent_card == agent_card
 
-    def test_init_with_interceptors(self, mock_httpx_client, agent_card):
-        """Test initialization with interceptors."""
-        interceptor = MagicMock()
-        transport = JsonRpcTransport(
-            httpx_client=mock_httpx_client,
-            agent_card=agent_card,
-            url='http://test-agent.example.com',
-            interceptors=[interceptor],
-        )
-        assert transport.interceptors == [interceptor]
-
 
 class TestSendMessage:
     """Tests for the send_message method."""
@@ -229,7 +218,7 @@ class TestSendMessage:
         self, transport, mock_httpx_client
     ):
         """Test that send_message passes context timeout to build_request."""
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         mock_response = MagicMock()
         mock_response.json.return_value = {
@@ -544,7 +533,7 @@ class TestExtensions:
 
         request = create_send_message_request()
 
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={'X-A2A-Extensions': 'https://example.com/ext1'}
@@ -631,7 +620,7 @@ class TestExtensions:
             'result': json_format.MessageToDict(extended_card),
         }
 
-        from a2a.client.middleware import ClientCallContext
+        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={HTTP_EXTENSION_HEADER: extensions_header_val}

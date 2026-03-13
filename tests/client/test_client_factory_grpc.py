@@ -60,7 +60,7 @@ def test_grpc_priority_1_0(grpc_agent_card):
 
         # Priority 1: 1.0 -> GrpcTransport
         mock_grpc.create.assert_called_once_with(
-            grpc_agent_card, 'url10', config, []
+            grpc_agent_card, 'url10', config
         )
         mock_compat.create.assert_not_called()
 
@@ -101,7 +101,7 @@ def test_grpc_priority_gt_1_0(grpc_agent_card):
 
         # Priority 2: > 1.0 -> GrpcTransport (first matching is 1.1)
         mock_grpc.create.assert_called_once_with(
-            grpc_agent_card, 'url11', config, []
+            grpc_agent_card, 'url11', config
         )
         mock_compat.create.assert_not_called()
 
@@ -171,5 +171,5 @@ def test_grpc_unspecified_version_uses_grpc_transport(grpc_agent_card):
         factory.create(grpc_agent_card)
 
         mock_grpc.create.assert_called_once_with(
-            grpc_agent_card, 'url_no_version', config, []
+            grpc_agent_card, 'url_no_version', config
         )

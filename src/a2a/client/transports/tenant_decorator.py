@@ -1,6 +1,6 @@
 from collections.abc import AsyncGenerator
 
-from a2a.client.middleware import ClientCallContext
+from a2a.client.client import ClientCallContext
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
     AgentCard,
