@@ -96,7 +96,30 @@ class MockAgentExecutor(AgentExecutor):
                 ),
                 Part(root=DataPart(data={'key': 'value'})),
             ]
-            assert context.message.parts == expected_parts
+
+            expected_parts2 = [
+                Part(root=TextPart(text='stream')),
+                Part(
+                    root=FilePart(
+                        file=FileWithUri(
+                            uri='https://example.com/file.txt',
+                            mime_type='text/plain',
+                        )
+                    )
+                ),
+                Part(
+                    root=FilePart(
+                        file=FileWithBytes(
+                            bytes=b'hello',
+                            mime_type='application/octet-stream',
+                        )
+                    )
+                ),
+                Part(root=DataPart(data={'key': 'value'})),
+            ] 
+
+            # XXX: JAVASCRIPT sends 'hello' over REST
+            assert context.message.parts == expected_parts or context.message.parts == expected_parts2, f'SERVER: parts mismatch: {context.message.parts} != {expected_parts}'
 
         print(f"SERVER: request message text='{text}'")
 
@@ -157,7 +180,7 @@ async def main_async(http_port: int, grpc_port: int):
     )
 
     agent_card = AgentCard(
-        name='Server 0.3',
+        name='Server 0.3 (Python)',
         description='Server running on a2a v0.3.0',
         version='1.0.0',
         url=f'http://127.0.0.1:{http_port}/jsonrpc/',

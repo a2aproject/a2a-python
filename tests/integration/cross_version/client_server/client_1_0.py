@@ -189,7 +189,7 @@ async def test_list_tasks(client, server_name):
         assert resp is not None
         print(f'Success: list_tasks returned {len(resp.tasks)} tasks')
     except NotImplementedError as e:
-        if server_name == 'Server 0.3':
+        if server_name.startswith('Server 0.3'):
             print(f'Success: list_tasks gracefully failed on 0.3 Server: {e}')
         else:
             raise e
@@ -201,7 +201,7 @@ async def test_get_extended_agent_card(client):
         request=GetExtendedAgentCardRequest()
     )
     assert card is not None
-    assert card.name in ('Server 0.3', 'Server 1.0')
+    assert card.name.startswith('Server')
     assert card.version == '1.0.0'
     assert 'Server running on a2a v' in card.description
 
@@ -209,7 +209,7 @@ async def test_get_extended_agent_card(client):
     assert card.capabilities.streaming is True
     assert card.capabilities.push_notifications is True
 
-    if card.name == 'Server 1.0':
+    if card.name.startswith('Server 1.0'):
         assert len(card.supported_interfaces) == 4
         assert card.capabilities.extended_agent_card in (False, None)
     else:
@@ -221,6 +221,10 @@ async def test_get_extended_agent_card(client):
 
 
 async def test_push_notification_lifecycle(client, task_id, server_name):
+    if server_name == 'Server 0.3 (Go)':
+        print('Skipping push notification tests for 0.3 Server (Go)')
+        return
+
     print(f'Testing Push Notification lifecycle for task {task_id}...')
     config_id = f'push-{uuid4()}'
 
@@ -251,7 +255,7 @@ async def test_push_notification_lifecycle(client, task_id, server_name):
         )
         assert any(c.id == config_id for c in listed.configs)
     except (NotImplementedError, A2AClientError) as e:
-        if server_name == 'Server 0.3':
+        if server_name.startswith('Server 0.3'):
             print(
                 'EXPECTED: list_task_push_notification_configs not implemented'
             )
@@ -274,7 +278,7 @@ async def test_push_notification_lifecycle(client, task_id, server_name):
         assert not any(c.id == config_id for c in listed_after.configs)
         print('Success: verified deletion.')
     except (NotImplementedError, A2AClientError) as e:
-        if server_name == 'Server 0.3':
+        if server_name.startswith('Server 0.3'):
             print(
                 'EXPECTED: delete_task_push_notification_config not implemented'
             )

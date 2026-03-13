@@ -207,7 +207,7 @@ async def test_get_extended_agent_card(client):
     # In v0.3, extended card is fetched via get_card() on the client
     card = await client.get_card()
     assert card is not None
-    assert card.name in ('Server 0.3', 'Server 1.0')
+    assert card.name.startswith('Server')
     assert card.version == '1.0.0'
     assert 'Server running on a2a v' in card.description
 
@@ -215,7 +215,7 @@ async def test_get_extended_agent_card(client):
     assert card.capabilities.streaming is True
     assert card.capabilities.push_notifications is True
 
-    if card.name == 'Server 0.3':
+    if card.name.startswith('Server 0.3'):
         assert card.url is not None
         assert card.preferred_transport == TransportProtocol.jsonrpc
         assert len(card.additional_interfaces) == 2

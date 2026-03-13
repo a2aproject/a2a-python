@@ -126,7 +126,7 @@ class MockAgentExecutor(AgentExecutor):
 
 async def main_async(http_port: int, grpc_port: int):
     agent_card = AgentCard(
-        name='Server 1.0',
+        name='Server 1.0 (Python)',
         description='Server running on a2a v1.0',
         version='1.0.0',
         skills=[],

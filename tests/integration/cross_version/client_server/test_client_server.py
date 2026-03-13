@@ -94,6 +94,12 @@ def running_servers():
     if not os.path.exists(uv_path):
         pytest.fail(f"Could not find 'uv' executable at {uv_path}")
 
+    print("Installing JS SDK dependencies...")
+    subprocess.run(['npm', 'install', '--no-save', '@a2a-js/sdk', 'uuid', '@grpc/grpc-js', '@bufbuild/protobuf', 'express'], cwd='tests/integration/cross_version/client_server', check=True)
+
+    print("Setting up Go SDK...")
+    subprocess.run(['go', 'mod', 'tidy'], cwd='tests/integration/cross_version/client_server', check=True)
+
     # Server 1.0 setup
     s10_http_port = get_free_port()
     s10_grpc_port = get_free_port()
@@ -152,6 +158,46 @@ def running_servers():
         start_new_session=True,
     )
 
+    # JS Server 0.3 setup
+    js03_http_port = get_free_port()
+    js03_grpc_port = get_free_port()
+    js03_cmd = [
+        'node',
+        'tests/integration/cross_version/client_server/server_0_3.mjs',
+        '--http-port',
+        str(js03_http_port),
+        '--grpc-port',
+        str(js03_grpc_port),
+    ]
+    js03_proc = subprocess.Popen(
+        js03_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+
+    # Go Server 0.3 setup
+    go03_http_port = get_free_port()
+    go03_grpc_port = get_free_port()
+    go03_cmd = [
+        'go',
+        'run',
+        'server_0_3.go',
+        '--http-port',
+        str(go03_http_port),
+        '--grpc-port',
+        str(go03_grpc_port),
+    ]
+    go03_proc = subprocess.Popen(
+        go03_cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        cwd='tests/integration/cross_version/client_server',
+        text=True,
+        start_new_session=True,
+    )
+
     try:
         # Wait for ports
         assert wait_for_port(
@@ -166,19 +212,40 @@ def running_servers():
         assert wait_for_port(
             s03_proc, 'server_0_3.py', s03_grpc_port, timeout=3.0
         ), 'Server 0.3 GRPC failed to start'
+        assert wait_for_port(
+            js03_proc, 'server_0_3.mjs', js03_http_port, timeout=3.0
+        ), 'JS Server 0.3 HTTP failed to start'
+        assert wait_for_port(
+            js03_proc, 'server_0_3.mjs', js03_grpc_port, timeout=3.0
+        ), 'JS Server 0.3 GRPC failed to start'
+        assert wait_for_port(
+            go03_proc, 'server_0_3.go', go03_http_port, timeout=3.0
+        ), 'Go Server 0.3 HTTP failed to start'
+        assert wait_for_port(
+            go03_proc, 'server_0_3.go', go03_grpc_port, timeout=3.0
+        ), 'Go Server 0.3 GRPC failed to start'
 
         print('SERVER READY')
 
         yield {
             'server_1_0.py': s10_http_port,
             'server_0_3.py': s03_http_port,
+            'server_0_3.mjs': js03_http_port,
+            'server_0_3.go': go03_http_port,
             'uv_path': uv_path,
-            'procs': {'server_1_0.py': s10_proc, 'server_0_3.py': s03_proc},
+            'procs': {
+                'server_1_0.py': s10_proc,
+                'server_0_3.py': s03_proc,
+                'server_0_3.mjs': js03_proc,
+                'server_0_3.go': go03_proc,
+            },
         }
 
     finally:
         print('SERVER CLEANUP')
         for proc, name in [
+            (go03_proc, 'server_0_3.go'),
+            (js03_proc, 'server_0_3.mjs'),
             (s03_proc, 'server_0_3.py'),
             (s10_proc, 'server_1_0.py'),
         ]:
@@ -217,6 +284,90 @@ def running_servers():
             [],
             ['grpc', 'jsonrpc', 'rest'],
         ),
+        # Run 0.3 Server <-> JS Client
+        (
+            'server_0_3.py',
+            'client_0_3.mjs',
+            [],
+            ['jsonrpc', 'grpc', 'rest'],
+        ),
+        # Run 1.0 Server <-> JS Client
+        (
+            'server_1_0.py',
+            'client_0_3.mjs',
+            [],
+            ['jsonrpc', 'grpc', 'rest'],
+        ),
+        # Run JS 0.3 Server <-> JS Client
+        (
+            'server_0_3.mjs',
+            'client_0_3.mjs',
+            [],
+            ['jsonrpc', 'grpc', 'rest'],
+        ),
+        # Run JS 0.3 Server <-> 0.3 Client
+        (
+            'server_0_3.mjs',
+            'client_0_3.py',
+            ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            ['jsonrpc', 'grpc', 'rest'],
+        ),
+        # Run JS 0.3 Server <-> 1.0 Client
+        (
+            'server_0_3.mjs',
+            'client_1_0.py',
+            [],
+            ['jsonrpc', 'grpc', 'rest'],
+        ),
+        # Run 0.3 Server <-> Go Client
+        (
+            'server_0_3.py',
+            'client_0_3.go',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run 1.0 Server <-> Go Client
+        (
+            'server_1_0.py',
+            'client_0_3.go',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run JS 0.3 Server <-> Go Client
+        (
+            'server_0_3.mjs',
+            'client_0_3.go',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run Go 0.3 Server <-> Go Client
+        (
+            'server_0_3.go',
+            'client_0_3.go',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run Go 0.3 Server <-> JS Client
+        (
+            'server_0_3.go',
+            'client_0_3.mjs',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run Go 0.3 Server <-> 0.3 Client
+        (
+            'server_0_3.go',
+            'client_0_3.py',
+            ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
+        # Run Go 0.3 Server <-> 1.0 Client
+        (
+            'server_0_3.go',
+            'client_1_0.py',
+            [],
+            ['jsonrpc', 'grpc'], # rest is not supported by GO 0.3
+        ),
     ],
 )
 def test_cross_version(
@@ -226,24 +377,41 @@ def test_cross_version(
     uv_path = running_servers['uv_path']
 
     card_url = f'http://127.0.0.1:{http_port}/jsonrpc/'
-    client_cmd = (
-        [uv_path, 'run']
-        + client_deps
-        + [
-            'python',
-            f'tests/integration/cross_version/client_server/{client_script}',
-            '--url',
-            card_url,
-            '--protocols',
-        ]
-        + protocols
-    )
+    
+    if client_script.endswith('.mjs'):
+        client_cmd = (
+            ['node', f'tests/integration/cross_version/client_server/{client_script}', '--url', card_url, '--protocols'] + protocols
+        )
+        cwd = None
+        env = os.environ.copy()
+    elif client_script.endswith('.go'):
+        client_cmd = (
+            ['go', 'run', client_script, '--url', card_url, '--protocols'] + protocols
+        )
+        cwd = 'tests/integration/cross_version/client_server'
+        env = os.environ.copy() 
+    else:
+        client_cmd = (
+            [uv_path, 'run']
+            + client_deps
+            + [
+                'python',
+                f'tests/integration/cross_version/client_server/{client_script}',
+                '--url',
+                card_url,
+                '--protocols',
+            ]
+            + protocols
+        )
+        cwd = None
+        env = get_env(client_script)
 
     client_result = subprocess.Popen(
         client_cmd,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
-        env=get_env(client_script),
+        env=env,
+        cwd=cwd,
         text=True,
         start_new_session=True,
     )
