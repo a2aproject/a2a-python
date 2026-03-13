@@ -17,7 +17,19 @@
 This module provides helper functions for common proto type operations.
 """
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+from google.protobuf.json_format import ParseDict
+from google.protobuf.message import Message as ProtobufMessage
+
+
+if TYPE_CHECKING:
+    from starlette.datastructures import QueryParams
+else:
+    try:
+        from starlette.datastructures import QueryParams
+    except ImportError:
+        QueryParams = Any
 
 from a2a.types.a2a_pb2 import (
     Message,
@@ -131,3 +143,49 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
         if stripped_value.isdigit() and len(stripped_value) > max_safe_digits:
             return int(value)
     return value
+
+
+def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
+    """Converts REST query parameters back into a Protobuf message.
+
+    Handles A2A-specific pre-processing before calling ParseDict:
+    - Booleans: 'true'/'false' -> True/False
+    - Repeated: Supports BOTH repeated keys and comma-separated values.
+    - Others: Handles string->enum/timestamp/number conversion via ParseDict.
+
+    See Also:
+        https://a2a-protocol.org/latest/specification/#115-query-parameter-naming-for-request-parameters
+    """
+    descriptor = message.DESCRIPTOR
+    fields = {f.camelcase_name: f for f in descriptor.fields}
+    processed: dict[str, Any] = {}
+
+    keys = params.keys()
+
+    for k in keys:
+        if k not in fields:
+            continue
+
+        field = fields[k]
+        v_list = params.getlist(k)
+
+        if field.label == field.LABEL_REPEATED:
+            accumulated: list[Any] = []
+            for v in v_list:
+                if not v:
+                    continue
+                if isinstance(v, str):
+                    accumulated.extend([x for x in v.split(',') if x])
+                else:
+                    accumulated.append(v)
+            processed[k] = accumulated
+        else:
+            # For non-repeated fields, the last one wins.
+            raw_val = v_list[-1]
+            if raw_val is not None:
+                parsed_val: Any = raw_val
+                if field.type == field.TYPE_BOOL and isinstance(raw_val, str):
+                    parsed_val = raw_val.lower() == 'true'
+                processed[k] = parsed_val
+
+    ParseDict(processed, message, ignore_unknown_fields=True)

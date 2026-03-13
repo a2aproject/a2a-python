@@ -52,8 +52,9 @@ from a2a.types.a2a_pb2 import (
 
 # Import SDK-specific error types from utils.errors
 from a2a.utils.errors import (
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -63,6 +64,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 
 
@@ -99,6 +101,7 @@ __all__ = [
     'ContentTypeNotSupportedError',
     'DeleteTaskPushNotificationConfigRequest',
     'DeviceCodeOAuthFlow',
+    'ExtensionSupportRequiredError',
     'GetExtendedAgentCardRequest',
     'GetTaskPushNotificationConfigRequest',
     'GetTaskRequest',
@@ -139,4 +142,5 @@ __all__ = [
     'TaskStatus',
     'TaskStatusUpdateEvent',
     'UnsupportedOperationError',
+    'VersionNotSupportedError',
 ]

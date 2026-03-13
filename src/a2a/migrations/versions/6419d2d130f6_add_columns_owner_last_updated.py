@@ -47,7 +47,7 @@ def upgrade() -> None:
     )
 
     if table_exists(tasks_table):
-        add_column(tasks_table, 'owner', False, sa.String(255), owner)
+        add_column(tasks_table, 'owner', True, sa.String(255), owner)
         add_column(tasks_table, 'last_updated', True, sa.DateTime())
         add_index(
             tasks_table,
@@ -63,7 +63,7 @@ def upgrade() -> None:
         add_column(
             push_notification_configs_table,
             'owner',
-            False,
+            True,
             sa.String(255),
             owner,
         )

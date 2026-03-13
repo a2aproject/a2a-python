@@ -46,16 +46,16 @@ ROLE_USER: Role
 ROLE_AGENT: Role
 
 class SendMessageConfiguration(_message.Message):
-    __slots__ = ("accepted_output_modes", "task_push_notification_config", "history_length", "blocking")
+    __slots__ = ("accepted_output_modes", "task_push_notification_config", "history_length", "return_immediately")
     ACCEPTED_OUTPUT_MODES_FIELD_NUMBER: _ClassVar[int]
     TASK_PUSH_NOTIFICATION_CONFIG_FIELD_NUMBER: _ClassVar[int]
     HISTORY_LENGTH_FIELD_NUMBER: _ClassVar[int]
-    BLOCKING_FIELD_NUMBER: _ClassVar[int]
+    RETURN_IMMEDIATELY_FIELD_NUMBER: _ClassVar[int]
     accepted_output_modes: _containers.RepeatedScalarFieldContainer[str]
     task_push_notification_config: TaskPushNotificationConfig
     history_length: int
-    blocking: bool
-    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., task_push_notification_config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., blocking: _Optional[bool] = ...) -> None: ...
+    return_immediately: bool
+    def __init__(self, accepted_output_modes: _Optional[_Iterable[str]] = ..., task_push_notification_config: _Optional[_Union[TaskPushNotificationConfig, _Mapping]] = ..., history_length: _Optional[int] = ..., return_immediately: _Optional[bool] = ...) -> None: ...
 
 class Task(_message.Message):
     __slots__ = ("id", "context_id", "status", "artifacts", "history", "metadata")

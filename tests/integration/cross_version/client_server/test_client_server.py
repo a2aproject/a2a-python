@@ -1,9 +1,12 @@
+import os
+import shutil
+import socket
 import subprocess
 import time
-import socket
+
 import pytest
-import shutil
-import os
+import select
+import signal
 
 
 def get_free_port():
@@ -45,7 +48,7 @@ def finalize_process(
     proc: subprocess.Popen,
     name: str,
     expected_return_code=None,
-    timeout: int = 5,
+    timeout: float = 5.0,
 ):
     failure = False
     if expected_return_code is not None:
@@ -58,19 +61,23 @@ def finalize_process(
                 failure = True
         except subprocess.TimeoutExpired:
             print(f'Process {name} timed out after {timeout} seconds')
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
             failure = True
     else:
         if proc.poll() is None:
-            proc.terminate()
+            os.killpg(os.getpgid(proc.pid), signal.SIGTERM)
         else:
             print(f'Process {name} already terminated!')
             failure = True
-        try:
-            proc.wait(timeout=2)
-        except subprocess.TimeoutExpired:
-            proc.kill()
 
-    stdout_text, stderr_text = proc.communicate()
+    try:
+        proc.wait(timeout=2)
+    except subprocess.TimeoutExpired:
+        os.killpg(os.getpgid(proc.pid), signal.SIGKILL)
+
+    print(f'Process {name} finished with code {proc.wait()}')
+
+    stdout_text, stderr_text = proc.communicate(timeout=3.0)
 
     print('-' * 80)
     print(f'Process {name} STDOUT:\n{stdout_text}')
@@ -109,6 +116,7 @@ def running_servers():
         stderr=subprocess.PIPE,
         env=get_env('server_1_0.py'),
         text=True,
+        start_new_session=True,
     )
 
     # Server 0.3 setup
@@ -141,6 +149,7 @@ def running_servers():
         stderr=subprocess.PIPE,
         env=get_env('server_0_3.py'),
         text=True,
+        start_new_session=True,
     )
 
     try:
@@ -176,7 +185,7 @@ def running_servers():
             finalize_process(proc, name)
 
 
-@pytest.mark.timeout(10)
+@pytest.mark.timeout(15)
 @pytest.mark.parametrize(
     'server_script, client_script, client_deps, protocols',
     [
@@ -192,7 +201,7 @@ def running_servers():
             'server_1_0.py',
             'client_0_3.py',
             ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
-            ['grpc'],
+            ['grpc', 'jsonrpc', 'rest'],
         ),
         # Run 1.0 Server <-> 1.0 Client
         (
@@ -206,7 +215,7 @@ def running_servers():
             'server_0_3.py',
             'client_1_0.py',
             [],
-            ['grpc'],
+            ['grpc', 'jsonrpc', 'rest'],
         ),
     ],
 )
@@ -236,5 +245,6 @@ def test_cross_version(
         stderr=subprocess.PIPE,
         env=get_env(client_script),
         text=True,
+        start_new_session=True,
     )
     finalize_process(client_result, client_script, 0)

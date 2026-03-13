@@ -14,6 +14,7 @@ from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
+from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
@@ -204,6 +205,7 @@ class JSONRPCApplication(ABC):
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
+        enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the JSONRPCApplication.
 
@@ -223,6 +225,7 @@ class JSONRPCApplication(ABC):
               call context.
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
+            enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -243,6 +246,18 @@ class JSONRPCApplication(ABC):
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
         self._max_content_length = max_content_length
+        self.enable_v0_3_compat = enable_v0_3_compat
+        self._v03_adapter: JSONRPC03Adapter | None = None
+
+        if self.enable_v0_3_compat:
+            self._v03_adapter = JSONRPC03Adapter(
+                agent_card=agent_card,
+                http_handler=http_handler,
+                extended_agent_card=extended_agent_card,
+                context_builder=context_builder,
+                card_modifier=card_modifier,
+                extended_card_modifier=extended_card_modifier,
+            )
 
     def _generate_error_response(
         self,
@@ -350,6 +365,13 @@ class JSONRPCApplication(ABC):
                             message='Batch requests are not supported'
                         ),
                     )
+                if body.get('jsonrpc') != '2.0':
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message="Invalid request: 'jsonrpc' must be exactly '2.0'"
+                        ),
+                    )
             except Exception as e:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
@@ -365,6 +387,18 @@ class JSONRPCApplication(ABC):
                 return self._generate_error_response(
                     request_id,
                     InvalidRequestError(message='Method is required'),
+                )
+
+            if (
+                self.enable_v0_3_compat
+                and self._v03_adapter
+                and self._v03_adapter.supports_method(method)
+            ):
+                return await self._v03_adapter.handle_request(
+                    request_id=request_id,
+                    method=method,
+                    body=body,
+                    request=request,
                 )
 
             model_class = self.METHOD_TO_MODEL.get(method)

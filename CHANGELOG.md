@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.3.25](https://github.com/a2aproject/a2a-python/compare/v0.3.24...v0.3.25) (2026-03-10)
+
+
+### Features
+
+* Implement a vertex based task store ([#752](https://github.com/a2aproject/a2a-python/issues/752)) ([fa14dbf](https://github.com/a2aproject/a2a-python/commit/fa14dbf46b603f288a1f1c474401483bf53950e4))
+
+
+### Bug Fixes
+
+* return background task from consume_and_break_on_interrupt to prevent GC ([#775](https://github.com/a2aproject/a2a-python/issues/775)) ([a236d4d](https://github.com/a2aproject/a2a-python/commit/a236d4df8dceb2db1e1170e0b57599f3837ebd71))
+* use default_factory for mutable field defaults in ServerCallContext ([#744](https://github.com/a2aproject/a2a-python/issues/744)) ([22b25d6](https://github.com/a2aproject/a2a-python/commit/22b25d653e57e2d1453bbc282052e51dbd904ac6))
+
 ## [0.3.24](https://github.com/a2aproject/a2a-python/compare/v0.3.23...v0.3.24) (2026-02-20)
 
 
@@ -73,7 +86,6 @@
 
 * return updated `agent_card` in `JsonRpcTransport.get_card()` ([#552](https://github.com/a2aproject/a2a-python/issues/552)) ([0ce239e](https://github.com/a2aproject/a2a-python/commit/0ce239e98f67ccbf154f2edcdbcee43f3b080ead))
 
-
 ## [0.3.17](https://github.com/a2aproject/a2a-python/compare/v0.3.16...v0.3.17) (2025-11-24)
 
 
@@ -109,20 +121,6 @@
 ### Bug Fixes
 
 * return entire history when history_length=0 ([#537](https://github.com/a2aproject/a2a-python/issues/537)) ([acdc0de](https://github.com/a2aproject/a2a-python/commit/acdc0de4fa03d34a6b287ab252ff51b19c3016b5))
-
-## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
-
-
-### Bug Fixes
-
-* **grpc:** Add `extensions` to `Artifact` converters. ([#523](https://github.com/a2aproject/a2a-python/issues/523)) ([c03129b](https://github.com/a2aproject/a2a-python/commit/c03129b99a663ae1f1ae72f20e4ead7807ede941))
-
-## [0.3.11](https://github.com/a2aproject/a2a-python/compare/v0.3.10...v0.3.11) (2025-11-07)
-
-
-### Bug Fixes
-
-* add metadata to send message request ([12b4a1d](https://github.com/a2aproject/a2a-python/commit/12b4a1d565a53794f5b55c8bd1728221c906ed41))
 
 ## [0.3.12](https://github.com/a2aproject/a2a-python/compare/v0.3.11...v0.3.12) (2025-11-12)
 

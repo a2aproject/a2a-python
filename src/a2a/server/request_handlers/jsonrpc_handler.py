@@ -35,8 +35,9 @@ from a2a.utils import proto_utils
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -46,6 +47,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -61,11 +63,13 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     UnsupportedOperationError: JSONRPCError,
     ContentTypeNotSupportedError: JSONRPCError,
     InvalidAgentResponseError: JSONRPCError,
-    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    ExtendedAgentCardNotConfiguredError: JSONRPCError,
     InternalError: JSONRPCInternalError,
     InvalidParamsError: JSONRPCError,
     InvalidRequestError: JSONRPCError,
     MethodNotFoundError: JSONRPCError,
+    ExtensionSupportRequiredError: JSONRPCError,
+    VersionNotSupportedError: JSONRPCError,
 }
 
 
@@ -373,7 +377,11 @@ class JSONRPCHandler:
             response = await self.request_handler.on_list_tasks(
                 request, context
             )
-            result = MessageToDict(response, preserving_proto_field_name=False)
+            result = MessageToDict(
+                response,
+                preserving_proto_field_name=False,
+                always_print_fields_with_no_presence=True,
+            )
             return _build_success_response(request_id, result)
         except A2AError as e:
             return _build_error_response(request_id, e)
@@ -442,8 +450,8 @@ class JSONRPCHandler:
         """
         request_id = self._get_request_id(context)
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
-                message='Authenticated card not supported'
+            raise ExtendedAgentCardNotConfiguredError(
+                message='The agent does not have an extended agent card configured'
             )
 
         base_card = self.extended_agent_card

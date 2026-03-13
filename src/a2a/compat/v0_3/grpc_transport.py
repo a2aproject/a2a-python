@@ -133,10 +133,10 @@ class CompatGrpcTransport(ClientTransport):
                     proto_utils.FromProto.task(resp_proto.task)
                 )
             )
-        if which == 'message':
+        if which == 'msg':
             return a2a_pb2.SendMessageResponse(
                 message=conversions.to_core_message(
-                    proto_utils.FromProto.message(resp_proto.message)
+                    proto_utils.FromProto.message(resp_proto.msg)
                 )
             )
         return a2a_pb2.SendMessageResponse()

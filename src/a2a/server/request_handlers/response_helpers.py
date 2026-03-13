@@ -27,9 +27,11 @@ from a2a.types.a2a_pb2 import (
     SendMessageResponse as SendMessageResponseProto,
 )
 from a2a.utils.errors import (
+    JSON_RPC_ERROR_CODE_MAP,
     A2AError,
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -39,6 +41,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 
 
@@ -49,24 +52,13 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     UnsupportedOperationError: JSONRPCError,
     ContentTypeNotSupportedError: JSONRPCError,
     InvalidAgentResponseError: JSONRPCError,
-    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    ExtendedAgentCardNotConfiguredError: JSONRPCError,
     InvalidParamsError: JSONRPCError,
     InvalidRequestError: JSONRPCError,
     MethodNotFoundError: JSONRPCError,
     InternalError: JSONRPCInternalError,
-}
-
-ERROR_CODE_MAP: dict[type[A2AError], int] = {
-    TaskNotFoundError: -32001,
-    TaskNotCancelableError: -32002,
-    PushNotificationNotSupportedError: -32003,
-    UnsupportedOperationError: -32004,
-    ContentTypeNotSupportedError: -32005,
-    InvalidAgentResponseError: -32006,
-    AuthenticatedExtendedCardNotConfiguredError: -32007,
-    InvalidParamsError: -32602,
-    InvalidRequestError: -32600,
-    MethodNotFoundError: -32601,
+    ExtensionSupportRequiredError: JSONRPCError,
+    VersionNotSupportedError: JSONRPCError,
 }
 
 
@@ -136,7 +128,7 @@ def build_error_response(
     elif isinstance(error, A2AError):
         error_type = type(error)
         model_class = EXCEPTION_MAP.get(error_type, JSONRPCInternalError)
-        code = ERROR_CODE_MAP.get(error_type, -32603)
+        code = JSON_RPC_ERROR_CODE_MAP.get(error_type, -32603)
         jsonrpc_error = model_class(
             code=code,
             message=str(error),

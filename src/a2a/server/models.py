@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
@@ -11,23 +11,16 @@ else:
         return func
 
 
-from google.protobuf.json_format import MessageToDict, ParseDict
-from google.protobuf.message import Message as ProtoMessage
-from pydantic import BaseModel
-
 from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, DateTime, Dialect, Index, LargeBinary, String
+    from sqlalchemy import JSON, DateTime, Index, LargeBinary, String
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
         declared_attr,
         mapped_column,
-    )
-    from sqlalchemy.types import (
-        TypeDecorator,
     )
 except ImportError as e:
     raise ImportError(
@@ -38,101 +31,6 @@ except ImportError as e:
         "'pip install a2a-sdk[sqlite]', "
         "or 'pip install a2a-sdk[sql]'"
     ) from e
-
-
-T = TypeVar('T')
-
-
-class PydanticType(TypeDecorator[T], Generic[T]):
-    """SQLAlchemy type that handles Pydantic model and Protobuf message serialization."""
-
-    impl = JSON
-    cache_ok = True
-
-    def __init__(self, pydantic_type: type[T], **kwargs: dict[str, Any]):
-        """Initialize the PydanticType.
-
-        Args:
-            pydantic_type: The Pydantic model or Protobuf message type to handle.
-            **kwargs: Additional arguments for TypeDecorator.
-        """
-        self.pydantic_type = pydantic_type
-        super().__init__(**kwargs)
-
-    def process_bind_param(
-        self, value: T | None, dialect: Dialect
-    ) -> dict[str, Any] | None:
-        """Convert Pydantic model or Protobuf message to a JSON-serializable dictionary for the database."""
-        if value is None:
-            return None
-        if isinstance(value, ProtoMessage):
-            return MessageToDict(value, preserving_proto_field_name=False)
-        if isinstance(value, BaseModel):
-            return value.model_dump(mode='json')
-        return value  # type: ignore[return-value]
-
-    def process_result_value(
-        self, value: dict[str, Any] | None, dialect: Dialect
-    ) -> T | None:
-        """Convert a JSON-like dictionary from the database back to a Pydantic model or Protobuf message."""
-        if value is None:
-            return None
-        # Check if it's a protobuf message class
-        if isinstance(self.pydantic_type, type) and issubclass(
-            self.pydantic_type, ProtoMessage
-        ):
-            return ParseDict(value, self.pydantic_type())  # type: ignore[return-value]
-        # Assume it's a Pydantic model
-        return self.pydantic_type.model_validate(value)  # type: ignore[attr-defined]
-
-
-class PydanticListType(TypeDecorator, Generic[T]):
-    """SQLAlchemy type that handles lists of Pydantic models or Protobuf messages."""
-
-    impl = JSON
-    cache_ok = True
-
-    def __init__(self, pydantic_type: type[T], **kwargs: dict[str, Any]):
-        """Initialize the PydanticListType.
-
-        Args:
-            pydantic_type: The Pydantic model or Protobuf message type for items in the list.
-            **kwargs: Additional arguments for TypeDecorator.
-        """
-        self.pydantic_type = pydantic_type
-        super().__init__(**kwargs)
-
-    def process_bind_param(
-        self, value: list[T] | None, dialect: Dialect
-    ) -> list[dict[str, Any]] | None:
-        """Convert a list of Pydantic models or Protobuf messages to a JSON-serializable list for the DB."""
-        if value is None:
-            return None
-        result: list[dict[str, Any]] = []
-        for item in value:
-            if isinstance(item, ProtoMessage):
-                result.append(
-                    MessageToDict(item, preserving_proto_field_name=False)
-                )
-            elif isinstance(item, BaseModel):
-                result.append(item.model_dump(mode='json'))
-            else:
-                result.append(item)  # type: ignore[arg-type]
-        return result
-
-    def process_result_value(
-        self, value: list[dict[str, Any]] | None, dialect: Dialect
-    ) -> list[T] | None:
-        """Convert a JSON-like list from the DB back to a list of Pydantic models or Protobuf messages."""
-        if value is None:
-            return None
-        # Check if it's a protobuf message class
-        if isinstance(self.pydantic_type, type) and issubclass(
-            self.pydantic_type, ProtoMessage
-        ):
-            return [ParseDict(item, self.pydantic_type()) for item in value]  # type: ignore[misc]
-        # Assume it's a Pydantic model
-        return [self.pydantic_type.model_validate(item) for item in value]  # type: ignore[attr-defined]
 
 
 # Base class for all database models
@@ -149,19 +47,15 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-    owner: Mapped[str] = mapped_column(String(255), nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
     last_updated: Mapped[datetime | None] = mapped_column(
         DateTime, nullable=True
     )
-
-    # Properly typed Pydantic fields with automatic serialization
-    status: Mapped[TaskStatus] = mapped_column(PydanticType(TaskStatus))
+    status: Mapped[TaskStatus] = mapped_column(JSON, nullable=False)
     artifacts: Mapped[list[Artifact] | None] = mapped_column(
-        PydanticListType(Artifact), nullable=True
+        JSON, nullable=True
     )
-    history: Mapped[list[Message] | None] = mapped_column(
-        PydanticListType(Message), nullable=True
-    )
+    history: Mapped[list[Message] | None] = mapped_column(JSON, nullable=True)
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )
@@ -252,7 +146,7 @@ class PushNotificationConfigMixin:
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
-    owner: Mapped[str] = mapped_column(String(255), nullable=False, index=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
     protocol_version: Mapped[str | None] = mapped_column(
         String(16), nullable=True
     )

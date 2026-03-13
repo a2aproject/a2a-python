@@ -304,9 +304,7 @@ def to_core_send_message_configuration(
 ) -> pb2_v10.SendMessageConfiguration:
     """Convert send message configuration to v1.0 core type."""
     core_config = pb2_v10.SendMessageConfiguration()
-    core_config.blocking = (
-        True  # Default to True as per A2A spec for SendMessage
-    )
+    # Result will be blocking by default (return_immediately=False)
     if compat_config.accepted_output_modes:
         core_config.accepted_output_modes.extend(
             compat_config.accepted_output_modes
@@ -320,7 +318,7 @@ def to_core_send_message_configuration(
     if compat_config.history_length is not None:
         core_config.history_length = compat_config.history_length
     if compat_config.blocking is not None:
-        core_config.blocking = compat_config.blocking
+        core_config.return_immediately = not compat_config.blocking
     return core_config
 
 
@@ -340,7 +338,7 @@ def to_compat_send_message_configuration(
         history_length=core_config.history_length
         if core_config.HasField('history_length')
         else None,
-        blocking=core_config.blocking,
+        blocking=not core_config.return_immediately,
     )
 
 
@@ -1039,8 +1037,6 @@ def to_core_send_message_request(
         core_req.configuration.CopyFrom(
             to_core_send_message_configuration(compat_req.params.configuration)
         )
-    else:
-        core_req.configuration.blocking = True  # Default for A2A
     if compat_req.params.metadata:
         ParseDict(compat_req.params.metadata, core_req.metadata)
     return core_req

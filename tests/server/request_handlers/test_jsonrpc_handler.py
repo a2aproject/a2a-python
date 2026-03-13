@@ -214,6 +214,31 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         self.assertTrue(is_error_response(response))
         self.assertEqual(response['error']['message'], 'DB down')
 
+    async def test_on_list_tasks_empty(self) -> None:
+        request_handler = AsyncMock(spec=DefaultRequestHandler)
+        handler = JSONRPCHandler(self.mock_agent_card, request_handler)
+
+        mock_result = ListTasksResponse(page_size=10)
+        request_handler.on_list_tasks.return_value = mock_result
+        from a2a.types.a2a_pb2 import ListTasksRequest
+
+        request = ListTasksRequest(page_size=10)
+        call_context = ServerCallContext(state={'foo': 'bar'})
+
+        response = await handler.list_tasks(request, call_context)
+
+        request_handler.on_list_tasks.assert_awaited_once()
+        self.assertIsInstance(response, dict)
+        self.assertTrue(is_success_response(response))
+        self.assertIn('tasks', response['result'])
+        self.assertEqual(len(response['result']['tasks']), 0)
+        self.assertIn('nextPageToken', response['result'])
+        self.assertEqual(response['result']['nextPageToken'], '')
+        self.assertIn('pageSize', response['result'])
+        self.assertEqual(response['result']['pageSize'], 10)
+        self.assertIn('totalSize', response['result'])
+        self.assertEqual(response['result']['totalSize'], 0)
+
     async def test_on_cancel_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
@@ -323,7 +348,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -352,7 +377,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
 
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -1021,7 +1046,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Task returned has task_id='task_123' but request_context will have generated UUID
         with patch(
             'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False),
+            return_value=(mock_task, False, None),
         ):
             request = SendMessageRequest(
                 message=create_message(),  # No task_id, so UUID is generated
