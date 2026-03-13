@@ -274,7 +274,7 @@ class DataPart(A2ABaseModel):
     Represents a structured data segment (e.g., JSON) within a message or artifact.
     """
 
-    data: dict[str, Any]
+    data: Any
     """
     The structured data content.
     """
