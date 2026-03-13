@@ -1,6 +1,7 @@
 import logging
 
 from datetime import datetime, timezone
+from typing import TYPE_CHECKING
 
 
 try:
@@ -30,10 +31,12 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.compat.v0_3 import conversions
-from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -60,6 +63,9 @@ class DatabaseTaskStore(TaskStore):
     _initialized: bool
     task_model: type[TaskModel]
     owner_resolver: OwnerResolver
+
+    core_to_model_conversion: 'Callable[[Task, str], TaskModel] | None' = None
+    model_to_core_conversion: 'Callable[[TaskModel], Task] | None' = None
 
     def __init__(
         self,
@@ -119,6 +125,14 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
+        if self.core_to_model_conversion:
+            conversion = self.core_to_model_conversion
+            # bound method
+            if hasattr(conversion, '__func__'):
+                return conversion.__func__(task, owner)
+            # instance method
+            return conversion(task, owner)
+
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
@@ -140,6 +154,14 @@ class DatabaseTaskStore(TaskStore):
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
+        if self.model_to_core_conversion:
+            conversion = self.model_to_core_conversion
+            # bound method
+            if hasattr(conversion, '__func__'):
+                return conversion.__func__(task_model)
+            # instance method
+            return conversion(task_model)
+
         if task_model.protocol_version == '1.0':
             task = Task(
                 id=task_model.id,
@@ -160,29 +182,7 @@ class DatabaseTaskStore(TaskStore):
             return task
 
         # Legacy conversion
-        legacy_task = types_v03.Task(
-            id=task_model.id,
-            context_id=task_model.context_id,
-            status=types_v03.TaskStatus.model_validate(task_model.status),
-            artifacts=(
-                [
-                    types_v03.Artifact.model_validate(a)
-                    for a in task_model.artifacts
-                ]
-                if task_model.artifacts
-                else []
-            ),
-            history=(
-                [
-                    types_v03.Message.model_validate(m)
-                    for m in task_model.history
-                ]
-                if task_model.history
-                else []
-            ),
-            metadata=task_model.task_metadata or {},
-        )
-        return conversions.to_core_task(legacy_task)
+        return conversions.compat_task_model_to_core(task_model)
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None

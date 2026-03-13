@@ -72,7 +72,13 @@ from a2a.compat.v0_3.conversions import (
     to_core_task_push_notification_config,
     to_core_task_status,
     to_core_task_status_update_event,
+    core_to_compat_task_model,
+    compat_task_model_to_core,
+    core_to_compat_push_notification_config_model,
+    compat_push_notification_config_model_to_core,
 )
+from a2a.server.models import PushNotificationConfigModel, TaskModel
+from cryptography.fernet import Fernet
 from a2a.types import a2a_pb2 as pb2_v10
 
 
@@ -1911,3 +1917,100 @@ def test_to_core_part_unknown_part():
     assert not core_part.HasField('data')
     assert not core_part.HasField('raw')
     assert not core_part.HasField('url')
+
+
+def test_task_db_conversion():
+    v10_task = pb2_v10.Task(
+        id='task-123',
+        context_id='ctx-456',
+        status=pb2_v10.TaskStatus(
+            state=pb2_v10.TaskState.TASK_STATE_WORKING,
+        ),
+        metadata={'m1': 'v1'},
+    )
+    owner = 'owner-789'
+
+    # Test Core -> Model
+    model = core_to_compat_task_model(v10_task, owner)
+    assert model.id == 'task-123'
+    assert model.context_id == 'ctx-456'
+    assert model.owner == owner
+    assert model.protocol_version == '0.3'
+    assert model.status['state'] == 'working'
+    assert model.task_metadata == {'m1': 'v1'}
+
+    # Test Model -> Core
+    v10_restored = compat_task_model_to_core(model)
+    assert v10_restored.id == v10_task.id
+    assert v10_restored.context_id == v10_task.context_id
+    assert v10_restored.status.state == v10_task.status.state
+    assert v10_restored.metadata == v10_task.metadata
+
+
+def test_push_notification_config_db_conversion():
+    task_id = 'task-123'
+    v10_config = pb2_v10.TaskPushNotificationConfig(
+        id='pnc-1',
+        url='https://example.com/push',
+        token='secret-token',
+    )
+    owner = 'owner-789'
+
+    # Test Core -> Model (No encryption)
+    model = core_to_compat_push_notification_config_model(
+        task_id, v10_config, owner
+    )
+    assert model.task_id == task_id
+    assert model.config_id == 'pnc-1'
+    assert model.owner == owner
+    assert model.protocol_version == '0.3'
+
+    import json
+
+    data = json.loads(model.config_data.decode('utf-8'))
+    assert data['url'] == 'https://example.com/push'
+    assert data['token'] == 'secret-token'
+
+    # Test Model -> Core
+    v10_restored = compat_push_notification_config_model_to_core(
+        model.config_data.decode('utf-8'), task_id
+    )
+    assert v10_restored.id == v10_config.id
+    assert v10_restored.url == v10_config.url
+    assert v10_restored.token == v10_config.token
+
+
+def test_push_notification_config_persistence_conversion_with_encryption():
+    task_id = 'task-123'
+    v10_config = pb2_v10.TaskPushNotificationConfig(
+        id='pnc-1',
+        url='https://example.com/push',
+        token='secret-token',
+    )
+    owner = 'owner-789'
+    key = Fernet.generate_key()
+    fernet = Fernet(key)
+
+    # Test Core -> Model (With encryption)
+    model = core_to_compat_push_notification_config_model(
+        task_id, v10_config, owner, fernet=fernet
+    )
+    assert (
+        model.config_data != v10_config.SerializeToString()
+    )  # Should be encrypted
+
+    # Decrypt and verify
+    decrypted_data = fernet.decrypt(model.config_data)
+    import json
+
+    data = json.loads(decrypted_data.decode('utf-8'))
+    assert data['url'] == 'https://example.com/push'
+    assert data['token'] == 'secret-token'
+
+    # Test Model -> Core
+    v10_restored = compat_push_notification_config_model_to_core(
+        decrypted_data.decode('utf-8'), task_id
+    )
+    assert v10_restored.id == v10_config.id
+    assert v10_restored.url == v10_config.url
+    assert v10_restored.token == v10_config.token

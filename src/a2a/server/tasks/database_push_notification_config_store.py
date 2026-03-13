@@ -26,8 +26,12 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
-from a2a.compat.v0_3 import conversions
-from a2a.compat.v0_3 import types as types_v03
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
+from a2a.compat.v0_3.conversions import (
+    compat_push_notification_config_model_to_core,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.models import (
     Base,
@@ -40,11 +44,8 @@ from a2a.server.tasks.push_notification_config_store import (
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
-
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
-
-
 logger = logging.getLogger(__name__)
 
 
@@ -61,6 +62,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     config_model: type[PushNotificationConfigModel]
     _fernet: 'Fernet | None'
     owner_resolver: OwnerResolver
+
+    core_to_model_conversion: 'Callable[[str, TaskPushNotificationConfig, str, Fernet | None], PushNotificationConfigModel] | None' = None
+    model_to_core_conversion: 'Callable[[PushNotificationConfigModel], TaskPushNotificationConfig] | None' = None
 
     def __init__(
         self,
@@ -152,6 +156,14 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
+        if self.core_to_model_conversion:
+            conversion = self.core_to_model_conversion
+            # bound method
+            if hasattr(conversion, '__func__'):
+                return conversion.__func__(task_id, config, owner, self._fernet)
+            # instance method
+            return conversion(task_id, config, owner, self._fernet)
+
         json_payload = MessageToJson(config).encode('utf-8')
 
         if self._fernet:
@@ -174,6 +186,14 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
+        if self.model_to_core_conversion:
+            conversion = self.model_to_core_conversion
+            # bound method
+            if hasattr(conversion, '__func__'):
+                return conversion.__func__(model_instance)
+            # instance method
+            return conversion(model_instance)
+
         payload = model_instance.config_data
 
         if self._fernet:
@@ -359,12 +379,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         """
         if protocol_version == '1.0':
             return Parse(json_payload, TaskPushNotificationConfig())
-        inner_config = types_v03.PushNotificationConfig.model_validate_json(
-            json_payload
-        )
-        return conversions.to_core_task_push_notification_config(
-            types_v03.TaskPushNotificationConfig(
-                task_id=task_id or '',
-                push_notification_config=inner_config,
-            )
+
+        return compat_push_notification_config_model_to_core(
+            json_payload, task_id or ''
         )

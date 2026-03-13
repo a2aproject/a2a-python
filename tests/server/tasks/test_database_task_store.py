@@ -1,5 +1,6 @@
 import os
 from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 from collections.abc import AsyncGenerator
 
@@ -23,6 +24,10 @@ from google.protobuf.json_format import MessageToDict
 
 from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
+from a2a.compat.v0_3.conversions import (
+    core_to_compat_task_model,
+    compat_task_model_to_core,
+)
 from a2a.types.a2a_pb2 import (
     Artifact,
     ListTasksRequest,
@@ -826,3 +831,77 @@ async def test_get_0_3_task_detailed(
 
 
 # Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).
+
+
+@pytest.mark.asyncio
+async def test_custom_conversion():
+    engine = MagicMock()
+    store = DatabaseTaskStore(engine=engine)
+
+    # Custom callables
+    mock_to_orm = MagicMock(
+        return_value=TaskModel(id='custom_id', protocol_version='custom')
+    )
+    mock_from_orm = MagicMock(return_value=Task(id='custom_id'))
+
+    DatabaseTaskStore.core_to_model_conversion = mock_to_orm
+    DatabaseTaskStore.model_to_core_conversion = mock_from_orm
+
+    try:
+        task = Task(id='123')
+        model = store._to_orm(task, 'owner')
+        assert model.id == 'custom_id'
+        mock_to_orm.assert_called_once_with(task, 'owner')
+
+        model_instance = TaskModel(id='dummy')
+        loaded_task = store._from_orm(model_instance)
+        assert loaded_task.id == 'custom_id'
+        mock_from_orm.assert_called_once_with(model_instance)
+    finally:
+        # Reset class variables
+        DatabaseTaskStore.core_to_model_conversion = None
+        DatabaseTaskStore.model_to_core_conversion = None
+
+
+@pytest.mark.asyncio
+async def test_core_to_0_3_model_conversion(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    """Test storing and retrieving tasks in v0.3 format using conversion utilities."""
+    store = db_store_parameterized
+
+    # Set the v0.3 persistence utilities
+    DatabaseTaskStore.core_to_model_conversion = core_to_compat_task_model
+
+    try:
+        task_id = 'v03-persistence-task'
+        original_task = Task(
+            id=task_id,
+            context_id='v03-context',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            metadata={'key': 'value'},
+        )
+
+        # 1. Save the task (will use core_to_compat_task_model)
+        await store.save(original_task)
+
+        # 2. Verify it's stored in v0.3 format directly in DB
+        async with store.async_session_maker() as session:
+            db_task = await session.get(TaskModel, task_id)
+            assert db_task is not None
+            assert db_task.protocol_version == '0.3'
+            # v0.3 status JSON uses string for state
+            assert db_task.status['state'] == 'working'
+
+        # 3. Retrieve the task (will use compat_task_model_to_core)
+        retrieved_task = await store.get(task_id)
+        assert retrieved_task is not None
+        assert retrieved_task.id == original_task.id
+        assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
+        assert dict(retrieved_task.metadata) == {'key': 'value'}
+
+    finally:
+        # Reset class variables
+        DatabaseTaskStore.core_to_model_conversion = None
+        DatabaseTaskStore.model_to_core_conversion = None
+        await store.delete('v03-persistence-task')
