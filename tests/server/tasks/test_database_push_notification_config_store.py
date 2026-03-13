@@ -826,8 +826,8 @@ async def test_core_to_0_3_model_conversion(
 ) -> None:
     """Test storing and retrieving push notification configs in v0.3 format using conversion utilities.
 
-    Setting the model_to_core_conversion to compat_push_notification_config_model_to_core would be redundant since it is the default for
-    0.3 entries in the DataBase.
+    Setting the model_to_core_conversion to compat_push_notification_config_model_to_core would be redundant as
+    it is always called when retrieving 0.3 PushNotificationConfigs.
     """
     store = db_store_parameterized
 

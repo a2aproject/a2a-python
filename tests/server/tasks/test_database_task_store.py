@@ -867,7 +867,11 @@ async def test_custom_conversion():
 async def test_core_to_0_3_model_conversion(
     db_store_parameterized: DatabaseTaskStore,
 ) -> None:
-    """Test storing and retrieving tasks in v0.3 format using conversion utilities."""
+    """Test storing and retrieving tasks in v0.3 format using conversion utilities.
+
+    Setting the model_to_core_conversion class variables to compat_task_model_to_core is redundant
+    as it is always called when retrieving 0.3 tasks.
+    """
     store = db_store_parameterized
 
     # Set the v0.3 persistence utilities
