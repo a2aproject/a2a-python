@@ -45,7 +45,7 @@ from a2a.utils.error_handlers import (
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
-    AuthenticatedExtendedCardNotConfiguredError,
+    ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
 )
 
@@ -192,7 +192,7 @@ class RESTAdapter(RESTAdapterInterface):
             A JSONResponse containing the authenticated card.
         """
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
+            raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
             )
         card_to_serve = self.extended_agent_card

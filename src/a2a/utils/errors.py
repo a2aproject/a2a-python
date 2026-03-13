@@ -58,7 +58,7 @@ class InvalidAgentResponseError(A2AError):
     message = 'Invalid agent response'
 
 
-class AuthenticatedExtendedCardNotConfiguredError(A2AError):
+class ExtendedAgentCardNotConfiguredError(A2AError):
     """Exception raised when the authenticated extended card is not configured."""
 
     message = 'Authenticated Extended Card is not configured'
@@ -122,7 +122,7 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     UnsupportedOperationError: -32004,
     ContentTypeNotSupportedError: -32005,
     InvalidAgentResponseError: -32006,
-    AuthenticatedExtendedCardNotConfiguredError: -32007,
+    ExtendedAgentCardNotConfiguredError: -32007,
     ExtensionSupportRequiredError: -32008,
     VersionNotSupportedError: -32009,
     InvalidParamsError: -32602,
@@ -139,7 +139,7 @@ A2A_ERROR_REASONS = {
     UnsupportedOperationError: 'UNSUPPORTED_OPERATION',
     ContentTypeNotSupportedError: 'CONTENT_TYPE_NOT_SUPPORTED',
     InvalidAgentResponseError: 'INVALID_AGENT_RESPONSE',
-    AuthenticatedExtendedCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
+    ExtendedAgentCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
     ExtensionSupportRequiredError: 'EXTENSION_SUPPORT_REQUIRED',
     VersionNotSupportedError: 'VERSION_NOT_SUPPORTED',
 }

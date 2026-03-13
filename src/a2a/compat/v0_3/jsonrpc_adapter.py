@@ -38,7 +38,7 @@ from a2a.server.jsonrpc_models import (
 from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
 )
-from a2a.utils.errors import AuthenticatedExtendedCardNotConfiguredError
+from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
 from a2a.utils.helpers import maybe_await
 
 
@@ -248,7 +248,7 @@ class JSONRPC03Adapter:
     ) -> types_v03.AgentCard:
         """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method."""
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
+            raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
             )
 

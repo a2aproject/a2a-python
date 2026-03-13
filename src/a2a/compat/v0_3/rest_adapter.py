@@ -43,7 +43,7 @@ from a2a.utils.error_handlers import (
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
-    AuthenticatedExtendedCardNotConfiguredError,
+    ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
 )
 from a2a.utils.helpers import maybe_await
@@ -126,7 +126,7 @@ class REST03Adapter(RESTAdapterInterface):
     ) -> dict[str, Any]:
         """Hook for per credential agent card response."""
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
+            raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
             )
         card_to_serve = self.extended_agent_card

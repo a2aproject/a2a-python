@@ -95,7 +95,7 @@ _ERROR_CODE_MAP = {
     types.UnsupportedOperationError: grpc.StatusCode.UNIMPLEMENTED,
     types.ContentTypeNotSupportedError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InvalidAgentResponseError: grpc.StatusCode.INTERNAL,
-    types.AuthenticatedExtendedCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.ExtendedAgentCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.VersionNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
 }

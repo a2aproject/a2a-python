@@ -29,8 +29,8 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
@@ -52,7 +52,7 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     UnsupportedOperationError: JSONRPCError,
     ContentTypeNotSupportedError: JSONRPCError,
     InvalidAgentResponseError: JSONRPCError,
-    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    ExtendedAgentCardNotConfiguredError: JSONRPCError,
     InvalidParamsError: JSONRPCError,
     InvalidRequestError: JSONRPCError,
     MethodNotFoundError: JSONRPCError,

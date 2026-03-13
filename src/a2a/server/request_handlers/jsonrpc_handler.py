@@ -35,8 +35,8 @@ from a2a.utils import proto_utils
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
-    AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
@@ -63,7 +63,7 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     UnsupportedOperationError: JSONRPCError,
     ContentTypeNotSupportedError: JSONRPCError,
     InvalidAgentResponseError: JSONRPCError,
-    AuthenticatedExtendedCardNotConfiguredError: JSONRPCError,
+    ExtendedAgentCardNotConfiguredError: JSONRPCError,
     InternalError: JSONRPCInternalError,
     InvalidParamsError: JSONRPCError,
     InvalidRequestError: JSONRPCError,
@@ -450,7 +450,7 @@ class JSONRPCHandler:
         """
         request_id = self._get_request_id(context)
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
+            raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
             )
 

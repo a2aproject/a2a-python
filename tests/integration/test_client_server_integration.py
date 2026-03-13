@@ -54,7 +54,7 @@ from a2a.utils.constants import (
     TransportProtocol,
 )
 from a2a.utils.errors import (
-    AuthenticatedExtendedCardNotConfiguredError,
+    ExtendedAgentCardNotConfiguredError,
     ContentTypeNotSupportedError,
     ExtensionSupportRequiredError,
     InternalError,
@@ -815,7 +815,7 @@ async def test_client_get_signed_base_and_extended_cards(
         UnsupportedOperationError,
         ContentTypeNotSupportedError,
         InvalidAgentResponseError,
-        AuthenticatedExtendedCardNotConfiguredError,
+        ExtendedAgentCardNotConfiguredError,
         ExtensionSupportRequiredError,
         VersionNotSupportedError,
     ],
