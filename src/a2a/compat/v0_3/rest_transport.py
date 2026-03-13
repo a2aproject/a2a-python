@@ -8,9 +8,9 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.base import ClientTransport
-from a2a.client.client import ClientCallContext
 from a2a.client.transports.http_helpers import (
     get_http_args,
     send_http_request,

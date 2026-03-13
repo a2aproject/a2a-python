@@ -12,6 +12,7 @@ from a2a.types.a2a_pb2 import (  # noqa: TC001
     AgentCard,
 )
 
+
 @dataclass
 class BeforeArgs:
     """Arguments passed to the interceptor before a method call."""

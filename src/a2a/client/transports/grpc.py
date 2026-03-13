@@ -4,8 +4,8 @@ from collections.abc import AsyncGenerator, Callable
 from functools import wraps
 from typing import Any, NoReturn, cast
 
-from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 from a2a.client.client import ClientCallContext
+from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 
 
 try:

@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
@@ -15,7 +15,6 @@ from a2a.client.client import Client, ClientConfig, Consumer
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
-from a2a.client.interceptors import ClientCallInterceptor
 from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -29,6 +28,10 @@ from a2a.utils.constants import (
     VERSION_HEADER,
     TransportProtocol,
 )
+
+
+if TYPE_CHECKING:
+    from a2a.client.interceptors import ClientCallInterceptor
 
 
 try:
@@ -197,9 +200,7 @@ class ClientFactory:
                     ClientFactory._is_legacy_version(version)
                     and CompatGrpcTransport is not None
                 ):
-                    return CompatGrpcTransport.create(
-                        card, url, config
-                    )
+                    return CompatGrpcTransport.create(card, url, config)
 
                 if GrpcTransport is not None:
                     return GrpcTransport.create(card, url, config)

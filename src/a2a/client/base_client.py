@@ -456,9 +456,7 @@ class BaseClient(Client):
             await self._intercept_after(after_args, before_result['executed'])
 
             tracker = ClientTaskManager()
-            yield await self._format_stream_event(
-                after_args.result, tracker
-            )
+            yield await self._format_stream_event(after_args.result, tracker)
             return
 
         stream = transport_call(before_args.input, before_args.context)

@@ -149,9 +149,6 @@ async def test_in_memory_context_credential_store(
     assert await store.get_credentials(scheme_name, context) == new_credential
 
 
-
-
-
 def wrap_security_scheme(scheme: Any) -> SecurityScheme:
     """Wraps a security scheme in the correct SecurityScheme proto field."""
     if isinstance(scheme, APIKeySecurityScheme):
