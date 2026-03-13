@@ -59,6 +59,8 @@ _A2AErrorType = (
     | type[ContentTypeNotSupportedError]
     | type[InvalidAgentResponseError]
     | type[ExtendedAgentCardNotConfiguredError]
+    | type[ExtensionSupportRequiredError]
+    | type[VersionNotSupportedError]
 )
 
 A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
