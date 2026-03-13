@@ -2,14 +2,14 @@ import base64
 
 from typing import Any
 
+from cryptography.fernet import (
+    Fernet,
+)
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.compat.v0_3 import types as types_v03
 from a2a.server.models import PushNotificationConfigModel, TaskModel
 from a2a.types import a2a_pb2 as pb2_v10
-from cryptography.fernet import (
-    Fernet,
-)
 
 
 _COMPAT_TO_CORE_TASK_STATE: dict[types_v03.TaskState, Any] = {
