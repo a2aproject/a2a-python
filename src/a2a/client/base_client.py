@@ -12,9 +12,7 @@ from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.interceptors import (
     AfterArgs,
     BeforeArgs,
-    ClientCallInput,
     ClientCallInterceptor,
-    ClientCallResult,
 )
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
@@ -75,9 +73,8 @@ class BaseClient(Client):
         self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._execute_with_interceptors(
-                input_data=ClientCallInput(
-                    method='send_message', value=request
-                ),
+                input_data=request,
+                method='send_message',
                 context=context,
                 transport_call=lambda req, ctx: self._transport.send_message(
                     req, context=ctx
@@ -103,9 +100,8 @@ class BaseClient(Client):
             return
 
         async for event in self._execute_stream_with_interceptors(
-            input_data=ClientCallInput(
-                method='send_message_streaming', value=request
-            ),
+            input_data=request,
+            method='send_message_streaming',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.send_message_streaming(req, context=ctx)
@@ -138,14 +134,13 @@ class BaseClient(Client):
         tracker = ClientTaskManager()
         async for stream_response in stream:
             after_args = AfterArgs(
-                result=ClientCallResult(
-                    method=before_args.input.method, value=stream_response
-                ),
+                result=stream_response,
+                method=before_args.method,
                 agent_card=self._card,
                 context=before_args.context,
             )
             await self._intercept_after(after_args)
-            intercepted_response = after_args.result.value
+            intercepted_response = after_args.result
             client_event = await self._format_stream_event(
                 intercepted_response, tracker
             )
@@ -169,7 +164,8 @@ class BaseClient(Client):
             A `Task` object representing the current state of the task.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(method='get_task', value=request),
+            input_data=request,
+            method='get_task',
             context=context,
             transport_call=lambda req, ctx: self._transport.get_task(
                 req, context=ctx
@@ -184,7 +180,8 @@ class BaseClient(Client):
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(method='list_tasks', value=request),
+            input_data=request,
+            method='list_tasks',
             context=context,
             transport_call=lambda req, ctx: self._transport.list_tasks(
                 req, context=ctx
@@ -207,7 +204,8 @@ class BaseClient(Client):
             A `Task` object containing the updated task status.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(method='cancel_task', value=request),
+            input_data=request,
+            method='cancel_task',
             context=context,
             transport_call=lambda req, ctx: self._transport.cancel_task(
                 req, context=ctx
@@ -230,9 +228,8 @@ class BaseClient(Client):
             The created or updated `TaskPushNotificationConfig` object.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(
-                method='create_task_push_notification_config', value=request
-            ),
+            input_data=request,
+            method='create_task_push_notification_config',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.create_task_push_notification_config(
@@ -257,9 +254,8 @@ class BaseClient(Client):
             A `TaskPushNotificationConfig` object containing the configuration.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(
-                method='get_task_push_notification_config', value=request
-            ),
+            input_data=request,
+            method='get_task_push_notification_config',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.get_task_push_notification_config(
@@ -284,9 +280,8 @@ class BaseClient(Client):
             A `ListTaskPushNotificationConfigsResponse` object.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(
-                method='list_task_push_notification_configs', value=request
-            ),
+            input_data=request,
+            method='list_task_push_notification_configs',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.list_task_push_notification_configs(
@@ -308,9 +303,8 @@ class BaseClient(Client):
             context: Optional client call context.
         """
         return await self._execute_with_interceptors(
-            input_data=ClientCallInput(
-                method='delete_task_push_notification_config', value=request
-            ),
+            input_data=request,
+            method='delete_task_push_notification_config',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.delete_task_push_notification_config(
@@ -345,7 +339,8 @@ class BaseClient(Client):
             )
 
         async for event in self._execute_stream_with_interceptors(
-            input_data=ClientCallInput(method='subscribe', value=request),
+            input_data=request,
+            method='subscribe',
             context=context,
             transport_call=lambda req, ctx: self._transport.subscribe(
                 req, context=ctx
@@ -374,9 +369,8 @@ class BaseClient(Client):
             The `AgentCard` for the agent.
         """
         card = await self._execute_with_interceptors(
-            input_data=ClientCallInput(
-                method='get_extended_agent_card', value=request
-            ),
+            input_data=request,
+            method='get_extended_agent_card',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.get_extended_agent_card(req, context=ctx)
@@ -394,7 +388,8 @@ class BaseClient(Client):
 
     async def _execute_with_interceptors(
         self,
-        input_data: ClientCallInput,
+        input_data: Any,
+        method: str,
         context: ClientCallContext | None,
         transport_call: Callable[
             [Any, ClientCallContext | None], Awaitable[Any]
@@ -402,6 +397,7 @@ class BaseClient(Client):
     ) -> Any:
         before_args = BeforeArgs(
             input=input_data,
+            method=method,
             agent_card=self._card,
             context=context,
         )
@@ -409,10 +405,8 @@ class BaseClient(Client):
 
         if before_result is not None:
             early_after_args = AfterArgs(
-                result=ClientCallResult(
-                    method=input_data.method,
-                    value=before_result['early_return'].value,
-                ),
+                result=before_result['early_return'],
+                method=method,
                 agent_card=self._card,
                 context=before_args.context,
             )
@@ -420,24 +414,24 @@ class BaseClient(Client):
                 early_after_args,
                 before_result['executed'],
             )
-            return early_after_args.result.value
+            return early_after_args.result
 
-        result = await transport_call(
-            before_args.input.value, before_args.context
-        )
+        result = await transport_call(before_args.input, before_args.context)
 
         after_args = AfterArgs(
-            result=ClientCallResult(method=input_data.method, value=result),
+            result=result,
+            method=method,
             agent_card=self._card,
             context=before_args.context,
         )
         await self._intercept_after(after_args)
 
-        return after_args.result.value
+        return after_args.result
 
     async def _execute_stream_with_interceptors(
         self,
-        input_data: ClientCallInput,
+        input_data: Any,
+        method: str,
         context: ClientCallContext | None,
         transport_call: Callable[
             [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
@@ -446,6 +440,7 @@ class BaseClient(Client):
 
         before_args = BeforeArgs(
             input=input_data,
+            method=method,
             agent_card=self._card,
             context=context,
         )
@@ -454,6 +449,7 @@ class BaseClient(Client):
         if before_result:
             after_args = AfterArgs(
                 result=before_result['early_return'],
+                method=method,
                 agent_card=self._card,
                 context=before_args.context,
             )
@@ -461,11 +457,11 @@ class BaseClient(Client):
 
             tracker = ClientTaskManager()
             yield await self._format_stream_event(
-                after_args.result.value, tracker
+                after_args.result, tracker
             )
             return
 
-        stream = transport_call(before_args.input.value, before_args.context)
+        stream = transport_call(before_args.input, before_args.context)
 
         async for client_event in self._process_stream(stream, before_args):
             yield client_event

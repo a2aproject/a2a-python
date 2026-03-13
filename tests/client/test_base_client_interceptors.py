@@ -8,9 +8,7 @@ from a2a.client.client import ClientConfig
 from a2a.client.interceptors import (
     AfterArgs,
     BeforeArgs,
-    ClientCallInput,
     ClientCallInterceptor,
-    ClientCallResult,
 )
 from a2a.client.transports.base import ClientTransport
 from a2a.types.a2a_pb2 import (
@@ -71,7 +69,8 @@ class TestBaseClientInterceptors:
         base_client: BaseClient,
         mock_interceptor: AsyncMock,
     ):
-        input_data = ClientCallInput(method='get_task', value=MagicMock())
+        input_data = MagicMock()
+        method = 'get_task'
         context = MagicMock()
         mock_transport_call = AsyncMock(return_value='transport_result')
 
@@ -80,6 +79,7 @@ class TestBaseClientInterceptors:
 
         result = await base_client._execute_with_interceptors(
             input_data=input_data,
+            method=method,
             context=context,
             transport_call=mock_transport_call,
         )
@@ -94,14 +94,14 @@ class TestBaseClientInterceptors:
         assert before_args.context == context
 
         # Verify transport call was made
-        mock_transport_call.assert_called_once_with(input_data.value, context)
+        mock_transport_call.assert_called_once_with(input_data, context)
 
         # Verify after was called
         mock_interceptor.after.assert_called_once()
         after_args = mock_interceptor.after.call_args[0][0]
         assert isinstance(after_args, AfterArgs)
-        assert after_args.result.method == input_data.method
-        assert after_args.result.value == 'transport_result'
+        assert after_args.method == method
+        assert after_args.result == 'transport_result'
         assert after_args.context == context
 
     @pytest.mark.asyncio
@@ -110,14 +110,13 @@ class TestBaseClientInterceptors:
         base_client: BaseClient,
         mock_interceptor: AsyncMock,
     ):
-        input_data = ClientCallInput(method='get_task', value=MagicMock())
+        input_data = MagicMock()
+        method = 'get_task'
         context = MagicMock()
         mock_transport_call = AsyncMock()
 
         # Set up early return in before
-        early_return_result = ClientCallResult(
-            method='get_task', value='early_result'
-        )
+        early_return_result = 'early_result'
 
         async def mock_before_with_early_return(args: BeforeArgs):
             args.early_return = early_return_result
@@ -126,6 +125,7 @@ class TestBaseClientInterceptors:
 
         result = await base_client._execute_with_interceptors(
             input_data=input_data,
+            method=method,
             context=context,
             transport_call=mock_transport_call,
         )
@@ -142,7 +142,7 @@ class TestBaseClientInterceptors:
         mock_interceptor.after.assert_called_once()
         after_args = mock_interceptor.after.call_args[0][0]
         assert isinstance(after_args, AfterArgs)
-        assert after_args.result.value == 'early_result'
+        assert after_args.result == 'early_result'
         assert after_args.context == context
 
     @pytest.mark.asyncio
@@ -151,9 +151,8 @@ class TestBaseClientInterceptors:
         base_client: BaseClient,
         mock_interceptor: AsyncMock,
     ):
-        input_data = ClientCallInput(
-            method='send_message_streaming', value=MagicMock()
-        )
+        input_data = MagicMock()
+        method = 'send_message_streaming'
         context = MagicMock()
 
         async def mock_transport_call(*args, **kwargs):
@@ -166,6 +165,7 @@ class TestBaseClientInterceptors:
             e
             async for e in base_client._execute_stream_with_interceptors(
                 input_data=input_data,
+                method=method,
                 context=context,
                 transport_call=mock_transport_call,
             )
@@ -184,7 +184,7 @@ class TestBaseClientInterceptors:
         mock_interceptor.after.assert_called_once()
         after_args = mock_interceptor.after.call_args[0][0]
         assert isinstance(after_args, AfterArgs)
-        assert after_args.result.method == 'send_message_streaming'
+        assert after_args.method == method
 
     @pytest.mark.asyncio
     async def test_execute_stream_with_interceptors_early_return(
@@ -192,17 +192,13 @@ class TestBaseClientInterceptors:
         base_client: BaseClient,
         mock_interceptor: AsyncMock,
     ):
-        input_data = ClientCallInput(
-            method='send_message_streaming', value=MagicMock()
-        )
+        input_data = MagicMock()
+        method = 'send_message_streaming'
         context = MagicMock()
         mock_transport_call = AsyncMock()
 
         # Set up early return in before
-        early_return_result = ClientCallResult(
-            method='send_message_streaming',
-            value=StreamResponse(message=Message(message_id='2')),
-        )
+        early_return_result = StreamResponse(message=Message(message_id='2'))
 
         async def mock_before_with_early_return(args: BeforeArgs):
             args.early_return = early_return_result
@@ -215,7 +211,7 @@ class TestBaseClientInterceptors:
 
         # Override BaseClient's _intercept_before to respect our early return setup
         # as the test's mock interceptor replaces the actual list items
-        base_client._intercept_before = AsyncMock(
+        base_client._intercept_before = AsyncMock(  # type: ignore
             return_value={
                 'early_return': early_return_result,
                 'executed': [mock_interceptor],
@@ -226,6 +222,7 @@ class TestBaseClientInterceptors:
             e
             async for e in base_client._execute_stream_with_interceptors(
                 input_data=input_data,
+                method=method,
                 context=context,
                 transport_call=mock_transport_call,
             )
@@ -240,5 +237,5 @@ class TestBaseClientInterceptors:
         mock_interceptor.after.assert_called_once()
         after_args = mock_interceptor.after.call_args[0][0]
         assert isinstance(after_args, AfterArgs)
-        assert after_args.result.method == 'send_message_streaming'
+        assert after_args.method == method
         assert after_args.context == context

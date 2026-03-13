@@ -1,3 +1,4 @@
+# ruff: noqa: INP001, S106
 import json
 
 from collections.abc import Callable
@@ -8,16 +9,17 @@ import httpx
 import pytest
 import respx
 
+from google.protobuf import json_format
+
 from a2a.client import (
     AuthInterceptor,
     Client,
     ClientCallContext,
-    ClientCallInterceptor,
     ClientConfig,
     ClientFactory,
     InMemoryContextCredentialStore,
 )
-from a2a.client.interceptors import BeforeArgs, ClientCallInput
+from a2a.client.interceptors import BeforeArgs
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -37,30 +39,6 @@ from a2a.types.a2a_pb2 import (
     StringList,
 )
 from a2a.utils.constants import TransportProtocol
-
-
-class HeaderInterceptor(ClientCallInterceptor):
-    """A simple mock interceptor for testing basic middleware functionality."""
-
-    def __init__(self, header_name: str, header_value: str):
-        self.header_name = header_name
-        self.header_value = header_value
-
-    async def intercept(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any],
-        agent_card: AgentCard | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
-        headers = http_kwargs.get('headers', {})
-        headers[self.header_name] = self.header_value
-        http_kwargs['headers'] = headers
-        return request_payload, http_kwargs
-
-
-from google.protobuf import json_format
 
 
 def build_success_response(request: httpx.Request) -> httpx.Response:
@@ -124,7 +102,8 @@ async def test_auth_interceptor_skips_when_no_agent_card(
     request = SendMessageRequest(message=Message())
     context = ClientCallContext(state={})
     args = BeforeArgs(
-        input=ClientCallInput(method='send_message', value=request),
+        input=request,
+        method='send_message',
         agent_card=AgentCard(),
         context=context,
     )
@@ -170,38 +149,7 @@ async def test_in_memory_context_credential_store(
     assert await store.get_credentials(scheme_name, context) == new_credential
 
 
-@pytest.mark.skip(
-    reason='Interceptors not explicitly being tested as per use request'
-)
-@pytest.mark.asyncio
-@respx.mock
-async def test_client_with_simple_interceptor() -> None:
-    """Ensures that a custom HeaderInterceptor correctly injects a static header into outbound HTTP requests from the A2AClient."""
-    url = 'http://agent.com/rpc'
-    interceptor = HeaderInterceptor('X-Test-Header', 'Test-Value-123')
-    card = AgentCard(
-        supported_interfaces=[
-            AgentInterface(url=url, protocol_binding=TransportProtocol.JSONRPC)
-        ],
-        name='testbot',
-        description='test bot',
-        version='1.0',
-        default_input_modes=[],
-        default_output_modes=[],
-        skills=[],
-        capabilities=AgentCapabilities(),
-    )
 
-    async with httpx.AsyncClient() as http_client:
-        config = ClientConfig(
-            httpx_client=http_client,
-            supported_protocol_bindings=[TransportProtocol.JSONRPC],
-        )
-        factory = ClientFactory(config)
-        client = factory.create(card, interceptors=[interceptor])
-
-        request = await send_message(client, url)
-        assert request.headers['x-test-header'] == 'Test-Value-123'
 
 
 def wrap_security_scheme(scheme: Any) -> SecurityScheme:
@@ -384,7 +332,8 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     request = SendMessageRequest(message=Message())
     context = ClientCallContext(state={'sessionId': session_id})
     args = BeforeArgs(
-        input=ClientCallInput(method='send_message', value=request),
+        input=request,
+        method='send_message',
         agent_card=agent_card,
         context=context,
     )

@@ -12,38 +12,23 @@ from a2a.types.a2a_pb2 import (  # noqa: TC001
     AgentCard,
 )
 
-
-@dataclass
-class ClientCallInput:
-    """Represents the method and its associated input arguments payload."""
-
-    method: str
-    value: Any
-
-
-@dataclass
-class ClientCallResult:
-    """Represents the method and its associated result payload."""
-
-    method: str
-    value: Any
-
-
 @dataclass
 class BeforeArgs:
     """Arguments passed to the interceptor before a method call."""
 
-    input: ClientCallInput
+    input: Any
+    method: str
     agent_card: AgentCard
     context: ClientCallContext | None = None
-    early_return: ClientCallResult | None = None
+    early_return: Any | None = None
 
 
 @dataclass
 class AfterArgs:
     """Arguments passed to the interceptor after a method call completes."""
 
-    result: ClientCallResult
+    result: Any
+    method: str
     agent_card: AgentCard
     context: ClientCallContext | None = None
     early_return: bool = False

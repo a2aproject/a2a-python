@@ -10,7 +10,7 @@ import httpx
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.client.errors import A2AClientError
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from a2a.client.client import ClientCallContext
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
@@ -58,13 +58,11 @@ class CompatJsonRpcTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
-        interceptors: list[ClientCallInterceptor] | None = None,
     ):
         """Initializes the CompatJsonRpcTransport."""
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self.interceptors = interceptors or []
 
     async def send_message(
         self,
