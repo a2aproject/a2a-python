@@ -28,6 +28,7 @@ from a2a.utils.errors import (
     A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -37,6 +38,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 
 
@@ -74,6 +76,8 @@ A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
     ContentTypeNotSupportedError: 415,
     InvalidAgentResponseError: 502,
     AuthenticatedExtendedCardNotConfiguredError: 404,
+    ExtensionSupportRequiredError: 400,
+    VersionNotSupportedError: 400,
 }
 
 

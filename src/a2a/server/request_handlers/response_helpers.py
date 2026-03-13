@@ -31,6 +31,7 @@ from a2a.utils.errors import (
     A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -40,6 +41,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 
 
@@ -55,6 +57,8 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     InvalidRequestError: JSONRPCError,
     MethodNotFoundError: JSONRPCError,
     InternalError: JSONRPCInternalError,
+    ExtensionSupportRequiredError: JSONRPCError,
+    VersionNotSupportedError: JSONRPCError,
 }
 
 

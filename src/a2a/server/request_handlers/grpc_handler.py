@@ -90,11 +90,14 @@ _ERROR_CODE_MAP = {
     types.InvalidParamsError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InternalError: grpc.StatusCode.INTERNAL,
     types.TaskNotFoundError: grpc.StatusCode.NOT_FOUND,
-    types.TaskNotCancelableError: grpc.StatusCode.UNIMPLEMENTED,
+    types.TaskNotCancelableError: grpc.StatusCode.FAILED_PRECONDITION,
     types.PushNotificationNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
     types.UnsupportedOperationError: grpc.StatusCode.UNIMPLEMENTED,
-    types.ContentTypeNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
+    types.ContentTypeNotSupportedError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InvalidAgentResponseError: grpc.StatusCode.INTERNAL,
+    types.AuthenticatedExtendedCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.VersionNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
 }
 
 

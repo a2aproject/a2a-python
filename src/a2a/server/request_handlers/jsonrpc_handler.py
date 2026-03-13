@@ -37,6 +37,7 @@ from a2a.utils.errors import (
     A2AError,
     AuthenticatedExtendedCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -46,6 +47,7 @@ from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    VersionNotSupportedError,
 )
 from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -66,6 +68,8 @@ EXCEPTION_MAP: dict[type[A2AError], type[JSONRPCError]] = {
     InvalidParamsError: JSONRPCError,
     InvalidRequestError: JSONRPCError,
     MethodNotFoundError: JSONRPCError,
+    ExtensionSupportRequiredError: JSONRPCError,
+    VersionNotSupportedError: JSONRPCError,
 }
 
 
