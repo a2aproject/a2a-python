@@ -2,6 +2,7 @@
 
 from a2a.utils import proto_utils
 from a2a.utils.artifact import (
+    ArtifactStreamer,
     get_artifact_text,
     new_artifact,
     new_data_artifact,
@@ -39,6 +40,7 @@ __all__ = [
     'AGENT_CARD_WELL_KNOWN_PATH',
     'DEFAULT_RPC_URL',
     'TransportProtocol',
+    'ArtifactStreamer',
     'append_artifact_to_task',
     'are_modalities_compatible',
     'build_text_artifact',
