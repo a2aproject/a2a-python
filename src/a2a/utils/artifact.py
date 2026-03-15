@@ -75,7 +75,7 @@ def new_data_artifact(
     )
 
 
-def get_artifact_text(artifact: Artifact, delimiter: str = "\n") -> str:
+def get_artifact_text(artifact: Artifact, delimiter: str = '\n') -> str:
     """Extracts and joins all text content from an Artifact's parts.
 
     Args:
@@ -114,7 +114,7 @@ class ArtifactStreamer:
         self,
         context_id: str,
         task_id: str,
-        name: str = "response",
+        name: str = 'response',
         artifact_id: str | None = None,
     ) -> None:
         self._context_id = context_id
