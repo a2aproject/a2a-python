@@ -75,7 +75,7 @@ def new_data_artifact(
     )
 
 
-def get_artifact_text(artifact: Artifact, delimiter: str = '\n') -> str:
+def get_artifact_text(artifact: Artifact, delimiter: str = "\n") -> str:
     """Extracts and joins all text content from an Artifact's parts.
 
     Args:
@@ -98,7 +98,7 @@ class ArtifactStreamer:
 
         streamer = ArtifactStreamer(context_id, task_id, name='response')
 
-        async for chunk in llm.stream(prompt):
+        async for chunk in model.stream(prompt):
             await event_queue.enqueue_event(streamer.append(chunk))
 
         await event_queue.enqueue_event(streamer.finalize())
@@ -114,7 +114,7 @@ class ArtifactStreamer:
         self,
         context_id: str,
         task_id: str,
-        name: str = 'response',
+        name: str = "response",
         artifact_id: str | None = None,
     ) -> None:
         self._context_id = context_id
@@ -141,7 +141,7 @@ class ArtifactStreamer:
                 artifact_id=self._artifact_id,
                 name=self._name,
                 parts=[Part(root=TextPart(text=text))],
-            )
+            ),
         )
 
     def finalize(self) -> TaskArtifactUpdateEvent:
@@ -160,5 +160,5 @@ class ArtifactStreamer:
                 artifact_id=self._artifact_id,
                 name=self._name,
                 parts=[],
-            )
+            ),
         )
