@@ -62,15 +62,9 @@ changelog = "https://github.com/a2aproject/a2a-python/blob/main/CHANGELOG.md"
 documentation = "https://a2a-protocol.org/latest/sdk/python/"
 
 [build-system]
-requires = ["hatchling", "uv-dynamic-versioning", "hatch-build-scripts"]
+requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
 
-[tool.hatch.build.hooks.build-scripts]
-artifacts = ["src/a2a/types/a2a.json"]
-
-[[tool.hatch.build.hooks.build-scripts.scripts]]
-commands = ["bash scripts/gen_proto.sh"]
-work_dir = "."
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
@@ -291,6 +285,9 @@ exclude = [
     "src/a2a/types/a2a_pb2.py",
     "src/a2a/types/a2a_pb2.pyi",
     "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
     "tests/**",
 ]
 
@@ -347,6 +344,9 @@ exclude = [
     "src/a2a/types/a2a_pb2.py",
     "src/a2a/types/a2a_pb2.pyi",
     "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
 ]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
