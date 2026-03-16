@@ -24,10 +24,7 @@ from google.protobuf.json_format import MessageToDict
 
 from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
-from a2a.compat.v0_3.conversions import (
-    core_to_compat_task_model,
-    compat_task_model_to_core,
-)
+from a2a.compat.v0_3.conversions import core_to_compat_task_model
 from a2a.types.a2a_pb2 import (
     Artifact,
     ListTasksRequest,

@@ -46,7 +46,6 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.compat.v0_3.conversions import (
     core_to_compat_push_notification_config_model,
-    compat_push_notification_config_model_to_core,
 )
 
 
