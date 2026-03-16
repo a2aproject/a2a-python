@@ -44,6 +44,7 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
+
 logger = logging.getLogger(__name__)
 
 
