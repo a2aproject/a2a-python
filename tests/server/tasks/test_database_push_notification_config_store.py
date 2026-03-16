@@ -844,51 +844,41 @@ async def test_core_to_0_3_model_conversion(
             core_to_compat_push_notification_config_model
         )
 
-    try:
-        task_id = 'v03-persistence-task'
-        config_id = 'c1'
-        original_config = TaskPushNotificationConfig(
-            id=config_id,
-            url='https://example.com/push',
-            token='legacy-token',
-        )
+    task_id = 'v03-persistence-task'
+    config_id = 'c1'
+    original_config = TaskPushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+    )
+    # 1. Save the config (will use core_to_compat_push_notification_config_model)
+    await store.set_info(task_id, original_config, MINIMAL_CALL_CONTEXT)
+    # 2. Verify it's stored in v0.3 format directly in DB
+    async with store.async_session_maker() as session:
+        db_model = await session.get(store.config_model, (task_id, config_id))
+        assert db_model is not None
+        assert db_model.protocol_version == '0.3'
+        # v0.3 JSON structure for PushNotificationConfig (unwrapped)
+        import json
 
-        # 1. Save the config (will use core_to_compat_push_notification_config_model)
-        await store.set_info(task_id, original_config, MINIMAL_CALL_CONTEXT)
-
-        # 2. Verify it's stored in v0.3 format directly in DB
-        async with store.async_session_maker() as session:
-            db_model = await session.get(
-                store.config_model, (task_id, config_id)
-            )
-            assert db_model is not None
-            assert db_model.protocol_version == '0.3'
-
-            # v0.3 JSON structure for PushNotificationConfig (unwrapped)
-            import json
-
-            raw_data = db_model.config_data
-            if store._fernet:
-                raw_data = store._fernet.decrypt(raw_data)
-            data = json.loads(raw_data.decode('utf-8'))
-            assert data['url'] == 'https://example.com/push'
-            assert data['id'] == 'c1'
-            assert data['token'] == 'legacy-token'
-            assert 'taskId' not in data
-
-        # 3. Retrieve the config (will use compat_push_notification_config_model_to_core)
-        retrieved_configs = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
-        assert len(retrieved_configs) == 1
-        retrieved = retrieved_configs[0]
-        assert retrieved.id == original_config.id
-        assert retrieved.url == original_config.url
-        assert retrieved.token == original_config.token
-
-    finally:
-        # Reset conversion attributes
-        if assignment_type == 'class':
-            DatabasePushNotificationConfigStore.core_to_model_conversion = None
-        else:
-            store.core_to_model_conversion = None
-
-        await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)
+        raw_data = db_model.config_data
+        if store._fernet:
+            raw_data = store._fernet.decrypt(raw_data)
+        data = json.loads(raw_data.decode('utf-8'))
+        assert data['url'] == 'https://example.com/push'
+        assert data['id'] == 'c1'
+        assert data['token'] == 'legacy-token'
+        assert 'taskId' not in data
+    # 3. Retrieve the config (will use compat_push_notification_config_model_to_core)
+    retrieved_configs = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
+    assert len(retrieved_configs) == 1
+    retrieved = retrieved_configs[0]
+    assert retrieved.id == original_config.id
+    assert retrieved.url == original_config.url
+    assert retrieved.token == original_config.token
+    # Reset conversion attributes
+    if assignment_type == 'class':
+        DatabasePushNotificationConfigStore.core_to_model_conversion = None
+    else:
+        store.core_to_model_conversion = None
+    await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)

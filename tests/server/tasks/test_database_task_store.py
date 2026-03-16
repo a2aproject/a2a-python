@@ -880,41 +880,34 @@ async def test_core_to_0_3_model_conversion(
     else:
         store.core_to_model_conversion = core_to_compat_task_model
 
-    try:
-        task_id = 'v03-persistence-task'
-        original_task = Task(
-            id=task_id,
-            context_id='v03-context',
-            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            metadata={'key': 'value'},
-        )
-
-        # 1. Save the task (will use core_to_compat_task_model)
-        await store.save(original_task)
-
-        # 2. Verify it's stored in v0.3 format directly in DB
-        async with store.async_session_maker() as session:
-            db_task = await session.get(TaskModel, task_id)
-            assert db_task is not None
-            assert db_task.protocol_version == '0.3'
-            # v0.3 status JSON uses string for state
-            assert db_task.status['state'] == 'working'
-
-        # 3. Retrieve the task (will use compat_task_model_to_core)
-        retrieved_task = await store.get(task_id)
-        assert retrieved_task is not None
-        assert retrieved_task.id == original_task.id
-        assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
-        assert dict(retrieved_task.metadata) == {'key': 'value'}
-
-    finally:
-        # Reset conversion attributes
-        if assignment_type == 'class':
-            DatabaseTaskStore.core_to_model_conversion = None
-        else:
-            store.core_to_model_conversion = None
-
-        await store.delete('v03-persistence-task')
+    task_id = 'v03-persistence-task'
+    original_task = Task(
+        id=task_id,
+        context_id='v03-context',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        metadata={'key': 'value'},
+    )
+    # 1. Save the task (will use core_to_compat_task_model)
+    await store.save(original_task)
+    # 2. Verify it's stored in v0.3 format directly in DB
+    async with store.async_session_maker() as session:
+        db_task = await session.get(TaskModel, task_id)
+        assert db_task is not None
+        assert db_task.protocol_version == '0.3'
+        # v0.3 status JSON uses string for state
+        assert db_task.status['state'] == 'working'
+    # 3. Retrieve the task (will use compat_task_model_to_core)
+    retrieved_task = await store.get(task_id)
+    assert retrieved_task is not None
+    assert retrieved_task.id == original_task.id
+    assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
+    assert dict(retrieved_task.metadata) == {'key': 'value'}
+    # Reset conversion attributes
+    if assignment_type == 'class':
+        DatabaseTaskStore.core_to_model_conversion = None
+    else:
+        store.core_to_model_conversion = None
+    await store.delete('v03-persistence-task')
 
 
 # Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).
