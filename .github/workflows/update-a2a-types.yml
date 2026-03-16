@@ -1,9 +1,6 @@
 ---
 name: Update A2A Schema from Specification
 on:
-#  TODO (https://github.com/a2aproject/a2a-python/issues/559): bring back once types are migrated, currently it generates many broken PRs
-#  repository_dispatch:
-#    types: [a2a_json_update]
   workflow_dispatch:
 jobs:
   generate_and_pr:
@@ -14,42 +11,58 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
-      - name: Set up Python
-        uses: actions/setup-python@v6
-        with:
-          python-version: '3.10'
-      - name: Install uv
-        uses: astral-sh/setup-uv@v7
-      - name: Configure uv shell
-        run: echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Define output file variable
-        id: vars
+      - name: Run scripts/gen_proto.sh
         run: |
-          GENERATED_FILE="./src/a2a/types"
-          echo "GENERATED_FILE=$GENERATED_FILE" >> "$GITHUB_OUTPUT"
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1
-      - name: Run buf generate
-        run: |
-          set -euo pipefail  # Exit immediately if a command exits with a non-zero status
-          echo "Running buf generate..."
-          buf generate
-          echo "Buf generate finished."
+          set -euo pipefail
+          echo "Running scripts/gen_proto.sh..."
+          bash scripts/gen_proto.sh
+          echo "Scripts/gen_proto.sh finished."
       - name: Create Pull Request with Updates
-        uses: peter-evans/create-pull-request@v8
-        with:
-          token: ${{ secrets.A2A_BOT_PAT }}
-          committer: a2a-bot <a2a-bot@google.com>
-          author: a2a-bot <a2a-bot@google.com>
-          commit-message: '${{ github.event.client_payload.message }}'
-          title: '${{ github.event.client_payload.message }}'
-          body: |
-            Commit: https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}
-          branch: auto-update-a2a-types-${{ github.event.client_payload.sha }}
-          base: main
-          labels: |
-            automated
-            dependencies
-          add-paths: |-
-            ${{ steps.vars.outputs.GENERATED_FILE }}
-            src/a2a/grpc/
+        env:
+          GH_TOKEN: ${{ secrets.A2A_BOT_PAT }}
+        run: |
+          set -euo pipefail
+          
+          # Configure Git
+          git config --global user.name "a2a-bot"
+          git config --global user.email "a2a-bot@google.com"
+          
+          # Configure remote to use PAT
+          git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
+          
+          # Branch name
+          BRANCH_NAME="auto-update-a2a-types-${{ github.event.client_payload.sha }}"
+          
+          # Add files
+          git add src/a2a/types/ src/a2a/compat/v0_3/
+          
+          # Check for changes
+          if git diff --staged --quiet; then
+            echo "No changes to commit. Skipping PR creation."
+            exit 0
+          fi
+          
+          # Create and switch to branch
+          git checkout -b "$BRANCH_NAME"
+          
+          # Commit
+          git commit -m "${{ github.event.client_payload.message }}"
+          
+          # Push
+          # Force push if branch exists (safe if branch name is unique)
+          git push -u origin "$BRANCH_NAME" --force
+          
+          # Check if open PR exists
+          if gh pr list --head "$BRANCH_NAME" --state open --json url --jq '.[0].url' | grep -q http; then
+            echo "Open PR already exists. Updating..."
+            gh pr edit "$BRANCH_NAME" --title "${{ github.event.client_payload.message }}" --body "Commit: https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}"
+          else
+            echo "Creating new PR..."
+            gh pr create \
+              --title "${{ github.event.client_payload.message }}" \
+              --body "Commit: https://github.com/a2aproject/A2A/commit/${{ github.event.client_payload.sha }}" \
+              --base main \
+              --head "$BRANCH_NAME" \
+              --label "automated" \
+              --label "dependencies"
+          fi
