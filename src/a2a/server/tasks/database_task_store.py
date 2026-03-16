@@ -1,3 +1,4 @@
+import inspect
 import logging
 
 from datetime import datetime, timezone
@@ -5,22 +6,13 @@ from typing import TYPE_CHECKING
 
 
 try:
-    from sqlalchemy import (
-        Table,
-        and_,
-        delete,
-        func,
-        or_,
-        select,
-    )
+    from sqlalchemy import Table, and_, delete, func, or_, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import (
-        class_mapper,
-    )
+    from sqlalchemy.orm import class_mapper
 except ImportError as e:
     raise ImportError(
         'DatabaseTaskStore requires SQLAlchemy and a database driver. '
@@ -125,12 +117,11 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
-        if self.core_to_model_conversion:
-            conversion = self.core_to_model_conversion
-            # bound method
-            if hasattr(conversion, '__func__'):
+        if conversion := self.core_to_model_conversion:
+            # If it's a bound method of this instance, call the underlying function
+            # to avoid passing 'self' twice.
+            if inspect.ismethod(conversion):
                 return conversion.__func__(task, owner)
-            # instance method
             return conversion(task, owner)
 
         return self.task_model(
@@ -154,12 +145,11 @@ class DatabaseTaskStore(TaskStore):
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        if self.model_to_core_conversion:
-            conversion = self.model_to_core_conversion
-            # bound method
-            if hasattr(conversion, '__func__'):
+        if conversion := self.model_to_core_conversion:
+            # If it's a bound method of this instance, call the underlying function
+            # to avoid passing 'self' twice.
+            if inspect.ismethod(conversion):
                 return conversion.__func__(task_model)
-            # instance method
             return conversion(task_model)
 
         if task_model.protocol_version == '1.0':

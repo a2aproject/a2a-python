@@ -1395,9 +1395,7 @@ def compat_task_model_to_core(task_model: TaskModel) -> pb2_v10.Task:
     compat_task = types_v03.Task(
         id=task_model.id,
         context_id=task_model.context_id,
-        status=types_v03.TaskStatus.model_validate(task_model.status)
-        if task_model.status
-        else None,
+        status=types_v03.TaskStatus.model_validate(task_model.status),
         artifacts=(
             [types_v03.Artifact.model_validate(a) for a in task_model.artifacts]
             if task_model.artifacts

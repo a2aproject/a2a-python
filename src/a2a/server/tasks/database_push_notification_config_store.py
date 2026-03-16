@@ -1,4 +1,5 @@
 # ruff: noqa: PLC0415
+import inspect
 import logging
 
 from typing import TYPE_CHECKING
@@ -13,9 +14,7 @@ try:
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import (
-        class_mapper,
-    )
+    from sqlalchemy.orm import class_mapper
 except ImportError as e:
     raise ImportError(
         'DatabasePushNotificationConfigStore requires SQLAlchemy and a database driver. '
@@ -157,12 +156,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
-        if self.core_to_model_conversion:
-            conversion = self.core_to_model_conversion
-            # bound method
-            if hasattr(conversion, '__func__'):
+        if conversion := self.core_to_model_conversion:
+            # If it's a bound method of this instance, call the underlying function
+            # to avoid passing 'self' twice.
+            if inspect.ismethod(conversion):
                 return conversion.__func__(task_id, config, owner, self._fernet)
-            # instance method
             return conversion(task_id, config, owner, self._fernet)
 
         json_payload = MessageToJson(config).encode('utf-8')
@@ -187,12 +185,11 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
-        if self.model_to_core_conversion:
-            conversion = self.model_to_core_conversion
-            # bound method
-            if hasattr(conversion, '__func__'):
+        if conversion := self.model_to_core_conversion:
+            # If it's a bound method of this instance, call the underlying function
+            # to avoid passing 'self' twice.
+            if inspect.ismethod(conversion):
                 return conversion.__func__(model_instance)
-            # instance method
             return conversion(model_instance)
 
         payload = model_instance.config_data

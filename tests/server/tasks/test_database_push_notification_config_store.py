@@ -820,21 +820,29 @@ async def test_custom_conversion():
         DatabasePushNotificationConfigStore.model_to_core_conversion = None
 
 
+@pytest.mark.parametrize('assignment_type', ['class', 'instance'])
 @pytest.mark.asyncio
 async def test_core_to_0_3_model_conversion(
     db_store_parameterized: DatabasePushNotificationConfigStore,
+    assignment_type: str,
 ) -> None:
     """Test storing and retrieving push notification configs in v0.3 format using conversion utilities.
 
+    Tests both class-level and instance-level assignment of the conversion function.
     Setting the model_to_core_conversion to compat_push_notification_config_model_to_core would be redundant as
     it is always called when retrieving 0.3 PushNotificationConfigs.
     """
     store = db_store_parameterized
 
     # Set the v0.3 persistence utilities
-    DatabasePushNotificationConfigStore.core_to_model_conversion = (
-        core_to_compat_push_notification_config_model
-    )
+    if assignment_type == 'class':
+        DatabasePushNotificationConfigStore.core_to_model_conversion = (
+            core_to_compat_push_notification_config_model
+        )
+    else:
+        store.core_to_model_conversion = (
+            core_to_compat_push_notification_config_model
+        )
 
     try:
         task_id = 'v03-persistence-task'
@@ -877,6 +885,10 @@ async def test_core_to_0_3_model_conversion(
         assert retrieved.token == original_config.token
 
     finally:
-        # Reset class variables
-        DatabasePushNotificationConfigStore.core_to_model_conversion = None
+        # Reset conversion attributes
+        if assignment_type == 'class':
+            DatabasePushNotificationConfigStore.core_to_model_conversion = None
+        else:
+            store.core_to_model_conversion = None
+
         await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)

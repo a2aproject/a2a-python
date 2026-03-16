@@ -830,9 +830,6 @@ async def test_get_0_3_task_detailed(
     await db_store_parameterized.delete(task_id, context_user)
 
 
-# Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).
-
-
 @pytest.mark.asyncio
 async def test_custom_conversion():
     engine = MagicMock()
@@ -863,19 +860,25 @@ async def test_custom_conversion():
         DatabaseTaskStore.model_to_core_conversion = None
 
 
+@pytest.mark.parametrize('assignment_type', ['class', 'instance'])
 @pytest.mark.asyncio
 async def test_core_to_0_3_model_conversion(
     db_store_parameterized: DatabaseTaskStore,
+    assignment_type: str,
 ) -> None:
     """Test storing and retrieving tasks in v0.3 format using conversion utilities.
 
-    Setting the model_to_core_conversion class variables to compat_task_model_to_core is redundant
+    Tests both class-level and instance-level assignment of the conversion function.
+    Setting the model_to_core_conversion class variables to compat_task_model_to_core would be redundant
     as it is always called when retrieving 0.3 tasks.
     """
     store = db_store_parameterized
 
     # Set the v0.3 persistence utilities
-    DatabaseTaskStore.core_to_model_conversion = core_to_compat_task_model
+    if assignment_type == 'class':
+        DatabaseTaskStore.core_to_model_conversion = core_to_compat_task_model
+    else:
+        store.core_to_model_conversion = core_to_compat_task_model
 
     try:
         task_id = 'v03-persistence-task'
@@ -905,7 +908,13 @@ async def test_core_to_0_3_model_conversion(
         assert dict(retrieved_task.metadata) == {'key': 'value'}
 
     finally:
-        # Reset class variables
-        DatabaseTaskStore.core_to_model_conversion = None
-        DatabaseTaskStore.model_to_core_conversion = None
+        # Reset conversion attributes
+        if assignment_type == 'class':
+            DatabaseTaskStore.core_to_model_conversion = None
+        else:
+            store.core_to_model_conversion = None
+
         await store.delete('v03-persistence-task')
+
+
+# Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).
