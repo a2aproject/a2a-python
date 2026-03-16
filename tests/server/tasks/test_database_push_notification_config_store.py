@@ -5,6 +5,8 @@ from collections.abc import AsyncGenerator
 import pytest
 from a2a.server.context import ServerCallContext
 from a2a.auth.user import User
+from a2a.compat.v0_3 import types as types_v03
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -218,10 +220,10 @@ async def test_set_and_get_info_multiple_configs(
 
     task_id = 'task-1'
     config1 = TaskPushNotificationConfig(
-        id='config-1', url='http://example.com/1'
+        id='config-1', task_id=task_id, url='http://example.com/1'
     )
     config2 = TaskPushNotificationConfig(
-        id='config-2', url='http://example.com/2'
+        id='config-2', task_id=task_id, url='http://example.com/2'
     )
 
     await db_store_parameterized.set_info(
@@ -719,3 +721,61 @@ async def test_owner_resource_scoping(
     # Cleanup remaining
     await config_store.delete_info('task1', context=context_user1)
     await config_store.delete_info('task1', context=context_user2)
+
+
+@pytest.mark.asyncio
+async def test_get_0_3_push_notification_config_detailed(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test retrieving a legacy v0.3 push notification config from the database.
+
+    This test simulates a database that already contains legacy v0.3 JSON data
+    and verifies that the store correctly converts it to the modern Protobuf model.
+    """
+    task_id = 'legacy-push-1'
+    config_id = 'config-legacy-1'
+    owner = 'legacy_user'
+    context_user = ServerCallContext(user=SampleUser(user_name=owner))
+
+    # 1. Create a legacy PushNotificationConfig using v0.3 models
+    legacy_config = types_v03.PushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+        authentication=types_v03.PushNotificationAuthenticationInfo(
+            schemes=['bearer'],
+            credentials='legacy-creds',
+        ),
+    )
+
+    # 2. Manually insert the legacy data into the database
+    # For PushNotificationConfigStore, the data is stored in the config_data column.
+    async with db_store_parameterized.async_session_maker.begin() as session:
+        # Pydantic model_dump_json() produces the JSON that we'll store.
+        # Note: DatabasePushNotificationConfigStore normally encrypts this, but here
+        # we'll store it as plain JSON bytes to simulate legacy data.
+        legacy_json = legacy_config.model_dump_json()
+
+        stmt = insert(db_store_parameterized.config_model).values(
+            task_id=task_id,
+            config_id=config_id,
+            owner=owner,
+            config_data=legacy_json.encode('utf-8'),
+        )
+        await session.execute(stmt)
+
+    # 3. Retrieve the config using the standard store.get_info()
+    # This will trigger the DatabasePushNotificationConfigStore._from_orm legacy conversion
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, context_user
+    )
+
+    # 4. Verify the conversion to modern Protobuf
+    assert len(retrieved_configs) == 1
+    retrieved = retrieved_configs[0]
+    assert retrieved.task_id == task_id
+    assert retrieved.id == config_id
+    assert retrieved.url == 'https://example.com/push'
+    assert retrieved.token == 'legacy-token'
+    assert retrieved.authentication.scheme == 'bearer'
+    assert retrieved.authentication.credentials == 'legacy-creds'

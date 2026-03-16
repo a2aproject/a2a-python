@@ -1,6 +1,7 @@
 import functools
 import logging
 
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -44,7 +45,7 @@ from a2a.utils.error_handlers import (
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
-    AuthenticatedExtendedCardNotConfiguredError,
+    ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
 )
 
@@ -52,7 +53,21 @@ from a2a.utils.errors import (
 logger = logging.getLogger(__name__)
 
 
-class RESTAdapter:
+class RESTAdapterInterface(ABC):
+    """Interface for RESTAdapter."""
+
+    @abstractmethod
+    async def handle_get_agent_card(
+        self, request: 'Request', call_context: ServerCallContext | None = None
+    ) -> dict[str, Any]:
+        """Handles GET requests for the agent card endpoint."""
+
+    @abstractmethod
+    def routes(self) -> dict[tuple[str, str], Callable[['Request'], Any]]:
+        """Constructs a dictionary of API routes and their corresponding handlers."""
+
+
+class RESTAdapter(RESTAdapterInterface):
     """Adapter to make RequestHandler work with RESTful API.
 
     Defines REST requests processors and the routes to attach them too, as well as
@@ -161,7 +176,7 @@ class RESTAdapter:
 
         return MessageToDict(card_to_serve)
 
-    async def handle_authenticated_agent_card(
+    async def _handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
     ) -> dict[str, Any]:
         """Hook for per credential agent card response.
@@ -177,7 +192,7 @@ class RESTAdapter:
             A JSONResponse containing the authenticated card.
         """
         if not self.agent_card.capabilities.extended_agent_card:
-            raise AuthenticatedExtendedCardNotConfiguredError(
+            raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
             )
         card_to_serve = self.extended_agent_card
@@ -255,7 +270,7 @@ class RESTAdapter:
 
         if self.agent_card.capabilities.extended_agent_card:
             base_routes[('/extendedAgentCard', 'GET')] = functools.partial(
-                self._handle_request, self.handle_authenticated_agent_card
+                self._handle_request, self._handle_authenticated_agent_card
             )
 
         routes: dict[tuple[str, str], Callable[[Request], Any]] = {

@@ -8,8 +8,8 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.http_helpers import (
     get_http_args,
@@ -54,13 +54,11 @@ class RestTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard,
         url: str,
-        interceptors: list[ClientCallInterceptor] | None = None,
     ):
         """Initializes the RestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self.interceptors = interceptors or []
 
     async def send_message(
         self,
@@ -109,6 +107,8 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']  # id is part of the URL path
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -127,12 +127,16 @@ class RestTransport(ClientTransport):
         context: ClientCallContext | None = None,
     ) -> ListTasksResponse:
         """Retrieves tasks for an agent."""
+        params = MessageToDict(request)
+        if 'tenant' in params:
+            del params['tenant']
+
         response_data = await self._execute_request(
             'GET',
             '/tasks',
             request.tenant,
             context=context,
-            params=MessageToDict(request),
+            params=params,
         )
         response: ListTasksResponse = ParseDict(
             response_data, ListTasksResponse()
@@ -185,8 +189,10 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -208,8 +214,10 @@ class RestTransport(ClientTransport):
     ) -> ListTaskPushNotificationConfigsResponse:
         """Lists push notification configurations for a specific task."""
         params = MessageToDict(request)
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         response_data = await self._execute_request(
             'GET',
@@ -233,8 +241,10 @@ class RestTransport(ClientTransport):
         params = MessageToDict(request)
         if 'id' in params:
             del params['id']
-        if 'task_id' in params:
-            del params['task_id']
+        if 'taskId' in params:
+            del params['taskId']
+        if 'tenant' in params:
+            del params['tenant']
 
         await self._execute_request(
             'DELETE',

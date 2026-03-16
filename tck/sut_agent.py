@@ -20,6 +20,7 @@ import grpc.aio
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
@@ -133,8 +134,8 @@ class SUTAgentExecutor(AgentExecutor):
         await event_queue.enqueue_event(final_update)
 
 
-def main() -> None:
-    """Main entrypoint."""
+def serve(task_store: TaskStore) -> None:
+    """Sets up the A2A service and starts the HTTP server."""
     http_port = int(os.environ.get('HTTP_PORT', '41241'))
 
     grpc_port = int(os.environ.get('GRPC_PORT', '50051'))
@@ -185,7 +186,7 @@ def main() -> None:
 
     request_handler = DefaultRequestHandler(
         agent_executor=SUTAgentExecutor(),
-        task_store=InMemoryTaskStore(),
+        task_store=task_store,
     )
 
     server = A2AStarletteApplication(
@@ -215,6 +216,11 @@ def main() -> None:
         )
     )
     loop.run_until_complete(grpc_server.wait_for_termination())
+
+def main() -> None:
+    """Main entrypoint."""
+    serve(InMemoryTaskStore())
+
 
 if __name__ == '__main__':
     main()

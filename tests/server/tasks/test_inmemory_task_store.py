@@ -5,6 +5,7 @@ from datetime import datetime, timezone
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus, ListTasksRequest
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
+from a2a.utils.errors import InvalidParamsError
 
 from a2a.auth.user import User
 
@@ -239,7 +240,7 @@ async def test_list_tasks_fails(
     for task in tasks_to_create:
         await store.save(task)
 
-    with pytest.raises(ValueError) as excinfo:
+    with pytest.raises(InvalidParamsError) as excinfo:
         await store.list(params)
 
     assert expected_error_message in str(excinfo.value)

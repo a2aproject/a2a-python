@@ -3,7 +3,7 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from typing import Any, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 
@@ -12,7 +12,6 @@ from packaging.version import InvalidVersion, Version
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
-from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
@@ -31,6 +30,10 @@ from a2a.utils.constants import (
 )
 
 
+if TYPE_CHECKING:
+    from a2a.client.interceptors import ClientCallInterceptor
+
+
 try:
     from a2a.client.transports.grpc import GrpcTransport
 except ImportError:
@@ -42,12 +45,11 @@ try:
 except ImportError:
     CompatGrpcTransport = None  # type: ignore # pyright: ignore
 
-
 logger = logging.getLogger(__name__)
 
 
 TransportProducer = Callable[
-    [AgentCard, str, ClientConfig, list[ClientCallInterceptor]],
+    [AgentCard, str, ClientConfig],
     ClientTransport,
 ]
 
@@ -92,24 +94,82 @@ class ClientFactory:
         # Empty support list implies JSON-RPC only.
 
         if TransportProtocol.JSONRPC in supported or not supported:
+
+            def jsonrpc_transport_producer(
+                card: AgentCard,
+                url: str,
+                config: ClientConfig,
+            ) -> ClientTransport:
+                interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[TransportProtocol.JSONRPC],
+                    url=url,
+                )
+                version = (
+                    interface.protocol_version
+                    if interface
+                    else PROTOCOL_VERSION_CURRENT
+                )
+
+                if ClientFactory._is_legacy_version(version):
+                    from a2a.compat.v0_3.jsonrpc_transport import (  # noqa: PLC0415
+                        CompatJsonRpcTransport,
+                    )
+
+                    return CompatJsonRpcTransport(
+                        cast('httpx.AsyncClient', config.httpx_client),
+                        card,
+                        url,
+                    )
+
+                return JsonRpcTransport(
+                    cast('httpx.AsyncClient', config.httpx_client),
+                    card,
+                    url,
+                )
+
             self.register(
                 TransportProtocol.JSONRPC,
-                lambda card, url, config, interceptors: JsonRpcTransport(
-                    cast('httpx.AsyncClient', config.httpx_client),
-                    card,
-                    url,
-                    interceptors,
-                ),
+                jsonrpc_transport_producer,
             )
         if TransportProtocol.HTTP_JSON in supported:
-            self.register(
-                TransportProtocol.HTTP_JSON,
-                lambda card, url, config, interceptors: RestTransport(
+
+            def rest_transport_producer(
+                card: AgentCard,
+                url: str,
+                config: ClientConfig,
+            ) -> ClientTransport:
+                interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[TransportProtocol.HTTP_JSON],
+                    url=url,
+                )
+                version = (
+                    interface.protocol_version
+                    if interface
+                    else PROTOCOL_VERSION_CURRENT
+                )
+
+                if ClientFactory._is_legacy_version(version):
+                    from a2a.compat.v0_3.rest_transport import (  # noqa: PLC0415
+                        CompatRestTransport,
+                    )
+
+                    return CompatRestTransport(
+                        cast('httpx.AsyncClient', config.httpx_client),
+                        card,
+                        url,
+                    )
+
+                return RestTransport(
                     cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
-                ),
+                )
+
+            self.register(
+                TransportProtocol.HTTP_JSON,
+                rest_transport_producer,
             )
         if TransportProtocol.GRPC in supported:
             if GrpcTransport is None:
@@ -122,7 +182,6 @@ class ClientFactory:
                 card: AgentCard,
                 url: str,
                 config: ClientConfig,
-                interceptors: list[ClientCallInterceptor],
             ) -> ClientTransport:
                 # The interface has already been selected and passed as `url`.
                 # We determine its version to use the appropriate transport implementation.
@@ -137,26 +196,14 @@ class ClientFactory:
                     else PROTOCOL_VERSION_CURRENT
                 )
 
-                compat_transport = CompatGrpcTransport
-                if version and compat_transport is not None:
-                    try:
-                        v = Version(version)
-                        if (
-                            Version(PROTOCOL_VERSION_0_3)
-                            <= v
-                            < Version(PROTOCOL_VERSION_1_0)
-                        ):
-                            return compat_transport.create(
-                                card, url, config, interceptors
-                            )
-                    except InvalidVersion:
-                        pass
+                if (
+                    ClientFactory._is_legacy_version(version)
+                    and CompatGrpcTransport is not None
+                ):
+                    return CompatGrpcTransport.create(card, url, config)
 
-                grpc_transport = GrpcTransport
-                if grpc_transport is not None:
-                    return grpc_transport.create(
-                        card, url, config, interceptors
-                    )
+                if GrpcTransport is not None:
+                    return GrpcTransport.create(card, url, config)
 
                 raise ImportError(
                     'GrpcTransport is not available. '
@@ -167,6 +214,21 @@ class ClientFactory:
                 TransportProtocol.GRPC,
                 grpc_transport_producer,
             )
+
+    @staticmethod
+    def _is_legacy_version(version: str | None) -> bool:
+        """Determines if the given version is a legacy protocol version (>=0.3 and <1.0)."""
+        if not version:
+            return False
+        try:
+            v = Version(version)
+            return (
+                Version(PROTOCOL_VERSION_0_3)
+                <= v
+                < Version(PROTOCOL_VERSION_1_0)
+            )
+        except InvalidVersion:
+            return False
 
     @staticmethod
     def _find_best_interface(
@@ -342,7 +404,7 @@ class ClientFactory:
             all_consumers.extend(consumers)
 
         transport = self._registry[transport_protocol](
-            card, selected_interface.url, self._config, interceptors or []
+            card, selected_interface.url, self._config
         )
 
         if selected_interface.tenant:

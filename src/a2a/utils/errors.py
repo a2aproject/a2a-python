@@ -58,7 +58,7 @@ class InvalidAgentResponseError(A2AError):
     message = 'Invalid agent response'
 
 
-class AuthenticatedExtendedCardNotConfiguredError(A2AError):
+class ExtendedAgentCardNotConfiguredError(A2AError):
     """Exception raised when the authenticated extended card is not configured."""
 
     message = 'Authenticated Extended Card is not configured'
@@ -82,11 +82,26 @@ class MethodNotFoundError(A2AError):
     message = 'Method not found'
 
 
+class ExtensionSupportRequiredError(A2AError):
+    """Exception raised when extension support is required but not present."""
+
+    message = 'Extension support required'
+
+
+class VersionNotSupportedError(A2AError):
+    """Exception raised when the requested version is not supported."""
+
+    message = 'Version not supported'
+
+
 # For backward compatibility if needed, or just aliases for clean refactor
 # We remove the Pydantic models here.
 
 __all__ = [
+    'A2A_ERROR_REASONS',
+    'A2A_REASON_TO_ERROR',
     'JSON_RPC_ERROR_CODE_MAP',
+    'ExtensionSupportRequiredError',
     'InternalError',
     'InvalidAgentResponseError',
     'InvalidParamsError',
@@ -96,6 +111,7 @@ __all__ = [
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
+    'VersionNotSupportedError',
 ]
 
 
@@ -106,9 +122,26 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     UnsupportedOperationError: -32004,
     ContentTypeNotSupportedError: -32005,
     InvalidAgentResponseError: -32006,
-    AuthenticatedExtendedCardNotConfiguredError: -32007,
+    ExtendedAgentCardNotConfiguredError: -32007,
+    ExtensionSupportRequiredError: -32008,
+    VersionNotSupportedError: -32009,
     InvalidParamsError: -32602,
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
     InternalError: -32603,
 }
+
+
+A2A_ERROR_REASONS = {
+    TaskNotFoundError: 'TASK_NOT_FOUND',
+    TaskNotCancelableError: 'TASK_NOT_CANCELABLE',
+    PushNotificationNotSupportedError: 'PUSH_NOTIFICATION_NOT_SUPPORTED',
+    UnsupportedOperationError: 'UNSUPPORTED_OPERATION',
+    ContentTypeNotSupportedError: 'CONTENT_TYPE_NOT_SUPPORTED',
+    InvalidAgentResponseError: 'INVALID_AGENT_RESPONSE',
+    ExtendedAgentCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
+    ExtensionSupportRequiredError: 'EXTENSION_SUPPORT_REQUIRED',
+    VersionNotSupportedError: 'VERSION_NOT_SUPPORTED',
+}
+
+A2A_REASON_TO_ERROR = {reason: cls for cls, reason in A2A_ERROR_REASONS.items()}
