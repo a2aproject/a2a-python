@@ -1,0 +1,188 @@
+name: Post Coverage Comment
+
+on:
+  workflow_run:
+    workflows: ["Run Unit Tests"]
+    types:
+      - completed
+
+permissions:
+  pull-requests: write
+  actions: read
+
+jobs:
+  comment:
+    runs-on: ubuntu-latest
+    if: >
+      github.event.workflow_run.event == 'pull_request' &&
+      github.event.workflow_run.conclusion == 'success'
+    steps:
+      - name: Download Coverage Artifacts
+        uses: actions/download-artifact@v4
+        with:
+          run-id: ${{ github.event.workflow_run.id }}
+          github-token: ${{ secrets.A2A_BOT_PAT }}
+          name: coverage-data
+      
+      - name: Upload Coverage Report
+        id: upload-report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: coverage/
+          retention-days: 14
+
+      - name: Post Comment
+        uses: actions/github-script@v6
+        env:
+          ARTIFACT_URL: ${{ steps.upload-report.outputs.artifact-url }}
+        with:
+          script: |
+            const fs = require('fs');
+
+            const { owner, repo } = context.repo;
+            const headSha = context.payload.workflow_run.head_commit.id;
+
+            const loadSummary = (path) => {
+              try {
+                const data = JSON.parse(fs.readFileSync(path, 'utf8'));
+                // Map Python coverage.json format to expected internal summary format
+                if (data.totals && data.files) {
+                  const summary = {
+                    total: {
+                      statements: { pct: data.totals.percent_covered }
+                    }
+                  };
+                  for (const [file, fileData] of Object.entries(data.files)) {
+                    // Python coverage uses absolute paths or relative to project root
+                    // We keep it as is for comparison
+                    summary[file] = {
+                      statements: { pct: fileData.summary.percent_covered }
+                    };
+                  }
+                  return summary;
+                }
+                return data;
+              } catch (e) {
+                console.log(`Could not read ${path}: ${e}`);
+                return null;
+              }
+            };
+
+            const baseSummary = loadSummary('./coverage-base.json');
+            const prSummary = loadSummary('./coverage-pr.json');
+
+            if (!baseSummary || !prSummary) {
+              console.log("Missing coverage data, skipping comment.");
+              return;
+            }
+
+            let baseBranch = 'main';
+            try {
+              baseBranch = fs.readFileSync('./BASE_BRANCH', 'utf8').trim();
+            } catch (e) {
+              console.log("Could not read BASE_BRANCH, defaulting to main.");
+            }
+
+            let markdown = `### 🧪 Code Coverage (vs \`${baseBranch}\`)\n\n`;
+            
+            markdown += `[⬇️ **Download Full Report**](${process.env.ARTIFACT_URL})\n\n`;
+
+            const metric = 'statements';
+            const getPct = (summaryItem, m) => summaryItem && summaryItem[m] ? Number(summaryItem[m].pct) : 0;
+            
+            const formatDiff = (oldPct, newPct) => {
+              const diff = (newPct - oldPct).toFixed(2);
+              
+              let icon = '';
+              if (diff > 0) icon = '🟢';
+              else if (diff < 0) icon = '🔴';
+              else icon = '⚪️';
+
+              const diffStr = diff > 0 ? `+${diff}%` : `${diff}%`;
+              return `${icon} ${diffStr}`;
+            };
+
+            const fileUrl = (path) => `https://github.com/${owner}/${repo}/blob/${headSha}/${path}`;
+
+            const allFiles = new Set([...Object.keys(baseSummary), ...Object.keys(prSummary)]);
+            allFiles.delete('total');
+            const workspacePath = process.env.GITHUB_WORKSPACE ? process.env.GITHUB_WORKSPACE + '/' : ''; 
+
+            let changedRows = [];
+            let newRows = [];
+            
+            for (const file of allFiles) {
+              const baseFile = baseSummary[file];
+              const prFile = prSummary[file];
+
+              if (!prFile) continue;
+
+              const oldPct = getPct(baseFile, metric);
+              const newPct = getPct(prFile, metric);
+
+              const relativeFilePath = file.replace(workspacePath, '');
+              const linkedPath = `[${relativeFilePath}](${fileUrl(relativeFilePath)})`;
+
+              if (!baseFile && prFile) {
+                newRows.push(`| ${linkedPath} (**new**) | — | ${newPct.toFixed(2)}% | — |\n`);
+              } else if (oldPct !== newPct) {
+                changedRows.push(`| ${linkedPath} | ${oldPct.toFixed(2)}% | ${newPct.toFixed(2)}% | ${formatDiff(oldPct, newPct)} |\n`);
+              }
+            }
+
+            if (changedRows.length === 0 && newRows.length === 0) {
+              markdown += `\n_No coverage changes._\n`;
+            } else {
+              markdown += `| | Base | PR | Delta |\n`;
+              markdown += `| :--- | :---: | :---: | :---: |\n`;
+              
+              if (changedRows.length > 0) {
+                markdown += changedRows.sort().join('');
+              }
+              if (newRows.length > 0) {
+                markdown += newRows.sort().join('');
+              }
+
+              const oldTotalPct = getPct(baseSummary.total, metric);
+              const newTotalPct = getPct(prSummary.total, metric);
+              if (oldTotalPct !== newTotalPct) {
+                markdown += `| **Total** | ${oldTotalPct.toFixed(2)}% | ${newTotalPct.toFixed(2)}% | ${formatDiff(oldTotalPct, newTotalPct)} |\n`;
+              }
+            }
+
+            markdown += `\n\n_Generated by [coverage-comment.yml](https://github.com/${owner}/${repo}/actions/workflows/coverage-comment.yml)_`;
+
+            const prNumber = fs.readFileSync('./PR_NUMBER', 'utf8').trim();
+
+            if (!prNumber) {
+              console.log("No PR number found.");
+              return;
+            }
+
+            const comments = await github.rest.issues.listComments({
+              owner,
+              repo,
+              issue_number: prNumber,
+            });
+
+            const existingComment = comments.data.find(c => 
+              c.body.includes('Generated by [coverage-comment.yml]') && 
+              c.user.type === 'Bot'
+            );
+
+            if (existingComment) {
+              await github.rest.issues.updateComment({
+                owner,
+                repo,
+                comment_id: existingComment.id,
+                body: markdown
+              });
+            } else {
+              await github.rest.issues.createComment({
+                owner,
+                repo,
+                issue_number: prNumber,
+                body: markdown
+              });
+            }

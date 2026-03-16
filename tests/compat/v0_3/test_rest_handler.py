@@ -110,7 +110,7 @@ async def test_on_message_send_stream(rest_handler, mock_request, mock_context):
     )
 
     results = [
-        json.loads(chunk)
+        chunk
         async for chunk in rest_handler.on_message_send_stream(
             mock_request, mock_context
         )
@@ -169,7 +169,7 @@ async def test_on_subscribe_to_task(rest_handler, mock_request, mock_context):
     )
 
     results = [
-        json.loads(chunk)
+        chunk
         async for chunk in rest_handler.on_subscribe_to_task(
             mock_request, mock_context
         )

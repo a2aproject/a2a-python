@@ -31,27 +31,6 @@ repos:
   # ===============================================
   # Python Hooks
   # ===============================================
-  # no_implicit_optional for ensuring explicit Optional types
-  - repo: https://github.com/hauntsaninja/no_implicit_optional
-    rev: '1.4'
-    hooks:
-      - id: no_implicit_optional
-        args: [--use-union-or]
-
-  # Pyupgrade for upgrading Python syntax to newer versions
-  - repo: https://github.com/asottile/pyupgrade
-    rev: v3.20.0
-    hooks:
-      - id: pyupgrade
-        args: [--py310-plus]  # Target Python 3.10+ syntax, matching project's target
-
-  # Autoflake for removing unused imports and variables
-  - repo: https://github.com/pycqa/autoflake
-    rev: v2.3.1
-    hooks:
-      - id: autoflake
-        args: [--in-place, --remove-all-unused-imports]
-
   # Ruff for linting and formatting
   - repo: https://github.com/astral-sh/ruff-pre-commit
     rev: v0.12.0
