@@ -830,38 +830,30 @@ async def test_get_0_3_task_detailed(
 @pytest.mark.asyncio
 async def test_custom_conversion():
     engine = MagicMock()
-    store = DatabaseTaskStore(engine=engine)
-
     # Custom callables
     mock_to_orm = MagicMock(
         return_value=TaskModel(id='custom_id', protocol_version='custom')
     )
     mock_from_orm = MagicMock(return_value=Task(id='custom_id'))
+    store = DatabaseTaskStore(
+        engine=engine,
+        core_to_model_conversion=mock_to_orm,
+        model_to_core_conversion=mock_from_orm,
+    )
 
-    DatabaseTaskStore.core_to_model_conversion = mock_to_orm
-    DatabaseTaskStore.model_to_core_conversion = mock_from_orm
-
-    try:
-        task = Task(id='123')
-        model = store._to_orm(task, 'owner')
-        assert model.id == 'custom_id'
-        mock_to_orm.assert_called_once_with(task, 'owner')
-
-        model_instance = TaskModel(id='dummy')
-        loaded_task = store._from_orm(model_instance)
-        assert loaded_task.id == 'custom_id'
-        mock_from_orm.assert_called_once_with(model_instance)
-    finally:
-        # Reset class variables
-        DatabaseTaskStore.core_to_model_conversion = None
-        DatabaseTaskStore.model_to_core_conversion = None
+    task = Task(id='123')
+    model = store._to_orm(task, 'owner')
+    assert model.id == 'custom_id'
+    mock_to_orm.assert_called_once_with(task, 'owner')
+    model_instance = TaskModel(id='dummy')
+    loaded_task = store._from_orm(model_instance)
+    assert loaded_task.id == 'custom_id'
+    mock_from_orm.assert_called_once_with(model_instance)
 
 
-@pytest.mark.parametrize('assignment_type', ['class', 'instance'])
 @pytest.mark.asyncio
 async def test_core_to_0_3_model_conversion(
     db_store_parameterized: DatabaseTaskStore,
-    assignment_type: str,
 ) -> None:
     """Test storing and retrieving tasks in v0.3 format using conversion utilities.
 
@@ -872,11 +864,7 @@ async def test_core_to_0_3_model_conversion(
     store = db_store_parameterized
 
     # Set the v0.3 persistence utilities
-    if assignment_type == 'class':
-        DatabaseTaskStore.core_to_model_conversion = core_to_compat_task_model
-    else:
-        store.core_to_model_conversion = core_to_compat_task_model
-
+    store.core_to_model_conversion = core_to_compat_task_model
     task_id = 'v03-persistence-task'
     original_task = Task(
         id=task_id,
@@ -884,8 +872,10 @@ async def test_core_to_0_3_model_conversion(
         status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         metadata={'key': 'value'},
     )
+
     # 1. Save the task (will use core_to_compat_task_model)
     await store.save(original_task)
+
     # 2. Verify it's stored in v0.3 format directly in DB
     async with store.async_session_maker() as session:
         db_task = await session.get(TaskModel, task_id)
@@ -893,6 +883,7 @@ async def test_core_to_0_3_model_conversion(
         assert db_task.protocol_version == '0.3'
         # v0.3 status JSON uses string for state
         assert db_task.status['state'] == 'working'
+
     # 3. Retrieve the task (will use compat_task_model_to_core)
     retrieved_task = await store.get(task_id)
     assert retrieved_task is not None
@@ -900,10 +891,7 @@ async def test_core_to_0_3_model_conversion(
     assert retrieved_task.status.state == TaskState.TASK_STATE_WORKING
     assert dict(retrieved_task.metadata) == {'key': 'value'}
     # Reset conversion attributes
-    if assignment_type == 'class':
-        DatabaseTaskStore.core_to_model_conversion = None
-    else:
-        store.core_to_model_conversion = None
+    store.core_to_model_conversion = None
     await store.delete('v03-persistence-task')
 
 

@@ -1,5 +1,4 @@
 # ruff: noqa: PLC0415
-import inspect
 import logging
 
 from typing import TYPE_CHECKING
@@ -25,8 +24,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
-if TYPE_CHECKING:
-    from collections.abc import Callable
+from collections.abc import Callable
 
 from a2a.compat.v0_3.conversions import (
     compat_push_notification_config_model_to_core,
@@ -62,17 +60,34 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     config_model: type[PushNotificationConfigModel]
     _fernet: 'Fernet | None'
     owner_resolver: OwnerResolver
+    core_to_model_conversion: (
+        Callable[
+            [str, TaskPushNotificationConfig, str, 'Fernet | None'],
+            PushNotificationConfigModel,
+        ]
+        | None
+    )
+    model_to_core_conversion: (
+        Callable[[PushNotificationConfigModel], TaskPushNotificationConfig]
+        | None
+    )
 
-    core_to_model_conversion: 'Callable[[str, TaskPushNotificationConfig, str, Fernet | None], PushNotificationConfigModel] | None' = None
-    model_to_core_conversion: 'Callable[[PushNotificationConfigModel], TaskPushNotificationConfig] | None' = None
-
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         engine: AsyncEngine,
         create_table: bool = True,
         table_name: str = 'push_notification_configs',
         encryption_key: str | bytes | None = None,
         owner_resolver: OwnerResolver = resolve_user_scope,
+        core_to_model_conversion: Callable[
+            [str, TaskPushNotificationConfig, str, 'Fernet | None'],
+            PushNotificationConfigModel,
+        ]
+        | None = None,
+        model_to_core_conversion: Callable[
+            [PushNotificationConfigModel], TaskPushNotificationConfig
+        ]
+        | None = None,
     ) -> None:
         """Initializes the DatabasePushNotificationConfigStore.
 
@@ -84,6 +99,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 If provided, `config_data` will be encrypted in the database.
                 The key must be a URL-safe base64-encoded 32-byte key.
             owner_resolver: Function to resolve the owner from the context.
+            core_to_model_conversion: Optional function to convert a TaskPushNotificationConfig to a TaskPushNotificationConfigModel.
+            model_to_core_conversion: Optional function to convert a TaskPushNotificationConfigModel to a TaskPushNotificationConfig.
         """
         logger.debug(
             'Initializing DatabasePushNotificationConfigStore with existing engine, table: %s',
@@ -102,6 +119,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             else create_push_notification_config_model(table_name)
         )
         self._fernet = None
+        self.core_to_model_conversion = core_to_model_conversion
+        self.model_to_core_conversion = model_to_core_conversion
 
         if encryption_key:
             try:
@@ -156,12 +175,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
-        if conversion := self.core_to_model_conversion:
-            # If it's a bound method of this instance, call the underlying function
-            # to avoid passing 'self' twice.
-            if inspect.ismethod(conversion):
-                return conversion.__func__(task_id, config, owner, self._fernet)
-            return conversion(task_id, config, owner, self._fernet)
+        if self.core_to_model_conversion:
+            return self.core_to_model_conversion(
+                task_id, config, owner, self._fernet
+            )
 
         json_payload = MessageToJson(config).encode('utf-8')
 
@@ -185,12 +202,8 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
-        if conversion := self.model_to_core_conversion:
-            # If it's a bound method of this instance, call the underlying function
-            # to avoid passing 'self' twice.
-            if inspect.ismethod(conversion):
-                return conversion.__func__(model_instance)
-            return conversion(model_instance)
+        if self.model_to_core_conversion:
+            return self.model_to_core_conversion(model_instance)
 
         payload = model_instance.config_data
 

@@ -1,8 +1,7 @@
-import inspect
 import logging
 
+from collections.abc import Callable
 from datetime import datetime, timezone
-from typing import TYPE_CHECKING
 
 
 try:
@@ -22,13 +21,11 @@ except ImportError as e:
         "'pip install a2a-sdk[sqlite]', "
         "or 'pip install a2a-sdk[sql]'"
     ) from e
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 from google.protobuf.json_format import MessageToDict, ParseDict
 
-from a2a.compat.v0_3 import conversions
+from a2a.compat.v0_3.conversions import (
+    compat_task_model_to_core,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -55,16 +52,18 @@ class DatabaseTaskStore(TaskStore):
     _initialized: bool
     task_model: type[TaskModel]
     owner_resolver: OwnerResolver
+    core_to_model_conversion: Callable[[Task, str], TaskModel] | None = None
+    model_to_core_conversion: Callable[[TaskModel], Task] | None = None
 
-    core_to_model_conversion: 'Callable[[Task, str], TaskModel] | None' = None
-    model_to_core_conversion: 'Callable[[TaskModel], Task] | None' = None
-
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         engine: AsyncEngine,
         create_table: bool = True,
         table_name: str = 'tasks',
         owner_resolver: OwnerResolver = resolve_user_scope,
+        core_to_model_conversion: Callable[[Task, str], TaskModel]
+        | None = None,
+        model_to_core_conversion: Callable[[TaskModel], Task] | None = None,
     ) -> None:
         """Initializes the DatabaseTaskStore.
 
@@ -73,6 +72,8 @@ class DatabaseTaskStore(TaskStore):
             create_table: If true, create tasks table on initialization.
             table_name: Name of the database table. Defaults to 'tasks'.
             owner_resolver: Function to resolve the owner from the context.
+            core_to_model_conversion: Optional function to convert a Task to a TaskModel.
+            model_to_core_conversion: Optional function to convert a TaskModel to a Task.
         """
         logger.debug(
             'Initializing DatabaseTaskStore with existing engine, table: %s',
@@ -85,6 +86,8 @@ class DatabaseTaskStore(TaskStore):
         self.create_table = create_table
         self._initialized = False
         self.owner_resolver = owner_resolver
+        self.core_to_model_conversion = core_to_model_conversion
+        self.model_to_core_conversion = model_to_core_conversion
 
         self.task_model = (
             TaskModel
@@ -117,12 +120,8 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
-        if conversion := self.core_to_model_conversion:
-            # If it's a bound method of this instance, call the underlying function
-            # to avoid passing 'self' twice.
-            if inspect.ismethod(conversion):
-                return conversion.__func__(task, owner)
-            return conversion(task, owner)
+        if self.core_to_model_conversion:
+            return self.core_to_model_conversion(task, owner)
 
         return self.task_model(
             id=task.id,
@@ -145,12 +144,8 @@ class DatabaseTaskStore(TaskStore):
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
-        if conversion := self.model_to_core_conversion:
-            # If it's a bound method of this instance, call the underlying function
-            # to avoid passing 'self' twice.
-            if inspect.ismethod(conversion):
-                return conversion.__func__(task_model)
-            return conversion(task_model)
+        if self.model_to_core_conversion:
+            return self.model_to_core_conversion(task_model)
 
         if task_model.protocol_version == '1.0':
             task = Task(
@@ -172,7 +167,7 @@ class DatabaseTaskStore(TaskStore):
             return task
 
         # Legacy conversion
-        return conversions.compat_task_model_to_core(task_model)
+        return compat_task_model_to_core(task_model)
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
