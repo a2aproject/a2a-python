@@ -285,6 +285,9 @@ exclude = [
     "src/a2a/types/a2a_pb2.py",
     "src/a2a/types/a2a_pb2.pyi",
     "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
     "tests/**",
 ]
 
@@ -341,6 +344,9 @@ exclude = [
     "src/a2a/types/a2a_pb2.py",
     "src/a2a/types/a2a_pb2.pyi",
     "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
 ]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
