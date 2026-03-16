@@ -1,4 +1,5 @@
 import functools
+import json
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
@@ -103,9 +104,9 @@ class REST03Adapter(RESTAdapterInterface):
 
         async def event_generator(
             stream: AsyncIterable[Any],
-        ) -> AsyncIterator[dict[str, dict[str, Any]]]:
+        ) -> AsyncIterator[str]:
             async for item in stream:
-                yield {'data': item}
+                yield json.dumps(item)
 
         return EventSourceResponse(
             event_generator(method(request, call_context))

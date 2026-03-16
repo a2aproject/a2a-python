@@ -1,9 +1,9 @@
 import logging
 
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict, MessageToJson, Parse
+from google.protobuf.json_format import MessageToDict, Parse
 
 
 if TYPE_CHECKING:
@@ -86,7 +86,7 @@ class REST03Handler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Handles the 'message/stream' REST method.
 
         Args:
@@ -108,7 +108,7 @@ class REST03Handler:
             v03_pb_resp = proto_utils.ToProto.stream_response(
                 v03_stream_resp.result
             )
-            yield MessageToJson(v03_pb_resp)
+            yield MessageToDict(v03_pb_resp)
 
     async def on_cancel_task(
         self,
@@ -142,7 +142,7 @@ class REST03Handler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterable[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Handles the 'tasks/{id}:subscribe' REST method.
 
         Args:
@@ -164,7 +164,7 @@ class REST03Handler:
             v03_pb_resp = proto_utils.ToProto.stream_response(
                 v03_stream_resp.result
             )
-            yield MessageToJson(v03_pb_resp)
+            yield MessageToDict(v03_pb_resp)
 
     async def get_push_notification(
         self,
