@@ -730,8 +730,12 @@ class TestRestTransportTenant:
         async for _ in method(request=request_obj):
             pass
 
-        # 4. Verify the URL
+        # 4. Verify the URL and method
         mock_aconnect_sse.assert_called_once()
-        args, _ = mock_aconnect_sse.call_args
+        args, kwargs = mock_aconnect_sse.call_args
+        # method is 2nd positional argument
+        assert args[1] == 'POST'
+        assert kwargs.get('json') == json_format.MessageToDict(request_obj)
+
         # url is 3rd positional argument in aconnect_sse(client, method, url, ...)
         assert args[2] == f'http://agent.example.com/api{expected_path}'

@@ -1,4 +1,5 @@
 import json
+
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -232,14 +233,49 @@ async def test_compat_rest_transport_send_message_streaming(transport):
     assert events[1] == StreamResponse(message=Message(message_id='msg-123'))
 
 
+def create_405_error():
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 405
+    mock_response.json.return_value = {
+        'type': 'MethodNotAllowed',
+        'message': 'Method Not Allowed',
+    }
+    mock_request = MagicMock(spec=httpx.Request)
+    mock_request.url = 'http://example.com/v1/tasks/task-123:subscribe'
+
+    status_error = httpx.HTTPStatusError(
+        '405 Method Not Allowed', request=mock_request, response=mock_response
+    )
+    raise A2AClientError('HTTP Error 405') from status_error
+
+
+def create_500_error():
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = 500
+    mock_response.json.return_value = {
+        'type': 'InternalError',
+        'message': 'Internal Error',
+    }
+    mock_request = MagicMock(spec=httpx.Request)
+
+    status_error = httpx.HTTPStatusError(
+        '500 Internal Error', request=mock_request, response=mock_response
+    )
+    raise A2AClientError('HTTP Error 500') from status_error
+
+
 @pytest.mark.asyncio
-async def test_compat_rest_transport_subscribe(transport):
-    async def mock_send_stream_request(*args, **kwargs):
+async def test_compat_rest_transport_subscribe_post_works_no_retry(transport):
+    """Scenario: POST works, no retry."""
+
+    async def mock_stream(method, path, context=None, json=None):
+        assert method == 'POST'
+        assert json == {'id': 'task-123'}
         task = Task(id='task-123')
         task.status.message.role = Role.ROLE_AGENT
         yield StreamResponse(task=task)
 
-    transport._send_stream_request = mock_send_stream_request
+    transport._send_stream_request = mock_stream
 
     req = SubscribeToTaskRequest(id='task-123')
     events = [event async for event in transport.subscribe(req)]
@@ -248,6 +284,109 @@ async def test_compat_rest_transport_subscribe(transport):
     expected_task = Task(id='task-123')
     expected_task.status.message.role = Role.ROLE_AGENT
     assert events[0] == StreamResponse(task=expected_task)
+    assert transport._subscribe_method == 'POST'
+    assert transport._subscribe_retry_attempted is False
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_subscribe_post_405_retry_get_success(
+    transport,
+):
+    """Scenario: POST returns 405, automatic retry GET. Second call uses GET directly."""
+    call_count = 0
+
+    async def mock_stream(method, path, context=None, json=None):
+        nonlocal call_count
+        call_count += 1
+        if method == 'POST':
+            assert json == {'id': 'task-123'}
+            create_405_error()
+        if method == 'GET':
+            assert json is None
+            task = Task(id='task-123')
+            task.status.message.role = Role.ROLE_AGENT
+            yield StreamResponse(task=task)
+
+    transport._send_stream_request = mock_stream
+
+    req = SubscribeToTaskRequest(id='task-123')
+    events = [event async for event in transport.subscribe(req)]
+
+    assert len(events) == 1
+    assert call_count == 2
+    assert transport._subscribe_method == 'GET'
+    assert transport._subscribe_retry_attempted is True
+
+    # Second call should use GET directly
+    call_count = 0
+    events = [event async for event in transport.subscribe(req)]
+    assert len(events) == 1
+    assert call_count == 1  # Only GET called
+    assert transport._subscribe_method == 'GET'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_subscribe_post_405_get_405_fails(
+    transport,
+):
+    """Scenario: POST return 405, retry GET, return 405 - error. Second call is just POST."""
+    call_count = 0
+
+    async def mock_stream(method, path, context=None, json=None):
+        nonlocal call_count
+        call_count += 1
+        if method == 'POST':
+            assert json == {'id': 'task-123'}
+        elif method == 'GET':
+            assert json is None
+        # To make it an async generator even when it raises
+        if False:
+            yield
+        create_405_error()
+
+    transport._send_stream_request = mock_stream
+
+    req = SubscribeToTaskRequest(id='task-123')
+    with pytest.raises(A2AClientError) as exc_info:
+        [event async for event in transport.subscribe(req)]
+
+    assert '405' in str(exc_info.value)
+    assert call_count == 2  # Tried POST then GET
+    assert transport._subscribe_method == 'POST'
+    assert transport._subscribe_retry_attempted is True
+
+    # Second call should try POST directly and fail without retry
+    call_count = 0
+    with pytest.raises(A2AClientError):
+        [event async for event in transport.subscribe(req)]
+    assert call_count == 1
+    assert transport._subscribe_method == 'POST'
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_subscribe_post_500_no_retry(transport):
+    """Scenario: POST return 500, no automatic retry."""
+    call_count = 0
+
+    async def mock_stream(method, path, context=None, json=None):
+        nonlocal call_count
+        call_count += 1
+        assert method == 'POST'
+        assert json == {'id': 'task-123'}
+        if False:
+            yield
+        create_500_error()
+
+    transport._send_stream_request = mock_stream
+
+    req = SubscribeToTaskRequest(id='task-123')
+    with pytest.raises(A2AClientError) as exc_info:
+        [event async for event in transport.subscribe(req)]
+
+    assert '500' in str(exc_info.value)
+    assert call_count == 1  # No retry on 500
+    assert transport._subscribe_method == 'POST'
+    assert transport._subscribe_retry_attempted is False
 
 
 def test_compat_rest_transport_handle_http_error(transport):
