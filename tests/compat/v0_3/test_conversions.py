@@ -3,6 +3,7 @@ import base64
 import pytest
 
 from google.protobuf.json_format import ParseDict
+import json
 
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.conversions import (
@@ -2001,7 +2002,6 @@ def test_push_notification_config_persistence_conversion_with_encryption():
 
     # Decrypt and verify
     decrypted_data = fernet.decrypt(model.config_data)
-    import json
 
     data = json.loads(decrypted_data.decode('utf-8'))
     assert data['url'] == 'https://example.com/push'

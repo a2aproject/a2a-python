@@ -1,10 +1,11 @@
 import base64
 
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from cryptography.fernet import (
-    Fernet,
-)
+
+if TYPE_CHECKING:
+    from cryptography.fernet import Fernet
+
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.compat.v0_3 import types as types_v03
@@ -1415,7 +1416,7 @@ def core_to_compat_push_notification_config_model(
     task_id: str,
     config: pb2_v10.TaskPushNotificationConfig,
     owner: str,
-    fernet: Fernet | None = None,
+    fernet: 'Fernet | None' = None,
 ) -> PushNotificationConfigModel:
     """Converts a 1.0 core TaskPushNotificationConfig to a PushNotificationConfigModel using v0.3 JSON structure."""
     compat_config = to_compat_push_notification_config(config)
