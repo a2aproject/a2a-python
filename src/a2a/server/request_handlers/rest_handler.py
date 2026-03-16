@@ -1,11 +1,10 @@
 import logging
 
-from collections.abc import AsyncIterable, AsyncIterator
+from collections.abc import AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import (
     MessageToDict,
-    MessageToJson,
     Parse,
 )
 
@@ -96,7 +95,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterator[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Handles the 'message/stream' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -116,7 +115,7 @@ class RESTHandler:
             params, context
         ):
             response = proto_utils.to_stream_response(event)
-            yield MessageToJson(response)
+            yield MessageToDict(response)
 
     async def on_cancel_task(
         self,
@@ -148,7 +147,7 @@ class RESTHandler:
         self,
         request: Request,
         context: ServerCallContext,
-    ) -> AsyncIterable[str]:
+    ) -> AsyncIterator[dict[str, Any]]:
         """Handles the 'SubscribeToTask' REST method.
 
         Yields response objects as they are produced by the underlying handler's stream.
@@ -164,7 +163,7 @@ class RESTHandler:
         async for event in self.request_handler.on_subscribe_to_task(
             SubscribeToTaskRequest(id=task_id), context
         ):
-            yield MessageToJson(proto_utils.to_stream_response(event))
+            yield MessageToDict(proto_utils.to_stream_response(event))
 
     async def get_push_notification(
         self,
