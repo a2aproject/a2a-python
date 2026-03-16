@@ -28,7 +28,7 @@ jobs:
           echo "Scripts/gen_proto.sh finished."
       - name: Create Pull Request with Updates
         env:
-          GH_TOKEN: ${{ secrets.A2A_BOT_PAT }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           
