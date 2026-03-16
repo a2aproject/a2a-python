@@ -21,10 +21,36 @@ from a2a.utils.errors import (
     A2A_REST_ERROR_MAPPING,
     A2AError,
     InternalError,
+    RestErrorMap,
 )
 
 
 logger = logging.getLogger(__name__)
+
+
+def _build_error_payload(
+    code: int,
+    status: str,
+    message: str,
+    reason: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Helper function to build the JSON error payload."""
+    payload: dict[str, Any] = {
+        'code': code,
+        'status': status,
+        'message': message,
+    }
+    if reason:
+        payload['details'] = [
+            {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': reason,
+                'domain': 'a2a-protocol.org',
+                'metadata': metadata if metadata is not None else {},
+            }
+        ]
+    return {'error': payload}
 
 
 def rest_error_handler(
@@ -37,9 +63,12 @@ def rest_error_handler(
         try:
             return await func(*args, **kwargs)
         except A2AError as error:
-            http_code, grpc_status, reason = A2A_REST_ERROR_MAPPING.get(
-                type(error), (500, 'INTERNAL', 'INTERNAL_ERROR')
+            mapping = A2A_REST_ERROR_MAPPING.get(
+                type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
             )
+            http_code = mapping.http_code
+            grpc_status = mapping.grpc_status
+            reason = mapping.reason
 
             log_level = (
                 logging.ERROR
@@ -51,62 +80,44 @@ def rest_error_handler(
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
                 getattr(error, 'message', str(error)),
-                f', Data={error.data}' if hasattr(error, 'data') else '',
+                f', Data={error.data}' if error.data else '',
             )
 
             # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
             metadata = getattr(error, 'data', None) or {}
 
             return JSONResponse(
-                content={
-                    'error': {
-                        'code': http_code,
-                        'status': grpc_status,
-                        'message': getattr(error, 'message', str(error)),
-                        'details': [
-                            {
-                                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
-                                'reason': reason,
-                                'domain': 'a2a-protocol.org',
-                                'metadata': metadata,
-                            }
-                        ],
-                    }
-                },
+                content=_build_error_payload(
+                    code=http_code,
+                    status=grpc_status,
+                    message=getattr(error, 'message', str(error)),
+                    reason=reason,
+                    metadata=metadata,
+                ),
                 status_code=http_code,
                 media_type='application/json',
             )
         except ParseError as error:
             logger.warning('Parse error: %s', str(error))
             return JSONResponse(
-                content={
-                    'error': {
-                        'code': 400,
-                        'status': 'INVALID_ARGUMENT',
-                        'message': str(error),
-                        'details': [
-                            {
-                                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
-                                'reason': 'INVALID_REQUEST',
-                                'domain': 'a2a-protocol.org',
-                                'metadata': {},
-                            }
-                        ],
-                    }
-                },
+                content=_build_error_payload(
+                    code=400,
+                    status='INVALID_ARGUMENT',
+                    message=str(error),
+                    reason='INVALID_REQUEST',
+                    metadata={},
+                ),
                 status_code=400,
                 media_type='application/json',
             )
         except Exception:
             logger.exception('Unknown error occurred')
             return JSONResponse(
-                content={
-                    'error': {
-                        'code': 500,
-                        'status': 'INTERNAL',
-                        'message': 'unknown exception',
-                    }
-                },
+                content=_build_error_payload(
+                    code=500,
+                    status='INTERNAL',
+                    message='unknown exception',
+                ),
                 status_code=500,
                 media_type='application/json',
             )
@@ -134,9 +145,7 @@ def rest_stream_error_handler(
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
                 getattr(error, 'message', str(error)),
-                ', Data=' + str(getattr(error, 'data', ''))
-                if getattr(error, 'data', None)
-                else '',
+                f', Data={error.data}' if error.data else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)

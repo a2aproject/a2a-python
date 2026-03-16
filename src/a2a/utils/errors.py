@@ -4,6 +4,16 @@ This module contains A2A-specific error codes,
 as well as server exception classes.
 """
 
+from typing import NamedTuple
+
+
+class RestErrorMap(NamedTuple):
+    """Named tuple mapping HTTP status, gRPC status, and reason strings."""
+
+    http_code: int
+    grpc_status: str
+    reason: str
+
 
 class A2AError(Exception):
     """Base exception for A2A errors."""
@@ -110,6 +120,7 @@ __all__ = [
     'InvalidRequestError',
     'MethodNotFoundError',
     'PushNotificationNotSupportedError',
+    'RestErrorMap',
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
@@ -134,43 +145,53 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
 }
 
 
-A2A_REST_ERROR_MAPPING: dict[type[A2AError], tuple[int, str, str]] = {
-    TaskNotFoundError: (404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
-    TaskNotCancelableError: (409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'),
-    PushNotificationNotSupportedError: (
+A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
+    TaskNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
+    TaskNotCancelableError: RestErrorMap(
+        409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
+    ),
+    PushNotificationNotSupportedError: RestErrorMap(
         400,
         'UNIMPLEMENTED',
         'PUSH_NOTIFICATION_NOT_SUPPORTED',
     ),
-    UnsupportedOperationError: (400, 'UNIMPLEMENTED', 'UNSUPPORTED_OPERATION'),
-    ContentTypeNotSupportedError: (
+    UnsupportedOperationError: RestErrorMap(
+        400, 'UNIMPLEMENTED', 'UNSUPPORTED_OPERATION'
+    ),
+    ContentTypeNotSupportedError: RestErrorMap(
         415,
         'INVALID_ARGUMENT',
         'CONTENT_TYPE_NOT_SUPPORTED',
     ),
-    InvalidAgentResponseError: (502, 'INTERNAL', 'INVALID_AGENT_RESPONSE'),
-    ExtendedAgentCardNotConfiguredError: (
+    InvalidAgentResponseError: RestErrorMap(
+        502, 'INTERNAL', 'INVALID_AGENT_RESPONSE'
+    ),
+    ExtendedAgentCardNotConfiguredError: RestErrorMap(
         400,
         'FAILED_PRECONDITION',
         'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
     ),
-    ExtensionSupportRequiredError: (
+    ExtensionSupportRequiredError: RestErrorMap(
         400,
         'FAILED_PRECONDITION',
         'EXTENSION_SUPPORT_REQUIRED',
     ),
-    VersionNotSupportedError: (400, 'UNIMPLEMENTED', 'VERSION_NOT_SUPPORTED'),
-    InvalidParamsError: (400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
-    InvalidRequestError: (400, 'INVALID_ARGUMENT', 'INVALID_REQUEST'),
-    MethodNotFoundError: (404, 'NOT_FOUND', 'METHOD_NOT_FOUND'),
-    InternalError: (500, 'INTERNAL', 'INTERNAL_ERROR'),
+    VersionNotSupportedError: RestErrorMap(
+        400, 'UNIMPLEMENTED', 'VERSION_NOT_SUPPORTED'
+    ),
+    InvalidParamsError: RestErrorMap(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
+    InvalidRequestError: RestErrorMap(
+        400, 'INVALID_ARGUMENT', 'INVALID_REQUEST'
+    ),
+    MethodNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'METHOD_NOT_FOUND'),
+    InternalError: RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR'),
 }
 
 
 A2A_ERROR_REASONS = {
-    cls: reason for cls, (_, _, reason) in A2A_REST_ERROR_MAPPING.items()
+    cls: mapping.reason for cls, mapping in A2A_REST_ERROR_MAPPING.items()
 }
 
 A2A_REASON_TO_ERROR = {
-    reason: cls for cls, (_, _, reason) in A2A_REST_ERROR_MAPPING.items()
+    mapping.reason: cls for cls, mapping in A2A_REST_ERROR_MAPPING.items()
 }
