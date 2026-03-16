@@ -4,11 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       message:
-        description: 'Commit message'
-        required: true
-        type: string
-      sha:
-        description: 'SHA of the specification from which with types are being updated'
+        description: 'Commit and PR title'
         required: true
         type: string
 jobs:
@@ -20,6 +16,8 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
+        with:
+          ref: main
       - name: Run scripts/gen_proto.sh
         run: |
           set -euo pipefail
@@ -40,7 +38,7 @@ jobs:
           git remote set-url origin "https://x-access-token:${GH_TOKEN}@github.com/${{ github.repository }}"
           
           # Branch name
-          BRANCH_NAME="auto-update-a2a-types-${{ inputs.sha }}"
+          BRANCH_NAME="auto-update-a2a-types"
           
           # Add files
           git add src/a2a/types/ src/a2a/compat/v0_3/
@@ -64,12 +62,12 @@ jobs:
           # Check if open PR exists
           if gh pr list --head "$BRANCH_NAME" --state open --json url --jq '.[0].url' | grep -q http; then
             echo "Open PR already exists. Updating..."
-            gh pr edit "$BRANCH_NAME" --title "${{ inputs.message }}" --body "Commit: https://github.com/a2aproject/A2A/commit/${{ inputs.sha }}"
+            gh pr edit "$BRANCH_NAME" --title "${{ inputs.message }}" --body "Automated update of A2A types from specification."
           else
             echo "Creating new PR..."
             gh pr create \
               --title "${{ inputs.message }}" \
-              --body "Commit: https://github.com/a2aproject/A2A/commit/${{ inputs.sha }}" \
+              --body "Automated update of A2A types from specification." \
               --base main \
               --head "$BRANCH_NAME"
           fi
