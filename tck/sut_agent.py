@@ -162,7 +162,7 @@ def serve(task_store: TaskStore) -> None:
                 protocol_version='1.0.0',
             ),
             AgentInterface(
-                url=f'localhost:{grpc_port}',
+                url=f'http://localhost:{grpc_port}',
                 protocol_binding='GRPC',
                 protocol_version='1.0.0',
             ),
