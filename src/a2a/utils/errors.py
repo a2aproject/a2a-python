@@ -9,6 +9,7 @@ class A2AError(Exception):
     """Base exception for A2A errors."""
 
     message: str = 'A2A Error'
+    data: dict | None = None
 
     def __init__(self, message: str | None = None):
         if message:
@@ -100,6 +101,7 @@ class VersionNotSupportedError(A2AError):
 __all__ = [
     'A2A_ERROR_REASONS',
     'A2A_REASON_TO_ERROR',
+    'A2A_REST_ERROR_MAPPING',
     'JSON_RPC_ERROR_CODE_MAP',
     'ExtensionSupportRequiredError',
     'InternalError',
@@ -132,16 +134,43 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
 }
 
 
-A2A_ERROR_REASONS = {
-    TaskNotFoundError: 'TASK_NOT_FOUND',
-    TaskNotCancelableError: 'TASK_NOT_CANCELABLE',
-    PushNotificationNotSupportedError: 'PUSH_NOTIFICATION_NOT_SUPPORTED',
-    UnsupportedOperationError: 'UNSUPPORTED_OPERATION',
-    ContentTypeNotSupportedError: 'CONTENT_TYPE_NOT_SUPPORTED',
-    InvalidAgentResponseError: 'INVALID_AGENT_RESPONSE',
-    ExtendedAgentCardNotConfiguredError: 'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
-    ExtensionSupportRequiredError: 'EXTENSION_SUPPORT_REQUIRED',
-    VersionNotSupportedError: 'VERSION_NOT_SUPPORTED',
+A2A_REST_ERROR_MAPPING: dict[type[A2AError], tuple[int, str, str]] = {
+    TaskNotFoundError: (404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
+    TaskNotCancelableError: (409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'),
+    PushNotificationNotSupportedError: (
+        400,
+        'UNIMPLEMENTED',
+        'PUSH_NOTIFICATION_NOT_SUPPORTED',
+    ),
+    UnsupportedOperationError: (400, 'UNIMPLEMENTED', 'UNSUPPORTED_OPERATION'),
+    ContentTypeNotSupportedError: (
+        415,
+        'INVALID_ARGUMENT',
+        'CONTENT_TYPE_NOT_SUPPORTED',
+    ),
+    InvalidAgentResponseError: (502, 'INTERNAL', 'INVALID_AGENT_RESPONSE'),
+    ExtendedAgentCardNotConfiguredError: (
+        400,
+        'FAILED_PRECONDITION',
+        'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
+    ),
+    ExtensionSupportRequiredError: (
+        400,
+        'FAILED_PRECONDITION',
+        'EXTENSION_SUPPORT_REQUIRED',
+    ),
+    VersionNotSupportedError: (400, 'UNIMPLEMENTED', 'VERSION_NOT_SUPPORTED'),
+    InvalidParamsError: (400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
+    InvalidRequestError: (400, 'INVALID_ARGUMENT', 'INVALID_REQUEST'),
+    MethodNotFoundError: (404, 'NOT_FOUND', 'METHOD_NOT_FOUND'),
+    InternalError: (500, 'INTERNAL', 'INTERNAL_ERROR'),
 }
 
-A2A_REASON_TO_ERROR = {reason: cls for cls, reason in A2A_ERROR_REASONS.items()}
+
+A2A_ERROR_REASONS = {
+    cls: reason for cls, (_, _, reason) in A2A_REST_ERROR_MAPPING.items()
+}
+
+A2A_REASON_TO_ERROR = {
+    reason: cls for cls, (_, _, reason) in A2A_REST_ERROR_MAPPING.items()
+}

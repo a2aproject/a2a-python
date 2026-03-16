@@ -13,16 +13,16 @@ from a2a.utils.errors import (
     MethodNotFoundError,
 )
 from a2a.utils.error_handlers import (
-    A2AErrorToHttpStatus,
     rest_error_handler,
     rest_stream_error_handler,
 )
 
 
 class MockJSONResponse:
-    def __init__(self, content, status_code):
+    def __init__(self, content, status_code, media_type=None):
         self.content = content
         self.status_code = status_code
+        self.media_type = media_type
 
 
 @pytest.mark.asyncio
@@ -39,9 +39,21 @@ async def test_rest_error_handler_server_error():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 400
+    assert result.media_type == 'application/json'
     assert result.content == {
-        'message': 'Bad request',
-        'type': 'InvalidRequestError',
+        'error': {
+            'code': 400,
+            'status': 'INVALID_ARGUMENT',
+            'message': 'Bad request',
+            'details': [
+                {
+                    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                    'reason': 'INVALID_REQUEST',
+                    'domain': 'a2a-protocol.org',
+                    'metadata': {},
+                }
+            ],
+        }
     }
 
 
@@ -58,9 +70,13 @@ async def test_rest_error_handler_unknown_exception():
 
     assert isinstance(result, MockJSONResponse)
     assert result.status_code == 500
+    assert result.media_type == 'application/json'
     assert result.content == {
-        'message': 'unknown exception',
-        'type': 'Exception',
+        'error': {
+            'code': 500,
+            'status': 'INTERNAL',
+            'message': 'unknown exception',
+        }
     }
 
 
@@ -89,11 +105,3 @@ async def test_rest_stream_error_handler_reraises_exception():
 
     with pytest.raises(RuntimeError, match='Stream failed'):
         await failing_stream()
-
-
-def test_a2a_error_to_http_status_mapping():
-    """Test A2AErrorToHttpStatus mapping."""
-    assert A2AErrorToHttpStatus[InvalidRequestError] == 400
-    assert A2AErrorToHttpStatus[MethodNotFoundError] == 404
-    assert A2AErrorToHttpStatus[TaskNotFoundError] == 404
-    assert A2AErrorToHttpStatus[InternalError] == 500

@@ -2,7 +2,7 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
@@ -17,70 +17,14 @@ else:
 
 from google.protobuf.json_format import ParseError
 
-from a2a.server.jsonrpc_models import (
-    InternalError as JSONRPCInternalError,
-)
-from a2a.server.jsonrpc_models import (
-    JSONParseError,
-    JSONRPCError,
-)
 from a2a.utils.errors import (
+    A2A_REST_ERROR_MAPPING,
     A2AError,
-    ContentTypeNotSupportedError,
-    ExtendedAgentCardNotConfiguredError,
-    ExtensionSupportRequiredError,
     InternalError,
-    InvalidAgentResponseError,
-    InvalidParamsError,
-    InvalidRequestError,
-    MethodNotFoundError,
-    PushNotificationNotSupportedError,
-    TaskNotCancelableError,
-    TaskNotFoundError,
-    UnsupportedOperationError,
-    VersionNotSupportedError,
 )
 
 
 logger = logging.getLogger(__name__)
-
-_A2AErrorType = (
-    type[JSONRPCError]
-    | type[JSONParseError]
-    | type[InvalidRequestError]
-    | type[MethodNotFoundError]
-    | type[InvalidParamsError]
-    | type[InternalError]
-    | type[JSONRPCInternalError]
-    | type[TaskNotFoundError]
-    | type[TaskNotCancelableError]
-    | type[PushNotificationNotSupportedError]
-    | type[UnsupportedOperationError]
-    | type[ContentTypeNotSupportedError]
-    | type[InvalidAgentResponseError]
-    | type[ExtendedAgentCardNotConfiguredError]
-    | type[ExtensionSupportRequiredError]
-    | type[VersionNotSupportedError]
-)
-
-A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
-    JSONRPCError: 500,
-    JSONParseError: 400,
-    InvalidRequestError: 400,
-    MethodNotFoundError: 404,
-    InvalidParamsError: 422,
-    InternalError: 500,
-    JSONRPCInternalError: 500,
-    TaskNotFoundError: 404,
-    TaskNotCancelableError: 409,
-    PushNotificationNotSupportedError: 501,
-    UnsupportedOperationError: 501,
-    ContentTypeNotSupportedError: 415,
-    InvalidAgentResponseError: 502,
-    ExtendedAgentCardNotConfiguredError: 400,
-    ExtensionSupportRequiredError: 400,
-    VersionNotSupportedError: 400,
-}
 
 
 def rest_error_handler(
@@ -93,8 +37,8 @@ def rest_error_handler(
         try:
             return await func(*args, **kwargs)
         except A2AError as error:
-            http_code = A2AErrorToHttpStatus.get(
-                cast('_A2AErrorType', type(error)), 500
+            http_code, grpc_status, reason = A2A_REST_ERROR_MAPPING.get(
+                type(error), (500, 'INTERNAL', 'INTERNAL_ERROR')
             )
 
             log_level = (
@@ -107,32 +51,64 @@ def rest_error_handler(
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
                 getattr(error, 'message', str(error)),
-                ', Data=' + str(getattr(error, 'data', ''))
-                if getattr(error, 'data', None)
-                else '',
+                f', Data={error.data}' if hasattr(error, 'data') else '',
             )
-            # TODO(#722): Standardize error response format.
+
+            # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
+            metadata = getattr(error, 'data', None) or {}
+
             return JSONResponse(
                 content={
-                    'message': getattr(error, 'message', str(error)),
-                    'type': type(error).__name__,
+                    'error': {
+                        'code': http_code,
+                        'status': grpc_status,
+                        'message': getattr(error, 'message', str(error)),
+                        'details': [
+                            {
+                                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                                'reason': reason,
+                                'domain': 'a2a-protocol.org',
+                                'metadata': metadata,
+                            }
+                        ],
+                    }
                 },
                 status_code=http_code,
+                media_type='application/json',
             )
         except ParseError as error:
             logger.warning('Parse error: %s', str(error))
             return JSONResponse(
                 content={
-                    'message': str(error),
-                    'type': 'ParseError',
+                    'error': {
+                        'code': 400,
+                        'status': 'INVALID_ARGUMENT',
+                        'message': str(error),
+                        'details': [
+                            {
+                                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                                'reason': 'INVALID_REQUEST',
+                                'domain': 'a2a-protocol.org',
+                                'metadata': {},
+                            }
+                        ],
+                    }
                 },
                 status_code=400,
+                media_type='application/json',
             )
         except Exception:
             logger.exception('Unknown error occurred')
             return JSONResponse(
-                content={'message': 'unknown exception', 'type': 'Exception'},
+                content={
+                    'error': {
+                        'code': 500,
+                        'status': 'INTERNAL',
+                        'message': 'unknown exception',
+                    }
+                },
                 status_code=500,
+                media_type='application/json',
             )
 
     return wrapper

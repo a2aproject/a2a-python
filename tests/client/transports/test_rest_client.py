@@ -29,7 +29,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import A2A_REST_ERROR_MAPPING
 
 
 @pytest.fixture
@@ -102,7 +102,7 @@ class TestRestTransport:
 
         assert 'Client Request timed out' in str(exc_info.value)
 
-    @pytest.mark.parametrize('error_cls', list(JSON_RPC_ERROR_CODE_MAP.keys()))
+    @pytest.mark.parametrize('error_cls', list(A2A_REST_ERROR_MAPPING.keys()))
     @pytest.mark.asyncio
     async def test_rest_mapped_errors(
         self,
@@ -127,9 +127,23 @@ class TestRestTransport:
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 500
+
+        reason = A2A_REST_ERROR_MAPPING[error_cls][2]
+
         mock_response.json.return_value = {
-            'type': error_cls.__name__,
-            'message': 'Mapped Error',
+            'error': {
+                'code': 500,
+                'status': 'UNKNOWN',
+                'message': 'Mapped Error',
+                'details': [
+                    {
+                        '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                        'reason': reason,
+                        'domain': 'a2a-protocol.org',
+                        'metadata': {},
+                    }
+                ],
+            }
         }
 
         error = httpx.HTTPStatusError(
