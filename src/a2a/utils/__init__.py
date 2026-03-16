@@ -39,8 +39,8 @@ from a2a.utils.task import (
 __all__ = [
     'AGENT_CARD_WELL_KNOWN_PATH',
     'DEFAULT_RPC_URL',
-    'TransportProtocol',
     'ArtifactStreamer',
+    'TransportProtocol',
     'append_artifact_to_task',
     'are_modalities_compatible',
     'build_text_artifact',
