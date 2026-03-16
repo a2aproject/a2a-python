@@ -89,6 +89,7 @@
 CHANGELOG.md
 ^src/a2a/grpc/
 ^src/a2a/types/
+^src/a2a/compat/v0_3/a2a_v0_3*
 ^tests/
 .pre-commit-config.yaml
 (?:^|/)a2a\.json$
