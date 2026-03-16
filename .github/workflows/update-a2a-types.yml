@@ -71,7 +71,5 @@ jobs:
               --title "${{ inputs.message }}" \
               --body "Commit: https://github.com/a2aproject/A2A/commit/${{ inputs.sha }}" \
               --base main \
-              --head "$BRANCH_NAME" \
-              --label "automated" \
-              --label "dependencies"
+              --head "$BRANCH_NAME"
           fi
