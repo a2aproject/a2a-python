@@ -29,7 +29,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import TaskNotFoundError
-from a2a.utils.helpers import validate
+from a2a.utils.helpers import validate, validate_async_generator
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -87,7 +87,7 @@ class RESTHandler:
             response = a2a_pb2.SendMessageResponse(message=task_or_message)
         return MessageToDict(response)
 
-    @validate(
+    @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -139,7 +139,7 @@ class RESTHandler:
             return MessageToDict(task)
         raise TaskNotFoundError
 
-    @validate(
+    @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )

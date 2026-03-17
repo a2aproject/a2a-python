@@ -28,7 +28,7 @@ from a2a.compat.v0_3 import proto_utils
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
-from a2a.utils.helpers import validate
+from a2a.utils.helpers import validate, validate_async_generator
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -78,7 +78,7 @@ class REST03Handler:
         pb2_v03_resp = proto_utils.ToProto.task_or_message(v03_resp)
         return MessageToDict(pb2_v03_resp)
 
-    @validate(
+    @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -134,7 +134,7 @@ class REST03Handler:
         pb2_v03_task = proto_utils.ToProto.task(v03_resp)
         return MessageToDict(pb2_v03_task)
 
-    @validate(
+    @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )

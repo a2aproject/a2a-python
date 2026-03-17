@@ -34,6 +34,10 @@ def sample_agent_card() -> a2a_pb2.AgentCard:
         name='Test Agent',
         description='A test agent',
         version='1.0.0',
+        capabilities=a2a_pb2.AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+        ),
         supported_interfaces=[
             a2a_pb2.AgentInterface(
                 url='http://jsonrpc.v03.com',
@@ -445,7 +449,10 @@ async def test_get_agent_card_success(
         version='1.0.0',
         protocol_version='0.3',
         preferred_transport='JSONRPC',
-        capabilities=a2a_v0_3_pb2.AgentCapabilities(),
+        capabilities=a2a_v0_3_pb2.AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+        ),
     )
     assert response == expected_res
 
