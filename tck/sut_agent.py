@@ -211,7 +211,7 @@ def serve(task_store: TaskStore) -> None:
         http_handler=request_handler,
     )
     rest_app = rest_server.build(rpc_url=REST_URL)
-    main_app.mount("", rest_app)
+    main_app.mount('', rest_app)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'
