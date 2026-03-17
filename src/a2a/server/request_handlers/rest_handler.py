@@ -159,15 +159,9 @@ class RESTHandler:
         Yields:
             JSON serialized objects containing streaming events
         """
-        params = SubscribeToTaskRequest()
-        if request.method == 'POST':
-            body = await request.body()
-            if body:
-                Parse(body, params)
-
-        params.id = request.path_params['id']
+        task_id = request.path_params['id']
         async for event in self.request_handler.on_subscribe_to_task(
-            params, context
+            SubscribeToTaskRequest(id=task_id), context
         ):
             yield MessageToDict(proto_utils.to_stream_response(event))
 

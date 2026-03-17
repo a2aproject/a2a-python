@@ -735,7 +735,10 @@ class TestRestTransportTenant:
         args, kwargs = mock_aconnect_sse.call_args
         # method is 2nd positional argument
         assert args[1] == 'POST'
-        assert kwargs.get('json') == json_format.MessageToDict(request_obj)
+        if method_name == 'subscribe':
+            assert kwargs.get('json') is None
+        else:
+            assert kwargs.get('json') == json_format.MessageToDict(request_obj)
 
         # url is 3rd positional argument in aconnect_sse(client, method, url, ...)
         assert args[2] == f'http://agent.example.com/api{expected_path}'

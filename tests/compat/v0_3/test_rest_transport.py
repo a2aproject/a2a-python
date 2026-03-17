@@ -270,7 +270,7 @@ async def test_compat_rest_transport_subscribe_post_works_no_retry(transport):
 
     async def mock_stream(method, path, context=None, json=None):
         assert method == 'POST'
-        assert json == {'id': 'task-123'}
+        assert json is None
         task = Task(id='task-123')
         task.status.message.role = Role.ROLE_AGENT
         yield StreamResponse(task=task)
@@ -284,8 +284,7 @@ async def test_compat_rest_transport_subscribe_post_works_no_retry(transport):
     expected_task = Task(id='task-123')
     expected_task.status.message.role = Role.ROLE_AGENT
     assert events[0] == StreamResponse(task=expected_task)
-    assert transport._subscribe_method == 'POST'
-    assert transport._subscribe_retry_attempted is False
+    assert transport._subscribe_method_override is None
 
 
 @pytest.mark.asyncio
@@ -299,7 +298,7 @@ async def test_compat_rest_transport_subscribe_post_405_retry_get_success(
         nonlocal call_count
         call_count += 1
         if method == 'POST':
-            assert json == {'id': 'task-123'}
+            assert json is None
             create_405_error()
         if method == 'GET':
             assert json is None
@@ -314,15 +313,14 @@ async def test_compat_rest_transport_subscribe_post_405_retry_get_success(
 
     assert len(events) == 1
     assert call_count == 2
-    assert transport._subscribe_method == 'GET'
-    assert transport._subscribe_retry_attempted is True
+    assert transport._subscribe_method_override == 'GET'
 
     # Second call should use GET directly
     call_count = 0
     events = [event async for event in transport.subscribe(req)]
     assert len(events) == 1
     assert call_count == 1  # Only GET called
-    assert transport._subscribe_method == 'GET'
+    assert transport._subscribe_method_override == 'GET'
 
 
 @pytest.mark.asyncio
@@ -330,13 +328,13 @@ async def test_compat_rest_transport_subscribe_post_405_get_405_fails(
     transport,
 ):
     """Scenario: POST return 405, retry GET, return 405 - error. Second call is just POST."""
-    call_count = 0
+
+    method_count = {}
 
     async def mock_stream(method, path, context=None, json=None):
-        nonlocal call_count
-        call_count += 1
+        method_count[method] = method_count.get(method, 0) + 1
         if method == 'POST':
-            assert json == {'id': 'task-123'}
+            assert json is None
         elif method == 'GET':
             assert json is None
         # To make it an async generator even when it raises
@@ -351,16 +349,16 @@ async def test_compat_rest_transport_subscribe_post_405_get_405_fails(
         [event async for event in transport.subscribe(req)]
 
     assert '405' in str(exc_info.value)
-    assert call_count == 2  # Tried POST then GET
-    assert transport._subscribe_method == 'POST'
-    assert transport._subscribe_retry_attempted is True
+    assert transport._subscribe_method_override == 'POST'
+    assert method_count == {'POST': 1, 'GET': 1}
+    assert transport._subscribe_auto_method_override is False
 
     # Second call should try POST directly and fail without retry
-    call_count = 0
     with pytest.raises(A2AClientError):
         [event async for event in transport.subscribe(req)]
-    assert call_count == 1
-    assert transport._subscribe_method == 'POST'
+    assert transport._subscribe_auto_method_override is False
+    assert transport._subscribe_method_override == 'POST'
+    assert method_count == {'POST': 2, 'GET': 1}
 
 
 @pytest.mark.asyncio
@@ -372,7 +370,7 @@ async def test_compat_rest_transport_subscribe_post_500_no_retry(transport):
         nonlocal call_count
         call_count += 1
         assert method == 'POST'
-        assert json == {'id': 'task-123'}
+        assert json is None
         if False:
             yield
         create_500_error()
@@ -385,8 +383,71 @@ async def test_compat_rest_transport_subscribe_post_500_no_retry(transport):
 
     assert '500' in str(exc_info.value)
     assert call_count == 1  # No retry on 500
-    assert transport._subscribe_method == 'POST'
-    assert transport._subscribe_retry_attempted is False
+    assert transport._subscribe_method_override is None
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_subscribe_method_override_avoids_retry_get(
+    mock_httpx_client, agent_card
+):
+    """Scenario: Init with GET override, server returns 405, no automatic retry."""
+    transport = CompatRestTransport(
+        httpx_client=mock_httpx_client,
+        agent_card=agent_card,
+        url='http://example.com',
+        subscribe_method_override='GET',
+    )
+    call_count = 0
+
+    async def mock_stream(method, path, context=None, json=None):
+        nonlocal call_count
+        call_count += 1
+        assert method == 'GET'
+        assert json is None
+        if False:
+            yield
+        create_405_error()
+
+    transport._send_stream_request = mock_stream
+
+    req = SubscribeToTaskRequest(id='task-123')
+    with pytest.raises(A2AClientError) as exc_info:
+        [event async for event in transport.subscribe(req)]
+
+    assert '405' in str(exc_info.value)
+    assert call_count == 1
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_subscribe_method_override_avoids_retry_post(
+    mock_httpx_client, agent_card
+):
+    """Scenario: Init with POST override, server returns 405, no automatic retry."""
+    transport = CompatRestTransport(
+        httpx_client=mock_httpx_client,
+        agent_card=agent_card,
+        url='http://example.com',
+        subscribe_method_override='POST',
+    )
+    call_count = 0
+
+    async def mock_stream(method, path, context=None, json=None):
+        nonlocal call_count
+        call_count += 1
+        assert method == 'POST'
+        assert json is None
+        if False:
+            yield
+        create_405_error()
+
+    transport._send_stream_request = mock_stream
+
+    req = SubscribeToTaskRequest(id='task-123')
+    with pytest.raises(A2AClientError) as exc_info:
+        [event async for event in transport.subscribe(req)]
+
+    assert '405' in str(exc_info.value)
+    assert call_count == 1
 
 
 def test_compat_rest_transport_handle_http_error(transport):

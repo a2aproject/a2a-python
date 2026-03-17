@@ -438,7 +438,7 @@ async def test_subscribe_to_task_get(
 async def test_subscribe_to_task_post(
     streaming_client: AsyncClient, request_handler: MagicMock
 ) -> None:
-    """Test that POST /tasks/{id}:subscribe works and parses body."""
+    """Test that POST /tasks/{id}:subscribe works."""
 
     async def mock_stream_response():
         yield Task(
@@ -449,11 +449,8 @@ async def test_subscribe_to_task_post(
 
     request_handler.on_subscribe_to_task.return_value = mock_stream_response()
 
-    request = a2a_pb2.SubscribeToTaskRequest(id='task-1')
-
     response = await streaming_client.post(
         '/tasks/task-1:subscribe',
-        json=json_format.MessageToDict(request),
         headers={'Accept': 'text/event-stream'},
     )
 
@@ -595,7 +592,7 @@ class TestTenantExtraction:
             ('/message:send', 'POST', 'on_message_send', {'message': {}}),
             ('/tasks/1:cancel', 'POST', 'on_cancel_task', None),
             ('/tasks/1:subscribe', 'GET', 'on_subscribe_to_task', None),
-            ('/tasks/1:subscribe', 'POST', 'on_subscribe_to_task', {'id': '1'}),
+            ('/tasks/1:subscribe', 'POST', 'on_subscribe_to_task', None),
             ('/tasks/1', 'GET', 'on_get_task', None),
             ('/tasks', 'GET', 'on_list_tasks', None),
             (

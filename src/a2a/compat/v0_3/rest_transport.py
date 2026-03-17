@@ -64,13 +64,14 @@ class CompatRestTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
+        subscribe_method_override: str | None = None,
     ):
         """Initializes the CompatRestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
-        self._subscribe_method = 'POST'
-        self._subscribe_retry_attempted = False
+        self._subscribe_method_override = subscribe_method_override
+        self._subscribe_auto_method_override = subscribe_method_override is None
 
     async def send_message(
         self,
@@ -285,17 +286,12 @@ class CompatRestTransport(ClientTransport):
         on this transport instance. If both fail with 405, it will default back
         to POST for next calls but will not retry again.
         """
-        if self._subscribe_method == 'POST':
-            json_body = MessageToDict(request, preserving_proto_field_name=True)
-        else:
-            json_body = None
-
+        subscribe_method = self._subscribe_method_override or 'POST'
         try:
             async for event in self._send_stream_request(
-                self._subscribe_method,
+                subscribe_method,
                 f'/v1/tasks/{request.id}:subscribe',
                 context=context,
-                json=json_body,
             ):
                 yield event
         except A2AClientError as e:
@@ -305,12 +301,13 @@ class CompatRestTransport(ClientTransport):
                 isinstance(cause, httpx.HTTPStatusError)
                 and cause.response.status_code == httpx.codes.METHOD_NOT_ALLOWED
             ):
-                if self._subscribe_retry_attempted:
-                    self._subscribe_method = 'POST'
+                if self._subscribe_method_override:
+                    if self._subscribe_auto_method_override:
+                        self._subscribe_auto_method_override = False
+                        self._subscribe_method_override = 'POST'
                     raise
                 else:
-                    self._subscribe_method = 'GET'
-                    self._subscribe_retry_attempted = True
+                    self._subscribe_method_override = 'GET'
                     async for event in self.subscribe(request, context=context):
                         yield event
             else:

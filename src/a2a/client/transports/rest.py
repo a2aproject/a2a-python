@@ -262,7 +262,6 @@ class RestTransport(ClientTransport):
             f'/tasks/{request.id}:subscribe',
             request.tenant,
             context=context,
-            json=MessageToDict(request),
         ):
             yield event
 
