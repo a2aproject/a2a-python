@@ -160,6 +160,9 @@ async def test_enqueue_event_propagates_to_children(
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
 
+    # Wait for all background tasks to complete
+    await event_queue.flush()
+
     # Check parent queue
     assert await event_queue.dequeue_event(no_wait=True) == event1
     assert await event_queue.dequeue_event(no_wait=True) == event2
@@ -201,6 +204,36 @@ async def test_enqueue_event_when_closed(
     )  # ensure child is also seen as closed for this test's purpose
     with pytest.raises(expected_queue_closed_exception):
         await child_queue.dequeue_event(no_wait=True)
+
+
+@pytest.mark.asyncio
+async def test_event_queue_slow_consumer_does_not_block_parent(
+    event_queue: EventQueue,
+) -> None:
+    """Test that a slow or blocked consumer on a tapped queue doesn't block the parent queue."""
+    child_queue = event_queue.tap()
+
+    # Artificially limit the child queue to a size of 1 so it fills up instantly
+    child_queue.queue = asyncio.Queue(maxsize=1)
+
+    # Enqueue first event. It should fit in the child queue.
+    event1 = create_sample_message('1')
+    await event_queue.enqueue_event(event1)
+
+    # Enqueue second event. The child queue is now full.
+    # If the parent blocks on `await child_queue.enqueue_event()`, this will hang.
+    event2 = create_sample_message('2')
+    try:
+        # Give it a short timeout. If it hangs, it means the parent is blocked.
+        await asyncio.wait_for(event_queue.enqueue_event(event2), timeout=0.1)
+    except asyncio.TimeoutError:
+        pytest.fail(
+            'Parent EventQueue was blocked by a full child queue (slow consumer)!'
+        )
+
+    # Clean up to prevent background tasks from leaking or complaining
+    await child_queue.dequeue_event()
+    await child_queue.dequeue_event()
 
 
 @pytest.fixture
@@ -420,6 +453,9 @@ async def test_close_immediate_propagates_to_children(
     event = create_sample_message()
     await event_queue.enqueue_event(event)
 
+    # Wait for background propagation to finish
+    await event_queue.flush()
+
     assert child_queue.is_closed() is False
     assert child_queue.queue.empty() is False
 
@@ -439,6 +475,9 @@ async def test_clear_events_current_queue_only(event_queue: EventQueue) -> None:
     event2 = create_sample_task()
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
+
+    # Wait for all background tasks to complete
+    await event_queue.flush()
 
     # Clear only parent queue
     await event_queue.clear_events(clear_child_queues=False)

@@ -41,10 +41,11 @@ class EventQueue:
         self._children: list[EventQueue] = []
         self._is_closed = False
         self._lock = asyncio.Lock()
+        self._bg_tasks: set[asyncio.Task[None]] = set()
         logger.debug('EventQueue initialized.')
 
     async def enqueue_event(self, event: Event) -> None:
-        """Enqueues an event to this queue and all its children.
+        """Enqueues an event to this queue and propagates it to all child queues.
 
         Args:
             event: The event object to enqueue.
@@ -59,7 +60,12 @@ class EventQueue:
         # Make sure to use put instead of put_nowait to avoid blocking the event loop.
         await self.queue.put(event)
         for child in self._children:
-            await child.enqueue_event(event)
+            # We use a background task to enqueue to children to avoid blocking
+            # the parent queue if a child queue is full (e.g. slow consumer).
+            # This prevents deadlocks where a slow consumer blocks the producer.
+            task = asyncio.create_task(child.enqueue_event(event))
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
 
     async def dequeue_event(self, no_wait: bool = False) -> Event:
         """Dequeues an event from the queue.
@@ -132,6 +138,17 @@ class EventQueue:
         self._children.append(queue)
         return queue
 
+    async def flush(self) -> None:
+        """Waits for all pending background propagation tasks to complete recursively."""
+        while self._bg_tasks:
+            # Copy the set to avoid "Set changed size during iteration"
+            tasks = list(self._bg_tasks)
+            if tasks:
+                await asyncio.gather(*tasks, return_exceptions=True)
+
+        if self._children:
+            await asyncio.gather(*(child.flush() for child in self._children))
+
     async def close(self, immediate: bool = False) -> None:
         """Closes the queue for future push events and also closes all child queues.
 
@@ -161,6 +178,12 @@ class EventQueue:
                 return
             if not self._is_closed:
                 self._is_closed = True
+
+        if immediate:
+            # Cancel all pending background propagation tasks
+            for task in self._bg_tasks:
+                task.cancel()
+
         # If using python 3.13 or higher, use shutdown but match <3.13 semantics
         if sys.version_info >= (3, 13):
             if immediate:
@@ -170,10 +193,12 @@ class EventQueue:
                 for child in self._children:
                     await child.close(True)
                 return
-            # Graceful: prevent further gets/puts via shutdown, then wait for drain and children
+            # Graceful: prevent further gets/puts via shutdown, then wait for drain, propagation and children
             self.queue.shutdown(False)
             await asyncio.gather(
-                self.queue.join(), *(child.close() for child in self._children)
+                self.queue.join(),
+                self.flush(),
+                *(child.close() for child in self._children),
             )
         # Otherwise, join the queue
         else:
@@ -182,8 +207,11 @@ class EventQueue:
                 for child in self._children:
                     await child.close(immediate)
                 return
+            # Graceful: wait for drain, propagation and children
             await asyncio.gather(
-                self.queue.join(), *(child.close() for child in self._children)
+                self.queue.join(),
+                self.flush(),
+                *(child.close() for child in self._children),
             )
 
     def is_closed(self) -> bool:
