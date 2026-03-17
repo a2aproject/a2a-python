@@ -123,6 +123,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         )
         self.mock_agent_card.capabilities = MagicMock(spec=AgentCapabilities)
         self.mock_agent_card.capabilities.extended_agent_card = True
+        self.mock_agent_card.capabilities.streaming = True
+        self.mock_agent_card.capabilities.push_notifications = True
 
         # Mock supported_interfaces list
         interface = MagicMock(spec=AgentInterface)
@@ -710,6 +712,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_agent_executor, mock_task_store, mock_queue_manager
         )
         self.mock_agent_card = MagicMock(spec=AgentCard)
+        self.mock_agent_card.capabilities = MagicMock(spec=AgentCapabilities)
+        self.mock_agent_card.capabilities.streaming = True
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task = create_task()
         events: list[Any] = [

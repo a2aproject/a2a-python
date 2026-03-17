@@ -49,7 +49,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
     VersionNotSupportedError,
 )
-from a2a.utils.helpers import maybe_await, validate
+from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -171,7 +171,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
-    @validate(
+    @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -235,6 +235,10 @@ class JSONRPCHandler:
 
         return _build_error_response(request_id, TaskNotFoundError())
 
+    @validate_async_generator(
+        lambda self: self.agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_subscribe_to_task(
         self,
         request: SubscribeToTaskRequest,
