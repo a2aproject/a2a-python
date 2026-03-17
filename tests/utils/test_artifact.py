@@ -231,10 +231,11 @@ class TestArtifactStreamer(unittest.TestCase):
         self.assertTrue(event.append)
         self.assertTrue(event.last_chunk)
 
-    def test_finalize_has_empty_parts(self):
+    def test_finalize_has_sentinel_empty_text_part(self):
         streamer = ArtifactStreamer(self.context_id, self.task_id)
         event = streamer.finalize()
-        self.assertEqual(len(event.artifact.parts), 0)
+        self.assertEqual(len(event.artifact.parts), 1)
+        self.assertEqual(event.artifact.parts[0].text, '')
 
     def test_finalize_uses_same_artifact_id_as_append(self):
         streamer = ArtifactStreamer(self.context_id, self.task_id)
