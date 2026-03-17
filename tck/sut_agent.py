@@ -8,6 +8,7 @@ from datetime import datetime, timezone
 import grpc.aio
 import uvicorn
 
+from fastapi import FastAPI
 from starlette.applications import Starlette
 
 import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc
@@ -19,6 +20,7 @@ from a2a.server.agent_execution.context import RequestContext
 from a2a.server.apps import (
     A2ARESTFastAPIApplication,
     A2AStarletteApplication,
+    A2AFastAPIApplication,
 )
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
@@ -196,10 +198,10 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    main_app = Starlette()
+    main_app = FastAPI()
 
     # JSONRPC
-    jsonrpc_server = A2AStarletteApplication(
+    jsonrpc_server = A2AFastAPIApplication(
         agent_card=agent_card,
         http_handler=request_handler,
     )
@@ -210,9 +212,10 @@ def serve(task_store: TaskStore) -> None:
         agent_card=agent_card,
         http_handler=request_handler,
     )
-    rest_app = rest_server.build(rpc_url=REST_URL)
-    main_app.mount('', rest_app)
-    main_app.mount('', json_rpc_app)
+    rest_app = rest_server.build()
+
+    main_app.mount(REST_URL,rest_app)
+    main_app.mount('',json_rpc_app)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'
