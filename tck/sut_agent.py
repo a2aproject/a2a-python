@@ -12,6 +12,7 @@ from starlette.applications import Starlette
 
 import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc
 import a2a.types.a2a_pb2_grpc as a2a_grpc
+from fastapi import FastAPI
 
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
@@ -20,6 +21,7 @@ from a2a.server.apps import (
     A2ARESTFastAPIApplication,
     A2AStarletteApplication,
 )
+from a2a.server.router import JsonRpcRouter, RestRouter, AgentCardRouter
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
@@ -44,6 +46,7 @@ from a2a.types import (
 
 JSONRPC_URL = '/a2a/jsonrpc'
 REST_URL = '/a2a/rest'
+AGENT_CARD_URL = '/.well-known/agent-card.json'
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('SUTAgent')
@@ -196,22 +199,27 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    main_app = Starlette()
+    main_app = FastAPI()
+
+    # Agent Card
+    agent_card_router = AgentCardRouter(
+        agent_card=agent_card,
+    )
+    main_app.include_router(agent_card_router.router)
 
     # JSONRPC
-    jsonrpc_server = A2AStarletteApplication(
+    jsonrpc_router = JsonRpcRouter(
         agent_card=agent_card,
         http_handler=request_handler,
     )
-    jsonrpc_server.add_routes_to_app(main_app, rpc_url=JSONRPC_URL)
+    main_app.include_router(jsonrpc_router.router, prefix=JSONRPC_URL)
 
     # REST
-    rest_server = A2ARESTFastAPIApplication(
+    rest_router = RestRouter(
         agent_card=agent_card,
         http_handler=request_handler,
     )
-    rest_app = rest_server.build(rpc_url=REST_URL)
-    main_app.mount('', rest_app)
+    main_app.include_router(rest_router.router, prefix=REST_URL)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'
