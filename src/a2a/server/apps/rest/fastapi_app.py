@@ -1,3 +1,5 @@
+import importlib.resources
+import json
 import logging
 
 from collections.abc import Awaitable, Callable
@@ -55,10 +57,12 @@ _HTTP_TO_GRPC_STATUS_MAP = {
     504: 'DEADLINE_EXCEEDED',
 }
 
+
 class A2AFastAPI(FastAPI):
     """A FastAPI application that adds A2A-specific OpenAPI components."""
 
     _a2a_components_added: bool = False
+    rpc_url: str = ''
 
     def openapi(self) -> dict[str, Any]:
         """Generates the OpenAPI schema for the application."""
@@ -75,6 +79,11 @@ class A2AFastAPI(FastAPI):
                 self.openapi_schema = json.loads(
                     schema_file.read_text(encoding='utf-8')
                 )
+                if self.rpc_url and self.openapi_schema:
+                    paths = self.openapi_schema.get('paths', {})
+                    self.openapi_schema['paths'] = {
+                        f'{self.rpc_url}{k}': v for k, v in paths.items()
+                    }
                 if self.openapi_schema:
                     return self.openapi_schema
         except Exception:  # noqa: BLE001
@@ -84,12 +93,9 @@ class A2AFastAPI(FastAPI):
 
         openapi_schema = super().openapi()
         if not self._a2a_components_added:
-            # A2ARequest is now a Union type of proto messages, so we can't use
-            # model_json_schema. Instead, we just mark it as added without
-            # adding the schema since proto types don't have Pydantic schemas.
-            # The OpenAPI schema will still be functional for the endpoints.
             self._a2a_components_added = True
         return openapi_schema
+
 
 class A2ARESTFastAPIApplication:
     """A FastAPI application implementing the A2A protocol server REST endpoints.
@@ -176,6 +182,7 @@ class A2ARESTFastAPIApplication:
             A configured FastAPI application instance.
         """
         app = A2AFastAPI(**kwargs)
+        app.rpc_url = rpc_url
 
         @app.exception_handler(StarletteHTTPException)
         async def http_exception_handler(

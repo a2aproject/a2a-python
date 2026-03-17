@@ -1,5 +1,3 @@
-import importlib.resources
-import json
 import logging
 
 from collections.abc import Awaitable, Callable
@@ -34,6 +32,7 @@ from a2a.utils.constants import (
 
 
 logger = logging.getLogger(__name__)
+
 
 class A2AFastAPIApplication(JSONRPCApplication):
     """A FastAPI application implementing the A2A protocol server endpoints.
