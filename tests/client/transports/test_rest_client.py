@@ -9,6 +9,7 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from httpx_sse import EventSource, ServerSentEvent
 
 from a2a.client import create_text_message_object
+from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
@@ -162,7 +163,6 @@ class TestRestTransport:
         self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
     ):
         """Test that send_message passes context timeout to build_request."""
-        from a2a.client.client import ClientCallContext
 
         client = RestTransport(
             httpx_client=mock_httpx_client,
@@ -258,8 +258,6 @@ class TestRestTransportExtensions:
         mock_response.status_code = 200
         mock_httpx_client.send.return_value = mock_response
 
-        from a2a.client.client import ClientCallContext
-
         context = ClientCallContext(
             service_parameters={
                 'X-A2A-Extensions': 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
@@ -301,8 +299,6 @@ class TestRestTransportExtensions:
         mock_aconnect_sse.return_value.__aenter__.return_value = (
             mock_event_source
         )
-
-        from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
             service_parameters={
@@ -404,8 +400,6 @@ class TestRestTransportExtensions:
 
         request = GetExtendedAgentCardRequest()
 
-        from a2a.client.client import ClientCallContext
-
         context = ClientCallContext(
             service_parameters={HTTP_EXTENSION_HEADER: extensions_str}
         )
@@ -419,7 +413,6 @@ class TestRestTransportExtensions:
             await client.get_extended_agent_card(request, context=context)
 
         mock_execute_request.assert_called_once()
-        # _execute_request(method, target, tenant, context)
         call_args = mock_execute_request.call_args
         assert (
             call_args[1].get('context') == context or call_args[0][3] == context
@@ -694,7 +687,7 @@ class TestRestTransportTenant:
     )
     @pytest.mark.asyncio
     @patch('a2a.client.transports.http_helpers.aconnect_sse')
-    async def test_rest_streaming_methods_prepend_tenant(
+    async def test_rest_streaming_methods_prepend_tenant(  # noqa: PLR0913
         self,
         mock_aconnect_sse,
         method_name,

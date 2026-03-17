@@ -333,9 +333,7 @@ async def test_compat_rest_transport_subscribe_post_405_get_405_fails(
 
     async def mock_stream(method, path, context=None, json=None):
         method_count[method] = method_count.get(method, 0) + 1
-        if method == 'POST':
-            assert json is None
-        elif method == 'GET':
+        if method in {'POST', 'GET'}:
             assert json is None
         # To make it an async generator even when it raises
         if False:
