@@ -2,13 +2,10 @@ import asyncio
 import contextlib
 import logging
 
-from typing import Any
-
 import grpc
 import uvicorn
 
 from fastapi import FastAPI
-from google.protobuf.json_format import MessageToDict
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
@@ -205,7 +202,6 @@ async def serve(
         http_handler=request_handler,
         enable_v0_3_compat=True,
     )
-    jsonrpc_app = jsonrpc_app_builder.build()
 
     app = FastAPI()
     jsonrpc_app_builder.add_routes_to_app(app, rpc_url='/a2a/jsonrpc/')
