@@ -293,7 +293,7 @@ class RESTHandler:
         proto_utils.parse_params(request.query_params, params)
 
         result = await self.request_handler.on_list_tasks(params, context)
-        return MessageToDict(result)
+        return MessageToDict(result, always_print_fields_with_no_presence=True)
 
     async def list_push_notifications(
         self,

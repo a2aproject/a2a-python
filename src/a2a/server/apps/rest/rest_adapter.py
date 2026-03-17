@@ -237,6 +237,10 @@ class RESTAdapter(RESTAdapterInterface):
                 self._handle_streaming_request,
                 self.handler.on_subscribe_to_task,
             ),
+            ('/tasks/{id}:subscribe', 'POST'): functools.partial(
+                self._handle_streaming_request,
+                self.handler.on_subscribe_to_task,
+            ),
             ('/tasks/{id}', 'GET'): functools.partial(
                 self._handle_request, self.handler.on_get_task
             ),

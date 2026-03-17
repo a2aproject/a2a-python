@@ -1,3 +1,4 @@
+import contextlib
 import json
 import logging
 
@@ -63,11 +64,14 @@ class CompatRestTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
+        subscribe_method_override: str | None = None,
     ):
         """Initializes the CompatRestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self._subscribe_method_override = subscribe_method_override
+        self._subscribe_auto_method_override = subscribe_method_override is None
 
     async def send_message(
         self,
@@ -273,13 +277,41 @@ class CompatRestTransport(ClientTransport):
         *,
         context: ClientCallContext | None = None,
     ) -> AsyncGenerator[StreamResponse]:
-        """Reconnects to get task updates."""
-        async for event in self._send_stream_request(
-            'GET',
-            f'/v1/tasks/{request.id}:subscribe',
-            context=context,
-        ):
-            yield event
+        """Reconnects to get task updates.
+
+        This method implements backward compatibility logic for the subscribe
+        endpoint. It first attempts to use POST, which is the official method
+        for A2A subscribe endpoint. If the server returns 405 Method Not Allowed,
+        it falls back to GET and remembers this preference for future calls
+        on this transport instance. If both fail with 405, it will default back
+        to POST for next calls but will not retry again.
+        """
+        subscribe_method = self._subscribe_method_override or 'POST'
+        try:
+            async for event in self._send_stream_request(
+                subscribe_method,
+                f'/v1/tasks/{request.id}:subscribe',
+                context=context,
+            ):
+                yield event
+        except A2AClientError as e:
+            # Check for 405 Method Not Allowed in the cause (httpx.HTTPStatusError)
+            cause = e.__cause__
+            if (
+                isinstance(cause, httpx.HTTPStatusError)
+                and cause.response.status_code == httpx.codes.METHOD_NOT_ALLOWED
+            ):
+                if self._subscribe_method_override:
+                    if self._subscribe_auto_method_override:
+                        self._subscribe_auto_method_override = False
+                        self._subscribe_method_override = 'POST'
+                    raise
+                else:
+                    self._subscribe_method_override = 'GET'
+                    async for event in self.subscribe(request, context=context):
+                        yield event
+            else:
+                raise
 
     async def get_extended_agent_card(
         self,
@@ -311,7 +343,14 @@ class CompatRestTransport(ClientTransport):
     def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
-            error_data = e.response.json()
+            with contextlib.suppress(httpx.StreamClosed):
+                e.response.read()
+
+            try:
+                error_data = e.response.json()
+            except (json.JSONDecodeError, ValueError, httpx.ResponseNotRead):
+                error_data = {}
+
             error_type = error_data.get('type')
             message = error_data.get('message', str(e))
 

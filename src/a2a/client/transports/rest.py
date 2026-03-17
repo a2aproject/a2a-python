@@ -258,7 +258,7 @@ class RestTransport(ClientTransport):
     ) -> AsyncGenerator[StreamResponse]:
         """Reconnects to get task updates."""
         async for event in self._send_stream_request(
-            'GET',
+            'POST',
             f'/tasks/{request.id}:subscribe',
             request.tenant,
             context=context,
