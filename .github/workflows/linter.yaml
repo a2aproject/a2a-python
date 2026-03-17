@@ -22,8 +22,6 @@ jobs:
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1
       - name: Install dependencies
         run: uv sync --locked
 
