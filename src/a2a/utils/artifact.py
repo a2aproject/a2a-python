@@ -163,6 +163,9 @@ class ArtifactStreamer:
             artifact=Artifact(
                 artifact_id=self._artifact_id,
                 name=self._name,
-                parts=[],
+                # Spec requires >= 1 part; use empty-text sentinel since
+                # finalize carries no new content.
+                # https://github.com/a2aproject/A2A/issues/1231
+                parts=[Part(text='')],
             ),
         )
