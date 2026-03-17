@@ -16,6 +16,6 @@ async def get_task_status(task: Task) -> TaskStatus:
 
 **Incorrect (Do NOT do this):**
 ```python
-def get_task(task): # Missing type hints
-    return task.status # Potential None return without handling
+async def get_task_status(task): # Missing type hints for argument and return value
+    return task.status
 ```

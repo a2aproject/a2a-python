@@ -19,7 +19,6 @@
 - **Style Guidelines**: Follow the rules in @./docs/ai/coding_conventions.md for every response involving code.
 - **Mandatory Checks**: Run the commands in @./docs/ai/mandatory_checks.md after making any changes to the code and before committing.
 
-
 ## 4. Mandatory AI Workflow for Coding Tasks
 1. **Required Reading**: You MUST use `view_file` to read the contents of @./docs/ai/coding_conventions.md and @./docs/ai/mandatory_checks.md at the very beginning of EVERY coding task.
 2. **Initial Checklist**: Every `task.md` you create MUST include a section for **Mandatory Checks** from @./docs/ai/mandatory_checks.md.
