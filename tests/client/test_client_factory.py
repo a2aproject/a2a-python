@@ -266,3 +266,20 @@ async def test_client_factory_connect_with_consumers_and_interceptors(
         call_args = mock_base_client.call_args[0]
         assert call_args[3] == [consumer1]
         assert call_args[4] == [interceptor1]
+
+
+def test_client_factory_create_does_not_mutate_config_extensions(
+    base_agent_card: AgentCard,
+):
+    """Verify that calling create() with extensions does not mutate the factory's config."""
+    config = ClientConfig(
+        httpx_client=httpx.AsyncClient(),
+        extensions=['base-ext'],
+    )
+    factory = ClientFactory(config)
+
+    factory.create(base_agent_card, extensions=['ext-a'])
+    factory.create(base_agent_card, extensions=['ext-b'])
+
+    # Config should be unchanged — no accumulation
+    assert config.extensions == ['base-ext']

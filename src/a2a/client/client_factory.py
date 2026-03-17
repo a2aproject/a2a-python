@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import dataclasses
 import logging
 
 from collections.abc import Callable
@@ -239,15 +240,20 @@ class ClientFactory:
         all_extensions = self._config.extensions.copy()
         if extensions:
             all_extensions.extend(extensions)
-            self._config.extensions = all_extensions
+
+        config = (
+            dataclasses.replace(self._config, extensions=all_extensions)
+            if extensions
+            else self._config
+        )
 
         transport = self._registry[transport_protocol](
-            card, transport_url, self._config, interceptors or []
+            card, transport_url, config, interceptors or []
         )
 
         return BaseClient(
             card,
-            self._config,
+            config,
             transport,
             all_consumers,
             interceptors or [],
