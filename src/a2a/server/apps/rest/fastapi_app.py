@@ -7,12 +7,14 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI, Request, Response
     from fastapi.responses import JSONResponse
+    from starlette.exceptions import HTTPException as StarletteHTTPException
 
     _package_fastapi_installed = True
 else:
     try:
         from fastapi import APIRouter, FastAPI, Request, Response
         from fastapi.responses import JSONResponse
+        from starlette.exceptions import HTTPException as StarletteHTTPException
 
         _package_fastapi_installed = True
     except ImportError:
@@ -20,6 +22,7 @@ else:
         FastAPI = Any
         Request = Any
         Response = Any
+        StarletteHTTPException = Any
 
         _package_fastapi_installed = False
 
@@ -34,6 +37,23 @@ from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 
 logger = logging.getLogger(__name__)
+
+
+_HTTP_TO_GRPC_STATUS_MAP = {
+    400: 'INVALID_ARGUMENT',
+    401: 'UNAUTHENTICATED',
+    403: 'PERMISSION_DENIED',
+    404: 'NOT_FOUND',
+    405: 'UNIMPLEMENTED',
+    409: 'ALREADY_EXISTS',
+    415: 'INVALID_ARGUMENT',
+    422: 'INVALID_ARGUMENT',
+    500: 'INTERNAL',
+    501: 'UNIMPLEMENTED',
+    502: 'INTERNAL',
+    503: 'UNAVAILABLE',
+    504: 'DEADLINE_EXCEEDED',
+}
 
 
 class A2ARESTFastAPIApplication:
@@ -121,6 +141,34 @@ class A2ARESTFastAPIApplication:
             A configured FastAPI application instance.
         """
         app = FastAPI(**kwargs)
+
+        @app.exception_handler(StarletteHTTPException)
+        async def http_exception_handler(
+            request: Request, exc: StarletteHTTPException
+        ) -> Response:
+            """Catches framework-level HTTP exceptions.
+
+            For example, 404 Not Found for bad routes, 422 Unprocessable Entity
+            for schema validation, and formats them into the A2A standard
+            google.rpc.Status JSON format (AIP-193).
+            """
+            grpc_status = _HTTP_TO_GRPC_STATUS_MAP.get(
+                exc.status_code, 'UNKNOWN'
+            )
+            return JSONResponse(
+                status_code=exc.status_code,
+                content={
+                    'error': {
+                        'code': exc.status_code,
+                        'status': grpc_status,
+                        'message': str(exc.detail)
+                        if hasattr(exc, 'detail')
+                        else 'HTTP Exception',
+                    }
+                },
+                media_type='application/json',
+            )
+
         if self.enable_v0_3_compat and self._v03_adapter:
             v03_adapter = self._v03_adapter
             v03_router = APIRouter()

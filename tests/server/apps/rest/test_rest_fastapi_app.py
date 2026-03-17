@@ -37,9 +37,9 @@ async def agent_card() -> AgentCard:
     mock_agent_card = MagicMock(spec=AgentCard)
     mock_agent_card.url = 'http://mockurl.com'
 
-    # Mock the capabilities object with streaming disabled
+    # Mock the capabilities object with streaming enabled
     mock_capabilities = MagicMock()
-    mock_capabilities.streaming = False
+    mock_capabilities.streaming = True
     mock_capabilities.push_notifications = True
     mock_capabilities.extended_agent_card = True
     mock_agent_card.capabilities = mock_capabilities
@@ -406,6 +406,64 @@ async def test_streaming_content_verification(
 
 
 @pytest.mark.anyio
+async def test_subscribe_to_task_get(
+    streaming_client: AsyncClient, request_handler: MagicMock
+) -> None:
+    """Test that GET /tasks/{id}:subscribe works."""
+
+    async def mock_stream_response():
+        yield Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+
+    request_handler.on_subscribe_to_task.return_value = mock_stream_response()
+
+    response = await streaming_client.get(
+        '/tasks/task-1:subscribe',
+        headers={'Accept': 'text/event-stream'},
+    )
+
+    response.raise_for_status()
+    assert response.status_code == 200
+
+    # Verify handler call
+    request_handler.on_subscribe_to_task.assert_called_once()
+    args, _ = request_handler.on_subscribe_to_task.call_args
+    assert args[0].id == 'task-1'
+
+
+@pytest.mark.anyio
+async def test_subscribe_to_task_post(
+    streaming_client: AsyncClient, request_handler: MagicMock
+) -> None:
+    """Test that POST /tasks/{id}:subscribe works."""
+
+    async def mock_stream_response():
+        yield Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+
+    request_handler.on_subscribe_to_task.return_value = mock_stream_response()
+
+    response = await streaming_client.post(
+        '/tasks/task-1:subscribe',
+        headers={'Accept': 'text/event-stream'},
+    )
+
+    response.raise_for_status()
+    assert response.status_code == 200
+
+    # Verify handler call
+    request_handler.on_subscribe_to_task.assert_called_once()
+    args, _ = request_handler.on_subscribe_to_task.call_args
+    assert args[0].id == 'task-1'
+
+
+@pytest.mark.anyio
 async def test_streaming_endpoint_with_invalid_content_type(
     streaming_client: AsyncClient, request_handler: MagicMock
 ) -> None:
@@ -493,6 +551,14 @@ class TestTenantExtraction:
     @pytest.fixture(autouse=True)
     def configure_mocks(self, request_handler: MagicMock) -> None:
         # Setup default return values for all handlers
+        async def mock_stream(*args, **kwargs):
+            if False:
+                yield
+
+        request_handler.on_subscribe_to_task.side_effect = (
+            lambda *args, **kwargs: mock_stream()
+        )
+
         request_handler.on_message_send.return_value = Message(
             message_id='test',
             role=Role.ROLE_AGENT,
@@ -525,6 +591,8 @@ class TestTenantExtraction:
         [
             ('/message:send', 'POST', 'on_message_send', {'message': {}}),
             ('/tasks/1:cancel', 'POST', 'on_cancel_task', None),
+            ('/tasks/1:subscribe', 'GET', 'on_subscribe_to_task', None),
+            ('/tasks/1:subscribe', 'POST', 'on_subscribe_to_task', None),
             ('/tasks/1', 'GET', 'on_get_task', None),
             ('/tasks', 'GET', 'on_list_tasks', None),
             (
@@ -622,6 +690,34 @@ class TestTenantExtraction:
         args, _ = extended_card_modifier.call_args
         context = args[1]
         assert context.tenant == ''
+
+
+@pytest.mark.anyio
+async def test_global_http_exception_handler_returns_rpc_status(
+    client: AsyncClient,
+) -> None:
+    """Test that a standard FastAPI 404 is transformed into the A2A google.rpc.Status format."""
+
+    # Send a request to an endpoint that does not exist
+    response = await client.get('/non-existent-route')
+
+    # Verify it returns a 404 with standard application/json
+    assert response.status_code == 404
+    assert response.headers.get('content-type') == 'application/json'
+
+    data = response.json()
+
+    # Assert the payload is wrapped in the "error" envelope
+    assert 'error' in data
+    error_payload = data['error']
+
+    # Assert it has the correct AIP-193 format
+    assert error_payload['code'] == 404
+    assert error_payload['status'] == 'NOT_FOUND'
+    assert 'Not Found' in error_payload['message']
+
+    # Standard HTTP errors shouldn't leak details
+    assert 'details' not in error_payload
 
 
 if __name__ == '__main__':

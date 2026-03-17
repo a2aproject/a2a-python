@@ -2,7 +2,7 @@ import functools
 import logging
 
 from collections.abc import Awaitable, Callable, Coroutine
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
@@ -17,70 +17,40 @@ else:
 
 from google.protobuf.json_format import ParseError
 
-from a2a.server.jsonrpc_models import (
-    InternalError as JSONRPCInternalError,
-)
-from a2a.server.jsonrpc_models import (
-    JSONParseError,
-    JSONRPCError,
-)
 from a2a.utils.errors import (
+    A2A_REST_ERROR_MAPPING,
     A2AError,
-    ContentTypeNotSupportedError,
-    ExtendedAgentCardNotConfiguredError,
-    ExtensionSupportRequiredError,
     InternalError,
-    InvalidAgentResponseError,
-    InvalidParamsError,
-    InvalidRequestError,
-    MethodNotFoundError,
-    PushNotificationNotSupportedError,
-    TaskNotCancelableError,
-    TaskNotFoundError,
-    UnsupportedOperationError,
-    VersionNotSupportedError,
+    RestErrorMap,
 )
 
 
 logger = logging.getLogger(__name__)
 
-_A2AErrorType = (
-    type[JSONRPCError]
-    | type[JSONParseError]
-    | type[InvalidRequestError]
-    | type[MethodNotFoundError]
-    | type[InvalidParamsError]
-    | type[InternalError]
-    | type[JSONRPCInternalError]
-    | type[TaskNotFoundError]
-    | type[TaskNotCancelableError]
-    | type[PushNotificationNotSupportedError]
-    | type[UnsupportedOperationError]
-    | type[ContentTypeNotSupportedError]
-    | type[InvalidAgentResponseError]
-    | type[ExtendedAgentCardNotConfiguredError]
-    | type[ExtensionSupportRequiredError]
-    | type[VersionNotSupportedError]
-)
 
-A2AErrorToHttpStatus: dict[_A2AErrorType, int] = {
-    JSONRPCError: 500,
-    JSONParseError: 400,
-    InvalidRequestError: 400,
-    MethodNotFoundError: 404,
-    InvalidParamsError: 422,
-    InternalError: 500,
-    JSONRPCInternalError: 500,
-    TaskNotFoundError: 404,
-    TaskNotCancelableError: 409,
-    PushNotificationNotSupportedError: 501,
-    UnsupportedOperationError: 501,
-    ContentTypeNotSupportedError: 415,
-    InvalidAgentResponseError: 502,
-    ExtendedAgentCardNotConfiguredError: 400,
-    ExtensionSupportRequiredError: 400,
-    VersionNotSupportedError: 400,
-}
+def _build_error_payload(
+    code: int,
+    status: str,
+    message: str,
+    reason: str | None = None,
+    metadata: dict[str, Any] | None = None,
+) -> dict[str, Any]:
+    """Helper function to build the JSON error payload."""
+    payload: dict[str, Any] = {
+        'code': code,
+        'status': status,
+        'message': message,
+    }
+    if reason:
+        payload['details'] = [
+            {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': reason,
+                'domain': 'a2a-protocol.org',
+                'metadata': metadata if metadata is not None else {},
+            }
+        ]
+    return {'error': payload}
 
 
 def rest_error_handler(
@@ -93,9 +63,12 @@ def rest_error_handler(
         try:
             return await func(*args, **kwargs)
         except A2AError as error:
-            http_code = A2AErrorToHttpStatus.get(
-                cast('_A2AErrorType', type(error)), 500
+            mapping = A2A_REST_ERROR_MAPPING.get(
+                type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
             )
+            http_code = mapping.http_code
+            grpc_status = mapping.grpc_status
+            reason = mapping.reason
 
             log_level = (
                 logging.ERROR
@@ -107,32 +80,46 @@ def rest_error_handler(
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
                 getattr(error, 'message', str(error)),
-                ', Data=' + str(getattr(error, 'data', ''))
-                if getattr(error, 'data', None)
-                else '',
+                f', Data={error.data}' if error.data else '',
             )
-            # TODO(#722): Standardize error response format.
+
+            # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
+            metadata = getattr(error, 'data', None) or {}
+
             return JSONResponse(
-                content={
-                    'message': getattr(error, 'message', str(error)),
-                    'type': type(error).__name__,
-                },
+                content=_build_error_payload(
+                    code=http_code,
+                    status=grpc_status,
+                    message=getattr(error, 'message', str(error)),
+                    reason=reason,
+                    metadata=metadata,
+                ),
                 status_code=http_code,
+                media_type='application/json',
             )
         except ParseError as error:
             logger.warning('Parse error: %s', str(error))
             return JSONResponse(
-                content={
-                    'message': str(error),
-                    'type': 'ParseError',
-                },
+                content=_build_error_payload(
+                    code=400,
+                    status='INVALID_ARGUMENT',
+                    message=str(error),
+                    reason='INVALID_REQUEST',
+                    metadata={},
+                ),
                 status_code=400,
+                media_type='application/json',
             )
         except Exception:
             logger.exception('Unknown error occurred')
             return JSONResponse(
-                content={'message': 'unknown exception', 'type': 'Exception'},
+                content=_build_error_payload(
+                    code=500,
+                    status='INTERNAL',
+                    message='unknown exception',
+                ),
                 status_code=500,
+                media_type='application/json',
             )
 
     return wrapper
@@ -158,9 +145,7 @@ def rest_stream_error_handler(
                 "Request error: Code=%s, Message='%s'%s",
                 getattr(error, 'code', 'N/A'),
                 getattr(error, 'message', str(error)),
-                ', Data=' + str(getattr(error, 'data', ''))
-                if getattr(error, 'data', None)
-                else '',
+                f', Data={error.data}' if error.data else '',
             )
             # Since the stream has started, we can't return a JSONResponse.
             # Instead, we run the error handling logic (provides logging)
