@@ -187,6 +187,44 @@ async def test_on_subscribe_to_task(rest_handler, mock_request, mock_context):
 
 
 @pytest.mark.anyio
+async def test_on_subscribe_to_task_post(
+    rest_handler, mock_request, mock_context
+):
+    mock_request.path_params = {'id': 'task-1'}
+    mock_request.method = 'POST'
+    request_body = {'name': 'tasks/task-1'}
+    mock_request.body = AsyncMock(
+        return_value=json.dumps(request_body).encode('utf-8')
+    )
+
+    async def mock_stream(*args, **kwargs):
+        yield types_v03.SendStreamingMessageSuccessResponse(
+            id='req-1',
+            result=types_v03.Message(
+                message_id='msg-2',
+                role='agent',
+                parts=[types_v03.TextPart(text='Update')],
+            ),
+        )
+
+    rest_handler.handler03.on_subscribe_to_task = MagicMock(
+        side_effect=mock_stream
+    )
+
+    results = [
+        chunk
+        async for chunk in rest_handler.on_subscribe_to_task(
+            mock_request, mock_context
+        )
+    ]
+
+    assert len(results) == 1
+    rest_handler.handler03.on_subscribe_to_task.assert_called_once()
+    called_req = rest_handler.handler03.on_subscribe_to_task.call_args[0][0]
+    assert called_req.params.id == 'task-1'
+
+
+@pytest.mark.anyio
 async def test_get_push_notification(rest_handler, mock_request, mock_context):
     mock_request.path_params = {'id': 'task-1', 'push_id': 'push-1'}
 
