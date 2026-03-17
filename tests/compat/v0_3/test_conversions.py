@@ -81,6 +81,7 @@ from a2a.compat.v0_3.conversions import (
 from a2a.server.models import PushNotificationConfigModel, TaskModel
 from cryptography.fernet import Fernet
 from a2a.types import a2a_pb2 as pb2_v10
+from a2a.utils.errors import VersionNotSupportedError
 
 
 def test_text_part_conversion():
@@ -986,7 +987,7 @@ def test_security_scheme_mtls_minimal():
 def test_agent_interface_conversion():
     v03_int = types_v03.AgentInterface(url='http', transport='JSONRPC')
     v10_expected = pb2_v10.AgentInterface(
-        url='http', protocol_binding='JSONRPC', protocol_version='0.3.0'
+        url='http', protocol_binding='JSONRPC', protocol_version='0.3'
     )
     v10_int = to_core_agent_interface(v03_int)
     assert v10_int == v10_expected
@@ -1131,7 +1132,7 @@ def test_agent_card_conversion():
                 url='u1', protocol_binding='JSONRPC', protocol_version='0.3.0'
             ),
             pb2_v10.AgentInterface(
-                url='u2', protocol_binding='HTTP', protocol_version='0.3.0'
+                url='u2', protocol_binding='HTTP', protocol_version='0.3'
             ),
         ]
     )
@@ -2014,3 +2015,24 @@ def test_push_notification_config_persistence_conversion_with_encryption():
     assert v10_restored.id == v10_config.id
     assert v10_restored.url == v10_config.url
     assert v10_restored.token == v10_config.token
+
+
+def test_to_compat_agent_card_unsupported_version():
+    card = pb2_v10.AgentCard(
+        name='Modern Agent',
+        description='Only supports 1.0',
+        version='1.0.0',
+        supported_interfaces=[
+            pb2_v10.AgentInterface(
+                url='http://grpc.v10.com',
+                protocol_binding='GRPC',
+                protocol_version='1.0.0',
+            ),
+        ],
+        capabilities=pb2_v10.AgentCapabilities(),
+    )
+    with pytest.raises(
+        VersionNotSupportedError,
+        match='AgentCard must have at least one interface with compatible protocol version.',
+    ):
+        to_compat_agent_card(card)

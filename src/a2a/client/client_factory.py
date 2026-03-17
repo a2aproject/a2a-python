@@ -16,6 +16,7 @@ from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
 from a2a.client.transports.tenant_decorator import TenantTransportDecorator
+from a2a.compat.v0_3.versions import is_legacy_version
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -111,7 +112,7 @@ class ClientFactory:
                     else PROTOCOL_VERSION_CURRENT
                 )
 
-                if ClientFactory._is_legacy_version(version):
+                if is_legacy_version(version):
                     from a2a.compat.v0_3.jsonrpc_transport import (  # noqa: PLC0415
                         CompatJsonRpcTransport,
                     )
@@ -150,7 +151,7 @@ class ClientFactory:
                     else PROTOCOL_VERSION_CURRENT
                 )
 
-                if ClientFactory._is_legacy_version(version):
+                if is_legacy_version(version):
                     from a2a.compat.v0_3.rest_transport import (  # noqa: PLC0415
                         CompatRestTransport,
                     )
@@ -197,7 +198,7 @@ class ClientFactory:
                 )
 
                 if (
-                    ClientFactory._is_legacy_version(version)
+                    is_legacy_version(version)
                     and CompatGrpcTransport is not None
                 ):
                     return CompatGrpcTransport.create(card, url, config)
@@ -214,21 +215,6 @@ class ClientFactory:
                 TransportProtocol.GRPC,
                 grpc_transport_producer,
             )
-
-    @staticmethod
-    def _is_legacy_version(version: str | None) -> bool:
-        """Determines if the given version is a legacy protocol version (>=0.3 and <1.0)."""
-        if not version:
-            return False
-        try:
-            v = Version(version)
-            return (
-                Version(PROTOCOL_VERSION_0_3)
-                <= v
-                < Version(PROTOCOL_VERSION_1_0)
-            )
-        except InvalidVersion:
-            return False
 
     @staticmethod
     def _find_best_interface(

@@ -39,6 +39,9 @@ from a2a.server.apps.jsonrpc import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
+)
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
@@ -175,7 +178,7 @@ class RESTAdapter(RESTAdapterInterface):
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return MessageToDict(card_to_serve)
+        return agent_card_to_dict(card_to_serve)
 
     async def _handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
