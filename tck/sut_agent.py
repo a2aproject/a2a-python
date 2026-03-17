@@ -232,16 +232,13 @@ def serve(task_store: TaskStore) -> None:
         grpc_port,
     )
 
-    async def _run_servers():
-        await grpc_server.start()
-        try:
-            await uvicorn_server.serve()
-        finally:
-            # Gracefully stop the gRPC server when uvicorn shuts down.
-            await grpc_server.stop(1)
-
-    # asyncio.run() is the modern way to run a top-level async function.
-    asyncio.run(_run_servers())
+    loop = asyncio.get_event_loop()
+    loop.run_until_complete(grpc_server.start())
+    loop.run_until_complete(
+        asyncio.gather(
+            uvicorn_server.serve(), grpc_server.wait_for_termination()
+        )
+    )
 
 
 def main() -> None:
