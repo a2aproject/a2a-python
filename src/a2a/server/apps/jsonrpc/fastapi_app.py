@@ -1,5 +1,3 @@
-import importlib.resources
-import json
 import logging
 
 from collections.abc import Awaitable, Callable
@@ -34,43 +32,6 @@ from a2a.utils.constants import (
 
 
 logger = logging.getLogger(__name__)
-
-
-class A2AFastAPI(FastAPI):
-    """A FastAPI application that adds A2A-specific OpenAPI components."""
-
-    _a2a_components_added: bool = False
-
-    def openapi(self) -> dict[str, Any]:
-        """Generates the OpenAPI schema for the application."""
-        if self.openapi_schema:
-            return self.openapi_schema
-
-        # Try to use the a2a.json schema generated from the proto file
-        # if available, instead of generating one from the python types.
-        try:
-            from a2a import types  # noqa: PLC0415
-
-            schema_file = importlib.resources.files(types).joinpath('a2a.json')
-            if schema_file.is_file():
-                self.openapi_schema = json.loads(
-                    schema_file.read_text(encoding='utf-8')
-                )
-                if self.openapi_schema:
-                    return self.openapi_schema
-        except Exception:  # noqa: BLE001
-            logger.warning(
-                "Could not load 'a2a.json' from 'a2a.types'. Falling back to auto-generation."
-            )
-
-        openapi_schema = super().openapi()
-        if not self._a2a_components_added:
-            # A2ARequest is now a Union type of proto messages, so we can't use
-            # model_json_schema. Instead, we just mark it as added without
-            # adding the schema since proto types don't have Pydantic schemas.
-            # The OpenAPI schema will still be functional for the endpoints.
-            self._a2a_components_added = True
-        return openapi_schema
 
 
 class A2AFastAPIApplication(JSONRPCApplication):
@@ -180,7 +141,7 @@ class A2AFastAPIApplication(JSONRPCApplication):
         Returns:
             A configured FastAPI application instance.
         """
-        app = A2AFastAPI(**kwargs)
+        app = FastAPI(**kwargs)
 
         self.add_routes_to_app(app, agent_card_url, rpc_url)
 
