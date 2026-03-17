@@ -624,5 +624,33 @@ class TestTenantExtraction:
         assert context.tenant == ''
 
 
+@pytest.mark.anyio
+async def test_global_http_exception_handler_returns_rpc_status(
+    client: AsyncClient,
+) -> None:
+    """Test that a standard FastAPI 404 is transformed into the A2A google.rpc.Status format."""
+
+    # Send a request to an endpoint that does not exist
+    response = await client.get('/non-existent-route')
+
+    # Verify it returns a 404 with standard application/json
+    assert response.status_code == 404
+    assert response.headers.get('content-type') == 'application/json'
+
+    data = response.json()
+
+    # Assert the payload is wrapped in the "error" envelope
+    assert 'error' in data
+    error_payload = data['error']
+
+    # Assert it has the correct AIP-193 format
+    assert error_payload['code'] == 404
+    assert error_payload['status'] == 'NOT_FOUND'
+    assert 'Not Found' in error_payload['message']
+
+    # Standard HTTP errors shouldn't leak details
+    assert 'details' not in error_payload
+
+
 if __name__ == '__main__':
     pytest.main([__file__])

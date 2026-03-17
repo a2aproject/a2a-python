@@ -14,6 +14,7 @@ agentic
 AGrpc
 aio
 aiomysql
+AIP
 alg
 amannn
 aproject
