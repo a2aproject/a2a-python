@@ -14,6 +14,7 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     Task,
     TaskState,
     TaskStatus,
@@ -27,6 +28,13 @@ class TestResponseHelpers(unittest.TestCase):
             description='Test Description',
             version='1.0',
             capabilities=AgentCapabilities(extended_agent_card=False),
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.v03.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='0.3',
+                ),
+            ],
         )
         result = agent_card_to_dict(card)
         self.assertNotIn('supportsAuthenticatedExtendedCard', result)
@@ -38,11 +46,180 @@ class TestResponseHelpers(unittest.TestCase):
             description='Test Description',
             version='1.0',
             capabilities=AgentCapabilities(extended_agent_card=True),
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.v03.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='0.3',
+                ),
+            ],
         )
         result = agent_card_to_dict(card)
         self.assertIn('supportsAuthenticatedExtendedCard', result)
         self.assertTrue(result['supportsAuthenticatedExtendedCard'])
         self.assertEqual(result['name'], 'Test Agent')
+
+    def test_agent_card_to_dict_all_transports_all_versions(self) -> None:
+
+        card = AgentCard(
+            name='Complex Agent',
+            description='Agent with many interfaces',
+            version='1.2.3',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.v10.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='1.0.0',
+                ),
+                AgentInterface(
+                    url='http://jsonrpc.v03.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='0.3.0',
+                ),
+                AgentInterface(
+                    url='http://grpc.v10.com',
+                    protocol_binding='GRPC',
+                    protocol_version='1.0.0',
+                ),
+                AgentInterface(
+                    url='http://grpc.v03.com',
+                    protocol_binding='GRPC',
+                    protocol_version='0.3.0',
+                ),
+                AgentInterface(
+                    url='http://httpjson.v10.com',
+                    protocol_binding='HTTP+JSON',
+                    protocol_version='1.0.0',
+                ),
+                AgentInterface(
+                    url='http://httpjson.v03.com',
+                    protocol_binding='HTTP+JSON',
+                    protocol_version='0.3.0',
+                ),
+            ],
+        )
+
+        result = agent_card_to_dict(card)
+
+        expected = {
+            'name': 'Complex Agent',
+            'description': 'Agent with many interfaces',
+            'version': '1.2.3',
+            'supportedInterfaces': [
+                {
+                    'url': 'http://jsonrpc.v10.com',
+                    'protocolBinding': 'JSONRPC',
+                    'protocolVersion': '1.0.0',
+                },
+                {
+                    'url': 'http://jsonrpc.v03.com',
+                    'protocolBinding': 'JSONRPC',
+                    'protocolVersion': '0.3.0',
+                },
+                {
+                    'url': 'http://grpc.v10.com',
+                    'protocolBinding': 'GRPC',
+                    'protocolVersion': '1.0.0',
+                },
+                {
+                    'url': 'http://grpc.v03.com',
+                    'protocolBinding': 'GRPC',
+                    'protocolVersion': '0.3.0',
+                },
+                {
+                    'url': 'http://httpjson.v10.com',
+                    'protocolBinding': 'HTTP+JSON',
+                    'protocolVersion': '1.0.0',
+                },
+                {
+                    'url': 'http://httpjson.v03.com',
+                    'protocolBinding': 'HTTP+JSON',
+                    'protocolVersion': '0.3.0',
+                },
+            ],
+            # Compatibility fields (v0.3)
+            'url': 'http://jsonrpc.v03.com',
+            'preferredTransport': 'JSONRPC',
+            'protocolVersion': '0.3.0',
+            'additionalInterfaces': [
+                {'url': 'http://grpc.v03.com', 'transport': 'GRPC'},
+                {'url': 'http://httpjson.v03.com', 'transport': 'HTTP+JSON'},
+            ],
+            'capabilities': {},
+            'defaultInputModes': [],
+            'defaultOutputModes': [],
+            'skills': [],
+        }
+
+        self.assertEqual(result, expected)
+
+    def test_agent_card_to_dict_only_1_0_interfaces(self) -> None:
+        card = AgentCard(
+            name='Modern Agent',
+            description='Agent with only 1.0 interfaces',
+            version='2.0.0',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.v10.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='1.0.0',
+                ),
+            ],
+        )
+
+        result = agent_card_to_dict(card)
+
+        expected = {
+            'name': 'Modern Agent',
+            'description': 'Agent with only 1.0 interfaces',
+            'version': '2.0.0',
+            'supportedInterfaces': [
+                {
+                    'url': 'http://jsonrpc.v10.com',
+                    'protocolBinding': 'JSONRPC',
+                    'protocolVersion': '1.0.0',
+                },
+            ],
+        }
+
+        self.assertEqual(result, expected)
+
+    def test_agent_card_to_dict_single_interface_no_version(self) -> None:
+        card = AgentCard(
+            name='Legacy Agent',
+            description='Agent with no protocol version',
+            version='1.0.0',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.legacy.com',
+                    protocol_binding='JSONRPC',
+                ),
+            ],
+        )
+
+        result = agent_card_to_dict(card)
+
+        expected = {
+            'name': 'Legacy Agent',
+            'description': 'Agent with no protocol version',
+            'version': '1.0.0',
+            'supportedInterfaces': [
+                {
+                    'url': 'http://jsonrpc.legacy.com',
+                    'protocolBinding': 'JSONRPC',
+                },
+            ],
+            # Compatibility fields (v0.3)
+            'url': 'http://jsonrpc.legacy.com',
+            'preferredTransport': 'JSONRPC',
+            'protocolVersion': '',
+            'capabilities': {},
+            'defaultInputModes': [],
+            'defaultOutputModes': [],
+            'skills': [],
+        }
+
+        self.assertEqual(result, expected)
 
     def test_build_error_response_with_a2a_error(self) -> None:
         request_id = 'req1'

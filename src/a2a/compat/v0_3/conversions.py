@@ -9,8 +9,10 @@ if TYPE_CHECKING:
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.compat.v0_3 import types as types_v03
+from a2a.compat.v0_3.versions import is_legacy_version
 from a2a.server.models import PushNotificationConfigModel, TaskModel
 from a2a.types import a2a_pb2 as pb2_v10
+from a2a.utils import constants, errors
 
 
 _COMPAT_TO_CORE_TASK_STATE: dict[types_v03.TaskState, Any] = {
@@ -676,7 +678,7 @@ def to_core_agent_interface(
     return pb2_v10.AgentInterface(
         url=compat_interface.url,
         protocol_binding=compat_interface.transport,
-        protocol_version='0.3.0',  # Defaulting for legacy
+        protocol_version=constants.PROTOCOL_VERSION_0_3,  # Defaulting for legacy
     )
 
 
@@ -857,7 +859,8 @@ def to_core_agent_card(compat_card: types_v03.AgentCard) -> pb2_v10.AgentCard:
     primary_interface = pb2_v10.AgentInterface(
         url=compat_card.url,
         protocol_binding=compat_card.preferred_transport or 'JSONRPC',
-        protocol_version=compat_card.protocol_version or '0.3.0',
+        protocol_version=compat_card.protocol_version
+        or constants.PROTOCOL_VERSION_0_3,
     )
     core_card.supported_interfaces.append(primary_interface)
 
@@ -918,21 +921,23 @@ def to_core_agent_card(compat_card: types_v03.AgentCard) -> pb2_v10.AgentCard:
 def to_compat_agent_card(core_card: pb2_v10.AgentCard) -> types_v03.AgentCard:
     # Map supported interfaces back to legacy layout
     """Convert agent card to v0.3 compat type."""
-    primary_interface = (
-        core_card.supported_interfaces[0]
-        if core_card.supported_interfaces
-        else pb2_v10.AgentInterface(
-            url='', protocol_binding='JSONRPC', protocol_version='0.3.0'
+    compat_interfaces = [
+        interface
+        for interface in core_card.supported_interfaces
+        if (
+            (not interface.protocol_version)
+            or is_legacy_version(interface.protocol_version)
         )
-    )
-    additional_interfaces = (
-        [
-            to_compat_agent_interface(i)
-            for i in core_card.supported_interfaces[1:]
-        ]
-        if len(core_card.supported_interfaces) > 1
-        else None
-    )
+    ]
+    if not compat_interfaces:
+        raise errors.VersionNotSupportedError(
+            'AgentCard must have at least one interface with compatible protocol version.'
+        )
+
+    primary_interface = compat_interfaces[0]
+    additional_interfaces = [
+        to_compat_agent_interface(i) for i in compat_interfaces[1:]
+    ]
 
     compat_cap = to_compat_agent_capabilities(core_card.capabilities)
     supports_authenticated_extended_card = (
@@ -948,7 +953,7 @@ def to_compat_agent_card(core_card: pb2_v10.AgentCard) -> types_v03.AgentCard:
         url=primary_interface.url,
         preferred_transport=primary_interface.protocol_binding,
         protocol_version=primary_interface.protocol_version,
-        additional_interfaces=additional_interfaces,
+        additional_interfaces=additional_interfaces or None,
         provider=to_compat_agent_provider(core_card.provider)
         if core_card.HasField('provider')
         else None,
