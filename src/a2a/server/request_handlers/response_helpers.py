@@ -87,8 +87,11 @@ def agent_card_to_dict(card: AgentCard) -> dict[str, Any]:
     """Convert AgentCard to dict and inject backward compatibility fields."""
     result = MessageToDict(card)
 
-    compat_card = to_compat_agent_card(card)
-    compat_dict = compat_card.model_dump(exclude_none=True)
+    try:
+        compat_card = to_compat_agent_card(card)
+        compat_dict = compat_card.model_dump(exclude_none=True)
+    except VersionNotSupportedError:
+        compat_dict = {}
 
     # Do not include supportsAuthenticatedExtendedCard if false
     if not compat_dict.get('supportsAuthenticatedExtendedCard'):
