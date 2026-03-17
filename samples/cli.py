@@ -1,12 +1,55 @@
 import argparse
 import asyncio
-import contextlib
+import os
+import signal
 import uuid
 
+from typing import Any
+
+import grpc
 import httpx
 
 from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
+
+
+async def _handle_stream(
+    stream: Any, current_task_id: str | None
+) -> str | None:
+    async for event, task in stream:
+        if not task:
+            continue
+        if not current_task_id:
+            current_task_id = task.id
+
+        if event:
+            if event.HasField('status_update'):
+                state_name = TaskState.Name(event.status_update.status.state)
+                print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
+                if event.status_update.status.HasField('message'):
+                    for part in event.status_update.status.message.parts:
+                        if part.text:
+                            print(part.text, end=' ')
+                print()
+
+                if (
+                    event.status_update.status.state
+                    == TaskState.TASK_STATE_COMPLETED
+                ):
+                    current_task_id = None
+                    print('--- Task Completed ---')
+
+            elif event.HasField('artifact_update'):
+                print(
+                    f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
+                    end=' ',
+                )
+                for part in event.artifact_update.artifact.parts:
+                    if part.text:
+                        print(part.text, end=' ')
+                print()
+
+    return current_task_id
 
 
 async def main() -> None:
@@ -48,7 +91,8 @@ async def main() -> None:
 
     while True:
         try:
-            user_input = input('You: ')
+            loop = asyncio.get_running_loop()
+            user_input = await loop.run_in_executor(None, input, 'You: ')
         except KeyboardInterrupt:
             break
 
@@ -69,49 +113,13 @@ async def main() -> None:
 
         try:
             stream = client.send_message(request)
-            async for event, task in stream:
-                if not task:
-                    continue
-                if not current_task_id:
-                    current_task_id = task.id
-
-                if event:
-                    if event.HasField('status_update'):
-                        state_name = TaskState.Name(
-                            event.status_update.status.state
-                        )
-                        print(f'TaskStatusUpdate [{state_name}]:', end=' ')
-                        if event.status_update.status.HasField('message'):
-                            for (
-                                part
-                            ) in event.status_update.status.message.parts:
-                                if part.text:
-                                    print(part.text, end=' ')
-                        print()
-
-                        if (
-                            event.status_update.status.state
-                            == TaskState.TASK_STATE_COMPLETED
-                        ):
-                            current_task_id = None
-                            print('--- Task Completed ---')
-
-                    elif event.HasField('artifact_update'):
-                        print(
-                            f'TaskArtifactUpdate [{event.artifact_update.artifact.name}]:',
-                            end=' ',
-                        )
-                        for part in event.artifact_update.artifact.parts:
-                            if part.text:
-                                print(part.text, end=' ')
-                        print()
-
-        except Exception as e:
+            current_task_id = await _handle_stream(stream, current_task_id)
+        except (httpx.RequestError, grpc.RpcError) as e:
             print(f'Error communicating with agent: {e}')
 
     await client.close()
 
 
 if __name__ == '__main__':
-    with contextlib.suppress(KeyboardInterrupt, asyncio.CancelledError):
-        asyncio.run(main())
+    signal.signal(signal.SIGINT, lambda sig, frame: os._exit(0))
+    asyncio.run(main())

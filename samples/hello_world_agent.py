@@ -207,14 +207,9 @@ async def serve(
     )
     jsonrpc_app = jsonrpc_app_builder.build()
 
-    main_app = FastAPI()
-    main_app.mount('/a2a/jsonrpc', jsonrpc_app)
-    main_app.mount('/a2a/rest', rest_app)
-
-    @main_app.get('/.well-known/agent-card.json')
-    def get_agent_card() -> Any:
-        """Return the agent card metadata used for automatic client connection."""
-        return MessageToDict(agent_card, preserving_proto_field_name=False)
+    app = FastAPI()
+    jsonrpc_app_builder.add_routes_to_app(app, rpc_url='/a2a/jsonrpc/')
+    app.mount('/a2a/rest', rest_app)
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')
@@ -228,7 +223,7 @@ async def serve(
         compat_servicer, compat_grpc_server
     )
 
-    config = uvicorn.Config(main_app, host=host, port=port)
+    config = uvicorn.Config(app, host=host, port=port)
     uvicorn_server = uvicorn.Server(config)
 
     logger.info('Starting Sample Agent servers:')
