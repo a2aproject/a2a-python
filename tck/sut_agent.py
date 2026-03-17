@@ -10,6 +10,7 @@ import uvicorn
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.apps import A2AStarletteApplication
+from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
@@ -32,6 +33,7 @@ from a2a.types import (
 
 
 JSONRPC_URL = '/a2a/jsonrpc'
+REST_URL = '/a2a/rest'
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('SUTAgent')
@@ -172,12 +174,12 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    server = A2AStarletteApplication(
+    server = A2ARESTFastAPIApplication(
         agent_card=agent_card,
         http_handler=request_handler,
     )
 
-    app = server.build(rpc_url=JSONRPC_URL)
+    app = server.build(rpc_url=REST_URL)
 
     logger.info('Starting HTTP server on port %s...', http_port)
     uvicorn.run(app, host='127.0.0.1', port=http_port, log_level='info')
