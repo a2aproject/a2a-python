@@ -1,10 +1,12 @@
 ---
 name: Run Unit Tests
 on:
-  pull_request:
+  push:
     branches: [main, 1.0-dev]
+  pull_request:
 permissions:
   contents: read
+
 jobs:
   test:
     name: Test with Python ${{ matrix.python-version }}
@@ -52,11 +54,69 @@ jobs:
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Install Buf
-        uses: bufbuild/buf-setup-action@v1
+
+
+      # Coverage comparison for PRs (only on Python 3.13 to avoid duplicate work)
+      - name: Checkout Base Branch
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.base.ref || 'main' }}
+          clean: true
+        
       - name: Install dependencies
         run: uv sync --locked
-      - name: Run tests and check coverage
+
+      - name: Run coverage (Base)
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        run: |
+          uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage
+          mv coverage.json /tmp/coverage-base.json
+
+      - name: Checkout PR Branch (Restore)
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        uses: actions/checkout@v4
+        with:
+          clean: true
+
+      - name: Run coverage (PR)
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        run: |
+          uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage --cov-report=term --cov-fail-under=88
+          mv coverage.json coverage-pr.json
+          cp /tmp/coverage-base.json coverage-base.json
+
+      - name: Save Metadata
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        run: |
+          echo ${{ github.event.number }} > ./PR_NUMBER
+          echo ${{ github.event.pull_request.base.ref || 'main' }} > ./BASE_BRANCH
+
+      - name: Upload Coverage Artifacts
+        uses: actions/upload-artifact@v4
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        with:
+          name: coverage-data
+          path: |
+            coverage-base.json
+            coverage-pr.json
+            coverage/
+            PR_NUMBER
+            BASE_BRANCH
+          retention-days: 1
+
+      # Run standard tests (for matrix items that didn't run coverage PR)
+      - name: Run tests (Standard)
+        if: matrix.python-version != '3.13' || github.event_name != 'pull_request'
         run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=88
+
+      - name: Upload Artifact (base)
+        uses: actions/upload-artifact@v4
+        if: github.event_name != 'pull_request' && matrix.python-version == '3.13'
+        with:
+          name: coverage-report
+          path: coverage
+          retention-days: 14
+
       - name: Show coverage summary in log
         run: uv run coverage report

@@ -75,8 +75,6 @@ if [ -n "$CHANGED_FILES" ]; then
     echo "Files to be formatted:"
     echo "$CHANGED_FILES"
 
-    echo "Running autoflake..."
-    run_formatter "$CHANGED_FILES" autoflake -i -r --remove-all-unused-imports
     echo "Running ruff check (fix-only)..."
     run_formatter "$CHANGED_FILES" ruff check --fix-only $RUFF_UNSAFE_FIXES_FLAG
     echo "Running ruff format..."

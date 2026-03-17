@@ -1,4 +1,5 @@
 import os
+from unittest.mock import MagicMock
 
 from collections.abc import AsyncGenerator
 
@@ -42,6 +43,9 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
     TaskStatus,
+)
+from a2a.compat.v0_3.conversions import (
+    core_to_compat_push_notification_config_model,
 )
 
 
@@ -779,3 +783,88 @@ async def test_get_0_3_push_notification_config_detailed(
     assert retrieved.token == 'legacy-token'
     assert retrieved.authentication.scheme == 'bearer'
     assert retrieved.authentication.credentials == 'legacy-creds'
+
+
+@pytest.mark.asyncio
+async def test_custom_conversion():
+    engine = MagicMock()
+
+    # Custom callables
+    mock_to_orm = MagicMock(
+        return_value=PushNotificationConfigModel(task_id='t1', config_id='c1')
+    )
+    mock_from_orm = MagicMock(
+        return_value=TaskPushNotificationConfig(id='custom_config')
+    )
+    store = DatabasePushNotificationConfigStore(
+        engine=engine,
+        core_to_model_conversion=mock_to_orm,
+        model_to_core_conversion=mock_from_orm,
+    )
+
+    config = TaskPushNotificationConfig(id='orig')
+    model = store._to_orm('t1', config, 'owner')
+    assert model.config_id == 'c1'
+    mock_to_orm.assert_called_once_with('t1', config, 'owner', None)
+
+    model_instance = PushNotificationConfigModel(task_id='t1', config_id='c1')
+    loaded_config = store._from_orm(model_instance)
+    assert loaded_config.id == 'custom_config'
+    mock_from_orm.assert_called_once_with(model_instance)
+
+
+@pytest.mark.asyncio
+async def test_core_to_0_3_model_conversion(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test storing and retrieving push notification configs in v0.3 format using conversion utilities.
+
+    Tests both class-level and instance-level assignment of the conversion function.
+    Setting the model_to_core_conversion to compat_push_notification_config_model_to_core would be redundant as
+    it is always called when retrieving 0.3 PushNotificationConfigs.
+    """
+    store = db_store_parameterized
+
+    # Set the v0.3 persistence utilities
+    store.core_to_model_conversion = (
+        core_to_compat_push_notification_config_model
+    )
+
+    task_id = 'v03-persistence-task'
+    config_id = 'c1'
+    original_config = TaskPushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+    )
+    # 1. Save the config (will use core_to_compat_push_notification_config_model)
+    await store.set_info(task_id, original_config, MINIMAL_CALL_CONTEXT)
+
+    # 2. Verify it's stored in v0.3 format directly in DB
+    async with store.async_session_maker() as session:
+        db_model = await session.get(store.config_model, (task_id, config_id))
+        assert db_model is not None
+        assert db_model.protocol_version == '0.3'
+        # v0.3 JSON structure for PushNotificationConfig (unwrapped)
+        import json
+
+        raw_data = db_model.config_data
+        if store._fernet:
+            raw_data = store._fernet.decrypt(raw_data)
+        data = json.loads(raw_data.decode('utf-8'))
+        assert data['url'] == 'https://example.com/push'
+        assert data['id'] == 'c1'
+        assert data['token'] == 'legacy-token'
+        assert 'taskId' not in data
+
+    # 3. Retrieve the config (will use compat_push_notification_config_model_to_core)
+    retrieved_configs = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
+    assert len(retrieved_configs) == 1
+    retrieved = retrieved_configs[0]
+    assert retrieved.id == original_config.id
+    assert retrieved.url == original_config.url
+    assert retrieved.token == original_config.token
+
+    # Reset conversion attributes
+    store.core_to_model_conversion = None
+    await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)

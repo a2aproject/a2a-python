@@ -1,4 +1,5 @@
 import logging
+import json
 
 from typing import Any
 from unittest.mock import MagicMock
@@ -337,6 +338,71 @@ async def test_streaming_message_request_body_consumption(
 
     # Verify that the request handler was called
     request_handler.on_message_send_stream.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_streaming_content_verification(
+    streaming_client: AsyncClient, request_handler: MagicMock
+) -> None:
+    """Test that streaming endpoint returns correct SSE content."""
+
+    async def mock_stream_response():
+        yield Message(
+            message_id='stream_msg_1',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='First chunk')],
+        )
+        yield Message(
+            message_id='stream_msg_2',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='Second chunk')],
+        )
+
+    request_handler.on_message_send_stream.return_value = mock_stream_response()
+
+    request = a2a_pb2.SendMessageRequest(
+        message=a2a_pb2.Message(
+            message_id='test_stream_msg',
+            role=a2a_pb2.ROLE_USER,
+            parts=[a2a_pb2.Part(text='Test message')],
+        ),
+    )
+
+    response = await streaming_client.post(
+        '/message:stream',
+        json=json_format.MessageToDict(request),
+        headers={'Accept': 'text/event-stream'},
+    )
+
+    response.raise_for_status()
+
+    # Read the response content
+    lines = [line async for line in response.aiter_lines()]
+
+    # SSE format is "data: <json>\n\n"
+    # httpx.aiter_lines() will give us each line.
+    data_lines = [
+        json.loads(line[6:]) for line in lines if line.startswith('data: ')
+    ]
+
+    expected_data_lines = [
+        {
+            'message': {
+                'messageId': 'stream_msg_1',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'First chunk'}],
+            }
+        },
+        {
+            'message': {
+                'messageId': 'stream_msg_2',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'Second chunk'}],
+            }
+        },
+    ]
+
+    assert data_lines == expected_data_lines
 
 
 @pytest.mark.anyio

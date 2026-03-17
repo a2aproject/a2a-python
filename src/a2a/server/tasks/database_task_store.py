@@ -1,25 +1,17 @@
 import logging
 
+from collections.abc import Callable
 from datetime import datetime, timezone
 
 
 try:
-    from sqlalchemy import (
-        Table,
-        and_,
-        delete,
-        func,
-        or_,
-        select,
-    )
+    from sqlalchemy import Table, and_, delete, func, or_, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
         async_sessionmaker,
     )
-    from sqlalchemy.orm import (
-        class_mapper,
-    )
+    from sqlalchemy.orm import class_mapper
 except ImportError as e:
     raise ImportError(
         'DatabaseTaskStore requires SQLAlchemy and a database driver. '
@@ -29,11 +21,11 @@ except ImportError as e:
         "'pip install a2a-sdk[sqlite]', "
         "or 'pip install a2a-sdk[sql]'"
     ) from e
-
 from google.protobuf.json_format import MessageToDict, ParseDict
 
-from a2a.compat.v0_3 import conversions
-from a2a.compat.v0_3 import types as types_v03
+from a2a.compat.v0_3.conversions import (
+    compat_task_model_to_core,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel, create_task_model
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -60,13 +52,18 @@ class DatabaseTaskStore(TaskStore):
     _initialized: bool
     task_model: type[TaskModel]
     owner_resolver: OwnerResolver
+    core_to_model_conversion: Callable[[Task, str], TaskModel] | None = None
+    model_to_core_conversion: Callable[[TaskModel], Task] | None = None
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         engine: AsyncEngine,
         create_table: bool = True,
         table_name: str = 'tasks',
         owner_resolver: OwnerResolver = resolve_user_scope,
+        core_to_model_conversion: Callable[[Task, str], TaskModel]
+        | None = None,
+        model_to_core_conversion: Callable[[TaskModel], Task] | None = None,
     ) -> None:
         """Initializes the DatabaseTaskStore.
 
@@ -75,6 +72,8 @@ class DatabaseTaskStore(TaskStore):
             create_table: If true, create tasks table on initialization.
             table_name: Name of the database table. Defaults to 'tasks'.
             owner_resolver: Function to resolve the owner from the context.
+            core_to_model_conversion: Optional function to convert a Task to a TaskModel.
+            model_to_core_conversion: Optional function to convert a TaskModel to a Task.
         """
         logger.debug(
             'Initializing DatabaseTaskStore with existing engine, table: %s',
@@ -87,6 +86,8 @@ class DatabaseTaskStore(TaskStore):
         self.create_table = create_table
         self._initialized = False
         self.owner_resolver = owner_resolver
+        self.core_to_model_conversion = core_to_model_conversion
+        self.model_to_core_conversion = model_to_core_conversion
 
         self.task_model = (
             TaskModel
@@ -119,6 +120,9 @@ class DatabaseTaskStore(TaskStore):
 
     def _to_orm(self, task: Task, owner: str) -> TaskModel:
         """Maps a Proto Task to a SQLAlchemy TaskModel instance."""
+        if self.core_to_model_conversion:
+            return self.core_to_model_conversion(task, owner)
+
         return self.task_model(
             id=task.id,
             context_id=task.context_id,
@@ -140,6 +144,9 @@ class DatabaseTaskStore(TaskStore):
 
     def _from_orm(self, task_model: TaskModel) -> Task:
         """Maps a SQLAlchemy TaskModel to a Proto Task instance."""
+        if self.model_to_core_conversion:
+            return self.model_to_core_conversion(task_model)
+
         if task_model.protocol_version == '1.0':
             task = Task(
                 id=task_model.id,
@@ -160,29 +167,7 @@ class DatabaseTaskStore(TaskStore):
             return task
 
         # Legacy conversion
-        legacy_task = types_v03.Task(
-            id=task_model.id,
-            context_id=task_model.context_id,
-            status=types_v03.TaskStatus.model_validate(task_model.status),
-            artifacts=(
-                [
-                    types_v03.Artifact.model_validate(a)
-                    for a in task_model.artifacts
-                ]
-                if task_model.artifacts
-                else []
-            ),
-            history=(
-                [
-                    types_v03.Message.model_validate(m)
-                    for m in task_model.history
-                ]
-                if task_model.history
-                else []
-            ),
-            metadata=task_model.task_metadata or {},
-        )
-        return conversions.to_core_task(legacy_task)
+        return compat_task_model_to_core(task_model)
 
     async def save(
         self, task: Task, context: ServerCallContext | None = None
