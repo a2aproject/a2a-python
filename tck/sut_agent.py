@@ -203,7 +203,7 @@ def serve(task_store: TaskStore) -> None:
         agent_card=agent_card,
         http_handler=request_handler,
     )
-    jsonrpc_server.add_routes_to_app(main_app, rpc_url=JSONRPC_URL)
+    json_rpc_app = jsonrpc_server.build(rpc_url=JSONRPC_URL)
 
     # REST
     rest_server = A2ARESTFastAPIApplication(
@@ -212,6 +212,7 @@ def serve(task_store: TaskStore) -> None:
     )
     rest_app = rest_server.build(rpc_url=REST_URL)
     main_app.mount('', rest_app)
+    main_app.mount('', json_rpc_app)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'
