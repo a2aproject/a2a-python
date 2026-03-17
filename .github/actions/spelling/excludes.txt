@@ -93,4 +93,4 @@ CHANGELOG.md
 ^tests/
 .pre-commit-config.yaml
 (?:^|/)a2a\.json$
-
+release-please-config.json
