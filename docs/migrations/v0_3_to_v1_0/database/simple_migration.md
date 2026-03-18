@@ -2,6 +2,8 @@
 
 This guide is for users who can afford a short period of downtime (typically a few minutes) during the migration from A2A protocol v0.3 to v1.0. This is the recommended path for single-instance applications or non-critical services.
 
+---
+
 > [!WARNING]
 > **Safety First:**
 > Before proceeding, ensure you have a backup of your database.

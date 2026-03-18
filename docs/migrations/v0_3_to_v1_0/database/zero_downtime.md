@@ -46,9 +46,12 @@ uv run a2a-db --database-url "your-database-url"
 > Protocol v1.0 is designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
 
 #### ✅ How to Verify
-Run `uv run a2a-db current` to ensure the migration was applied successfully.
+Confirm the schema is at the correct version:
 
----
+```bash
+uv run a2a-db current
+```
+The output should show the latest revision ID (e.g., `38ce57e08137`).
 
 ### Step 2: Rolling Deployment in Compatibility Mode
 
@@ -82,8 +85,6 @@ Deploy the new code by restarting your instances one by one.
 
 #### ✅ How to Verify
 Verify that v1.0 instances are successfully writing to the database. In the `tasks` and `push_notification_configs` tables, new rows created during this phase should have `protocol_version` set to `0.3`.
-
----
 
 ### Step 3: Transition to v1.0 Mode
 
@@ -121,6 +122,7 @@ The A2A `DatabaseStore` classes follow a version-aware read/write pattern:
 
 This allows v1.0 instances to read *all* existing data regardless of when it was written.
 
+---
 
 ## 🧩 Resources
 - **[a2a-db CLI](../../../../src/a2a/migrations/README.md)**: The primary tool for executing schema migrations.
