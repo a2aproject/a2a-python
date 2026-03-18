@@ -161,6 +161,32 @@ async def test_create_a2a_rest_fastapi_app_with_present_deps_succeeds(
 
 
 @pytest.mark.anyio
+async def test_build_a2a_rest_fastapi_app_with_dependencies_succeeds(
+    agent_card: AgentCard, request_handler: RequestHandler
+):
+    from fastapi import Depends
+
+    def mock_dependency():
+        return 'mock'
+
+    app = A2ARESTFastAPIApplication(agent_card, request_handler)
+    fastapi_app = app.build(
+        agent_card_url='/well-known/agent.json',
+        rpc_url='',
+        dependencies=[Depends(mock_dependency)],
+    )
+
+    from fastapi.routing import APIRoute
+
+    # Check that routes have the dependency
+    for route in fastapi_app.routes:
+        if getattr(route, 'path', '') in ['/v1/message:send']:
+            assert isinstance(route, APIRoute)
+            assert len(route.dependencies) == 1
+            assert route.dependencies[0].dependency == mock_dependency
+
+
+@pytest.mark.anyio
 async def test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror(
     agent_card: AgentCard,
     request_handler: RequestHandler,
