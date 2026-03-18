@@ -7,21 +7,20 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Router
+    from starlette.routing import Route
 else:
     try:
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.routing import Router
+        from starlette.routing import Route
     except ImportError:
-        Router = Any
+        Route = Any
         Request = Any
         Response = Any
         JSONResponse = Any
 
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from a2a.utils.helpers import maybe_await
 
 
@@ -36,8 +35,7 @@ class AgentCardRouter:
         agent_card: AgentCard,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
-        agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
-        rpc_url: str = '',
+        card_url: str = '/',
     ) -> None:
         """Initializes the AgentCardRouter.
 
@@ -45,26 +43,10 @@ class AgentCardRouter:
             agent_card: The AgentCard describing the agent's capabilities.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
-            agent_card_url: The URL for the agent card endpoint.
-            rpc_url: The URL prefix for the endpoint.
+            card_url: The URL for the agent card endpoint.
         """
         self.agent_card = agent_card
         self.card_modifier = card_modifier
-
-        self.router = Router()
-        self._setup_router(agent_card_url, rpc_url)
-
-    def _setup_router(
-        self,
-        agent_card_url: str,
-        rpc_url: str,
-    ) -> None:
-        """Configures the APIRouter with the A2A endpoints.
-
-        Args:
-            agent_card_url: The URL for the agent card endpoint.
-            rpc_url: The URL prefix for the endpoint.
-        """
 
         async def get_agent_card(request: Request) -> Response:
             card_to_serve = self.agent_card
@@ -74,6 +56,4 @@ class AgentCardRouter:
                 )
             return JSONResponse(agent_card_to_dict(card_to_serve))
 
-        self.router.add_route(
-            f'{rpc_url}{agent_card_url}', get_agent_card, methods=['GET']
-        )
+        self.route = Route(path=card_url, endpoint=get_agent_card, methods=['GET'])
