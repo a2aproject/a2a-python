@@ -27,9 +27,9 @@ pip install "a2a-sdk[db-cli]"
 
 Zero-downtime migration requires an "Expand, Migrate, Contract" pattern. It means we first expand the schema, then migrate the code to coexist with the old format, and finally transition fully to the new v1.0 standards.
 
-### Step 1: Expand Schema
+### Step 1: Apply Schema Updates
 
-Apply the v1.0 schema updates to your database using the `a2a-db` migration tool. This adds new columns (`owner`, `protocol_version`, `last_updated`) while leaving existing v0.3 data intact.
+Run the `a2a-db` migration tool to update your tables. This adds new columns (`owner`, `protocol_version`, `last_updated`) while leaving existing v0.3 data intact.
 
 ```bash
 # Run migration against your target database
@@ -43,7 +43,7 @@ uv run a2a-db --database-url "your-database-url"
 > [!NOTE]
 > All new columns are nullable or have default values. Your existing v0.3 code will continue to work normally after this step is completed.
 >
-> Protocol v1.0 is designed to be backward compatible by default. After this step, your new v0.1 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
+> Protocol v1.0 is designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
 
 #### ✅ How to Verify
 Run `uv run a2a-db current` to ensure the migration was applied successfully.

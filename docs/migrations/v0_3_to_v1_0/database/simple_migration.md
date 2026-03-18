@@ -24,7 +24,8 @@ pip install "a2a-sdk[db-cli]"
 ## 🚀 Migration Steps
 
 ### Step 1: Apply Schema Updates
-Run the `a2a-db` tool to update your tables.
+
+Run the `a2a-db` migration tool to update your tables. This adds new columns (`owner`, `protocol_version`, `last_updated`) while leaving existing v0.3 data intact.
 
 ```bash
 # Run migration against your target database
@@ -38,9 +39,10 @@ uv run a2a-db --database-url "your-database-url"
 > [!NOTE]
 > All new columns are nullable or have default values.
 >
-> Protocol v1.0 is designed to be backward compatible by default. After this step, your new v0.1 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
+> Protocol v1.0 is designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
 
 ### Step 2: Verify the Migration
+
 Confirm the schema is at the correct version:
 
 ```bash
@@ -49,6 +51,7 @@ uv run a2a-db current
 The output should show the latest revision ID (e.g., `38ce57e08137`).
 
 ### Step 3: Update Your Application Code
+
 Upgrade your application to use the v1.0 SDK.
 
 ---
