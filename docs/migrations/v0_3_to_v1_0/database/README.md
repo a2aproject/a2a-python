@@ -20,5 +20,3 @@ Depending on your application's availability requirements, choose one of the fol
 The v1.0 database migration involves:
 1.  **Schema Updates**: Adding `protocol_version`, `owner`, and `last_updated` columns to the `tasks` and `push_notification_configs` tables.
 2.  **Storage Model**: Transitioning from Pydantic-based JSON to Protobuf-based JSON serialization for better interoperability and performance.
-
----
