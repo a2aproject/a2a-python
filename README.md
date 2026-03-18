@@ -68,6 +68,7 @@ Install the core SDK and any desired extras using your preferred package manager
 | **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
 | **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
 | **Encryption**           | `uv add "a2a-sdk[encryption]"`             | `pip install "a2a-sdk[encryption]"`          |
+| **Vertex AI Task Store** | `uv add "a2a-sdk[vertex]"`                 | `pip install "a2a-sdk[vertex]"`              |
 |                          |                                            |                                              |
 | **Database Drivers**     |                                            |                                              |
 | **PostgreSQL**           | `uv add "a2a-sdk[postgresql]"`             | `pip install "a2a-sdk[postgresql]"`          |
