@@ -91,7 +91,18 @@ uv run a2a-db downgrade base
 uv run a2a-db downgrade head:base --sql
 ```
 
-Note: All flags except `--add_columns_owner_last_updated-default-owner` can be used during rollbacks.
+### 6. Verifying Current Status
+To see the current revision applied to your database:
+
+```bash
+uv run a2a-db current
+
+# To see more details (like revision dates, if available)
+uv run a2a-db current -v
+```
+
+> [!NOTE]
+> All flags except `--add_columns_owner_last_updated-default-owner` can be used during status checks.
 
 ---
 

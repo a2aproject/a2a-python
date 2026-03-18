@@ -93,6 +93,12 @@ def create_parser() -> argparse.ArgumentParser:
     )
     _add_shared_args(down_parser, is_sub=True)
 
+    # Current command
+    current_parser = subparsers.add_parser(
+        'current', help='Display the current revision for a database'
+    )
+    _add_shared_args(current_parser, is_sub=True)
+
     return parser
 
 
@@ -152,5 +158,7 @@ def run_migrations() -> None:
     elif args.cmd == 'downgrade':
         logging.info('Downgrading database to %s', args.revision)
         command.downgrade(cfg, args.revision, sql=sql)
+    elif args.cmd == 'current':
+        command.current(cfg, verbose=verbose)
 
     logging.info('Done.')
