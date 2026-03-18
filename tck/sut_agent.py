@@ -8,25 +8,20 @@ from datetime import datetime, timezone
 import grpc.aio
 import uvicorn
 
-from starlette.applications import Starlette
+from fastapi import FastAPI
 
 import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc
 import a2a.types.a2a_pb2_grpc as a2a_grpc
-from fastapi import FastAPI
 
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps import (
-    A2ARESTFastAPIApplication,
-    A2AStarletteApplication,
-)
-from a2a.server.router import JsonRpcRouter, RestRouter, AgentCardRouter
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
+from a2a.server.router import AgentCardRouter, JsonRpcRouter, RestRouter
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (

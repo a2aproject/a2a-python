@@ -9,8 +9,8 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import ParseDict
-from jsonrpc.jsonrpc2 import JSONRPC20Request
+from google.protobuf.json_format import MessageToDict, ParseDict
+from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
@@ -28,10 +28,8 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError,
     MethodNotFoundError,
 )
-from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
-    agent_card_to_dict,
     build_error_response,
 )
 from a2a.types import A2ARequest
@@ -45,11 +43,16 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     SendMessageRequest,
+    SendMessageResponse,
     SubscribeToTaskRequest,
+    Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils import proto_utils
 from a2a.utils.errors import (
     A2AError,
+    ExtendedAgentCardNotConfiguredError,
+    TaskNotFoundError,
     UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await
@@ -234,12 +237,7 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self.handler = JSONRPCHandler(
-            agent_card=agent_card,
-            request_handler=http_handler,
-            extended_agent_card=extended_agent_card,
-            extended_card_modifier=extended_card_modifier,
-        )
+        self.http_handler = http_handler
         self._context_builder = context_builder or DefaultCallContextBuilder()
         self._max_content_length = max_content_length
         self.enable_v0_3_compat = enable_v0_3_compat
@@ -420,14 +418,21 @@ class JsonRpcDispatcher:
             call_context.state['request_id'] = request_id
 
             # Route streaming requests by method name
+            # Route streaming requests by method name
             if method in ('SendStreamingMessage', 'SubscribeToTask'):
-                return await self._process_streaming_request(
+                handler_result = await self._process_streaming_request(
                     request_id, specific_request, call_context
                 )
+            else:
+                try:
+                    raw_result = await self._process_non_streaming_request(
+                        request_id, specific_request, call_context
+                    )
+                    handler_result = JSONRPC20Response(result=raw_result, _id=request_id).data
+                except Exception as e:
+                    return self._generate_error_response(request_id, e)
 
-            return await self._process_non_streaming_request(
-                request_id, specific_request, call_context
-            )
+            return self._create_response(call_context, handler_result)
         except json.decoder.JSONDecodeError as e:
             traceback.print_exc()
             return self._generate_error_response(
@@ -451,7 +456,7 @@ class JsonRpcDispatcher:
         request_id: str | int | None,
         request_obj: A2ARequest,
         context: ServerCallContext,
-    ) -> Response:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
 
         Args:
@@ -460,31 +465,43 @@ class JsonRpcDispatcher:
             context: The ServerCallContext for the request.
 
         Returns:
-            An `EventSourceResponse` object to stream results to the client.
+            An async generator yielding JSON-RPC response dicts.
         """
-        handler_result: Any = None
-        # Check for streaming message request (same type as SendMessage, but handled differently)
-        if isinstance(
-            request_obj,
-            SendMessageRequest,
-        ):
-            handler_result = self.handler.on_message_send_stream(
-                request_obj, context
-            )
-        elif isinstance(request_obj, SubscribeToTaskRequest):
-            handler_result = self.handler.on_subscribe_to_task(
-                request_obj, context
+        if not self.agent_card.capabilities.streaming:
+            raise UnsupportedOperationError(
+                message='Streaming is not supported by the agent'
             )
 
-        return self._create_response(context, handler_result)
+        stream: AsyncGenerator | None = None
+        if isinstance(request_obj, SendMessageRequest):
+            stream = self.http_handler.on_message_send_stream(request_obj, context)
+        elif isinstance(request_obj, SubscribeToTaskRequest):
+            stream = self.http_handler.on_subscribe_to_task(request_obj, context)
+
+        if stream is None:
+             raise UnsupportedOperationError(message='Stream not supported')
+
+        async def _wrap_stream(st: AsyncGenerator) -> AsyncGenerator[dict[str, Any], None]:
+            try:
+                async for event in st:
+                    stream_response = proto_utils.to_stream_response(event)
+                    result = MessageToDict(
+                        stream_response, preserving_proto_field_name=False
+                    )
+                    yield JSONRPC20Response(result=result, _id=request_id).data
+            except Exception as e:
+                error = e if isinstance(e, A2AError) else InternalError(message=str(e))
+                yield build_error_response(request_id, error)
+
+        return _wrap_stream(stream)
 
     async def _process_non_streaming_request(
         self,
         request_id: str | int | None,
         request_obj: A2ARequest,
         context: ServerCallContext,
-    ) -> Response:
-        """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
+    ) -> Any:
+        """Processes non-streaming requests and returns the raw result data.
 
         Args:
             request_id: The ID of the request.
@@ -492,71 +509,80 @@ class JsonRpcDispatcher:
             context: The ServerCallContext for the request.
 
         Returns:
-            A `JSONResponse` object containing the result or error.
+            The raw response object or dict, to be wrapped in a success response.
         """
-        handler_result: Any = None
         match request_obj:
             case SendMessageRequest():
-                handler_result = await self.handler.on_message_send(
+                task_or_message = await self.http_handler.on_message_send(
                     request_obj, context
                 )
+                if isinstance(task_or_message, Task):
+                    msg_response = SendMessageResponse(task=task_or_message)
+                else:
+                    msg_response = SendMessageResponse(message=task_or_message)
+                return MessageToDict(msg_response)
             case CancelTaskRequest():
-                handler_result = await self.handler.on_cancel_task(
-                    request_obj, context
-                )
+                task = await self.http_handler.on_cancel_task(request_obj, context)
+                if not task:
+                    raise TaskNotFoundError()
+                return MessageToDict(task, preserving_proto_field_name=False)
             case GetTaskRequest():
-                handler_result = await self.handler.on_get_task(
-                    request_obj, context
-                )
+                task = await self.http_handler.on_get_task(request_obj, context)
+                if not task:
+                    raise TaskNotFoundError()
+                return MessageToDict(task, preserving_proto_field_name=False)
             case ListTasksRequest():
-                handler_result = await self.handler.list_tasks(
-                    request_obj, context
+                tasks_response = await self.http_handler.on_list_tasks(request_obj, context)
+                return MessageToDict(
+                    tasks_response,
+                    preserving_proto_field_name=False,
+                    always_print_fields_with_no_presence=True,
                 )
             case TaskPushNotificationConfig():
-                handler_result = (
-                    await self.handler.set_push_notification_config(
-                        request_obj,
-                        context,
+                if not self.agent_card.capabilities.push_notifications:
+                    raise UnsupportedOperationError(
+                        message='Push notifications are not supported by the agent'
                     )
+                result_config = await self.http_handler.on_create_task_push_notification_config(
+                    request_obj, context
                 )
+                return MessageToDict(result_config, preserving_proto_field_name=False)
             case GetTaskPushNotificationConfigRequest():
-                handler_result = (
-                    await self.handler.get_push_notification_config(
-                        request_obj,
-                        context,
-                    )
+                config = await self.http_handler.on_get_task_push_notification_config(
+                    request_obj, context
                 )
+                return MessageToDict(config, preserving_proto_field_name=False)
             case ListTaskPushNotificationConfigsRequest():
-                handler_result = (
-                    await self.handler.list_push_notification_configs(
-                        request_obj,
-                        context,
-                    )
+                list_push_response = await self.http_handler.on_list_task_push_notification_configs(
+                    request_obj, context
                 )
+                return MessageToDict(list_push_response, preserving_proto_field_name=False)
             case DeleteTaskPushNotificationConfigRequest():
-                handler_result = (
-                    await self.handler.delete_push_notification_config(
-                        request_obj,
-                        context,
-                    )
+                await self.http_handler.on_delete_task_push_notification_config(
+                    request_obj, context
                 )
+                return None
             case GetExtendedAgentCardRequest():
-                handler_result = (
-                    await self.handler.get_authenticated_extended_card(
-                        request_obj,
-                        context,
+                if not self.agent_card.capabilities.extended_agent_card:
+                    raise ExtendedAgentCardNotConfiguredError(
+                        message='The agent does not have an extended agent card configured'
                     )
-                )
+                base_card = self.extended_agent_card or self.agent_card
+                card_to_serve = base_card
+                if self.extended_card_modifier and context:
+                    card_to_serve = await maybe_await(
+                        self.extended_card_modifier(base_card, context)
+                    )
+                elif self.card_modifier:
+                    card_to_serve = await maybe_await(self.card_modifier(base_card))
+                return MessageToDict(card_to_serve, preserving_proto_field_name=False)
             case _:
                 logger.error(
                     'Unhandled validated request type: %s', type(request_obj)
                 )
-                error = UnsupportedOperationError(
+                raise UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
                 )
-                return self._generate_error_response(request_id, error)
-
-        return self._create_response(context, handler_result)
 
     def _create_response(
         self,
@@ -594,22 +620,3 @@ class JsonRpcDispatcher:
 
         # handler_result is a dict (JSON-RPC response)
         return JSONResponse(handler_result, headers=headers)
-
-    async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
-        """Handles GET requests for the agent card endpoint.
-
-        Args:
-            request: The incoming Starlette Request object.
-
-        Returns:
-            A JSONResponse containing the agent card data.
-        """
-        card_to_serve = self.agent_card
-        if self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
-
-        return JSONResponse(
-            agent_card_to_dict(
-                card_to_serve,
-            )
-        )

@@ -5,16 +5,16 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from fastapi import APIRouter
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
+    from starlette.routing import Router
 else:
     try:
-        from fastapi import APIRouter
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
+        from starlette.routing import Router
     except ImportError:
-        APIRouter = Any
+        Router = Any
         Request = Any
         Response = Any
         JSONResponse = Any
@@ -51,7 +51,7 @@ class AgentCardRouter:
         self.agent_card = agent_card
         self.card_modifier = card_modifier
 
-        self.router = APIRouter()
+        self.router = Router()
         self._setup_router(agent_card_url, rpc_url)
 
     def _setup_router(
@@ -66,7 +66,6 @@ class AgentCardRouter:
             rpc_url: The URL prefix for the endpoint.
         """
 
-        @self.router.get(f'{rpc_url}{agent_card_url}')
         async def get_agent_card(request: Request) -> Response:
             card_to_serve = self.agent_card
             if self.card_modifier:
@@ -74,3 +73,7 @@ class AgentCardRouter:
                     self.card_modifier(card_to_serve)
                 )
             return JSONResponse(agent_card_to_dict(card_to_serve))
+
+        self.router.add_route(
+            f'{rpc_url}{agent_card_url}', get_agent_card, methods=['GET']
+        )

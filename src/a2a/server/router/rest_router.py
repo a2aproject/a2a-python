@@ -5,32 +5,31 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from fastapi import APIRouter, FastAPI
     from sse_starlette.sse import EventSourceResponse
     from starlette.exceptions import HTTPException as StarletteHTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
+    from starlette.routing import Router
 
-    _package_fastapi_installed = True
+    _package_starlette_installed = True
 else:
     try:
-        from fastapi import APIRouter, FastAPI
         from sse_starlette.sse import EventSourceResponse
         from starlette.exceptions import HTTPException as StarletteHTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
+        from starlette.routing import Router
 
-        _package_fastapi_installed = True
+        _package_starlette_installed = True
     except ImportError:
-        APIRouter = Any
-        FastAPI = Any
+        Router = Any
         EventSourceResponse = Any
         Request = Any
         JSONResponse = Any
         Response = Any
         StarletteHTTPException = Any
 
-        _package_fastapi_installed = False
+        _package_starlette_installed = False
 
 import json
 
@@ -40,20 +39,16 @@ from a2a.server.apps.jsonrpc import (
     CallContextBuilder,
     DefaultCallContextBuilder,
 )
-from a2a.server.apps.rest.fastapi_app import _HTTP_TO_GRPC_STATUS_MAP
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.rest_handler_v2 import RESTHandlerV2
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    DEFAULT_RPC_URL,
-)
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await
 
@@ -81,9 +76,7 @@ class RestRouter:
             [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
-        max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
         enable_v0_3_compat: bool = False,
-        agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = '',
     ) -> None:
         """Initializes the A2AFastAPIApplication.
@@ -102,27 +95,21 @@ class RestRouter:
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
-            max_content_length: The maximum allowed content length for incoming
-              requests. Defaults to 10MB. Set to None for unbounded maximum.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
-        if not _package_fastapi_installed:
+        if not _package_starlette_installed:
             raise ImportError(
-                'The `fastapi` package is required to use the `A2AFastAPIApplication`.'
+                'The `starlette` package is required to use the `RestRouter`.'
                 ' It can be added as a part of `a2a-sdk` optional dependencies,'
                 ' `a2a-sdk[http-server]`.'
             )
 
         self.agent_card = agent_card
         self.http_handler = http_handler
-        self.rest_handler = RESTHandlerV2(
-            agent_card=agent_card, request_handler=http_handler
-        )
         self.extended_agent_card = extended_agent_card
         self._context_builder = context_builder or DefaultCallContextBuilder()
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self.max_content_length = max_content_length
         self.enable_v0_3_compat = enable_v0_3_compat
 
         self._v03_adapter = None
@@ -138,8 +125,8 @@ class RestRouter:
                 context_builder=context_builder,
             )
 
-        self.router = APIRouter()
-        self._setup_router(agent_card_url, rpc_url)
+        self.router = Router()
+        self._setup_router(rpc_url)
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
         call_context = self._context_builder.build(request)
@@ -149,33 +136,27 @@ class RestRouter:
 
     def _setup_router(
         self,
-        agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
-        rpc_url: str = '',
+        rpc_url,
         **kwargs: Any,
     ) -> None:
         """Builds and returns the FastAPI application instance."""
-
         if self.enable_v0_3_compat and self._v03_adapter:
-            v03_router = APIRouter()
             for route, callback in self._v03_adapter.routes().items():
-                v03_router.add_api_route(
+                self.router.add_route(
                     f'{rpc_url}{route[0]}', callback, methods=[route[1]]
                 )
-            self.router.include_router(v03_router)
-
-        base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {}
 
         async def message_send(request: Request) -> Response:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
             Parse(body, params)
             context = self._build_call_context(request)
-            result = await self.rest_handler.on_message_send(
-                params, context
-            )
-            return JSONResponse(result)
-
-        base_routes[('/message:send', 'POST')] = message_send
+            task_or_message = await self.http_handler.on_message_send(params, context)
+            if isinstance(task_or_message, a2a_pb2.Task):
+                response = a2a_pb2.SendMessageResponse(task=task_or_message)
+            else:
+                response = a2a_pb2.SendMessageResponse(message=task_or_message)
+            return JSONResponse(MessageToDict(response))
 
         async def message_stream(request: Request) -> EventSourceResponse:
             try:
@@ -185,68 +166,54 @@ class RestRouter:
                     message=f'Failed to pre-consume request body: {e}'
                 ) from e
 
+            if not self.agent_card.capabilities.streaming:
+                raise UnsupportedOperationError(message='Streaming is not supported by the agent')
+
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
             Parse(body, params)
             context = self._build_call_context(request)
 
-            async def event_generator(
-                stream: AsyncIterator[dict[str, Any]],
-            ) -> AsyncIterator[str]:
-                async for item in stream:
-                    yield json.dumps(item)
+            async def event_generator() -> AsyncIterator[str]:
+                async for event in self.http_handler.on_message_send_stream(params, context):
+                    yield json.dumps(MessageToDict(proto_utils.to_stream_response(event)))
 
-            return EventSourceResponse(
-                event_generator(
-                    self.rest_handler.on_message_send_stream(
-                        params, context
-                    )
-                )
-            )
-
-        base_routes[('/message:stream', 'POST')] = message_stream
+            return EventSourceResponse(event_generator())
 
         async def cancel_task(request: Request) -> Response:
             task_id = request.path_params['id']
             params = a2a_pb2.CancelTaskRequest(id=task_id)
             context = self._build_call_context(request)
-            result = await self.rest_handler.on_cancel_task(params, context)
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}:cancel', 'POST')] = cancel_task
+            task = await self.http_handler.on_cancel_task(params, context)
+            if not task:
+                 raise TaskNotFoundError()
+            return JSONResponse(MessageToDict(task))
 
         async def subscribe_task(request: Request) -> EventSourceResponse:
             import contextlib  # noqa: PLC0415
             with contextlib.suppress(ValueError, RuntimeError, OSError):
                 await request.body()
             task_id = request.path_params['id']
+            if not self.agent_card.capabilities.streaming:
+                raise UnsupportedOperationError(message='Streaming is not supported by the agent')
             params = a2a_pb2.SubscribeToTaskRequest(id=task_id)
             context = self._build_call_context(request)
 
-            async def event_generator(
-                stream: AsyncIterator[dict[str, Any]],
-            ) -> AsyncIterator[str]:
-                async for item in stream:
-                    yield json.dumps(item)
+            async def event_generator() -> AsyncIterator[str]:
+                async for event in self.http_handler.on_subscribe_to_task(params, context):
+                    yield json.dumps(MessageToDict(proto_utils.to_stream_response(event)))
 
-            return EventSourceResponse(
-                event_generator(
-                    self.rest_handler.on_subscribe_to_task(params, context)
-                )
-            )
-
-        base_routes[('/tasks/{id}:subscribe', 'GET')] = subscribe_task
-        base_routes[('/tasks/{id}:subscribe', 'POST')] = subscribe_task
+            return EventSourceResponse(event_generator())
 
         async def get_task(request: Request) -> Response:
             params = a2a_pb2.GetTaskRequest()
             proto_utils.parse_params(request.query_params, params)
             params.id = request.path_params['id']
             context = self._build_call_context(request)
-            result = await self.rest_handler.on_get_task(params, context)
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}', 'GET')] = get_task
+            task = await self.http_handler.on_get_task(params, context)
+            if not task:
+                 raise TaskNotFoundError()
+            return JSONResponse(MessageToDict(task))
 
         async def get_push_notification(request: Request) -> Response:
             task_id = request.path_params['id']
@@ -255,12 +222,8 @@ class RestRouter:
                 task_id=task_id, id=push_id
             )
             context = self._build_call_context(request)
-            result = await self.rest_handler.get_push_notification(
-                params, context
-            )
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}/pushNotificationConfigs/{push_id}', 'GET')] = get_push_notification
+            config = await self.http_handler.on_get_task_push_notification_config(params, context)
+            return JSONResponse(MessageToDict(config))
 
         async def delete_push_notification(request: Request) -> Response:
             task_id = request.path_params['id']
@@ -269,72 +232,72 @@ class RestRouter:
                 task_id=task_id, id=push_id
             )
             context = self._build_call_context(request)
-            result = await self.rest_handler.delete_push_notification(
-                params, context
-            )
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}/pushNotificationConfigs/{push_id}', 'DELETE')] = delete_push_notification
+            await self.http_handler.on_delete_task_push_notification_config(params, context)
+            return JSONResponse({})
 
         async def set_push_notification(request: Request) -> Response:
+            if not self.agent_card.capabilities.push_notifications:
+                 raise UnsupportedOperationError(message='Push notifications are not supported by the agent')
             body = await request.body()
             params = a2a_pb2.TaskPushNotificationConfig()
             Parse(body, params)
             params.task_id = request.path_params['id']
             context = self._build_call_context(request)
-            result = await self.rest_handler.set_push_notification(
-                params, context
-            )
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}/pushNotificationConfigs', 'POST')] = set_push_notification
+            config = await self.http_handler.on_create_task_push_notification_config(params, context)
+            return JSONResponse(MessageToDict(config))
 
         async def list_push_notifications(request: Request) -> Response:
             params = a2a_pb2.ListTaskPushNotificationConfigsRequest()
             proto_utils.parse_params(request.query_params, params)
             params.task_id = request.path_params['id']
             context = self._build_call_context(request)
-            result = await self.rest_handler.list_push_notifications(
-                params, context
-            )
-            return JSONResponse(result)
-
-        base_routes[('/tasks/{id}/pushNotificationConfigs', 'GET')] = list_push_notifications
+            result = await self.http_handler.on_list_task_push_notification_configs(params, context)
+            return JSONResponse(MessageToDict(result))
 
         async def list_tasks(request: Request) -> Response:
             params = a2a_pb2.ListTasksRequest()
             proto_utils.parse_params(request.query_params, params)
             context = self._build_call_context(request)
-            result = await self.rest_handler.list_tasks(params, context)
-            return JSONResponse(result)
+            result = await self.http_handler.on_list_tasks(params, context)
+            return JSONResponse(MessageToDict(result, always_print_fields_with_no_presence=True))
 
-        base_routes[('/tasks', 'GET')] = list_tasks
+        async def get_extended_agent_card(request: Request) -> Response:
+            if not self.agent_card.capabilities.extended_agent_card:
+                raise ExtendedAgentCardNotConfiguredError(
+                    message='Authenticated card not supported'
+                )
+            card_to_serve = self.extended_agent_card or self.agent_card
 
-        if self.agent_card.capabilities.extended_agent_card:
-            async def get_extended_agent_card(request: Request) -> Response:
-                if not self.agent_card.capabilities.extended_agent_card:
-                    raise ExtendedAgentCardNotConfiguredError(
-                        message='Authenticated card not supported'
-                    )
-                card_to_serve = self.extended_agent_card or self.agent_card
-
-                if self.extended_card_modifier:
-                    context = self._build_call_context(request)
-                    card_to_serve = await maybe_await(
-                        self.extended_card_modifier(card_to_serve, context)
-                    )
-                elif self.card_modifier:
-                    card_to_serve = await maybe_await(
-                        self.card_modifier(card_to_serve)
-                    )
-
-                return JSONResponse(
-                    MessageToDict(
-                        card_to_serve, preserving_proto_field_name=True
-                    )
+            if self.extended_card_modifier:
+                context = self._build_call_context(request)
+                card_to_serve = await maybe_await(
+                    self.extended_card_modifier(card_to_serve, context)
+                )
+            elif self.card_modifier:
+                card_to_serve = await maybe_await(
+                    self.card_modifier(card_to_serve)
                 )
 
-            base_routes[('/extendedAgentCard', 'GET')] = get_extended_agent_card
+            return JSONResponse(
+                MessageToDict(
+                    card_to_serve, preserving_proto_field_name=True
+                )
+            )
+
+        base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+            ('/message:send', 'POST'): message_send,
+            ('/message:stream', 'POST'): message_stream,
+            ('/tasks/{id}:cancel', 'POST'): cancel_task,
+            ('/tasks/{id}:subscribe', 'GET'): subscribe_task,
+            ('/tasks/{id}:subscribe', 'POST'): subscribe_task,
+            ('/tasks/{id}', 'GET'): get_task,
+            ('/tasks/{id}/pushNotificationConfigs/{push_id}', 'GET'): get_push_notification,
+            ('/tasks/{id}/pushNotificationConfigs/{push_id}', 'DELETE'): delete_push_notification,
+            ('/tasks/{id}/pushNotificationConfigs', 'POST'): set_push_notification,
+            ('/tasks/{id}/pushNotificationConfigs', 'GET'): list_push_notifications,
+            ('/tasks', 'GET'): list_tasks,
+            ('/extendedAgentCard', 'GET'): get_extended_agent_card,
+        }
 
         routes: dict[tuple[str, str], Callable[[Request], Any]] = {
             (p, method): handler
@@ -343,7 +306,7 @@ class RestRouter:
         }
 
         for (path, method), handler in routes.items():
-            self.router.add_api_route(
+            self.router.add_route(
                 f'{rpc_url}{path}', handler, methods=[method]
             )
 

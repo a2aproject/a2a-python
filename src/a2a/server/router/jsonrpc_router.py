@@ -5,19 +5,18 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from fastapi import APIRouter, FastAPI
+    from starlette.routing import Router
 
-    _package_fastapi_installed = True
+    _package_starlette_installed = True
 else:
     try:
-        from fastapi import APIRouter, FastAPI
+        from starlette.routing import Router
 
-        _package_fastapi_installed = True
+        _package_starlette_installed = True
     except ImportError:
-        APIRouter = Any
-        FastAPI = Any
+        Router = Any
 
-        _package_fastapi_installed = False
+        _package_starlette_installed = False
 
 
 from a2a.server.context import ServerCallContext
@@ -27,10 +26,6 @@ from a2a.server.router.jsonrpc_dispatcher import (
     JsonRpcDispatcher,
 )
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.utils.constants import (
-    AGENT_CARD_WELL_KNOWN_PATH,
-    DEFAULT_RPC_URL,
-)
 
 
 logger = logging.getLogger(__name__)
@@ -56,9 +51,7 @@ class JsonRpcRouter:
             [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
-        max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
         enable_v0_3_compat: bool = False,
-        agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = '',
     ) -> None:
         """Initializes the A2AFastAPIApplication.
@@ -72,18 +65,14 @@ class JsonRpcRouter:
             context_builder: The CallContextBuilder used to construct the
               ServerCallContext passed to the http_handler. If None, no
               ServerCallContext is passed.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
-            max_content_length: The maximum allowed content length for incoming
-              requests. Defaults to 10MB. Set to None for unbounded maximum.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
-        if not _package_fastapi_installed:
+        if not _package_starlette_installed:
             raise ImportError(
-                'The `fastapi` package is required to use the `A2AFastAPIApplication`.'
+                'The `starlette` package is required to use the `JsonRpcRouter`.'
                 ' It can be added as a part of `a2a-sdk` optional dependencies,'
                 ' `a2a-sdk[http-server]`.'
             )
@@ -94,15 +83,13 @@ class JsonRpcRouter:
             context_builder=context_builder,
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
-            max_content_length=max_content_length,
             enable_v0_3_compat=enable_v0_3_compat,
         )
-        self.router = APIRouter()
-        self._setup_router(agent_card_url, rpc_url)
+        self.router = Router()
+        self._setup_router(rpc_url)
 
     def _setup_router(
         self,
-        agent_card_url: str,
         rpc_url: str,
     ) -> None:
         """Configures the APIRouter with the A2A endpoints.
@@ -111,19 +98,8 @@ class JsonRpcRouter:
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
         """
-        self.router.post(
+        self.router.add_route(
             rpc_url,
-            openapi_extra={
-                'requestBody': {
-                    'content': {
-                        'application/json': {
-                            'schema': {
-                                '$ref': '#/components/schemas/A2ARequest'
-                            }
-                        }
-                    },
-                    'required': True,
-                    'description': 'A2ARequest',
-                }
-            },
-        )(self.dispatcher._handle_requests)
+            self.dispatcher._handle_requests,
+            methods=['POST']
+        )
