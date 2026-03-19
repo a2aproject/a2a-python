@@ -233,7 +233,7 @@ class TestJSONRPCApplicationV03Compat:
 
         # Instead of _v03_adapter, the handler handles it or it's dispatcher
         with patch.object(
-            router.dispatcher,
+            routes.dispatcher,
             '_process_non_streaming_request',
             new_callable=AsyncMock,
         ) as mock_handle:
