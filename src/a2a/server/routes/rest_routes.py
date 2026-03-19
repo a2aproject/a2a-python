@@ -3,6 +3,10 @@ import logging
 from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
+from a2a.compat.v0_3.rest_adapter import (
+    REST03Adapter as V03RESTAdapter,
+)
+
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -91,12 +95,12 @@ class RestRoutes:
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
-            httpr: The handler instance responsible for processing A2A
+            request_handler: The handler instance responsible for processing A2A
               requests via http.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
             context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the httpr. If None, no
+              ServerCallContext passed to the request_handler. If None, no
               ServerCallContext is passed.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
@@ -104,6 +108,8 @@ class RestRoutes:
               the extended agent card before it is served. It receives the
               call context.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
+            rpc_url: The URL prefix for the RPC endpoints.
+            middleware: An optional list of Starlette middleware to apply to the routes.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -122,16 +128,13 @@ class RestRoutes:
 
         self._v03_adapter = None
         if enable_v0_3_compat:
-            from a2a.compat.v0_3.rest_adapter import (
-                REST03Adapter as V03RESTAdapter,
-            )
-
             self._v03_adapter = V03RESTAdapter(
                 agent_card=agent_card,
-                httpr=request_handler,
+                http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
                 context_builder=context_builder,
             )
+
 
         self._setup_routes(rpc_url)
 

@@ -311,7 +311,7 @@ class JsonRpcDispatcher:
                     return False
         return True
 
-    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
+    async def handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
         """Handles incoming POST requests to the main A2A endpoint.
 
         Parses the request body as JSON, validates it against A2A request types,
@@ -417,7 +417,7 @@ class JsonRpcDispatcher:
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
 
-            # Route streaming requests by method name
+            handler_result: AsyncGenerator[dict[str, Any], None] | dict[str, Any]
             # Route streaming requests by method name
             if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 handler_result = await self._process_streaming_request(
@@ -431,8 +431,8 @@ class JsonRpcDispatcher:
                     handler_result = JSONRPC20Response(
                         result=raw_result, _id=request_id
                     ).data
-                except Exception as e:
-                    return self._generate_error_response(request_id, e)
+                except A2AError as e:
+                    handler_result = build_error_response(request_id, e)
 
             return self._create_response(call_context, handler_result)
         except json.decoder.JSONDecodeError as e:
@@ -497,17 +497,12 @@ class JsonRpcDispatcher:
                         stream_response, preserving_proto_field_name=False
                     )
                     yield JSONRPC20Response(result=result, _id=request_id).data
-            except Exception as e:
-                error = (
-                    e
-                    if isinstance(e, A2AError)
-                    else InternalError(message=str(e))
-                )
-                yield build_error_response(request_id, error)
+            except A2AError as e:
+                yield build_error_response(request_id, e)
 
         return _wrap_stream(stream)
 
-    async def _process_non_streaming_request(
+    async def _process_non_streaming_request(  # noqa: PLR0911, PLR0912
         self,
         request_id: str | int | None,
         request_obj: A2ARequest,

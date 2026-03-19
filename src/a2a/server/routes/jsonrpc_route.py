@@ -3,21 +3,21 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
-from starlette.middleware import Middleware
-from starlette.routing import Route
-
 
 if TYPE_CHECKING:
-
-    from starlette.routing import Router
+    from starlette.middleware import Middleware
+    from starlette.routing import Route, Router
 
     _package_starlette_installed = True
 else:
     try:
-        from starlette.routing import Router
+        from starlette.middleware import Middleware
+        from starlette.routing import Route, Router
 
         _package_starlette_installed = True
     except ImportError:
+        Middleware = Any
+        Route = Any
         Router = Any
 
         _package_starlette_installed = False
@@ -33,9 +33,6 @@ from a2a.types.a2a_pb2 import AgentCard
 
 
 logger = logging.getLogger(__name__)
-
-
-
 
 
 class JsonRpcRoute:
@@ -64,7 +61,23 @@ class JsonRpcRoute:
     ) -> None:
         """Initializes the JsonRpcRoute.
 
-        ... (docstrings remain the same) ...
+        Args:
+            agent_card: The AgentCard describing the agent's capabilities.
+            request_handler: The handler instance responsible for processing A2A
+              requests via http.
+            extended_agent_card: An optional, distinct AgentCard to be served
+              at the authenticated extended card endpoint.
+            context_builder: The CallContextBuilder used to construct the
+              ServerCallContext passed to the request_handler. If None, no
+              ServerCallContext is passed.
+            card_modifier: An optional callback to dynamically modify the public
+              agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify
+              the extended agent card before it is served. It receives the
+              call context.
+            enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
+            rpc_url: The URL prefix for the RPC endpoints.
+            middleware: An optional list of Starlette middleware to apply to the routes.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -85,7 +98,7 @@ class JsonRpcRoute:
 
         self.route = Route(
             path=rpc_url,
-            endpoint=self.dispatcher._handle_requests,
+            endpoint=self.dispatcher.handle_requests,
             methods=['POST'],
             middleware=middleware,
         )

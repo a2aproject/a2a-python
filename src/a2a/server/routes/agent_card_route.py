@@ -9,6 +9,8 @@ if TYPE_CHECKING:
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Route
+
+    _package_starlette_installed = True
 else:
     try:
         from starlette.middleware import Middleware
@@ -16,12 +18,15 @@ else:
         from starlette.responses import JSONResponse, Response
         from starlette.routing import Route
 
+        _package_starlette_installed = True
     except ImportError:
         Middleware = Any
         Route = Any
         Request = Any
         Response = Any
         JSONResponse = Any
+
+        _package_starlette_installed = False
 
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
@@ -49,7 +54,16 @@ class AgentCardRoute:
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
             card_url: The URL for the agent card endpoint.
+            middleware: An optional list of Starlette middleware to apply to the
+              agent card endpoint.
         """
+        if not _package_starlette_installed:
+            raise ImportError(
+                'The `starlette` package is required to use the `JsonRpcRoute`.'
+                ' It can be added as a part of `a2a-sdk` optional dependencies,'
+                ' `a2a-sdk[http-server]`.'
+            )
+
         self.agent_card = agent_card
         self.card_modifier = card_modifier
 
