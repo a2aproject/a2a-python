@@ -6,6 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.testclient import TestClient
 from starlette.middleware import Middleware
+from starlette.applications import Starlette
 
 from a2a.server.routes.agent_card_routes import AgentCardRoutes
 from a2a.types.a2a_pb2 import AgentCard
@@ -19,8 +20,6 @@ def agent_card():
 def test_get_agent_card_success(agent_card):
     """Tests that the agent card route returns the card correctly."""
     routes = AgentCardRoutes(agent_card=agent_card).routes
-
-    from starlette.applications import Starlette
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -52,8 +51,6 @@ def test_get_agent_card_with_modifier(agent_card):
         agent_card=agent_card, card_modifier=mock_modifier
     ).routes
 
-    from starlette.applications import Starlette
-
     app = Starlette(routes=routes)
     client = TestClient(app)
 
@@ -66,8 +63,6 @@ def test_agent_card_custom_url(agent_card):
     """Tests that custom card_url is respected."""
     custom_url = '/custom/path/agent.json'
     routes = AgentCardRoutes(agent_card=agent_card, card_url=custom_url).routes
-
-    from starlette.applications import Starlette
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -94,8 +89,6 @@ def test_agent_card_with_middleware(agent_card):
     routes = AgentCardRoutes(
         agent_card=agent_card, middleware=[Middleware(MyMiddleware)]
     ).routes
-
-    from starlette.applications import Starlette
 
     app = Starlette(routes=routes)
     client = TestClient(app)

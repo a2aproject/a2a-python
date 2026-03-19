@@ -63,24 +63,21 @@ class AgentCardRoutes:
                 'The `starlette` package is required to use `AgentCardRoutes`. '
                 'It can be installed as part of `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
             )
-            )
 
         self.agent_card = agent_card
         self.card_modifier = card_modifier
 
-        async def get_agent_card(request: Request) -> Response:
-            card_to_serve = self.agent_card
-            if self.card_modifier:
-                card_to_serve = await maybe_await(
-                    self.card_modifier(card_to_serve)
-                )
-            return JSONResponse(agent_card_to_dict(card_to_serve))
-
         self.routes = [
             Route(
                 path=card_url,
-                endpoint=get_agent_card,
+                endpoint=self._get_agent_card,
                 methods=['GET'],
                 middleware=middleware,
             )
         ]
+
+    async def _get_agent_card(self, request: Request) -> Response:
+        card_to_serve = self.agent_card
+        if self.card_modifier:
+            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
+        return JSONResponse(agent_card_to_dict(card_to_serve))

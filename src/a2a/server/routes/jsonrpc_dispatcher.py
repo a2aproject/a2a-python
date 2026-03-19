@@ -47,9 +47,6 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     TaskPushNotificationConfig,
 )
-from a2a.utils.constants import (
-    DEFAULT_MAX_CONTENT_LENGTH,
-)
 from a2a.utils.errors import (
     A2AError,
     UnsupportedOperationError,
@@ -202,7 +199,6 @@ class JsonRpcDispatcher:
         ]
         | None = None,
         enable_v0_3_compat: bool = False,
-        max_content_length: int | None = DEFAULT_MAX_CONTENT_LENGTH,
     ) -> None:
         """Initializes the JsonRpcDispatcher.
 
@@ -220,8 +216,6 @@ class JsonRpcDispatcher:
             extended_card_modifier: An optional callback to dynamically modify
               the extended agent card before it is served. It receives the
               call context.
-            max_content_length: The maximum allowed content length for incoming
-              requests. Defaults to 10MB. Set to None for unbounded maximum.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
@@ -242,7 +236,6 @@ class JsonRpcDispatcher:
             extended_card_modifier=extended_card_modifier,
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
-        self._max_content_length = max_content_length
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 
@@ -298,22 +291,6 @@ class JsonRpcDispatcher:
             status_code=200,
         )
 
-    def _allowed_content_length(self, request: Request) -> bool:
-        """Checks if the request content length is within the allowed maximum.
-
-        Args:
-            request: The incoming Starlette Request object.
-
-        Returns:
-            False if the content length is larger than the allowed maximum, True otherwise.
-        """
-        if self._max_content_length is not None:
-            with contextlib.suppress(ValueError):
-                content_length = int(request.headers.get('content-length', '0'))
-                if content_length and content_length > self._max_content_length:
-                    return False
-        return True
-
     async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
         """Handles incoming POST requests to the main A2A endpoint.
 
@@ -344,12 +321,6 @@ class JsonRpcDispatcher:
                     request_id, str | int
                 ):
                     request_id = None
-            # Treat payloads lager than allowed as invalid request (-32600) before routing
-            if not self._allowed_content_length(request):
-                return self._generate_error_response(
-                    request_id,
-                    InvalidRequestError(message='Payload too large'),
-                )
             logger.debug('Request body: %s', body)
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
             try:

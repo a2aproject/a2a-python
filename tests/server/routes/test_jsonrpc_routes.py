@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.testclient import TestClient
 from starlette.middleware import Middleware
+from starlette.applications import Starlette
 
 from a2a.server.routes.jsonrpc_routes import JsonRpcRoutes
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -44,8 +45,6 @@ def test_jsonrpc_custom_url(agent_card, mock_handler):
         agent_card=agent_card, request_handler=mock_handler, rpc_url=custom_url
     )
 
-    from starlette.applications import Starlette
-
     app = Starlette(routes=jsonrpc_routes.routes)
     client = TestClient(app)
 
@@ -82,8 +81,6 @@ def test_jsonrpc_with_middleware(agent_card, mock_handler):
         middleware=[Middleware(MyMiddleware)],
         rpc_url='/',
     )
-
-    from starlette.applications import Starlette
 
     app = Starlette(routes=jsonrpc_routes.routes)
     client = TestClient(app)
