@@ -43,7 +43,7 @@ uv run a2a-db --database-url "your-database-url"
 > [!NOTE]
 > All new columns are nullable. Your existing v0.3 code will continue to work normally after this step is completed.
 >
-> Database stores v1.0 are designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
+> The v1.0 database stores are designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
 
 #### ✅ How to Verify
 Confirm the schema is at the correct version:
