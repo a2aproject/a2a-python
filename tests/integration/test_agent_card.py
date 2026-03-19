@@ -17,7 +17,7 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import VERSION_HEADER, TransportProtocol
 
 
 class DummyAgentExecutor(AgentExecutor):
@@ -35,7 +35,8 @@ class DummyAgentExecutor(AgentExecutor):
 
 
 @pytest.mark.asyncio
-async def test_agent_card_integration() -> None:
+@pytest.mark.parametrize('header_val', [None, '0.3', '1.0', '1.2', 'INVALID'])
+async def test_agent_card_integration(header_val: str | None) -> None:
     """Tests that the agent card is correctly served via REST and JSONRPC."""
     # 1. Define AgentCard
     agent_card = AgentCard(
@@ -101,16 +102,24 @@ async def test_agent_card_integration() -> None:
         'url': 'http://localhost/jsonrpc/',
     }
 
+    headers = {}
+    if header_val is not None:
+        headers[VERSION_HEADER] = header_val
+
     # 3. Use direct http client (ASGITransport) to fetch and assert
     async with httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     ) as client:
         # Fetch from JSONRPC endpoint
-        resp_jsonrpc = await client.get('/jsonrpc/.well-known/agent-card.json')
+        resp_jsonrpc = await client.get(
+            '/jsonrpc/.well-known/agent-card.json', headers=headers
+        )
         assert resp_jsonrpc.status_code == 200
         assert resp_jsonrpc.json() == expected_content
 
         # Fetch from REST endpoint
-        resp_rest = await client.get('/rest/.well-known/agent-card.json')
+        resp_rest = await client.get(
+            '/rest/.well-known/agent-card.json', headers=headers
+        )
         assert resp_rest.status_code == 200
         assert resp_rest.json() == expected_content

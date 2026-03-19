@@ -100,7 +100,7 @@ def test_app(mock_handler):
 
 @pytest.fixture
 def client(test_app):
-    return TestClient(test_app.build())
+    return TestClient(test_app.build(), headers={'A2A-Version': '1.0'})
 
 
 def _make_send_message_request(
