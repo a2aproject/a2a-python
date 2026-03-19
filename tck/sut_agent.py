@@ -16,15 +16,12 @@ import a2a.types.a2a_pb2_grpc as a2a_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps import (
-    A2ARESTFastAPIApplication,
-    A2AStarletteApplication,
-)
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
+from a2a.server.routes import AgentCardRoutes, JsonRpcRoutes, RestRoutes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
@@ -44,6 +41,7 @@ from a2a.types import (
 
 JSONRPC_URL = '/a2a/jsonrpc'
 REST_URL = '/a2a/rest'
+AGENT_CARD_URL = '/.well-known/agent-card.json'
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger('SUTAgent')
@@ -196,22 +194,30 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    main_app = Starlette()
-
+    # Agent Card
+    agent_card_routes = AgentCardRoutes(
+        agent_card=agent_card,
+        card_url=AGENT_CARD_URL,
+    )
     # JSONRPC
-    jsonrpc_server = A2AStarletteApplication(
+    jsonrpc_routes = JsonRpcRoutes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        rpc_url=JSONRPC_URL,
     )
-    jsonrpc_server.add_routes_to_app(main_app, rpc_url=JSONRPC_URL)
-
     # REST
-    rest_server = A2ARESTFastAPIApplication(
+    rest_routes = RestRoutes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        rpc_url=REST_URL,
     )
-    rest_app = rest_server.build(rpc_url=REST_URL)
-    main_app.mount('', rest_app)
+
+    routes = [
+        *agent_card_routes.routes,
+        *jsonrpc_routes.routes,
+        *rest_routes.routes,
+    ]
+    main_app = Starlette(routes=routes)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'

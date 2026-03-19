@@ -5,7 +5,8 @@ import asyncio
 import grpc
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+from a2a.server.routes import JsonRpcRoutes, RestRoutes, AgentCardRoutes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
@@ -166,17 +167,29 @@ async def main_async(http_port: int, grpc_port: int):
     app = FastAPI()
     app.add_middleware(CustomLoggingMiddleware)
 
-    jsonrpc_app = A2AFastAPIApplication(
-        http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
-    ).build()
+    jsonrpc_routes = JsonRpcRoutes(
+        agent_card=agent_card,
+        request_handler=handler,
+        enable_v0_3_compat=True,
+    )
+    jsonrpc_card = AgentCardRoutes(
+        agent_card=agent_card,
+        card_url='/.well-known/agent-card.json',
+    )
+    jsonrpc_app = Starlette(routes=jsonrpc_routes.routes + jsonrpc_card.routes)
     app.mount('/jsonrpc', jsonrpc_app)
 
-    app.mount(
-        '/rest',
-        A2ARESTFastAPIApplication(
-            http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
-        ).build(),
+    rest_routes = RestRoutes(
+        agent_card=agent_card,
+        request_handler=handler,
+        enable_v0_3_compat=True,
     )
+    rest_card = AgentCardRoutes(
+        agent_card=agent_card,
+        card_url='/.well-known/agent-card.json',
+    )
+    rest_app = Starlette(routes=rest_routes.routes + rest_card.routes)
+    app.mount('/rest', rest_app)
 
     # Start gRPC Server
     server = grpc.aio.server()

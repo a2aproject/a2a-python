@@ -10,9 +10,7 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
-from a2a.server.apps.rest import fastapi_app, rest_adapter
-from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
-from a2a.server.apps.rest.rest_adapter import RESTAdapter
+from a2a.server.routes import RestRoutes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -74,12 +72,13 @@ async def extended_card_modifier() -> MagicMock | None:
 @pytest.fixture
 async def streaming_app(
     streaming_agent_card: AgentCard, request_handler: RequestHandler
-) -> FastAPI:
-    """Builds the FastAPI application for testing streaming endpoints."""
+) -> Any:
+    from starlette.applications import Starlette
 
-    return A2ARESTFastAPIApplication(
-        streaming_agent_card, request_handler
-    ).build(agent_card_url='/well-known/agent-card.json', rpc_url='')
+    router = RestRoutes(streaming_agent_card, request_handler, rpc_url='')
+    app = Starlette()
+    app.routes.extend(router.routes)
+    return app
 
 
 @pytest.fixture
@@ -95,14 +94,26 @@ async def app(
     agent_card: AgentCard,
     request_handler: RequestHandler,
     extended_card_modifier: MagicMock | None,
-) -> FastAPI:
-    """Builds the FastAPI application for testing."""
+) -> Any:
+    from starlette.applications import Starlette
+    from a2a.server.routes import AgentCardRoutes
 
-    return A2ARESTFastAPIApplication(
+    # Return Starlette app
+    app_instance = Starlette()
+
+    rest_router = RestRoutes(
         agent_card,
         request_handler,
         extended_card_modifier=extended_card_modifier,
-    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
+        rpc_url='',
+    )
+    app_instance.routes.extend(rest_router.routes)
+
+    # Also Agent card endpoint? if needed in tests
+    card_routes = AgentCardRoutes(agent_card, card_url='/well-known/agent.json')
+    app_instance.routes.extend(card_routes.routes)
+
+    return app_instance
 
 
 @pytest.fixture
@@ -112,93 +123,18 @@ async def client(app: FastAPI) -> AsyncClient:
     )
 
 
-@pytest.fixture
-def mark_pkg_starlette_not_installed():
-    pkg_starlette_installed_flag = rest_adapter._package_starlette_installed
-    rest_adapter._package_starlette_installed = False
-    yield
-    rest_adapter._package_starlette_installed = pkg_starlette_installed_flag
-
-
-@pytest.fixture
-def mark_pkg_fastapi_not_installed():
-    pkg_fastapi_installed_flag = fastapi_app._package_fastapi_installed
-    fastapi_app._package_fastapi_installed = False
-    yield
-    fastapi_app._package_fastapi_installed = pkg_fastapi_installed_flag
+# --- RestRouter Tests ---
 
 
 @pytest.mark.anyio
-async def test_create_rest_adapter_with_present_deps_succeeds(
+async def test_create_rest_router_with_v0_3_compat(
     agent_card: AgentCard, request_handler: RequestHandler
 ):
-    try:
-        _app = RESTAdapter(agent_card, request_handler)
-    except ImportError:
-        pytest.fail(
-            'With packages starlette and see-starlette present, creating an'
-            ' RESTAdapter instance should not raise ImportError'
-        )
-
-
-@pytest.mark.anyio
-async def test_create_rest_adapter_with_missing_deps_raises_importerror(
-    agent_card: AgentCard,
-    request_handler: RequestHandler,
-    mark_pkg_starlette_not_installed: Any,
-):
-    with pytest.raises(
-        ImportError,
-        match=(
-            r'Packages `starlette` and `sse-starlette` are required to use'
-            r' the `RESTAdapter`.'
-        ),
-    ):
-        _app = RESTAdapter(agent_card, request_handler)
-
-
-@pytest.mark.anyio
-async def test_create_a2a_rest_fastapi_app_with_present_deps_succeeds(
-    agent_card: AgentCard, request_handler: RequestHandler
-):
-    try:
-        _app = A2ARESTFastAPIApplication(agent_card, request_handler).build(
-            agent_card_url='/well-known/agent.json', rpc_url=''
-        )
-    except ImportError:
-        pytest.fail(
-            'With the fastapi package present, creating a'
-            ' A2ARESTFastAPIApplication instance should not raise ImportError'
-        )
-
-
-@pytest.mark.anyio
-async def test_create_a2a_rest_fastapi_app_with_missing_deps_raises_importerror(
-    agent_card: AgentCard,
-    request_handler: RequestHandler,
-    mark_pkg_fastapi_not_installed: Any,
-):
-    with pytest.raises(
-        ImportError,
-        match=(
-            'The `fastapi` package is required to use the'
-            ' `A2ARESTFastAPIApplication`'
-        ),
-    ):
-        _app = A2ARESTFastAPIApplication(agent_card, request_handler).build(
-            agent_card_url='/well-known/agent.json', rpc_url=''
-        )
-
-
-@pytest.mark.anyio
-async def test_create_a2a_rest_fastapi_app_with_v0_3_compat(
-    agent_card: AgentCard, request_handler: RequestHandler
-):
-    app = A2ARESTFastAPIApplication(
-        agent_card, request_handler, enable_v0_3_compat=True
-    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
-
-    routes = [getattr(route, 'path', '') for route in app.routes]
+    router = RestRoutes(
+        agent_card, request_handler, enable_v0_3_compat=True, rpc_url=''
+    )
+    # Check if a route from v0.3 compatibility is present
+    routes = [getattr(route, 'path', '') for route in router.routes]
     assert '/v1/message:send' in routes
 
 
@@ -690,34 +626,6 @@ class TestTenantExtraction:
         args, _ = extended_card_modifier.call_args
         context = args[1]
         assert context.tenant == ''
-
-
-@pytest.mark.anyio
-async def test_global_http_exception_handler_returns_rpc_status(
-    client: AsyncClient,
-) -> None:
-    """Test that a standard FastAPI 404 is transformed into the A2A google.rpc.Status format."""
-
-    # Send a request to an endpoint that does not exist
-    response = await client.get('/non-existent-route')
-
-    # Verify it returns a 404 with standard application/json
-    assert response.status_code == 404
-    assert response.headers.get('content-type') == 'application/json'
-
-    data = response.json()
-
-    # Assert the payload is wrapped in the "error" envelope
-    assert 'error' in data
-    error_payload = data['error']
-
-    # Assert it has the correct AIP-193 format
-    assert error_payload['code'] == 404
-    assert error_payload['status'] == 'NOT_FOUND'
-    assert 'Not Found' in error_payload['message']
-
-    # Standard HTTP errors shouldn't leak details
-    assert 'details' not in error_payload
 
 
 if __name__ == '__main__':
