@@ -60,8 +60,9 @@ class AgentCardRoutes:
         """
         if not _package_starlette_installed:
             raise ImportError(
-                'The `starlette` package is required to use the `AgentCardRoutes`.'
-                ' `a2a-sdk[http-server]`.'
+                'The `starlette` package is required to use `AgentCardRoutes`. '
+                'It can be installed as part of `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
+            )
             )
 
         self.agent_card = agent_card
