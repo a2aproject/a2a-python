@@ -86,7 +86,9 @@ async def streaming_app(
 async def streaming_client(streaming_app: FastAPI) -> AsyncClient:
     """HTTP client for the streaming FastAPI application."""
     return AsyncClient(
-        transport=ASGITransport(app=streaming_app), base_url='http://test'
+        transport=ASGITransport(app=streaming_app),
+        base_url='http://test',
+        headers={'A2A-Version': '1.0'},
     )
 
 
@@ -108,7 +110,9 @@ async def app(
 @pytest.fixture
 async def client(app: FastAPI) -> AsyncClient:
     return AsyncClient(
-        transport=ASGITransport(app=app), base_url='http://testapp'
+        transport=ASGITransport(app=app),
+        base_url='http://testapp',
+        headers={'A2A-Version': '1.0'},
     )
 
 
@@ -370,8 +374,8 @@ async def test_streaming_content_verification(
 
     response = await streaming_client.post(
         '/message:stream',
-        json=json_format.MessageToDict(request),
         headers={'Accept': 'text/event-stream'},
+        json=json_format.MessageToDict(request),
     )
 
     response.raise_for_status()

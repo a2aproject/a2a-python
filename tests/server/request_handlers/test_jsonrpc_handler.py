@@ -131,6 +131,12 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         interface.url = 'http://agent.example.com/api'
         self.mock_agent_card.supported_interfaces = [interface]
 
+    def _ctx(self, state: dict[str, Any] | None = None) -> ServerCallContext:
+        full_state = {'headers': {'A2A-Version': '1.0'}}
+        if state:
+            full_state.update(state)
+        return ServerCallContext(state=full_state)
+
     async def test_on_get_task_success(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
         mock_task_store = AsyncMock(spec=TaskStore)
@@ -138,7 +144,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_agent_executor, mock_task_store
         )
         call_context = ServerCallContext(
-            state={'foo': 'bar', 'request_id': '1'}
+            state={
+                'foo': 'bar',
+                'request_id': '1',
+                'headers': {'A2A-Version': '1.0'},
+            }
         )
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         task_id = 'test_task_id'
@@ -162,7 +172,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = None
         request = GetTaskRequest(id='nonexistent_id')
         call_context = ServerCallContext(
-            state={'foo': 'bar', 'request_id': '1'}
+            state={
+                'foo': 'bar',
+                'request_id': '1',
+                'headers': {'A2A-Version': '1.0'},
+            }
         )
         response = await handler.on_get_task(request, call_context)
         self.assertIsInstance(response, dict)
@@ -186,7 +200,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             page_size=10,
             page_token='token',
         )
-        call_context = ServerCallContext(state={'foo': 'bar'})
+        call_context = self._ctx({'foo': 'bar'})
 
         response = await handler.list_tasks(request, call_context)
 
@@ -207,7 +221,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         from a2a.types.a2a_pb2 import ListTasksRequest
 
         request = ListTasksRequest(page_size=10)
-        call_context = ServerCallContext(state={'request_id': '2'})
+        call_context = self._ctx({'request_id': '2'})
 
         response = await handler.list_tasks(request, call_context)
 
@@ -225,7 +239,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         from a2a.types.a2a_pb2 import ListTasksRequest
 
         request = ListTasksRequest(page_size=10)
-        call_context = ServerCallContext(state={'foo': 'bar'})
+        call_context = self._ctx({'foo': 'bar'})
 
         response = await handler.list_tasks(request, call_context)
 
@@ -253,7 +267,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
         call_context = ServerCallContext(
-            state={'foo': 'bar', 'request_id': '1'}
+            state={
+                'foo': 'bar',
+                'request_id': '1',
+                'headers': {'A2A-Version': '1.0'},
+            }
         )
 
         async def streaming_coro():
@@ -288,7 +306,11 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.cancel.return_value = None
         call_context = ServerCallContext(
-            state={'foo': 'bar', 'request_id': '1'}
+            state={
+                'foo': 'bar',
+                'request_id': '1',
+                'headers': {'A2A-Version': '1.0'},
+            }
         )
 
         async def streaming_coro():
@@ -316,7 +338,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
         request = CancelTaskRequest(id='nonexistent_id')
-        call_context = ServerCallContext(state={'request_id': '1'})
+        call_context = self._ctx({'request_id': '1'})
         response = await handler.on_cancel_task(request, call_context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_error_response(response))
@@ -358,7 +380,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             # execute is called asynchronously in background task
             self.assertIsInstance(response, dict)
@@ -388,7 +411,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             # execute is called asynchronously in background task
             self.assertIsInstance(response, dict)
@@ -419,7 +443,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
 
             # Allow the background event loop to start the execution_task
@@ -492,7 +517,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
@@ -554,7 +580,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             assert isinstance(response, AsyncGenerator)
             collected_events = [item async for item in response]
@@ -585,7 +612,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             task_id=mock_task.id,
             url='http://example.com',
         )
-        context = ServerCallContext()
+        context = self._ctx()
         response = await handler.set_push_notification_config(request, context)
         self.assertIsInstance(response, dict)
         self.assertTrue(is_success_response(response))
@@ -616,14 +643,18 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             url='http://example.com',
             id='default',
         )
-        await handler.set_push_notification_config(request, ServerCallContext())
+        await handler.set_push_notification_config(
+            request,
+            self._ctx(),
+        )
 
         get_request = GetTaskPushNotificationConfigRequest(
             task_id=mock_task.id,
             id='default',
         )
         get_response = await handler.get_push_notification_config(
-            get_request, ServerCallContext()
+            get_request,
+            self._ctx(),
         )
         self.assertIsInstance(get_response, dict)
         self.assertTrue(is_success_response(get_response))
@@ -639,7 +670,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         push_notification_store = InMemoryPushNotificationConfigStore()
         push_notification_sender = BasePushNotificationSender(
-            mock_httpx_client, push_notification_store, ServerCallContext()
+            mock_httpx_client,
+            push_notification_store,
+            self._ctx(),
         )
         request_handler = DefaultRequestHandler(
             mock_agent_executor,
@@ -695,7 +728,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 ),
             )
             response = handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             assert isinstance(response, AsyncGenerator)
 
@@ -741,7 +775,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             mock_queue_manager.tap.return_value = EventQueue()
             request = SubscribeToTaskRequest(id=f'{mock_task.id}')
             response = handler.on_subscribe_to_task(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
@@ -761,7 +796,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         handler = JSONRPCHandler(self.mock_agent_card, request_handler)
         mock_task_store.get.return_value = None
         request = SubscribeToTaskRequest(id='nonexistent_id')
-        response = handler.on_subscribe_to_task(request, ServerCallContext())
+        response = handler.on_subscribe_to_task(
+            request,
+            self._ctx(),
+        )
         assert isinstance(response, AsyncGenerator)
         collected_events: list[Any] = []
         async for event in response:
@@ -793,7 +831,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Should raise UnsupportedOperationError about streaming not supported
         with self.assertRaises(UnsupportedOperationError) as context:
             async for _ in handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             ):
                 pass
 
@@ -825,7 +864,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Should raise UnsupportedOperationError about push notifications not supported
         with self.assertRaises(UnsupportedOperationError) as context:
             await handler.set_push_notification_config(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
 
         self.assertEqual(
@@ -856,7 +896,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             id='default',
         )
         response = await handler.get_push_notification_config(
-            get_request, ServerCallContext()
+            get_request,
+            self._ctx(),
         )
 
         # Assert
@@ -887,7 +928,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             url='http://example.com',
         )
         response = await handler.set_push_notification_config(
-            request, ServerCallContext()
+            request,
+            self._ctx(),
         )
 
         # Assert
@@ -918,7 +960,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 message=create_message(),
             )
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
 
             # Assert
@@ -956,7 +999,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             # Get the single error response
             responses = []
             async for response in handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             ):
                 responses.append(response)
 
@@ -1027,7 +1071,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             )
 
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
 
             # Assert
@@ -1056,7 +1101,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 message=create_message(),  # No task_id, so UUID is generated
             )
             response = await handler.on_message_send(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             # The task ID mismatch should cause an error
             self.assertIsInstance(response, dict)
@@ -1088,7 +1134,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 message=create_message(),
             )
             response = handler.on_message_send_stream(
-                request, ServerCallContext()
+                request,
+                self._ctx(),
             )
             assert isinstance(response, AsyncGenerator)
             collected_events: list[Any] = []
@@ -1124,7 +1171,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             id='config1',
         )
         response = await handler.get_push_notification_config(
-            get_request, ServerCallContext()
+            get_request,
+            self._ctx(),
         )
         # Assert
         self.assertIsInstance(response, dict)
@@ -1163,7 +1211,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             task_id=mock_task.id,
         )
         response = await handler.list_push_notification_configs(
-            list_request, ServerCallContext()
+            list_request,
+            self._ctx(),
         )
         # Assert
         self.assertIsInstance(response, dict)
@@ -1193,7 +1242,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             task_id=mock_task.id,
         )
         response = await handler.list_push_notification_configs(
-            list_request, ServerCallContext()
+            list_request,
+            self._ctx(),
         )
         # Assert
         self.assertIsInstance(response, dict)
@@ -1218,7 +1268,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             id='config1',
         )
         response = await handler.delete_push_notification_config(
-            delete_request, ServerCallContext()
+            delete_request,
+            self._ctx(),
         )
         # Assert
         self.assertIsInstance(response, dict)
@@ -1244,7 +1295,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             id='config1',
         )
         response = await handler.delete_push_notification_config(
-            delete_request, ServerCallContext()
+            delete_request,
+            self._ctx(),
         )
         # Assert
         self.assertIsInstance(response, dict)
@@ -1371,7 +1423,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             extended_card_modifier=modifier,
         )
         request = GetExtendedAgentCardRequest()
-        call_context = ServerCallContext(state={'foo': 'bar'})
+        call_context = self._ctx({'foo': 'bar'})
 
         # Act
         response = await handler.get_authenticated_extended_card(
