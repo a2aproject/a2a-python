@@ -20,7 +20,7 @@ def mock_agent_card():
 def test_app(mock_agent_card):
     app = Starlette()
     card_route = AgentCardRoutes(mock_agent_card)
-    app.routes.append(card_route.route)
+    app.routes.append(card_route.routes[0])
     return app
 
 
