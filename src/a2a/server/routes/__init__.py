@@ -14,7 +14,7 @@ __all__ = [
     'AgentCardRoutes',
     'CallContextBuilder',
     'DefaultCallContextBuilder',
-    'JsonRpcRoute',
+    'JsonRpcRoutes',
     'RestRoutes',
     'StarletteUserProxy',
 ]
