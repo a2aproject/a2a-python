@@ -1,6 +1,6 @@
 # Simple Migration: v0.3 to v1.0
 
-This guide is for users who can afford a short period of downtime (typically a few minutes) during the migration from A2A protocol v0.3 to v1.0. This is the recommended path for single-instance applications or non-critical services.
+This guide is for users who can afford a short period of downtime during the migration from A2A protocol v0.3 to v1.0. This is the recommended path for single-instance applications or non-critical services.
 
 ---
 
@@ -39,9 +39,8 @@ uv run a2a-db --database-url "your-database-url"
 >For more details on the CLI migration tool, including flags, see the [A2A SDK Database Migrations README](../../../../src/a2a/migrations/README.md).
 
 > [!NOTE]
-> All new columns are nullable or have default values.
 >
-> Protocol v1.0 is designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
+> Database stores v1.0 are designed to be backward compatible by default. After this step, your new v1.0 code will be able to read existing v0.3 entries from the database using a built-in legacy parser.
 
 ### Step 2: Verify the Migration
 
@@ -62,12 +61,17 @@ Upgrade your application to use the v1.0 SDK.
 
 If your application fails to start or encounters errors after the migration:
 
-1.  **Revert Schema**: Use the `downgrade` command to step back to the v0.3 structure.
+1.  **Revert Application Code**: Revert your application code to use the v0.3 SDK.
+
+    > [!NOTE]
+    > Older SDKs are compatible with the new schema (as new columns are nullable). If something breaks, rolling back the application code is usually sufficient.
+
+2.  **Revert Schema (Fallback)**: If you encounter database issues, use the `downgrade` command to step back to the v0.3 structure.
     ```bash
     uv run a2a-db downgrade -1
     ```
-2.  **Reinstall v0.3 SDK**: Revert your application code to the previous version.
 3.  **Restart**: Resume operations using the v0.3 SDK.
+
 
 ---
 
