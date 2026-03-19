@@ -96,7 +96,7 @@ async def app(
     extended_card_modifier: MagicMock | None,
 ) -> Any:
     from starlette.applications import Starlette
-    from a2a.server.routes import AgentCardRoute
+    from a2a.server.routes import AgentCardRoutes
 
     # Return Starlette app
     app_instance = Starlette()
@@ -110,8 +110,8 @@ async def app(
     app_instance.routes.extend(rest_router.routes)
 
     # Also Agent card endpoint? if needed in tests
-    card_router = AgentCardRoute(agent_card, card_url='/well-known/agent.json')
-    app_instance.routes.append(card_router.route)
+    card_routes = AgentCardRoutes(agent_card, card_url='/well-known/agent.json')
+    app_instance.routes.extend(card_routes.routes)
 
     return app_instance
 

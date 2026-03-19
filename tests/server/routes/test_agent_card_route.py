@@ -2,7 +2,7 @@ import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
-from a2a.server.routes import AgentCardRoute
+from a2a.server.routes import AgentCardRoutes
 from a2a.types import a2a_pb2
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 
@@ -19,7 +19,7 @@ def mock_agent_card():
 @pytest.fixture
 def test_app(mock_agent_card):
     app = Starlette()
-    card_route = AgentCardRoute(mock_agent_card)
+    card_route = AgentCardRoutes(mock_agent_card)
     app.routes.append(card_route.route)
     return app
 
@@ -45,7 +45,7 @@ def test_agent_card_route_with_modifier(mock_agent_card):
         card.name = 'modified-agent'
         return card
 
-    card_route = AgentCardRoute(mock_agent_card, card_modifier=modifier)
+    card_route = AgentCardRoutes(mock_agent_card, card_modifier=modifier)
     app = Starlette()
     app.routes.append(card_route.route)
     client = TestClient(app)

@@ -135,7 +135,6 @@ class RestRoutes:
                 context_builder=context_builder,
             )
 
-
         self._setup_routes(rpc_url)
 
     def _build_call_context(self, request: Request) -> ServerCallContext:

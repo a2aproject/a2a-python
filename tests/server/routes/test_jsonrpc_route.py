@@ -7,7 +7,7 @@ from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.server.routes import JsonRpcRoute, StarletteUserProxy
+from a2a.server.routes import JsonRpcRoutes, StarletteUserProxy
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -40,8 +40,8 @@ def test_app(mock_handler):
     from starlette.applications import Starlette
 
     app = Starlette()
-    router = JsonRpcRoute(mock_agent_card, mock_handler)
-    app.routes.append(router.route)
+    jsonrpc_routes = JsonRpcRoutes(mock_agent_card, mock_handler)
+    app.routes.extend(jsonrpc_routes.routes)
     return app
 
 
@@ -211,10 +211,10 @@ class TestJSONRPCApplicationV03Compat:
         from starlette.applications import Starlette
 
         app = Starlette()
-        router = JsonRpcRoute(
+        routes = JsonRpcRoutes(
             mock_agent_card, mock_handler, enable_v0_3_compat=True
         )
-        app.routes.append(router.route)
+        app.routes.extend(routes.routes)
 
         client = TestClient(app)
 
@@ -257,10 +257,10 @@ class TestJSONRPCApplicationV03Compat:
         from starlette.applications import Starlette
 
         app = Starlette()
-        router = JsonRpcRoute(
+        routes = JsonRpcRoutes(
             mock_agent_card, mock_handler, enable_v0_3_compat=False
         )
-        app.routes.append(router.route)
+        app.routes.extend(routes.routes)
 
         client = TestClient(app)
 

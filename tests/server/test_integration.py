@@ -18,7 +18,7 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from a2a.server.routes import AgentCardRoute, JsonRpcRoute
+from a2a.server.routes import AgentCardRoutes, JsonRpcRoutes
 
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
@@ -164,18 +164,18 @@ class AppBuilder:
         app_instance = Starlette(middleware=middleware, routes=routes or [])
 
         # Agent card router
-        card_router = AgentCardRoute(
+        card_routes = AgentCardRoutes(
             self.agent_card,
             card_url=agent_card_url,
             card_modifier=self.card_modifier,
         )
-        app_instance.routes.append(card_router.route)
+        app_instance.routes.extend(card_routes.routes)
 
         # JSON-RPC router
-        rpc_router = JsonRpcRoute(
+        rpc_routes = JsonRpcRoutes(
             self.agent_card, self.handler, rpc_url=rpc_url
         )
-        app_instance.routes.append(rpc_router.route)
+        app_instance.routes.extend(rpc_routes.routes)
 
         return app_instance
 

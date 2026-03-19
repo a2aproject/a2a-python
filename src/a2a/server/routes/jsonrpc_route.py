@@ -35,7 +35,7 @@ from a2a.types.a2a_pb2 import AgentCard
 logger = logging.getLogger(__name__)
 
 
-class JsonRpcRoute:
+class JsonRpcRoutes:
     """Provides the Starlette Route for the A2A protocol JSON-RPC endpoint.
 
     Handles incoming JSON-RPC requests, routes them to the appropriate
@@ -96,9 +96,11 @@ class JsonRpcRoute:
             enable_v0_3_compat=enable_v0_3_compat,
         )
 
-        self.route = Route(
-            path=rpc_url,
-            endpoint=self.dispatcher.handle_requests,
-            methods=['POST'],
-            middleware=middleware,
-        )
+        self.routes = [
+            Route(
+                path=rpc_url,
+                endpoint=self.dispatcher.handle_requests,
+                methods=['POST'],
+                middleware=middleware,
+            )
+        ]

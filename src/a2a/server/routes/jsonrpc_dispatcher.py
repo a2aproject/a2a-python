@@ -417,7 +417,9 @@ class JsonRpcDispatcher:
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
 
-            handler_result: AsyncGenerator[dict[str, Any], None] | dict[str, Any]
+            handler_result: (
+                AsyncGenerator[dict[str, Any], None] | dict[str, Any]
+            )
             # Route streaming requests by method name
             if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 handler_result = await self._process_streaming_request(

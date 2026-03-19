@@ -3,7 +3,8 @@ import httpx
 from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+from a2a.server.routes import RestRoutes
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -139,17 +140,20 @@ def create_agent_app(
 ) -> FastAPI:
     """Creates a new HTTP+REST FastAPI application for the test agent."""
     push_config_store = InMemoryPushNotificationConfigStore()
-    app = A2ARESTFastAPIApplication(
-        agent_card=test_agent_card(url),
-        http_handler=DefaultRequestHandler(
-            agent_executor=TestAgentExecutor(),
-            task_store=InMemoryTaskStore(),
-            push_config_store=push_config_store,
-            push_sender=BasePushNotificationSender(
-                httpx_client=notification_client,
-                config_store=push_config_store,
-                context=ServerCallContext(),
-            ),
+    handler = DefaultRequestHandler(
+        agent_executor=TestAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        push_config_store=push_config_store,
+        push_sender=BasePushNotificationSender(
+            httpx_client=notification_client,
+            config_store=push_config_store,
+            context=ServerCallContext(),
         ),
     )
-    return app.build()
+    rest_routes = RestRoutes(
+        agent_card=test_agent_card(url),
+        request_handler=handler,
+        extended_agent_card=test_agent_card(url),
+        rpc_url='',
+    )
+    return FastAPI(routes=rest_routes.routes)

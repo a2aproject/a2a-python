@@ -36,7 +36,7 @@ from a2a.utils.helpers import maybe_await
 logger = logging.getLogger(__name__)
 
 
-class AgentCardRoute:
+class AgentCardRoutes:
     """Provides the Starlette Route for the A2A protocol agent card endpoint."""
 
     def __init__(
@@ -75,9 +75,11 @@ class AgentCardRoute:
                 )
             return JSONResponse(agent_card_to_dict(card_to_serve))
 
-        self.route = Route(
-            path=card_url,
-            endpoint=get_agent_card,
-            methods=['GET'],
-            middleware=middleware,
-        )
+        self.routes = [
+            Route(
+                path=card_url,
+                endpoint=get_agent_card,
+                methods=['GET'],
+                middleware=middleware,
+            )
+        ]

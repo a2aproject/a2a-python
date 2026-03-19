@@ -33,11 +33,11 @@ else:
 
 from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3.rest_handler import REST03Handler
+from a2a.server.context import ServerCallContext
 from a2a.server.routes.jsonrpc_dispatcher import (
     CallContextBuilder,
     DefaultCallContextBuilder,
 )
-from a2a.server.context import ServerCallContext
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
