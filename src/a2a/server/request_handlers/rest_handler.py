@@ -27,9 +27,13 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
 )
-from a2a.utils import proto_utils
+from a2a.utils import constants, proto_utils
 from a2a.utils.errors import TaskNotFoundError
-from a2a.utils.helpers import validate, validate_async_generator
+from a2a.utils.helpers import (
+    validate,
+    validate_async_generator,
+    validate_version,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -61,6 +65,7 @@ class RESTHandler:
         self.agent_card = agent_card
         self.request_handler = request_handler
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_message_send(
         self,
         request: Request,
@@ -87,6 +92,7 @@ class RESTHandler:
             response = a2a_pb2.SendMessageResponse(message=task_or_message)
         return MessageToDict(response)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
@@ -117,6 +123,7 @@ class RESTHandler:
             response = proto_utils.to_stream_response(event)
             yield MessageToDict(response)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_cancel_task(
         self,
         request: Request,
@@ -139,6 +146,7 @@ class RESTHandler:
             return MessageToDict(task)
         raise TaskNotFoundError
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
@@ -165,6 +173,7 @@ class RESTHandler:
         ):
             yield MessageToDict(proto_utils.to_stream_response(event))
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def get_push_notification(
         self,
         request: Request,
@@ -192,6 +201,7 @@ class RESTHandler:
         )
         return MessageToDict(config)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate(
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
@@ -229,6 +239,7 @@ class RESTHandler:
         )
         return MessageToDict(config)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_get_task(
         self,
         request: Request,
@@ -251,6 +262,7 @@ class RESTHandler:
             return MessageToDict(task)
         raise TaskNotFoundError
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def delete_push_notification(
         self,
         request: Request,
@@ -275,6 +287,7 @@ class RESTHandler:
         )
         return {}
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def list_tasks(
         self,
         request: Request,
@@ -295,6 +308,7 @@ class RESTHandler:
         result = await self.request_handler.on_list_tasks(params, context)
         return MessageToDict(result, always_print_fields_with_no_presence=True)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def list_push_notifications(
         self,
         request: Request,

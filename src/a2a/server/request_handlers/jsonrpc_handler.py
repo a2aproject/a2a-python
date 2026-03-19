@@ -31,7 +31,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils import proto_utils
+from a2a.utils import constants, proto_utils
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
@@ -49,7 +49,12 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
     VersionNotSupportedError,
 )
-from a2a.utils.helpers import maybe_await, validate, validate_async_generator
+from a2a.utils.helpers import (
+    maybe_await,
+    validate,
+    validate_async_generator,
+    validate_version,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -143,6 +148,7 @@ class JSONRPCHandler:
             return None
         return context.state.get('request_id')
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_message_send(
         self,
         request: SendMessageRequest,
@@ -172,6 +178,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
@@ -210,6 +217,7 @@ class JSONRPCHandler:
                 e,
             )
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_cancel_task(
         self,
         request: CancelTaskRequest,
@@ -236,6 +244,7 @@ class JSONRPCHandler:
 
         return _build_error_response(request_id, TaskNotFoundError())
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate_async_generator(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
@@ -274,6 +283,7 @@ class JSONRPCHandler:
                 e,
             )
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def get_push_notification_config(
         self,
         request: GetTaskPushNotificationConfigRequest,
@@ -300,6 +310,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate(
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
@@ -337,6 +348,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_get_task(
         self,
         request: GetTaskRequest,
@@ -363,6 +375,7 @@ class JSONRPCHandler:
 
         return _build_error_response(request_id, TaskNotFoundError())
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def list_tasks(
         self,
         request: ListTasksRequest,
@@ -391,6 +404,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def list_push_notification_configs(
         self,
         request: ListTaskPushNotificationConfigsRequest,
@@ -416,6 +430,7 @@ class JSONRPCHandler:
         except A2AError as e:
             return _build_error_response(request_id, e)
 
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def delete_push_notification_config(
         self,
         request: DeleteTaskPushNotificationConfigRequest,

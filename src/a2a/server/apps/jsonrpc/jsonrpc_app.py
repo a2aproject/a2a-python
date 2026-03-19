@@ -254,7 +254,7 @@ class JSONRPCApplication(ABC):
                 agent_card=agent_card,
                 http_handler=http_handler,
                 extended_agent_card=extended_agent_card,
-                context_builder=context_builder,
+                context_builder=self._context_builder,
                 card_modifier=card_modifier,
                 extended_card_modifier=extended_card_modifier,
             )
@@ -444,6 +444,8 @@ class JSONRPCApplication(ABC):
                     InvalidRequestError(message='Payload too large'),
                 )
             raise e
+        except A2AError as e:
+            return self._generate_error_response(request_id, e)
         except Exception as e:
             logger.exception('Unhandled exception')
             return self._generate_error_response(
