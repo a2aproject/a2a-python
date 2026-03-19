@@ -1,7 +1,8 @@
 import functools
+import inspect
 import logging
 
-from collections.abc import Awaitable, Callable, Coroutine
+from collections.abc import AsyncGenerator, Awaitable, Callable, Coroutine
 from typing import TYPE_CHECKING, Any
 
 
@@ -53,6 +54,68 @@ def _build_error_payload(
     return {'error': payload}
 
 
+def _create_error_response(error: Exception) -> Response:
+    """Helper function to create a JSONResponse for an error."""
+    if isinstance(error, A2AError):
+        mapping = A2A_REST_ERROR_MAPPING.get(
+            type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
+        )
+        http_code = mapping.http_code
+        grpc_status = mapping.grpc_status
+        reason = mapping.reason
+
+        log_level = (
+            logging.ERROR
+            if isinstance(error, InternalError)
+            else logging.WARNING
+        )
+        logger.log(
+            log_level,
+            "Request error: Code=%s, Message='%s'%s",
+            getattr(error, 'code', 'N/A'),
+            getattr(error, 'message', str(error)),
+            f', Data={error.data}' if error.data else '',
+        )
+
+        # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
+        metadata = getattr(error, 'data', None) or {}
+
+        return JSONResponse(
+            content=_build_error_payload(
+                code=http_code,
+                status=grpc_status,
+                message=getattr(error, 'message', str(error)),
+                reason=reason,
+                metadata=metadata,
+            ),
+            status_code=http_code,
+            media_type='application/json',
+        )
+    if isinstance(error, ParseError):
+        logger.warning('Parse error: %s', str(error))
+        return JSONResponse(
+            content=_build_error_payload(
+                code=400,
+                status='INVALID_ARGUMENT',
+                message=str(error),
+                reason='INVALID_REQUEST',
+                metadata={},
+            ),
+            status_code=400,
+            media_type='application/json',
+        )
+    logger.exception('Unknown error occurred')
+    return JSONResponse(
+        content=_build_error_payload(
+            code=500,
+            status='INTERNAL',
+            message='unknown exception',
+        ),
+        status_code=500,
+        media_type='application/json',
+    )
+
+
 def rest_error_handler(
     func: Callable[..., Awaitable[Response]],
 ) -> Callable[..., Awaitable[Response]]:
@@ -62,65 +125,8 @@ def rest_error_handler(
     async def wrapper(*args: Any, **kwargs: Any) -> Response:
         try:
             return await func(*args, **kwargs)
-        except A2AError as error:
-            mapping = A2A_REST_ERROR_MAPPING.get(
-                type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
-            )
-            http_code = mapping.http_code
-            grpc_status = mapping.grpc_status
-            reason = mapping.reason
-
-            log_level = (
-                logging.ERROR
-                if isinstance(error, InternalError)
-                else logging.WARNING
-            )
-            logger.log(
-                log_level,
-                "Request error: Code=%s, Message='%s'%s",
-                getattr(error, 'code', 'N/A'),
-                getattr(error, 'message', str(error)),
-                f', Data={error.data}' if error.data else '',
-            )
-
-            # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
-            metadata = getattr(error, 'data', None) or {}
-
-            return JSONResponse(
-                content=_build_error_payload(
-                    code=http_code,
-                    status=grpc_status,
-                    message=getattr(error, 'message', str(error)),
-                    reason=reason,
-                    metadata=metadata,
-                ),
-                status_code=http_code,
-                media_type='application/json',
-            )
-        except ParseError as error:
-            logger.warning('Parse error: %s', str(error))
-            return JSONResponse(
-                content=_build_error_payload(
-                    code=400,
-                    status='INVALID_ARGUMENT',
-                    message=str(error),
-                    reason='INVALID_REQUEST',
-                    metadata={},
-                ),
-                status_code=400,
-                media_type='application/json',
-            )
-        except Exception:
-            logger.exception('Unknown error occurred')
-            return JSONResponse(
-                content=_build_error_payload(
-                    code=500,
-                    status='INTERNAL',
-                    message='unknown exception',
-                ),
-                status_code=500,
-                media_type='application/json',
-            )
+        except Exception as error:  # noqa: BLE001
+            return _create_error_response(error)
 
     return wrapper
 
@@ -128,13 +134,10 @@ def rest_error_handler(
 def rest_stream_error_handler(
     func: Callable[..., Coroutine[Any, Any, Any]],
 ) -> Callable[..., Coroutine[Any, Any, Any]]:
-    """Decorator to catch A2AError for a streaming method, log it and then rethrow it to be handled by framework."""
+    """Decorator to catch A2AError for a streaming method. Maps synchronous errors to JSONResponse and logs streaming errors."""
 
-    @functools.wraps(func)
-    async def wrapper(*args: Any, **kwargs: Any) -> Any:
-        try:
-            return await func(*args, **kwargs)
-        except A2AError as error:
+    def _log_error(error: Exception) -> None:
+        if isinstance(error, A2AError):
             log_level = (
                 logging.ERROR
                 if isinstance(error, InternalError)
@@ -147,14 +150,36 @@ def rest_stream_error_handler(
                 getattr(error, 'message', str(error)),
                 f', Data={error.data}' if error.data else '',
             )
-            # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we run the error handling logic (provides logging)
-            # and reraise the error and let server framework manage
-            raise error
-        except Exception as e:
-            # Since the stream has started, we can't return a JSONResponse.
-            # Instead, we run the error handling logic (provides logging)
-            # and reraise the error and let server framework manage
-            raise e
+        else:
+            logger.exception('Unknown streaming error occurred')
+
+    @functools.wraps(func)
+    async def wrapper(*args: Any, **kwargs: Any) -> Any:
+        try:
+            response = await func(*args, **kwargs)
+
+            # If the response has an async generator body (like EventSourceResponse),
+            # we must wrap it to catch errors that occur during stream execution.
+            if hasattr(response, 'body_iterator') and inspect.isasyncgen(
+                response.body_iterator
+            ):
+                original_iterator = response.body_iterator
+
+                async def error_catching_iterator() -> AsyncGenerator[
+                    Any, None
+                ]:
+                    try:
+                        async for item in original_iterator:
+                            yield item
+                    except Exception as stream_error:
+                        _log_error(stream_error)
+                        raise stream_error
+
+                response.body_iterator = error_catching_iterator()
+
+        except Exception as e:  # noqa: BLE001
+            return _create_error_response(e)
+        else:
+            return response
 
     return wrapper
