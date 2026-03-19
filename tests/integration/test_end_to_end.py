@@ -555,37 +555,26 @@ async def test_end_to_end_input_required(transport_setups):
     [
         (
             SendMessageRequest(),
-            ['message'],
+            {'message'},
         ),
         (
             SendMessageRequest(message=Message()),
-            ['message.message_id', 'message.role', 'message.parts'],
+            {'message.message_id', 'message.role', 'message.parts'},
         ),
     ],
 )
 async def test_end_to_end_validation_errors(
     transport_setups,
     empty_request: SendMessageRequest,
-    expected_fields: list[str],
+    expected_fields: set[str],
 ) -> None:
     client = transport_setups.client
 
-    try:
+    with pytest.raises(InvalidParamsError) as exc_info:
         async for _ in client.send_message(request=empty_request):
             pass
-    except Exception as e:
-        # ASGITransport propagates server-side generator crashes as ExceptionGroups
-        exc = e
-        if hasattr(e, 'exceptions') and len(e.exceptions) == 1:
-            exc = e.exceptions[0]
-        
-        if not isinstance(exc, InvalidParamsError):
-            raise e
-            
-        errors = exc.data.get('errors', []) if exc.data else []
-        assert {e['field'] for e in errors} == set(expected_fields)
-        return
 
-    pytest.fail('InvalidParamsError was not raised')
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == expected_fields
 
     await client.close()

@@ -40,6 +40,11 @@ def handle_http_exceptions(
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
         raise A2AClientError(f'JSON Decode Error: {e}') from e
+    except Exception as e:
+        # ASGITransport propagates local server-side generator crashes as ExceptionGroups
+        if hasattr(e, 'exceptions') and len(e.exceptions) == 1:
+            raise e.exceptions[0] from e
+        raise e
 
 
 def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
