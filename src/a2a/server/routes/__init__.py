@@ -11,7 +11,7 @@ from a2a.server.routes.rest_routes import RestRoutes
 
 
 __all__ = [
-    'AgentCardRoute',
+    'AgentCardRoutes',
     'CallContextBuilder',
     'DefaultCallContextBuilder',
     'JsonRpcRoute',
