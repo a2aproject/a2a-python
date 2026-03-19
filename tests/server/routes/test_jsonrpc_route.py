@@ -233,15 +233,13 @@ class TestJSONRPCApplicationV03Compat:
 
         # Instead of _v03_adapter, the handler handles it or it's dispatcher
         with patch.object(
-            routes.dispatcher,
-            '_process_non_streaming_request',
+            routes.dispatcher._v03_adapter,
+            'handle_request',
             new_callable=AsyncMock,
         ) as mock_handle:
-            mock_handle.return_value = {
-                'jsonrpc': '2.0',
-                'id': '1',
-                'result': {},
-            }
+            mock_handle.return_value = JSONResponse(
+                {'jsonrpc': '2.0', 'id': '1', 'result': {}}
+            )
 
             response = client.post('/', json=request_data)
 
