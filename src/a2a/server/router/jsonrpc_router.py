@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
@@ -31,7 +31,8 @@ from a2a.types.a2a_pb2 import AgentCard
 logger = logging.getLogger(__name__)
 
 
-from starlette.routing import Route
+from starlette.middleware import Middleware
+from starlette.routing import Route, Router
 
 
 class JsonRpcRouter:
@@ -56,6 +57,7 @@ class JsonRpcRouter:
         | None = None,
         enable_v0_3_compat: bool = False,
         rpc_url: str = '/',
+        middleware: Sequence[Middleware] | None = None,
     ) -> None:
         """Initializes the JsonRpcRouter.
         
@@ -81,5 +83,6 @@ class JsonRpcRouter:
         self.route = Route(
             path=rpc_url,
             endpoint=self.dispatcher._handle_requests,
-            methods=['POST']
+            methods=['POST'],
+            middleware=middleware,
         )

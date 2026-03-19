@@ -215,8 +215,10 @@ def serve(task_store: TaskStore) -> None:
     rest_router = RestRouter(
         agent_card=agent_card,
         request_handler=request_handler,
+        rpc_url=REST_URL,
     )
-    main_app.mount(REST_URL, rest_router.router)
+    main_app.routes.extend(rest_router.routes)
+
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'

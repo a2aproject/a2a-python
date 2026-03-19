@@ -1,28 +1,31 @@
 import logging
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
     from starlette.exceptions import HTTPException as StarletteHTTPException
+    from starlette.middleware import Middleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Router
+    from starlette.routing import Route
 
     _package_starlette_installed = True
 else:
     try:
         from sse_starlette.sse import EventSourceResponse
         from starlette.exceptions import HTTPException as StarletteHTTPException
+        from starlette.middleware import Middleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.routing import Router
+        from starlette.routing import Route
 
         _package_starlette_installed = True
     except ImportError:
-        Router = Any
+        Middleware = Any
+        Route = Any
         EventSourceResponse = Any
         Request = Any
         JSONResponse = Any
@@ -35,7 +38,7 @@ import json
 
 from google.protobuf.json_format import MessageToDict, Parse
 
-from a2a.server.apps.jsonrpc import (
+from a2a.server.router.jsonrpc_dispatcher import (
     CallContextBuilder,
     DefaultCallContextBuilder,
 )
@@ -82,6 +85,7 @@ class RestRouter:
         | None = None,
         enable_v0_3_compat: bool = False,
         rpc_url: str = '',
+        middleware: Sequence['Middleware'] | None = None,
     ) -> None:
         """Initializes the A2AFastAPIApplication.
 
@@ -129,8 +133,7 @@ class RestRouter:
                 context_builder=context_builder,
             )
 
-        self.router = Router()
-        self._setup_router(rpc_url)
+        self._setup_routes(rpc_url)
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
         call_context = self._context_builder.build(request)
@@ -138,16 +141,22 @@ class RestRouter:
             call_context.tenant = request.path_params['tenant']
         return call_context
 
-    def _setup_router(
+    def _setup_routes(
         self,
         rpc_url: str,
     ) -> None:
         """Builds and returns the FastAPI application instance."""
+        self.routes = []
         if self.enable_v0_3_compat and self._v03_adapter:
             for route, callback in self._v03_adapter.routes().items():
-                self.router.add_route(
-                    f'{rpc_url}{route[0]}', callback, methods=[route[1]]
+                self.routes.append(
+                    Route(
+                        path=f'{rpc_url}{route[0]}',
+                        endpoint=callback,
+                        methods=[route[1]],
+                    )
                 )
+
 
         base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
             ('/message:send', 'POST'): self._message_send,
@@ -164,16 +173,16 @@ class RestRouter:
             ('/extendedAgentCard', 'GET'): self._get_extended_agent_card,
         }
 
-        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
-            (p, method): handler
+        self.routes.extend([
+            Route(
+                path=f'{rpc_url}{p}',
+                endpoint=handler,
+                methods=[method],
+            )
             for (path, method), handler in base_routes.items()
             for p in (path, f'/{{tenant}}{path}')
-        }
+        ])
 
-        for (path, method), handler in routes.items():
-            self.router.add_route(
-                f'{rpc_url}{path}', handler, methods=[method]
-            )
 
     @rest_error_handler
     async def _message_send(self, request: Request) -> Response:

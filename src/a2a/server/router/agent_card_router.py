@@ -1,19 +1,22 @@
 import logging
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
+    from starlette.middleware import Middleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Route
+    from starlette.routing import Router, Route
 else:
     try:
+        from starlette.middleware import Middleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.routing import Route
+        from starlette.routing import Router, Route
     except ImportError:
+        Middleware = Any
         Route = Any
         Request = Any
         Response = Any
@@ -36,6 +39,7 @@ class AgentCardRouter:
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
         card_url: str = '/',
+        middleware: Sequence['Middleware'] | None = None,
     ) -> None:
         """Initializes the AgentCardRouter.
 
@@ -56,4 +60,10 @@ class AgentCardRouter:
                 )
             return JSONResponse(agent_card_to_dict(card_to_serve))
 
-        self.route = Route(path=card_url, endpoint=get_agent_card, methods=['GET'])
+        self.route = Route(
+            path=card_url,
+            endpoint=get_agent_card,
+            methods=['GET'],
+            middleware=middleware,
+        )
+        
