@@ -21,7 +21,7 @@ from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
-from a2a.server.router import AgentCardRouter, JsonRpcRouter, RestRouter
+from a2a.server.routes import AgentCardRoute, JsonRpcRoute, RestRoutes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
@@ -197,14 +197,14 @@ def serve(task_store: TaskStore) -> None:
     main_app = Starlette()
 
     # Agent Card
-    agent_card_router = AgentCardRouter(
+    agent_card_router = AgentCardRoute(
         agent_card=agent_card,
         card_url=AGENT_CARD_URL,
     )
     main_app.routes.append(agent_card_router.route)
 
     # JSONRPC
-    jsonrpc_router = JsonRpcRouter(
+    jsonrpc_router = JsonRpcRoute(
         agent_card=agent_card,
         request_handler=request_handler,
         rpc_url=JSONRPC_URL,
@@ -212,13 +212,12 @@ def serve(task_store: TaskStore) -> None:
     main_app.routes.append(jsonrpc_router.route)
 
     # REST
-    rest_router = RestRouter(
+    rest_router = RestRoutes(
         agent_card=agent_card,
         request_handler=request_handler,
         rpc_url=REST_URL,
     )
     main_app.routes.extend(rest_router.routes)
-
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'

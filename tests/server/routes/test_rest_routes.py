@@ -10,7 +10,7 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 
-from a2a.server.router.rest_router import RestRouter
+from a2a.server.routes import RestRoutes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -74,11 +74,10 @@ async def streaming_app(
     streaming_agent_card: AgentCard, request_handler: RequestHandler
 ) -> Any:
     from starlette.applications import Starlette
-    router = RestRouter(
-        streaming_agent_card, request_handler, rpc_url=''
-    )
+
+    router = RestRoutes(streaming_agent_card, request_handler, rpc_url='')
     app = Starlette()
-    app.mount('', router.router)
+    app.routes.extend(router.routes)
     return app
 
 
@@ -97,22 +96,23 @@ async def app(
     extended_card_modifier: MagicMock | None,
 ) -> Any:
     from starlette.applications import Starlette
-    from a2a.server.router.agent_card_router import AgentCardRouter
+    from a2a.server.routes import AgentCardRoute
+
     # Return Starlette app
     app_instance = Starlette()
-    
-    rest_router = RestRouter(
+
+    rest_router = RestRoutes(
         agent_card,
         request_handler,
         extended_card_modifier=extended_card_modifier,
-        rpc_url=''
+        rpc_url='',
     )
-    app_instance.mount('', rest_router.router)
-    
+    app_instance.routes.extend(rest_router.routes)
+
     # Also Agent card endpoint? if needed in tests
-    card_router = AgentCardRouter(agent_card, card_url='/well-known/agent.json')
+    card_router = AgentCardRoute(agent_card, card_url='/well-known/agent.json')
     app_instance.routes.append(card_router.route)
-    
+
     return app_instance
 
 
@@ -130,11 +130,11 @@ async def client(app: FastAPI) -> AsyncClient:
 async def test_create_rest_router_with_v0_3_compat(
     agent_card: AgentCard, request_handler: RequestHandler
 ):
-    router = RestRouter(
+    router = RestRoutes(
         agent_card, request_handler, enable_v0_3_compat=True, rpc_url=''
     )
     # Check if a route from v0.3 compatibility is present
-    routes = [getattr(route, 'path', '') for route in router.router.routes]
+    routes = [getattr(route, 'path', '') for route in router.routes]
     assert '/v1/message:send' in routes
 
 

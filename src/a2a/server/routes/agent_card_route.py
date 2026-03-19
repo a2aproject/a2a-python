@@ -8,13 +8,14 @@ if TYPE_CHECKING:
     from starlette.middleware import Middleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Router, Route
+    from starlette.routing import Route
 else:
     try:
         from starlette.middleware import Middleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.routing import Router, Route
+        from starlette.routing import Route
+
     except ImportError:
         Middleware = Any
         Route = Any
@@ -30,8 +31,8 @@ from a2a.utils.helpers import maybe_await
 logger = logging.getLogger(__name__)
 
 
-class AgentCardRouter:
-    """A FastAPI router implementing the A2A protocol agent card endpoints."""
+class AgentCardRoute:
+    """Provides the Starlette Route for the A2A protocol agent card endpoint."""
 
     def __init__(
         self,
@@ -41,7 +42,7 @@ class AgentCardRouter:
         card_url: str = '/',
         middleware: Sequence['Middleware'] | None = None,
     ) -> None:
-        """Initializes the AgentCardRouter.
+        """Initializes the AgentCardRoute.
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
@@ -66,4 +67,3 @@ class AgentCardRouter:
             methods=['GET'],
             middleware=middleware,
         )
-        

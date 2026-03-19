@@ -7,7 +7,8 @@ from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.server.router import JsonRpcRouter, StarletteUserProxy
+from a2a.server.routes import JsonRpcRoute, StarletteUserProxy
+
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
@@ -35,10 +36,11 @@ def test_app(mock_handler):
     mock_agent_card.url = 'http://mockurl.com'
     mock_agent_card.capabilities = MagicMock()
     mock_agent_card.capabilities.streaming = False
-    
+
     from starlette.applications import Starlette
+
     app = Starlette()
-    router = JsonRpcRouter(mock_agent_card, mock_handler)
+    router = JsonRpcRoute(mock_agent_card, mock_handler)
     app.routes.append(router.route)
     return app
 
@@ -207,8 +209,11 @@ class TestJSONRPCApplicationV03Compat:
         mock_agent_card.capabilities.streaming = False
 
         from starlette.applications import Starlette
+
         app = Starlette()
-        router = JsonRpcRouter(mock_agent_card, mock_handler, enable_v0_3_compat=True)
+        router = JsonRpcRoute(
+            mock_agent_card, mock_handler, enable_v0_3_compat=True
+        )
         app.routes.append(router.route)
 
         client = TestClient(app)
@@ -228,9 +233,15 @@ class TestJSONRPCApplicationV03Compat:
 
         # Instead of _v03_adapter, the handler handles it or it's dispatcher
         with patch.object(
-            router.dispatcher, '_process_non_streaming_request', new_callable=AsyncMock
+            router.dispatcher,
+            '_process_non_streaming_request',
+            new_callable=AsyncMock,
         ) as mock_handle:
-            mock_handle.return_value = {'jsonrpc': '2.0', 'id': '1', 'result': {}}
+            mock_handle.return_value = {
+                'jsonrpc': '2.0',
+                'id': '1',
+                'result': {},
+            }
 
             response = client.post('/', json=request_data)
 
@@ -244,8 +255,11 @@ class TestJSONRPCApplicationV03Compat:
         mock_agent_card.capabilities.streaming = False
 
         from starlette.applications import Starlette
+
         app = Starlette()
-        router = JsonRpcRouter(mock_agent_card, mock_handler, enable_v0_3_compat=False)
+        router = JsonRpcRoute(
+            mock_agent_card, mock_handler, enable_v0_3_compat=False
+        )
         app.routes.append(router.route)
 
         client = TestClient(app)

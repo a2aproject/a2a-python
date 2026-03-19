@@ -3,8 +3,12 @@ import logging
 from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
+from starlette.middleware import Middleware
+from starlette.routing import Route
+
 
 if TYPE_CHECKING:
+
     from starlette.routing import Router
 
     _package_starlette_installed = True
@@ -21,7 +25,7 @@ else:
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.router.jsonrpc_dispatcher import (
+from a2a.server.routes.jsonrpc_dispatcher import (
     CallContextBuilder,
     JsonRpcDispatcher,
 )
@@ -31,11 +35,10 @@ from a2a.types.a2a_pb2 import AgentCard
 logger = logging.getLogger(__name__)
 
 
-from starlette.middleware import Middleware
-from starlette.routing import Route, Router
 
 
-class JsonRpcRouter:
+
+class JsonRpcRoute:
     """Provides the Starlette Route for the A2A protocol JSON-RPC endpoint.
 
     Handles incoming JSON-RPC requests, routes them to the appropriate
@@ -59,13 +62,13 @@ class JsonRpcRouter:
         rpc_url: str = '/',
         middleware: Sequence[Middleware] | None = None,
     ) -> None:
-        """Initializes the JsonRpcRouter.
-        
+        """Initializes the JsonRpcRoute.
+
         ... (docstrings remain the same) ...
         """
         if not _package_starlette_installed:
             raise ImportError(
-                'The `starlette` package is required to use the `JsonRpcRouter`.'
+                'The `starlette` package is required to use the `JsonRpcRoute`.'
                 ' It can be added as a part of `a2a-sdk` optional dependencies,'
                 ' `a2a-sdk[http-server]`.'
             )

@@ -428,7 +428,9 @@ class JsonRpcDispatcher:
                     raw_result = await self._process_non_streaming_request(
                         request_id, specific_request, call_context
                     )
-                    handler_result = JSONRPC20Response(result=raw_result, _id=request_id).data
+                    handler_result = JSONRPC20Response(
+                        result=raw_result, _id=request_id
+                    ).data
                 except Exception as e:
                     return self._generate_error_response(request_id, e)
 
@@ -474,14 +476,20 @@ class JsonRpcDispatcher:
 
         stream: AsyncGenerator | None = None
         if isinstance(request_obj, SendMessageRequest):
-            stream = self.http_handler.on_message_send_stream(request_obj, context)
+            stream = self.http_handler.on_message_send_stream(
+                request_obj, context
+            )
         elif isinstance(request_obj, SubscribeToTaskRequest):
-            stream = self.http_handler.on_subscribe_to_task(request_obj, context)
+            stream = self.http_handler.on_subscribe_to_task(
+                request_obj, context
+            )
 
         if stream is None:
-             raise UnsupportedOperationError(message='Stream not supported')
+            raise UnsupportedOperationError(message='Stream not supported')
 
-        async def _wrap_stream(st: AsyncGenerator) -> AsyncGenerator[dict[str, Any], None]:
+        async def _wrap_stream(
+            st: AsyncGenerator,
+        ) -> AsyncGenerator[dict[str, Any], None]:
             try:
                 async for event in st:
                     stream_response = proto_utils.to_stream_response(event)
@@ -490,7 +498,11 @@ class JsonRpcDispatcher:
                     )
                     yield JSONRPC20Response(result=result, _id=request_id).data
             except Exception as e:
-                error = e if isinstance(e, A2AError) else InternalError(message=str(e))
+                error = (
+                    e
+                    if isinstance(e, A2AError)
+                    else InternalError(message=str(e))
+                )
                 yield build_error_response(request_id, error)
 
         return _wrap_stream(stream)
@@ -522,17 +534,21 @@ class JsonRpcDispatcher:
                     msg_response = SendMessageResponse(message=task_or_message)
                 return MessageToDict(msg_response)
             case CancelTaskRequest():
-                task = await self.http_handler.on_cancel_task(request_obj, context)
+                task = await self.http_handler.on_cancel_task(
+                    request_obj, context
+                )
                 if not task:
-                    raise TaskNotFoundError()
+                    raise TaskNotFoundError
                 return MessageToDict(task, preserving_proto_field_name=False)
             case GetTaskRequest():
                 task = await self.http_handler.on_get_task(request_obj, context)
                 if not task:
-                    raise TaskNotFoundError()
+                    raise TaskNotFoundError
                 return MessageToDict(task, preserving_proto_field_name=False)
             case ListTasksRequest():
-                tasks_response = await self.http_handler.on_list_tasks(request_obj, context)
+                tasks_response = await self.http_handler.on_list_tasks(
+                    request_obj, context
+                )
                 return MessageToDict(
                     tasks_response,
                     preserving_proto_field_name=False,
@@ -546,7 +562,9 @@ class JsonRpcDispatcher:
                 result_config = await self.http_handler.on_create_task_push_notification_config(
                     request_obj, context
                 )
-                return MessageToDict(result_config, preserving_proto_field_name=False)
+                return MessageToDict(
+                    result_config, preserving_proto_field_name=False
+                )
             case GetTaskPushNotificationConfigRequest():
                 config = await self.http_handler.on_get_task_push_notification_config(
                     request_obj, context
@@ -556,7 +574,9 @@ class JsonRpcDispatcher:
                 list_push_response = await self.http_handler.on_list_task_push_notification_configs(
                     request_obj, context
                 )
-                return MessageToDict(list_push_response, preserving_proto_field_name=False)
+                return MessageToDict(
+                    list_push_response, preserving_proto_field_name=False
+                )
             case DeleteTaskPushNotificationConfigRequest():
                 await self.http_handler.on_delete_task_push_notification_config(
                     request_obj, context
@@ -574,8 +594,12 @@ class JsonRpcDispatcher:
                         self.extended_card_modifier(base_card, context)
                     )
                 elif self.card_modifier:
-                    card_to_serve = await maybe_await(self.card_modifier(base_card))
-                return MessageToDict(card_to_serve, preserving_proto_field_name=False)
+                    card_to_serve = await maybe_await(
+                        self.card_modifier(base_card)
+                    )
+                return MessageToDict(
+                    card_to_serve, preserving_proto_field_name=False
+                )
             case _:
                 logger.error(
                     'Unhandled validated request type: %s', type(request_obj)
