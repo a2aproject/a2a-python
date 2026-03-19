@@ -47,7 +47,7 @@ def test_agent_card_route_with_modifier(mock_agent_card):
 
     card_route = AgentCardRoutes(mock_agent_card, card_modifier=modifier)
     app = Starlette()
-    app.routes.append(card_route.route)
+    app.routes.append(card_route.routes[0])
     client = TestClient(app)
 
     response = client.get('/')
