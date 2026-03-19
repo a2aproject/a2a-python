@@ -5,6 +5,8 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from pydantic import ValidationError
+
 from a2a.server.events.event_consumer import EventConsumer, QueueClosed
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.jsonrpc_models import JSONRPCError
@@ -433,9 +435,6 @@ def test_agent_task_callback_not_done_task(event_consumer: EventConsumer):
     mock_task.exception.assert_not_called()
 
 
-from pydantic import ValidationError
-
-
 @pytest.mark.asyncio
 async def test_consume_all_handles_validation_error(
     event_consumer: EventConsumer, mock_event_queue: AsyncMock
@@ -459,3 +458,83 @@ async def test_consume_all_handles_validation_error(
         assert (
             'Invalid event format received' in logger_error_mock.call_args[0][0]
         )
+
+
+@pytest.mark.asyncio
+async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
+
+    parent_queue = EventQueue(max_queue_size=10)
+    child_queue = parent_queue.tap()
+
+    fast_consumer_done = asyncio.Event()
+
+    # Producer
+    async def produce() -> None:
+        await parent_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING)
+            )
+        )
+        await parent_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING)
+            )
+        )
+        await parent_queue.enqueue_event(Message(message_id='final'))
+
+    # Fast consumer on parent queue
+    async def fast_consume() -> list:
+        consumer = EventConsumer(parent_queue)
+        events = [event async for event in consumer.consume_all()]
+        fast_consumer_done.set()
+        return events
+
+    # Slow consumer on child queue
+    async def slow_consume() -> list:
+        consumer = EventConsumer(child_queue)
+        events = []
+        async for event in consumer.consume_all():
+            events.append(event)
+            # Wait for fast_consume to complete (and trigger close) before
+            # consuming further events to ensure they aren't prematurely dropped.
+            await fast_consumer_done.wait()
+        return events
+
+    # Run producer and consumers
+    producer_task = asyncio.create_task(produce())
+
+    fast_task = asyncio.create_task(fast_consume())
+    slow_task = asyncio.create_task(slow_consume())
+
+    await producer_task
+    fast_events = await fast_task
+    slow_events = await slow_task
+
+    assert len(fast_events) == 3
+    assert len(slow_events) == 3
+
+
+@pytest.mark.asyncio
+async def test_background_close_deadlocks_on_trailing_events() -> None:
+    queue = EventQueue()
+    consumer = EventConsumer(queue)
+
+    # Producer enqueues a final event, but then enqueues another event
+    # (e.g., simulating a delayed log message, race condition, or multiple messages).
+    await queue.enqueue_event(Message(message_id='final'))
+    await queue.enqueue_event(Message(message_id='trailing_log'))
+
+    # Consume events. The consumer will break its internal loop on the 'final' message,
+    # leaving 'trailing_log' in the queue forever.
+    events = [event async for event in consumer.consume_all()]
+
+    assert len(events) == 1
+    assert consumer._close_task is not None
+
+    # The background close task awaits queue.close(immediate=False), which waits for
+    # queue.join(). Since we passed clear_parent_events=True, it clears trailing events
+    # and successfully completes without deadlocking.
+    try:
+        await asyncio.wait_for(consumer._close_task, timeout=0.1)
+    except asyncio.TimeoutError:
+        pytest.fail('Background close task deadlocked on trailing events!')
