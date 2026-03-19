@@ -38,8 +38,9 @@ from a2a.server.jsonrpc_models import (
 from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
 )
+from a2a.utils import constants
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
-from a2a.utils.helpers import maybe_await
+from a2a.utils.helpers import maybe_await, validate_version
 
 
 logger = logging.getLogger(__name__)
@@ -152,6 +153,7 @@ class JSONRPC03Adapter:
                 request_id, CoreInternalError(message=str(e))
             )
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def _process_non_streaming_request(
         self,
         request_id: 'str | int | None',
@@ -266,6 +268,7 @@ class JSONRPC03Adapter:
 
         return conversions.to_compat_agent_card(card_to_serve)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def _process_streaming_request(
         self,
         request_id: 'str | int | None',

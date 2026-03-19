@@ -156,7 +156,7 @@ def app(agent_card: AgentCard, handler: mock.AsyncMock):
 @pytest.fixture
 def client(app: A2AStarletteApplication, **kwargs):
     """Create a test client with the Starlette app."""
-    return TestClient(app.build(**kwargs))
+    return TestClient(app.build(**kwargs), headers={'A2A-Version': '1.0'})
 
 
 # === BASIC FUNCTIONALITY TESTS ===
@@ -191,7 +191,9 @@ def test_starlette_rpc_endpoint_custom_url(
     task_status = MINIMAL_TASK_STATUS
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
-    client = TestClient(app.build(rpc_url='/api/rpc'))
+    client = TestClient(
+        app.build(rpc_url='/api/rpc'), headers={'A2A-Version': '1.0'}
+    )
     response = client.post(
         '/api/rpc',
         json={
@@ -214,7 +216,9 @@ def test_fastapi_rpc_endpoint_custom_url(
     task_status = MINIMAL_TASK_STATUS
     task = Task(id='task1', context_id='ctx1', status=task_status)
     handler.on_get_task.return_value = task
-    client = TestClient(app.build(rpc_url='/api/rpc'))
+    client = TestClient(
+        app.build(rpc_url='/api/rpc'), headers={'A2A-Version': '1.0'}
+    )
     response = client.post(
         '/api/rpc',
         json={
@@ -482,7 +486,8 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
                     AuthenticationMiddleware, backend=TestAuthMiddleware()
                 )
             ]
-        )
+        ),
+        headers={'A2A-Version': '1.0'},
     )
 
     # Set the output message to be the authenticated user name
@@ -556,7 +561,11 @@ async def test_message_send_stream(
     client = None
     try:
         # Create client
-        client = TestClient(app.build(), raise_server_exceptions=False)
+        client = TestClient(
+            app.build(),
+            raise_server_exceptions=False,
+            headers={'A2A-Version': '1.0'},
+        )
         # Send request
         with client.stream(
             'POST',
@@ -630,7 +639,11 @@ async def test_task_resubscription(
     handler.on_subscribe_to_task.return_value = stream_generator()
 
     # Create client
-    client = TestClient(app.build(), raise_server_exceptions=False)
+    client = TestClient(
+        app.build(),
+        raise_server_exceptions=False,
+        headers={'A2A-Version': '1.0'},
+    )
 
     try:
         # Send request using client.stream() context manager
