@@ -133,6 +133,8 @@ class RestRoutes:
                 http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
                 context_builder=context_builder,
+                card_modifier=card_modifier,
+                extended_card_modifier=extended_card_modifier,
             )
 
         self._setup_routes(rpc_url)
