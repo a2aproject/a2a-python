@@ -438,16 +438,29 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 error.message if hasattr(error, 'message') else str(error)
             )
 
-            # Create standard Status and pack the ErrorInfo
+            # Create standard Status
             status = status_pb2.Status(code=status_code, message=error_msg)
-            detail = any_pb2.Any()
-            detail.Pack(error_info)
-            status.details.append(detail)
+
+            # Exclusive details based on error type:
+            if error.data and error.data.get('errors'):
+                bad_request = error_details_pb2.BadRequest()
+                for err_dict in error.data['errors']:
+                    violation = bad_request.field_violations.add()
+                    violation.field = err_dict.get('field', '')
+                    violation.description = err_dict.get('message', '')
+                any_bad_request = any_pb2.Any()
+                any_bad_request.Pack(bad_request)
+                status.details.append(any_bad_request)
+            else:
+                detail = any_pb2.Any()
+                detail.Pack(error_info)
+                status.details.append(detail)
 
             # Use grpc_status to safely generate standard trailing metadata
             rich_status = rpc_status.to_status(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
+
             trailing = context.trailing_metadata()
             if trailing:
                 for k, v in trailing:

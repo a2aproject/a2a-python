@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import NamedTuple
+from typing import Any, NamedTuple
 
 import grpc
 import httpx
@@ -31,6 +31,7 @@ from a2a.types import (
     a2a_pb2_grpc,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.errors import InvalidParamsError
 
 
 def assert_message_matches(message, expected_role, expected_text):
@@ -546,3 +547,34 @@ async def test_end_to_end_input_required(transport_setups):
         ],
     )
     assert_message_matches(task.status.message, Role.ROLE_AGENT, 'done')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'empty_request, expected_fields',
+    [
+        (
+            SendMessageRequest(),
+            ['message'],
+        ),
+        (
+            SendMessageRequest(message=Message()),
+            ['message.message_id', 'message.role', 'message.parts'],
+        ),
+    ],
+)
+async def test_end_to_end_validation_errors(
+    transport_setups,
+    empty_request: SendMessageRequest,
+    expected_fields: list[str],
+) -> None:
+    client = transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in client.send_message(request=empty_request):
+            pass
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == set(expected_fields)
+
+    await client.close()
