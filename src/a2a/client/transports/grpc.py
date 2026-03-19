@@ -47,7 +47,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
-from a2a.utils.errors import A2A_REASON_TO_ERROR
+from a2a.utils.errors import InvalidParamsError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -74,8 +74,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
                     for v in bad_request.field_violations
                 ]
                 data = {'errors': errors}
-                # Infer InvalidParamsError from BadRequest details
-                exception_cls = A2A_REASON_TO_ERROR.get('INVALID_PARAMS')
+                exception_cls = InvalidParamsError
             elif detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)

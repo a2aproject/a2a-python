@@ -441,8 +441,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             # Create standard Status
             status = status_pb2.Status(code=status_code, message=error_msg)
 
-            # Exclusive details based on error type:
-            if error.data and error.data.get('errors'):
+            if isinstance(error, types.InvalidParamsError) and error.data and error.data.get('errors'):
                 bad_request = error_details_pb2.BadRequest()
                 for err_dict in error.data['errors']:
                     violation = bad_request.field_violations.add()
