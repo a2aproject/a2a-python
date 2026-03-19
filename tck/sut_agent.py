@@ -18,13 +18,16 @@ from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.apps import (
     A2ARESTFastAPIApplication,
-    A2AStarletteApplication,
 )
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
+from a2a.server.routes import (
+    AgentCardRoutes,
+    JsonRpcRoutes,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
@@ -196,15 +199,22 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    main_app = Starlette()
-
     # JSONRPC
-    jsonrpc_server = A2AStarletteApplication(
+    jsonrpc_routes = JsonRpcRoutes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        rpc_url=JSONRPC_URL,
     )
-    jsonrpc_server.add_routes_to_app(main_app, rpc_url=JSONRPC_URL)
+    # Agent Card
+    agent_card_routes = AgentCardRoutes(
+        agent_card=agent_card,
+    )
+    routes = [
+        *jsonrpc_routes.routes,
+        *agent_card_routes.routes,
+    ]
 
+    main_app = Starlette(routes=routes)
     # REST
     rest_server = A2ARESTFastAPIApplication(
         agent_card=agent_card,

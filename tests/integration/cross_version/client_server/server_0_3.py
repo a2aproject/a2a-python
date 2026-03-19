@@ -8,7 +8,7 @@ import time
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.server.apps.jsonrpc import A2AFastAPIApplication
 from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -188,12 +188,13 @@ async def main_async(http_port: int, grpc_port: int):
     )
 
     app = FastAPI()
-    app.mount(
-        '/jsonrpc',
-        A2AFastAPIApplication(
-            http_handler=handler, agent_card=agent_card
-        ).build(),
-    )
+    jsonrpc_app = A2AFastAPIApplication(
+        agent_card=agent_card,
+        http_handler=handler,
+        extended_agent_card=agent_card,
+    ).build()
+    app.mount('/jsonrpc', jsonrpc_app)
+
     app.mount(
         '/rest',
         A2ARESTFastAPIApplication(
