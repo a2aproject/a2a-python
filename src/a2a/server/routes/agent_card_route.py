@@ -31,7 +31,7 @@ else:
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.helpers import maybe_await
-
+from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 logger = logging.getLogger(__name__)
 
@@ -44,7 +44,7 @@ class AgentCardRoutes:
         agent_card: AgentCard,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
-        card_url: str = '/',
+        card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         middleware: Sequence['Middleware'] | None = None,
     ) -> None:
         """Initializes the AgentCardRoute.

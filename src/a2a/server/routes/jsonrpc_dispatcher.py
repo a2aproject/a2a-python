@@ -194,7 +194,7 @@ class JsonRpcDispatcher:
     def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
-        http_handler: RequestHandler,
+        request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
@@ -203,7 +203,6 @@ class JsonRpcDispatcher:
             [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
         | None = None,
-        max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
         enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the JSONRPCApplication.
@@ -237,16 +236,15 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self.http_handler = http_handler
+        self.request_handler = request_handler
         self._context_builder = context_builder or DefaultCallContextBuilder()
-        self._max_content_length = max_content_length
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
                 agent_card=agent_card,
-                http_handler=http_handler,
+                http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
                 context_builder=context_builder,
                 card_modifier=card_modifier,
@@ -478,11 +476,11 @@ class JsonRpcDispatcher:
 
         stream: AsyncGenerator | None = None
         if isinstance(request_obj, SendMessageRequest):
-            stream = self.http_handler.on_message_send_stream(
+            stream = self.request_handler.on_message_send_stream(
                 request_obj, context
             )
         elif isinstance(request_obj, SubscribeToTaskRequest):
-            stream = self.http_handler.on_subscribe_to_task(
+            stream = self.request_handler.on_subscribe_to_task(
                 request_obj, context
             )
 
@@ -522,7 +520,7 @@ class JsonRpcDispatcher:
         """
         match request_obj:
             case SendMessageRequest():
-                task_or_message = await self.http_handler.on_message_send(
+                task_or_message = await self.request_handler.on_message_send(
                     request_obj, context
                 )
                 if isinstance(task_or_message, Task):
@@ -531,19 +529,19 @@ class JsonRpcDispatcher:
                     msg_response = SendMessageResponse(message=task_or_message)
                 return MessageToDict(msg_response)
             case CancelTaskRequest():
-                task = await self.http_handler.on_cancel_task(
+                task = await self.request_handler.on_cancel_task(
                     request_obj, context
                 )
                 if not task:
                     raise TaskNotFoundError
                 return MessageToDict(task, preserving_proto_field_name=False)
             case GetTaskRequest():
-                task = await self.http_handler.on_get_task(request_obj, context)
+                task = await self.request_handler.on_get_task(request_obj, context)
                 if not task:
                     raise TaskNotFoundError
                 return MessageToDict(task, preserving_proto_field_name=False)
             case ListTasksRequest():
-                tasks_response = await self.http_handler.on_list_tasks(
+                tasks_response = await self.request_handler.on_list_tasks(
                     request_obj, context
                 )
                 return MessageToDict(
@@ -556,26 +554,26 @@ class JsonRpcDispatcher:
                     raise UnsupportedOperationError(
                         message='Push notifications are not supported by the agent'
                     )
-                result_config = await self.http_handler.on_create_task_push_notification_config(
+                result_config = await self.request_handler.on_create_task_push_notification_config(
                     request_obj, context
                 )
                 return MessageToDict(
                     result_config, preserving_proto_field_name=False
                 )
             case GetTaskPushNotificationConfigRequest():
-                config = await self.http_handler.on_get_task_push_notification_config(
+                config = await self.request_handler.on_get_task_push_notification_config(
                     request_obj, context
                 )
                 return MessageToDict(config, preserving_proto_field_name=False)
             case ListTaskPushNotificationConfigsRequest():
-                list_push_response = await self.http_handler.on_list_task_push_notification_configs(
+                list_push_response = await self.request_handler.on_list_task_push_notification_configs(
                     request_obj, context
                 )
                 return MessageToDict(
                     list_push_response, preserving_proto_field_name=False
                 )
             case DeleteTaskPushNotificationConfigRequest():
-                await self.http_handler.on_delete_task_push_notification_config(
+                await self.request_handler.on_delete_task_push_notification_config(
                     request_obj, context
                 )
                 return None

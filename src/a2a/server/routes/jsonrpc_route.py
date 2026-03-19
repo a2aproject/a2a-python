@@ -30,6 +30,7 @@ from a2a.server.routes.jsonrpc_dispatcher import (
     JsonRpcDispatcher,
 )
 from a2a.types.a2a_pb2 import AgentCard
+from a2a.utils.constants import DEFAULT_RPC_URL
 
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class JsonRpcRoutes:
         ]
         | None = None,
         enable_v0_3_compat: bool = False,
-        rpc_url: str = '/',
+        rpc_url: str = DEFAULT_RPC_URL,
         middleware: Sequence[Middleware] | None = None,
     ) -> None:
         """Initializes the JsonRpcRoute.

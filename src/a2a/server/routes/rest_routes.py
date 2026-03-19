@@ -62,6 +62,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await
+from a2a.utils.constants import DEFAULT_RPC_URL
 
 
 logger = logging.getLogger(__name__)
@@ -88,7 +89,7 @@ class RestRoutes:
         ]
         | None = None,
         enable_v0_3_compat: bool = False,
-        rpc_url: str = '',
+        rpc_url: str = DEFAULT_RPC_URL,
         middleware: Sequence['Middleware'] | None = None,
     ) -> None:
         """Initializes the RestRoutes.
