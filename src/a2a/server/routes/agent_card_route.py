@@ -59,8 +59,7 @@ class AgentCardRoutes:
         """
         if not _package_starlette_installed:
             raise ImportError(
-                'The `starlette` package is required to use the `JsonRpcRoute`.'
-                ' It can be added as a part of `a2a-sdk` optional dependencies,'
+                'The `starlette` package is required to use the `AgentCardRoutes`.'
                 ' `a2a-sdk[http-server]`.'
             )
 
