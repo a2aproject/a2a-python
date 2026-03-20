@@ -1,20 +1,16 @@
 """A2A Routes."""
 
-from a2a.server.routes.agent_card_routes import AgentCardRoutes
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.routes.jsonrpc_dispatcher import (
     CallContextBuilder,
     DefaultCallContextBuilder,
-    JsonRpcDispatcher,
-    StarletteUserProxy,
 )
-from a2a.server.routes.jsonrpc_routes import JsonRpcRoutes
+from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 
 
 __all__ = [
-    'AgentCardRoutes',
+    'create_agent_card_routes',
     'CallContextBuilder',
     'DefaultCallContextBuilder',
-    'JsonRpcDispatcher',
-    'JsonRpcRoutes',
-    'StarletteUserProxy',
+    'create_jsonrpc_routes',
 ]

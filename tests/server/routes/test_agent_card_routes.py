@@ -8,7 +8,7 @@ from starlette.testclient import TestClient
 from starlette.middleware import Middleware
 from starlette.applications import Starlette
 
-from a2a.server.routes.agent_card_routes import AgentCardRoutes
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.types.a2a_pb2 import AgentCard
 
 
@@ -19,7 +19,7 @@ def agent_card():
 
 def test_get_agent_card_success(agent_card):
     """Tests that the agent card route returns the card correctly."""
-    routes = AgentCardRoutes(agent_card=agent_card).routes
+    routes = create_agent_card_routes(agent_card=agent_card)
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -47,9 +47,9 @@ def test_get_agent_card_with_modifier(agent_card):
         return card
 
     mock_modifier = AsyncMock(side_effect=modifier)
-    routes = AgentCardRoutes(
+    routes = create_agent_card_routes(
         agent_card=agent_card, card_modifier=mock_modifier
-    ).routes
+    )
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -62,7 +62,7 @@ def test_get_agent_card_with_modifier(agent_card):
 def test_agent_card_custom_url(agent_card):
     """Tests that custom card_url is respected."""
     custom_url = '/custom/path/agent.json'
-    routes = AgentCardRoutes(agent_card=agent_card, card_url=custom_url).routes
+    routes = create_agent_card_routes(agent_card=agent_card, card_url=custom_url)
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -73,26 +73,3 @@ def test_agent_card_custom_url(agent_card):
     assert client.get(custom_url).status_code == 200
 
 
-def test_agent_card_with_middleware(agent_card):
-    """Tests that middleware is applied to the routes."""
-    middleware_called = False
-
-    class MyMiddleware:
-        def __init__(self, app):
-            self.app = app
-
-        async def __call__(self, scope, receive, send):
-            nonlocal middleware_called
-            middleware_called = True
-            await self.app(scope, receive, send)
-
-    routes = AgentCardRoutes(
-        agent_card=agent_card, middleware=[Middleware(MyMiddleware)]
-    ).routes
-
-    app = Starlette(routes=routes)
-    client = TestClient(app)
-
-    response = client.get('/.well-known/agent-card.json')
-    assert response.status_code == 200
-    assert middleware_called is True

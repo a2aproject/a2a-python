@@ -28,8 +28,8 @@ from a2a.server.routes.jsonrpc_dispatcher import (
     JsonRpcDispatcher,
     StarletteUserProxy,
 )
-from a2a.server.routes.jsonrpc_routes import JsonRpcRoutes
-from a2a.server.routes.agent_card_routes import AgentCardRoutes
+from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
+from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.utils.errors import A2AError
 
@@ -86,13 +86,13 @@ def test_app(mock_handler):
     mock_agent_card.capabilities = MagicMock()
     mock_agent_card.capabilities.streaming = False
 
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=mock_agent_card, request_handler=mock_handler, rpc_url='/'
     )
 
     from starlette.applications import Starlette
 
-    return Starlette(routes=jsonrpc_routes.routes)
+    return Starlette(routes=jsonrpc_routes)
 
 
 @pytest.fixture
@@ -256,13 +256,13 @@ class TestJsonRpcDispatcherV03Compat:
 
         from starlette.applications import Starlette
 
-        jsonrpc_routes = JsonRpcRoutes(
+        jsonrpc_routes = create_jsonrpc_routes(
             agent_card=mock_agent_card,
             request_handler=mock_handler,
             enable_v0_3_compat=True,
             rpc_url='/',
         )
-        app = Starlette(routes=jsonrpc_routes.routes)
+        app = Starlette(routes=jsonrpc_routes)
         client = TestClient(app)
 
         request_data = {
@@ -278,7 +278,7 @@ class TestJsonRpcDispatcherV03Compat:
             },
         }
 
-        dispatcher_instance = jsonrpc_routes.dispatcher
+        dispatcher_instance = jsonrpc_routes[0].endpoint.__self__
         with patch.object(
             dispatcher_instance._v03_adapter,
             'handle_request',

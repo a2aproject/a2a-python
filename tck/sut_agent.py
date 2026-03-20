@@ -25,8 +25,8 @@ from a2a.server.request_handlers.default_request_handler import (
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
 from a2a.server.routes import (
-    AgentCardRoutes,
-    JsonRpcRoutes,
+    create_agent_card_routes,
+    create_jsonrpc_routes,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
@@ -200,18 +200,18 @@ def serve(task_store: TaskStore) -> None:
     )
 
     # JSONRPC
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=request_handler,
         rpc_url=JSONRPC_URL,
     )
     # Agent Card
-    agent_card_routes = AgentCardRoutes(
+    agent_card_routes = create_agent_card_routes(
         agent_card=agent_card,
     )
     routes = [
-        *jsonrpc_routes.routes,
-        *agent_card_routes.routes,
+        *jsonrpc_routes,
+        *agent_card_routes,
     ]
 
     main_app = Starlette(routes=routes)

@@ -37,47 +37,29 @@ from a2a.utils.helpers import maybe_await
 logger = logging.getLogger(__name__)
 
 
-class AgentCardRoutes:
-    """Provides the Starlette Route for the A2A protocol agent card endpoint."""
+def create_agent_card_routes(
+    agent_card: AgentCard,
+    card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+    | None = None,
+    card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
+) -> list['Route']:
+    """Creates the Starlette Route for the A2A protocol agent card endpoint."""
+    if not _package_starlette_installed:
+        raise ImportError(
+            'The `starlette` package is required to use `create_agent_card_routes`. '
+            'It can be installed as part of `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
+        )
 
-    def __init__(
-        self,
-        agent_card: AgentCard,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
-        card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
-        middleware: Sequence['Middleware'] | None = None,
-    ) -> None:
-        """Initializes the AgentCardRoute.
-
-        Args:
-            agent_card: The AgentCard describing the agent's capabilities.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
-            card_url: The URL for the agent card endpoint.
-            middleware: An optional list of Starlette middleware to apply to the
-              agent card endpoint.
-        """
-        if not _package_starlette_installed:
-            raise ImportError(
-                'The `starlette` package is required to use `AgentCardRoutes`. '
-                'It can be installed as part of `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
-            )
-
-        self.agent_card = agent_card
-        self.card_modifier = card_modifier
-
-        self.routes = [
-            Route(
-                path=card_url,
-                endpoint=self._get_agent_card,
-                methods=['GET'],
-                middleware=middleware,
-            )
-        ]
-
-    async def _get_agent_card(self, request: Request) -> Response:
-        card_to_serve = self.agent_card
-        if self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
+    async def _get_agent_card(request: Request) -> Response:
+        card_to_serve = agent_card
+        if card_modifier:
+            card_to_serve = await maybe_await(card_modifier(card_to_serve))
         return JSONResponse(agent_card_to_dict(card_to_serve))
+
+    return [
+        Route(
+            path=card_url,
+            endpoint=_get_agent_card,
+            methods=['GET'],
+        )
+    ]

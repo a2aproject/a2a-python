@@ -17,7 +17,7 @@ from a2a.server.request_handlers import GrpcHandler
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
-from a2a.server.routes import AgentCardRoutes, JsonRpcRoutes
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
@@ -198,17 +198,17 @@ async def serve(
     )
     rest_app = rest_app_builder.build()
 
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=request_handler,
         rpc_url='/a2a/jsonrpc/',
     )
-    agent_card_routes = AgentCardRoutes(
+    agent_card_routes = create_agent_card_routes(
         agent_card=agent_card,
     )
     app = FastAPI()
-    app.routes.extend(jsonrpc_routes.routes)
-    app.routes.extend(agent_card_routes.routes)
+    app.routes.extend(jsonrpc_routes)
+    app.routes.extend(agent_card_routes)
     app.mount('/a2a/rest', rest_app)
 
     grpc_server = grpc.aio.server()

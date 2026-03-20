@@ -7,7 +7,7 @@ import pytest
 from starlette.testclient import TestClient
 
 from starlette.applications import Starlette
-from a2a.server.routes import JsonRpcRoutes
+from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -51,13 +51,13 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
     mock_agent_card.capabilities.push_notifications = True
     mock_agent_card.capabilities.extended_agent_card = True
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=mock_agent_card,
         request_handler=mock_handler,
         enable_v0_3_compat=True,
         rpc_url='/',
     )
-    return Starlette(routes=jsonrpc_routes.routes)
+    return Starlette(routes=jsonrpc_routes)
 
 
 @pytest.fixture

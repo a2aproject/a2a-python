@@ -25,7 +25,7 @@ from a2a.client.service_parameters import (
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from starlette.applications import Starlette
 from a2a.server.apps import A2ARESTFastAPIApplication
-from a2a.server.routes import AgentCardRoutes, JsonRpcRoutes
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
@@ -222,14 +222,14 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
 def jsonrpc_setup(http_base_setup) -> TransportSetup:
     """Sets up the JsonRpcTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    agent_card_routes = AgentCardRoutes(agent_card=agent_card, card_url='/')
-    jsonrpc_routes = JsonRpcRoutes(
+    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,
         extended_agent_card=agent_card,
         rpc_url='/',
     )
-    app = Starlette(routes=[*agent_card_routes.routes, *jsonrpc_routes.routes])
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     factory = ClientFactory(
         config=ClientConfig(
@@ -625,16 +625,16 @@ async def test_json_transport_get_signed_base_card(
         },
     )
 
-    agent_card_routes = AgentCardRoutes(
+    agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,
         extended_agent_card=agent_card,
         rpc_url='/',
     )
-    app = Starlette(routes=[*agent_card_routes.routes, *jsonrpc_routes.routes])
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     agent_url = agent_card.supported_interfaces[0].url
@@ -695,15 +695,15 @@ async def test_client_get_signed_extended_card(
         },
     )
 
-    agent_card_routes = AgentCardRoutes(agent_card=agent_card, card_url='/')
-    jsonrpc_routes = JsonRpcRoutes(
+    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,
         extended_agent_card=extended_agent_card,
         extended_card_modifier=lambda card, ctx: signer(card),
         rpc_url='/',
     )
-    app = Starlette(routes=[*agent_card_routes.routes, *jsonrpc_routes.routes])
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     transport = JsonRpcTransport(
@@ -764,17 +764,17 @@ async def test_client_get_signed_base_and_extended_cards(
         },
     )
 
-    agent_card_routes = AgentCardRoutes(
+    agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    jsonrpc_routes = JsonRpcRoutes(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,
         extended_agent_card=extended_agent_card,
         extended_card_modifier=lambda card, ctx: signer(card),
         rpc_url='/',
     )
-    app = Starlette(routes=[*agent_card_routes.routes, *jsonrpc_routes.routes])
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     agent_url = agent_card.supported_interfaces[0].url
