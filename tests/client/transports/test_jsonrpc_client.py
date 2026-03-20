@@ -442,6 +442,7 @@ class TestStreamingErrors:
         request = create_send_message_request()
         mock_event_source = AsyncMock()
         mock_event_source.response.raise_for_status = MagicMock()
+        mock_event_source.response.headers = {}
         mock_event_source.aiter_sse = MagicMock(
             side_effect=SSEError('Simulated SSE error')
         )
