@@ -304,13 +304,12 @@ def validate_async_generator(
 
     def decorator(function):
         @functools.wraps(function)
-        async def wrapper(self, *args, **kwargs):
+        def wrapper(self, *args, **kwargs):
             if not expression(self):
                 final_message = error_message or str(expression)
                 logger.error('Unsupported Operation: %s', final_message)
                 raise UnsupportedOperationError(message=final_message)
-            async for i in function(self, *args, **kwargs):
-                yield i
+            return function(self, *args, **kwargs)
 
         return wrapper
 

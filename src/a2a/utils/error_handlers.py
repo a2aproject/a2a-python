@@ -165,26 +165,17 @@ def rest_stream_error_handler(
             ):
                 original_iterator = response.body_iterator
 
-                try:
-                    # Prime the stream to catch upfront errors
-                    first_item = await original_iterator.__anext__()
-                except StopAsyncIteration:
-                    # Stream is empty
-                    pass
-                except Exception as e:  # noqa: BLE001
-                    return _create_error_response(e)
-                else:
+                async def error_catching_iterator() -> AsyncGenerator[
+                    Any, None
+                ]:
+                    try:
+                        async for item in original_iterator:
+                            yield item
+                    except Exception as stream_error:
+                        _log_error(stream_error)
+                        raise stream_error
 
-                    async def error_catching_iterator() -> AsyncGenerator[Any, None]:
-                        yield first_item
-                        try:
-                            async for item in original_iterator:
-                                yield item
-                        except Exception as stream_error:
-                            _log_error(stream_error)
-                            raise stream_error
-
-                    response.body_iterator = error_catching_iterator()
+                response.body_iterator = error_catching_iterator()
 
         except Exception as e:  # noqa: BLE001
             return _create_error_response(e)

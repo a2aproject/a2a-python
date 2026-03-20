@@ -90,7 +90,9 @@ async def send_http_stream_request(
                         continue
                     yield sse.data
             except SSEError as e:
-                if 'application/json' in event_source.response.headers.get('content-type', ''):
+                if 'application/json' in event_source.response.headers.get(
+                    'content-type', ''
+                ):
                     content = await event_source.response.aread()
                     yield content.decode('utf-8')
                 else:
