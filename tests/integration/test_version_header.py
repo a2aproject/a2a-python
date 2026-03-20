@@ -57,7 +57,9 @@ def test_app():
     handler.on_message_send_stream = mock_on_message_send_stream
 
     app = FastAPI()
-    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=handler,

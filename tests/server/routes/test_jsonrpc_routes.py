@@ -59,4 +59,3 @@ def test_jsonrpc_custom_url(agent_card, mock_handler):
     assert 'error' in resp_json
     # Method not found error from dispatcher
     assert resp_json['error']['code'] == -32601
-

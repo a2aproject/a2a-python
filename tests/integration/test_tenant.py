@@ -207,9 +207,7 @@ class TestJSONRPCTenantIntegration:
             extended_agent_card=jsonrpc_agent_card,
             rpc_url='/jsonrpc',
         )
-        app = Starlette(
-            routes=[*agent_card_routes, *jsonrpc_routes]
-        )
+        app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
         return app
 
     @pytest.mark.asyncio

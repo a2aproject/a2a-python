@@ -194,7 +194,9 @@ def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
 @pytest.fixture
 def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=handler,

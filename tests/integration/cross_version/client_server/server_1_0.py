@@ -5,7 +5,7 @@ import asyncio
 import grpc
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.routes import AgentCardRoutes, create_jsonrpc_routes
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.apps import A2ARESTFastAPIApplication
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -167,7 +167,7 @@ async def main_async(http_port: int, grpc_port: int):
     app = FastAPI()
     app.add_middleware(CustomLoggingMiddleware)
 
-    agent_card_routes = AgentCardRoutes(
+    agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
@@ -179,7 +179,7 @@ async def main_async(http_port: int, grpc_port: int):
     )
     app.mount(
         '/jsonrpc',
-        FastAPI(routes=jsonrpc_routes + agent_card_routes.routes),
+        FastAPI(routes=jsonrpc_routes + agent_card_routes),
     )
 
     app.mount(

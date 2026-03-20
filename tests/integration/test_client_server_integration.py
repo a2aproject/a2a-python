@@ -222,7 +222,9 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
 def jsonrpc_setup(http_base_setup) -> TransportSetup:
     """Sets up the JsonRpcTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,
@@ -695,7 +697,9 @@ async def test_client_get_signed_extended_card(
         },
     )
 
-    agent_card_routes = create_agent_card_routes(agent_card=agent_card, card_url='/')
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=mock_request_handler,

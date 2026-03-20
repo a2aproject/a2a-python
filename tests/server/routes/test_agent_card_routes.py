@@ -62,7 +62,9 @@ def test_get_agent_card_with_modifier(agent_card):
 def test_agent_card_custom_url(agent_card):
     """Tests that custom card_url is respected."""
     custom_url = '/custom/path/agent.json'
-    routes = create_agent_card_routes(agent_card=agent_card, card_url=custom_url)
+    routes = create_agent_card_routes(
+        agent_card=agent_card, card_url=custom_url
+    )
 
     app = Starlette(routes=routes)
     client = TestClient(app)
@@ -71,5 +73,3 @@ def test_agent_card_custom_url(agent_card):
     assert client.get('/.well-known/agent-card.json').status_code == 404
     # Check that custom returns 200
     assert client.get(custom_url).status_code == 200
-
-
