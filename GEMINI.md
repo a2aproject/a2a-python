@@ -1,20 +1,25 @@
-**A2A specification:** https://a2a-protocol.org/latest/specification/
+# Agent Command Center
 
-## Project frameworks
-- uv as package manager
+## 1. Project Overview & Purpose
+**Primary Goal**: This is the Python SDK for the Agent2Agent (A2A) Protocol. It allows developers to build and run agentic applications as A2A-compliant servers. It handles complex messaging, task management, and communication across different transports (REST, gRPC, JSON-RPC).
+**Specification**: [A2A-Protocol](https://a2a-protocol.org/latest/specification/)
 
-## Code style and mandatory checks
-1. Whenever writing python code, write types as well.
-2. After making the changes run ruff to check and fix the formatting issues
-   ```
-   uv run ruff check --fix
-   uv run ruff format
-   ```
-3. Run mypy type checkers to check for type errors
-   ```
-   uv run mypy src
-   ```
-4. Run the unit tests to make sure that none of the unit tests are broken.
-  ```
-  uv run pytest
-  ```
+## 2. Technology Stack & Architecture
+
+- **Language**: Python 3.10+
+- **Package Manager**: `uv`
+- **Lead Transports**: FastAPI (REST/JSON-RPC), gRPC
+- **Data Layer**: SQLAlchemy (SQL), Pydantic (Logic/Legacy), Protobuf (Modern Messaging)
+- **Key Directories**:
+    - `/src`: Core implementation logic.
+    - `/tests`: Comprehensive test suite.
+    - `/docs`: AI guides.
+
+## 3. Style Guidelines & Mandatory Checks
+- **Style Guidelines**: Follow the rules in @./docs/ai/coding_conventions.md for every response involving code.
+- **Mandatory Checks**: Run the commands in @./docs/ai/mandatory_checks.md after making any changes to the code and before committing.
+
+## 4. Mandatory AI Workflow for Coding Tasks
+1. **Required Reading**: You MUST read the contents of @./docs/ai/coding_conventions.md and @./docs/ai/mandatory_checks.md at the very beginning of EVERY coding task.
+2. **Initial Checklist**: Every `task.md` you create MUST include a section for **Mandatory Checks** from @./docs/ai/mandatory_checks.md.
+3. **Verification Requirement**: You MUST run all mandatory checks before declaring any task finished.
