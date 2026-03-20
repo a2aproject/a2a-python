@@ -78,7 +78,22 @@ async def send_http_stream_request(
         async with aconnect_sse(
             httpx_client, method, url, **kwargs
         ) as event_source:
-            event_source.response.raise_for_status()
+            try:
+                event_source.response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                # Read upfront streaming error content immediately, otherwise lower-level handlers
+                # (e.g. response.json()) crash with 'ResponseNotRead' Access errors.
+                await event_source.response.aread()
+                raise e
+
+            # If the response is not a stream, read it standardly (e.g., upfront JSON-RPC error payload)
+            if 'text/event-stream' not in event_source.response.headers.get(
+                'content-type', ''
+            ):
+                content = await event_source.response.aread()
+                yield content.decode('utf-8')
+                return
+
             async for sse in event_source.aiter_sse():
                 if not sse.data:
                     continue
