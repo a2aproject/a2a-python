@@ -87,7 +87,9 @@ class TestRestTransport:
         )
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {'content-type': 'text/event-stream'}
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.response.raise_for_status.return_value = None
         mock_event_source.aiter_sse.side_effect = httpx.TimeoutException(
             'Read timed out'
@@ -297,7 +299,9 @@ class TestRestTransportExtensions:
 
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {'content-type': 'text/event-stream'}
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.aiter_sse.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = (
             mock_event_source
@@ -711,7 +715,9 @@ class TestRestTransportTenant:
         # 2. Setup mocks
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {'content-type': 'text/event-stream'}
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.response.raise_for_status.return_value = None
 
         async def empty_aiter():
