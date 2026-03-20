@@ -169,9 +169,7 @@ class DatabaseTaskStore(TaskStore):
         # Legacy conversion
         return compat_task_model_to_core(task_model)
 
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the database for the resolved owner."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
@@ -185,7 +183,7 @@ class DatabaseTaskStore(TaskStore):
             )
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the database by ID, for the given owner."""
         await self._ensure_initialized()
@@ -216,7 +214,7 @@ class DatabaseTaskStore(TaskStore):
     async def list(
         self,
         params: a2a_pb2.ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> a2a_pb2.ListTasksResponse:
         """Retrieves tasks from the database based on provided parameters, for the given owner."""
         await self._ensure_initialized()
@@ -315,9 +313,7 @@ class DatabaseTaskStore(TaskStore):
                 page_size=page_size,
             )
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the database by ID, for the given owner."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)

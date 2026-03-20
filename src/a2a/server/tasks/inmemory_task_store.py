@@ -34,9 +34,7 @@ class InMemoryTaskStore(TaskStore):
     def _get_owner_tasks(self, owner: str) -> dict[str, Task]:
         return self.tasks.get(owner, {})
 
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the in-memory store for the resolved owner."""
         owner = self.owner_resolver(context)
         if owner not in self.tasks:
@@ -49,7 +47,7 @@ class InMemoryTaskStore(TaskStore):
             )
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the in-memory store by ID, for the given owner."""
         owner = self.owner_resolver(context)
@@ -76,7 +74,7 @@ class InMemoryTaskStore(TaskStore):
     async def list(
         self,
         params: a2a_pb2.ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> a2a_pb2.ListTasksResponse:
         """Retrieves a list of tasks from the store, for the given owner."""
         owner = self.owner_resolver(context)
@@ -155,9 +153,7 @@ class InMemoryTaskStore(TaskStore):
             page_size=page_size,
         )
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the in-memory store by ID, for the given owner."""
         owner = self.owner_resolver(context)
         async with self.lock:

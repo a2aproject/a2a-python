@@ -25,6 +25,9 @@ class SampleUser(User):
         return self._user_name
 
 
+TEST_CONTEXT = ServerCallContext(user=SampleUser('test_user'))
+
+
 def create_minimal_task(
     task_id: str = 'task-abc', context_id: str = 'session-xyz'
 ) -> Task:
@@ -41,8 +44,8 @@ async def test_in_memory_task_store_save_and_get() -> None:
     """Test saving and retrieving a task from the in-memory store."""
     store = InMemoryTaskStore()
     task = create_minimal_task()
-    await store.save(task)
-    retrieved_task = await store.get('task-abc')
+    await store.save(task, TEST_CONTEXT)
+    retrieved_task = await store.get('task-abc', TEST_CONTEXT)
     assert retrieved_task == task
 
 
@@ -50,7 +53,7 @@ async def test_in_memory_task_store_save_and_get() -> None:
 async def test_in_memory_task_store_get_nonexistent() -> None:
     """Test retrieving a nonexistent task."""
     store = InMemoryTaskStore()
-    retrieved_task = await store.get('nonexistent')
+    retrieved_task = await store.get('nonexistent', TEST_CONTEXT)
     assert retrieved_task is None
 
 
@@ -179,9 +182,9 @@ async def test_list_tasks(
         ),
     ]
     for task in tasks_to_create:
-        await store.save(task)
+        await store.save(task, TEST_CONTEXT)
 
-    page = await store.list(params)
+    page = await store.list(params, TEST_CONTEXT)
 
     retrieved_ids = [task.id for task in page.tasks]
     assert retrieved_ids == expected_ids
@@ -191,7 +194,7 @@ async def test_list_tasks(
 
     # Cleanup
     for task in tasks_to_create:
-        await store.delete(task.id)
+        await store.delete(task.id, TEST_CONTEXT)
 
 
 @pytest.mark.asyncio
@@ -238,16 +241,16 @@ async def test_list_tasks_fails(
         ),
     ]
     for task in tasks_to_create:
-        await store.save(task)
+        await store.save(task, TEST_CONTEXT)
 
     with pytest.raises(InvalidParamsError) as excinfo:
-        await store.list(params)
+        await store.list(params, TEST_CONTEXT)
 
     assert expected_error_message in str(excinfo.value)
 
     # Cleanup
     for task in tasks_to_create:
-        await store.delete(task.id)
+        await store.delete(task.id, TEST_CONTEXT)
 
 
 @pytest.mark.asyncio
@@ -255,9 +258,9 @@ async def test_in_memory_task_store_delete() -> None:
     """Test deleting a task from the store."""
     store = InMemoryTaskStore()
     task = create_minimal_task()
-    await store.save(task)
-    await store.delete('task-abc')
-    retrieved_task = await store.get('task-abc')
+    await store.save(task, TEST_CONTEXT)
+    await store.delete('task-abc', TEST_CONTEXT)
+    retrieved_task = await store.get('task-abc', TEST_CONTEXT)
     assert retrieved_task is None
 
 
@@ -265,7 +268,7 @@ async def test_in_memory_task_store_delete() -> None:
 async def test_in_memory_task_store_delete_nonexistent() -> None:
     """Test deleting a nonexistent task."""
     store = InMemoryTaskStore()
-    await store.delete('nonexistent')
+    await store.delete('nonexistent', TEST_CONTEXT)
 
 
 @pytest.mark.asyncio

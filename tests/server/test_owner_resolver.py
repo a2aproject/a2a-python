@@ -19,13 +19,13 @@ class SampleUser(User):
         return self._user_name
 
 
-def test_resolve_user_scope_valid_user():
-    """Test resolve_user_scope with a valid user in the context."""
+def test_resolve_user():
+    """Test resolve_user_scope."""
     user = SampleUser(user_name='SampleUser')
     context = ServerCallContext(user=user)
     assert resolve_user_scope(context) == 'SampleUser'
 
 
-def test_resolve_user_scope_no_context():
-    """Test resolve_user_scope when the context is None."""
-    assert resolve_user_scope(None) == 'unknown'
+def test_resolve_user_default_context():
+    """Test resolve_user_scope with default context."""
+    assert resolve_user_scope(ServerCallContext()) == ''

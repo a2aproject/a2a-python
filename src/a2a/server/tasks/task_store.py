@@ -11,14 +11,12 @@ class TaskStore(ABC):
     """
 
     @abstractmethod
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the store."""
 
     @abstractmethod
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the store by ID."""
 
@@ -26,12 +24,10 @@ class TaskStore(ABC):
     async def list(
         self,
         params: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTasksResponse:
         """Retrieves a list of tasks from the store."""
 
     @abstractmethod
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the store by ID."""
