@@ -292,6 +292,17 @@ def transport_setups(request) -> TransportSetup:
     return request.getfixturevalue(request.param)
 
 
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ]
+)
+def http_transport_setups(request) -> TransportSetup:
+    """Parametrized fixture that runs tests against HTTP-based transports only."""
+    return request.getfixturevalue(request.param)
+
+
 # --- gRPC Setup ---
 
 
@@ -926,4 +937,63 @@ async def test_rest_malformed_payload(
     response = await client.request(method, f'{url}{path}', **request_kwargs)
     assert response.status_code == 400
 
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_version_unsupported(http_transport_setups) -> None:
+    """Integration test for @validate_version decorator."""
+    client = http_transport_setups.client
+
+    service_params = {'A2A-Version': '2.0.0'}
+    context = ClientCallContext(service_parameters=service_params)
+
+    params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
+
+    with pytest.raises(VersionNotSupportedError) as exc_info:
+        await client.get_task(request=params, context=context)
+
+    assert 'not supported' in str(exc_info.value).lower()
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_decorator_push_notifications_disabled(
+    transport_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate decorator with push notifications disabled."""
+    client = transport_setups.client
+
+    agent_card.capabilities.push_notifications = False
+
+    params = TaskPushNotificationConfig(task_id='123')
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        await client.create_task_push_notification_config(request=params)
+
+    assert 'not supported' in str(exc_info.value).lower()
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_async_generator_streaming_disabled(
+    transport_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate_async_generator decorator when streaming is disabled."""
+    client = transport_setups.client
+    transport = client._transport
+
+    agent_card.capabilities.streaming = False
+
+    params = SendMessageRequest(
+        message=Message(role=Role.ROLE_USER, parts=[Part(text='hi')])
+    )
+
+    stream = transport.send_message_streaming(request=params)
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        async for _ in stream:
+            pass
+
+    assert 'not supported' in str(exc_info.value).lower()
     await transport.close()
