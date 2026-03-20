@@ -81,7 +81,7 @@ async def send_http_stream_request(
             try:
                 event_source.response.raise_for_status()
             except httpx.HTTPStatusError as e:
-                # Read upfront streaming error content immediately, otherwise lower-level handlers 
+                # Read upfront streaming error content immediately, otherwise lower-level handlers
                 # (e.g. response.json()) crash with 'ResponseNotRead' Access errors.
                 await event_source.response.aread()
                 raise e
