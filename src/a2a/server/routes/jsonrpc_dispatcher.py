@@ -291,7 +291,7 @@ class JsonRpcDispatcher:
             status_code=200,
         )
 
-    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
+    async def handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
         """Handles incoming POST requests to the main A2A endpoint.
 
         Parses the request body as JSON, validates it against A2A request types,

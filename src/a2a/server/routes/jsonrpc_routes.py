@@ -100,7 +100,7 @@ class JsonRpcRoutes:
         self.routes = [
             Route(
                 path=rpc_url,
-                endpoint=self.dispatcher._handle_requests,  # noqa: SLF001
+                endpoint=self.dispatcher.handle_requests,
                 methods=['POST'],
                 middleware=middleware,
             )
