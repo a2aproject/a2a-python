@@ -1,8 +1,10 @@
+# ruff: noqa: INP001
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from starlette.responses import JSONResponse
 from starlette.testclient import TestClient
 
 
@@ -25,16 +27,11 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
 )  # For mock spec
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
     Message,
-    MessageSendParams,
     Part,
     Role,
-    SendMessageRequest,
-    SendMessageResponse,
-    SendMessageSuccessResponse,
-    TextPart,
 )
 
 
@@ -77,6 +74,57 @@ class TestStarletteUserProxy:
 # --- JSONRPCApplication Tests (Selected) ---
 
 
+@pytest.fixture
+def mock_handler():
+    handler = AsyncMock(spec=RequestHandler)
+    # Return a proto Message object directly - the handler wraps it in SendMessageResponse
+    handler.on_message_send.return_value = Message(
+        message_id='test',
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='response message')],
+    )
+    return handler
+
+
+@pytest.fixture
+def test_app(mock_handler):
+    mock_agent_card = MagicMock(spec=AgentCard)
+    mock_agent_card.url = 'http://mockurl.com'
+    # Set up capabilities.streaming to avoid validation issues
+    mock_agent_card.capabilities = MagicMock()
+    mock_agent_card.capabilities.streaming = False
+    return A2AStarletteApplication(
+        agent_card=mock_agent_card, http_handler=mock_handler
+    )
+
+
+@pytest.fixture
+def client(test_app):
+    return TestClient(test_app.build(), headers={'A2A-Version': '1.0'})
+
+
+def _make_send_message_request(
+    text: str = 'hi', tenant: str | None = None
+) -> dict:
+    """Helper to create a JSON-RPC send message request."""
+    params: dict[str, Any] = {
+        'message': {
+            'messageId': '1',
+            'role': 'ROLE_USER',
+            'parts': [{'text': text}],
+        }
+    }
+    if tenant is not None:
+        params['tenant'] = tenant
+
+    return {
+        'jsonrpc': '2.0',
+        'id': '1',
+        'method': 'SendMessage',
+        'params': params,
+    }
+
+
 class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
     def test_jsonrpc_app_build_method_abstract_raises_typeerror(
         self,
@@ -87,12 +135,11 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
         # Ensure 'url' attribute exists on the mock_agent_card, as it's accessed in __init__
         mock_agent_card.url = 'http://mockurl.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
-        mock_agent_card.supports_authenticated_extended_card = False
 
         # This will fail at definition time if an abstract method is not implemented
         with pytest.raises(
             TypeError,
-            match=".*abstract class IncompleteJSONRPCApp .* abstract method '?build'?",
+            match=r".*abstract class IncompleteJSONRPCApp .* abstract method '?build'?",
         ):
 
             class IncompleteJSONRPCApp(JSONRPCApplication):
@@ -102,7 +149,7 @@ class TestJSONRPCApplicationSetup:  # Renamed to avoid conflict
 
             IncompleteJSONRPCApp(
                 agent_card=mock_agent_card, http_handler=mock_handler
-            )
+            )  # type: ignore[abstract]
 
 
 class TestJSONRPCApplicationOptionalDeps:
@@ -112,8 +159,8 @@ class TestJSONRPCApplicationOptionalDeps:
     @pytest.fixture(scope='class', autouse=True)
     def ensure_pkg_starlette_is_present(self):
         try:
-            import sse_starlette as _sse_starlette  # noqa: F401
-            import starlette as _starlette  # noqa: F401
+            import sse_starlette as _sse_starlette  # noqa: F401, PLC0415
+            import starlette as _starlette  # noqa: F401, PLC0415
         except ImportError:
             pytest.fail(
                 f'Running tests in {self.__class__.__name__} requires'
@@ -132,7 +179,6 @@ class TestJSONRPCApplicationOptionalDeps:
         # in __init__
         mock_agent_card.url = 'http://example.com'
         # Ensure 'supportsAuthenticatedExtendedCard' attribute exists
-        mock_agent_card.supports_authenticated_extended_card = False
         return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
 
     @pytest.fixture(scope='class')
@@ -145,17 +191,17 @@ class TestJSONRPCApplicationOptionalDeps:
     def test_create_jsonrpc_based_app_with_present_deps_succeeds(
         self, mock_app_params: dict
     ):
-        class DummyJSONRPCApp(JSONRPCApplication):
-            def build(
+        class MockJSONRPCApp(JSONRPCApplication):
+            def build(  # type: ignore[override]
                 self,
                 agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):
-                return object()
+                return object()  # type: ignore[return-value]
 
         try:
-            _app = DummyJSONRPCApp(**mock_app_params)
+            _app = MockJSONRPCApp(**mock_app_params)
         except ImportError:
             pytest.fail(
                 'With packages starlette and see-starlette present, creating a'
@@ -166,14 +212,14 @@ class TestJSONRPCApplicationOptionalDeps:
     def test_create_jsonrpc_based_app_with_missing_deps_raises_importerror(
         self, mock_app_params: dict, mark_pkg_starlette_not_installed: Any
     ):
-        class DummyJSONRPCApp(JSONRPCApplication):
-            def build(
+        class MockJSONRPCApp(JSONRPCApplication):
+            def build(  # type: ignore[override]
                 self,
                 agent_card_url='/.well-known/agent.json',
                 rpc_url='/',
                 **kwargs,
             ):
-                return object()
+                return object()  # type: ignore[return-value]
 
         with pytest.raises(
             ImportError,
@@ -182,54 +228,16 @@ class TestJSONRPCApplicationOptionalDeps:
                 ' the `JSONRPCApplication`'
             ),
         ):
-            _app = DummyJSONRPCApp(**mock_app_params)
+            _app = MockJSONRPCApp(**mock_app_params)
 
 
-class TestJSONRPCExtensions:
-    @pytest.fixture
-    def mock_handler(self):
-        handler = AsyncMock(spec=RequestHandler)
-        handler.on_message_send.return_value = SendMessageResponse(
-            root=SendMessageSuccessResponse(
-                id='1',
-                result=Message(
-                    message_id='test',
-                    role=Role.agent,
-                    parts=[Part(TextPart(text='response message'))],
-                ),
-            )
-        )
-        return handler
-
-    @pytest.fixture
-    def test_app(self, mock_handler):
-        mock_agent_card = MagicMock(spec=AgentCard)
-        mock_agent_card.url = 'http://mockurl.com'
-        mock_agent_card.supports_authenticated_extended_card = False
-
-        return A2AStarletteApplication(
-            agent_card=mock_agent_card, http_handler=mock_handler
-        )
-
-    @pytest.fixture
-    def client(self, test_app):
-        return TestClient(test_app.build())
-
+class TestJSONRPCApplicationExtensions:
     def test_request_with_single_extension(self, client, mock_handler):
         headers = {HTTP_EXTENSION_HEADER: 'foo'}
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -245,16 +253,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -272,16 +271,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -292,22 +282,13 @@ class TestJSONRPCExtensions:
     def test_method_added_to_call_context_state(self, client, mock_handler):
         response = client.post(
             '/',
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
         mock_handler.on_message_send.assert_called_once()
         call_context = mock_handler.on_message_send.call_args[0][1]
-        assert call_context.state['method'] == 'message/send'
+        assert call_context.state['method'] == 'SendMessage'
 
     def test_request_with_multiple_extension_headers(
         self, client, mock_handler
@@ -319,16 +300,7 @@ class TestJSONRPCExtensions:
         response = client.post(
             '/',
             headers=headers,
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -340,31 +312,18 @@ class TestJSONRPCExtensions:
         def side_effect(request, context: ServerCallContext):
             context.activated_extensions.add('foo')
             context.activated_extensions.add('baz')
-            return SendMessageResponse(
-                root=SendMessageSuccessResponse(
-                    id='1',
-                    result=Message(
-                        message_id='test',
-                        role=Role.agent,
-                        parts=[Part(TextPart(text='response message'))],
-                    ),
-                )
+            # Return a proto Message object directly
+            return Message(
+                message_id='test',
+                role=Role.ROLE_AGENT,
+                parts=[Part(text='response message')],
             )
 
         mock_handler.on_message_send.side_effect = side_effect
 
         response = client.post(
             '/',
-            json=SendMessageRequest(
-                id='1',
-                params=MessageSendParams(
-                    message=Message(
-                        message_id='1',
-                        role=Role.user,
-                        parts=[Part(TextPart(text='hi'))],
-                    )
-                ),
-            ).model_dump(),
+            json=_make_send_message_request(),
         )
         response.raise_for_status()
 
@@ -374,6 +333,111 @@ class TestJSONRPCExtensions:
             'foo',
             'baz',
         }
+
+
+class TestJSONRPCApplicationTenant:
+    def test_tenant_extraction_from_params(self, client, mock_handler):
+        tenant_id = 'my-tenant-123'
+        response = client.post(
+            '/',
+            json=_make_send_message_request(tenant=tenant_id),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.tenant == tenant_id
+
+    def test_no_tenant_extraction(self, client, mock_handler):
+        response = client.post(
+            '/',
+            json=_make_send_message_request(tenant=None),
+        )
+        response.raise_for_status()
+
+        mock_handler.on_message_send.assert_called_once()
+        call_context = mock_handler.on_message_send.call_args[0][1]
+        assert isinstance(call_context, ServerCallContext)
+        assert call_context.tenant == ''
+
+
+class TestJSONRPCApplicationV03Compat:
+    def test_v0_3_compat_flag_routes_to_adapter(self, mock_handler):
+        mock_agent_card = MagicMock(spec=AgentCard)
+        mock_agent_card.url = 'http://mockurl.com'
+        mock_agent_card.capabilities = MagicMock()
+        mock_agent_card.capabilities.streaming = False
+
+        app = A2AStarletteApplication(
+            agent_card=mock_agent_card,
+            http_handler=mock_handler,
+            enable_v0_3_compat=True,
+        )
+
+        client = TestClient(app.build())
+
+        request_data = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'method': 'message/send',
+            'params': {
+                'message': {
+                    'messageId': 'msg-1',
+                    'role': 'ROLE_USER',
+                    'parts': [{'text': 'Hello'}],
+                }
+            },
+        }
+
+        with patch.object(
+            app._v03_adapter, 'handle_request', new_callable=AsyncMock
+        ) as mock_handle:
+            mock_handle.return_value = JSONResponse(
+                {'jsonrpc': '2.0', 'id': '1', 'result': {}}
+            )
+
+            response = client.post('/', json=request_data)
+
+            response.raise_for_status()
+            assert mock_handle.called
+            assert mock_handle.call_args[1]['method'] == 'message/send'
+
+    def test_v0_3_compat_flag_disabled_rejects_v0_3_method(self, mock_handler):
+        mock_agent_card = MagicMock(spec=AgentCard)
+        mock_agent_card.url = 'http://mockurl.com'
+        mock_agent_card.capabilities = MagicMock()
+        mock_agent_card.capabilities.streaming = False
+
+        app = A2AStarletteApplication(
+            agent_card=mock_agent_card,
+            http_handler=mock_handler,
+            enable_v0_3_compat=False,
+        )
+
+        client = TestClient(app.build())
+
+        request_data = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'method': 'message/send',
+            'params': {
+                'message': {
+                    'messageId': 'msg-1',
+                    'role': 'ROLE_USER',
+                    'parts': [{'text': 'Hello'}],
+                }
+            },
+        }
+
+        response = client.post('/', json=request_data)
+
+        assert response.status_code == 200
+        # Should return MethodNotFoundError because the v0.3 method is not recognized
+        # without the adapter enabled.
+        resp_json = response.json()
+        assert 'error' in resp_json
+        assert resp_json['error']['code'] == -32601
 
 
 if __name__ == '__main__':

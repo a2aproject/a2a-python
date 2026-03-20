@@ -2,7 +2,7 @@
 name: Lint Code Base
 on:
   pull_request:
-    branches: [main]
+    branches: [main, 1.0-dev]
 permissions:
   contents: read
 jobs:
@@ -43,9 +43,7 @@ jobs:
       - name: Run Pyright (Pylance equivalent)
         id: pyright
         continue-on-error: true
-        uses: jakebailey/pyright-action@v3
-        with:
-          pylance-version: latest-release
+        run: uv run pyright src
 
       - name: Run JSCPD for copy-paste detection
         id: jscpd

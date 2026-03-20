@@ -76,7 +76,9 @@ from typing_extensions import Self
 
 
 if TYPE_CHECKING:
-    from opentelemetry.trace import SpanKind as SpanKindType
+    from opentelemetry.trace import (
+        SpanKind as SpanKindType,
+    )
 else:
     SpanKindType = object
 
@@ -84,8 +86,12 @@ logger = logging.getLogger(__name__)
 
 try:
     from opentelemetry import trace
-    from opentelemetry.trace import SpanKind as _SpanKind
-    from opentelemetry.trace import StatusCode
+    from opentelemetry.trace import (
+        SpanKind as _SpanKind,
+    )
+    from opentelemetry.trace import (
+        StatusCode,
+    )
 
     otel_installed = True
 

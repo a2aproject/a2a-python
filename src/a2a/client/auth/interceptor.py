@@ -1,15 +1,11 @@
 import logging  # noqa: I001
-from typing import Any
 
 from a2a.client.auth.credentials import CredentialService
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
-from a2a.types import (
-    AgentCard,
-    APIKeySecurityScheme,
-    HTTPAuthSecurityScheme,
-    In,
-    OAuth2SecurityScheme,
-    OpenIdConnectSecurityScheme,
+from a2a.client.client import ClientCallContext
+from a2a.client.interceptors import (
+    AfterArgs,
+    BeforeArgs,
+    ClientCallInterceptor,
 )
 
 logger = logging.getLogger(__name__)
@@ -24,75 +20,79 @@ class AuthInterceptor(ClientCallInterceptor):
     def __init__(self, credential_service: CredentialService):
         self._credential_service = credential_service
 
-    async def intercept(
-        self,
-        method_name: str,
-        request_payload: dict[str, Any],
-        http_kwargs: dict[str, Any],
-        agent_card: AgentCard | None,
-        context: ClientCallContext | None,
-    ) -> tuple[dict[str, Any], dict[str, Any]]:
+    async def before(self, args: BeforeArgs) -> None:
         """Applies authentication headers to the request if credentials are available."""
-        if (
-            agent_card is None
-            or agent_card.security is None
-            or agent_card.security_schemes is None
-        ):
-            return request_payload, http_kwargs
+        agent_card = args.agent_card
 
-        for requirement in agent_card.security:
-            for scheme_name in requirement:
+        # Proto3 repeated fields (security) and maps (security_schemes) do not track presence.
+        # HasField() raises ValueError for them.
+        # We check for truthiness to see if they are non-empty.
+        if (
+            not agent_card.security_requirements
+            or not agent_card.security_schemes
+        ):
+            return
+
+        for requirement in agent_card.security_requirements:
+            for scheme_name in requirement.schemes:
                 credential = await self._credential_service.get_credentials(
-                    scheme_name, context
+                    scheme_name, args.context
                 )
                 if credential and scheme_name in agent_card.security_schemes:
-                    scheme_def_union = agent_card.security_schemes.get(
-                        scheme_name
-                    )
-                    if not scheme_def_union:
+                    scheme = agent_card.security_schemes.get(scheme_name)
+                    if not scheme:
                         continue
-                    scheme_def = scheme_def_union.root
 
-                    headers = http_kwargs.get('headers', {})
+                    if args.context is None:
+                        args.context = ClientCallContext()
 
-                    match scheme_def:
-                        # Case 1a: HTTP Bearer scheme with an if guard
-                        case HTTPAuthSecurityScheme() if (
-                            scheme_def.scheme.lower() == 'bearer'
-                        ):
-                            headers['Authorization'] = f'Bearer {credential}'
-                            logger.debug(
-                                "Added Bearer token for scheme '%s' (type: %s).",
-                                scheme_name,
-                                scheme_def.type,
-                            )
-                            http_kwargs['headers'] = headers
-                            return request_payload, http_kwargs
+                    if args.context.service_parameters is None:
+                        args.context.service_parameters = {}
 
-                        # Case 1b: OAuth2 and OIDC schemes, which are implicitly Bearer
-                        case (
-                            OAuth2SecurityScheme()
-                            | OpenIdConnectSecurityScheme()
-                        ):
-                            headers['Authorization'] = f'Bearer {credential}'
-                            logger.debug(
-                                "Added Bearer token for scheme '%s' (type: %s).",
-                                scheme_name,
-                                scheme_def.type,
-                            )
-                            http_kwargs['headers'] = headers
-                            return request_payload, http_kwargs
+                    # HTTP Bearer authentication
+                    if (
+                        scheme.HasField('http_auth_security_scheme')
+                        and scheme.http_auth_security_scheme.scheme.lower()
+                        == 'bearer'
+                    ):
+                        args.context.service_parameters['Authorization'] = (
+                            f'Bearer {credential}'
+                        )
+                        logger.debug(
+                            "Added Bearer token for scheme '%s'.",
+                            scheme_name,
+                        )
+                        return
 
-                        # Case 2: API Key in Header
-                        case APIKeySecurityScheme(in_=In.header):
-                            headers[scheme_def.name] = credential
-                            logger.debug(
-                                "Added API Key Header for scheme '%s'.",
-                                scheme_name,
-                            )
-                            http_kwargs['headers'] = headers
-                            return request_payload, http_kwargs
+                    # OAuth2 and OIDC schemes are implicitly Bearer
+                    if scheme.HasField(
+                        'oauth2_security_scheme'
+                    ) or scheme.HasField('open_id_connect_security_scheme'):
+                        args.context.service_parameters['Authorization'] = (
+                            f'Bearer {credential}'
+                        )
+                        logger.debug(
+                            "Added Bearer token for scheme '%s'.",
+                            scheme_name,
+                        )
+                        return
+
+                    # API Key in Header
+                    if (
+                        scheme.HasField('api_key_security_scheme')
+                        and scheme.api_key_security_scheme.location.lower()
+                        == 'header'
+                    ):
+                        args.context.service_parameters[
+                            scheme.api_key_security_scheme.name
+                        ] = credential
+                        logger.debug(
+                            "Added API Key Header for scheme '%s'.",
+                            scheme_name,
+                        )
+                        return
 
                 # Note: Other cases like API keys in query/cookie are not handled and will be skipped.
 
-        return request_payload, http_kwargs
+    async def after(self, args: AfterArgs) -> None:
+        """Invoked after the method is executed."""

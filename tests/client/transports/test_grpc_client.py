@@ -3,44 +3,54 @@ from unittest.mock import AsyncMock, MagicMock
 import grpc
 import pytest
 
+from google.protobuf import any_pb2
+from google.rpc import error_details_pb2, status_pb2
+
+from a2a.client.client import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2, a2a_pb2_grpc
-from a2a.types import (
+from a2a.utils.constants import VERSION_HEADER, PROTOCOL_VERSION_CURRENT
+from a2a.utils.errors import A2A_ERROR_REASONS
+from a2a.types import a2a_pb2
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     Artifact,
-    GetTaskPushNotificationConfigParams,
+    AuthenticationInfo,
+    TaskPushNotificationConfig,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
-    MessageSendParams,
     Part,
-    PushNotificationAuthenticationInfo,
-    PushNotificationConfig,
+    TaskPushNotificationConfig,
     Role,
+    SendMessageRequest,
     Task,
     TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    TextPart,
 )
-from a2a.utils import get_text_parts, proto_utils
-from a2a.utils.errors import ServerError
+from a2a.utils import get_text_parts
 
 
 @pytest.fixture
 def mock_grpc_stub() -> AsyncMock:
     """Provides a mock gRPC stub with methods mocked."""
-    stub = AsyncMock(spec=a2a_pb2_grpc.A2AServiceStub)
+    stub = MagicMock()  # Use MagicMock without spec to avoid auto-spec warnings
     stub.SendMessage = AsyncMock()
     stub.SendStreamingMessage = MagicMock()
     stub.GetTask = AsyncMock()
+    stub.ListTasks = AsyncMock()
     stub.CancelTask = AsyncMock()
     stub.CreateTaskPushNotificationConfig = AsyncMock()
     stub.GetTaskPushNotificationConfig = AsyncMock()
+    stub.ListTaskPushNotificationConfigs = AsyncMock()
+    stub.DeleteTaskPushNotificationConfig = AsyncMock()
     return stub
 
 
@@ -50,7 +60,11 @@ def sample_agent_card() -> AgentCard:
     return AgentCard(
         name='gRPC Test Agent',
         description='Agent for testing gRPC client',
-        url='grpc://localhost:50051',
+        supported_interfaces=[
+            AgentInterface(
+                url='grpc://localhost:50051', protocol_binding='GRPC'
+            )
+        ],
         version='1.0',
         capabilities=AgentCapabilities(streaming=True, push_notifications=True),
         default_input_modes=['text/plain'],
@@ -64,27 +78,23 @@ def grpc_transport(
     mock_grpc_stub: AsyncMock, sample_agent_card: AgentCard
 ) -> GrpcTransport:
     """Provides a GrpcTransport instance."""
-    channel = AsyncMock()
+    channel = MagicMock()  # Use MagicMock instead of AsyncMock
     transport = GrpcTransport(
         channel=channel,
         agent_card=sample_agent_card,
-        extensions=[
-            'https://example.com/test-ext/v1',
-            'https://example.com/test-ext/v2',
-        ],
     )
     transport.stub = mock_grpc_stub
     return transport
 
 
 @pytest.fixture
-def sample_message_send_params() -> MessageSendParams:
-    """Provides a sample MessageSendParams object."""
-    return MessageSendParams(
+def sample_message_send_params() -> SendMessageRequest:
+    """Provides a sample SendMessageRequest object."""
+    return SendMessageRequest(
         message=Message(
-            role=Role.user,
+            role=Role.ROLE_USER,
             message_id='msg-1',
-            parts=[Part(root=TextPart(text='Hello'))],
+            parts=[Part(text='Hello')],
         )
     )
 
@@ -95,7 +105,17 @@ def sample_task() -> Task:
     return Task(
         id='task-1',
         context_id='ctx-1',
-        status=TaskStatus(state=TaskState.completed),
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+    )
+
+
+@pytest.fixture
+def sample_task_2() -> Task:
+    """Provides a sample Task object."""
+    return Task(
+        id='task-2',
+        context_id='ctx-2',
+        status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
     )
 
 
@@ -103,9 +123,9 @@ def sample_task() -> Task:
 def sample_message() -> Message:
     """Provides a sample Message object."""
     return Message(
-        role=Role.agent,
+        role=Role.ROLE_AGENT,
         message_id='msg-response',
-        parts=[Part(root=TextPart(text='Hi there'))],
+        parts=[Part(text='Hi there')],
     )
 
 
@@ -116,7 +136,7 @@ def sample_artifact() -> Artifact:
         artifact_id='artifact-1',
         name='example.txt',
         description='An example artifact',
-        parts=[Part(root=TextPart(text='Hi there'))],
+        parts=[Part(text='Hi there')],
         metadata={},
         extensions=[],
     )
@@ -128,8 +148,7 @@ def sample_task_status_update_event() -> TaskStatusUpdateEvent:
     return TaskStatusUpdateEvent(
         task_id='task-1',
         context_id='ctx-1',
-        status=TaskStatus(state=TaskState.working),
-        final=False,
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         metadata={},
     )
 
@@ -150,19 +169,18 @@ def sample_task_artifact_update_event(
 
 
 @pytest.fixture
-def sample_authentication_info() -> PushNotificationAuthenticationInfo:
+def sample_authentication_info() -> AuthenticationInfo:
     """Provides a sample AuthenticationInfo object."""
-    return PushNotificationAuthenticationInfo(
-        schemes=['apikey', 'oauth2'], credentials='secret-token'
-    )
+    return AuthenticationInfo(scheme='apikey', credentials='secret-token')
 
 
 @pytest.fixture
-def sample_push_notification_config(
-    sample_authentication_info: PushNotificationAuthenticationInfo,
-) -> PushNotificationConfig:
-    """Provides a sample PushNotificationConfig object."""
-    return PushNotificationConfig(
+def sample_task_push_notification_config(
+    sample_authentication_info: AuthenticationInfo,
+) -> TaskPushNotificationConfig:
+    """Provides a sample TaskPushNotificationConfig object."""
+    return TaskPushNotificationConfig(
+        task_id='task-1',
         id='config-1',
         url='https://example.com/notify',
         token='example-token',
@@ -170,56 +188,116 @@ def sample_push_notification_config(
     )
 
 
-@pytest.fixture
-def sample_task_push_notification_config(
-    sample_push_notification_config: PushNotificationConfig,
-) -> TaskPushNotificationConfig:
-    """Provides a sample TaskPushNotificationConfig object."""
-    return TaskPushNotificationConfig(
-        task_id='task-1',
-        push_notification_config=sample_push_notification_config,
-    )
-
-
 @pytest.mark.asyncio
 async def test_send_message_task_response(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
-    sample_message_send_params: MessageSendParams,
+    sample_message_send_params: SendMessageRequest,
     sample_task: Task,
 ) -> None:
     """Test send_message that returns a Task."""
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
-        task=proto_utils.ToProto.task(sample_task)
+        task=sample_task
     )
 
     response = await grpc_transport.send_message(
         sample_message_send_params,
-        extensions=['https://example.com/test-ext/v3'],
+        context=ClientCallContext(
+            service_parameters={
+                HTTP_EXTENSION_HEADER: 'https://example.com/test-ext/v3'
+            }
+        ),
     )
 
     mock_grpc_stub.SendMessage.assert_awaited_once()
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
+        (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
         (
             HTTP_EXTENSION_HEADER.lower(),
             'https://example.com/test-ext/v3',
-        )
+        ),
     ]
-    assert isinstance(response, Task)
-    assert response.id == sample_task.id
+    assert response.HasField('task')
+    assert response.task.id == sample_task.id
+
+
+@pytest.mark.asyncio
+async def test_send_message_with_timeout_context(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+    sample_task: Task,
+) -> None:
+    """Test send_message passes context timeout to grpc stub."""
+    from a2a.client.client import ClientCallContext
+
+    mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
+        task=sample_task
+    )
+    context = ClientCallContext(timeout=12.5)
+
+    await grpc_transport.send_message(
+        sample_message_send_params,
+        context=context,
+    )
+
+    mock_grpc_stub.SendMessage.assert_awaited_once()
+    _, kwargs = mock_grpc_stub.SendMessage.call_args
+    assert 'timeout' in kwargs
+    assert kwargs['timeout'] == 12.5
+
+
+@pytest.mark.parametrize('error_cls', list(A2A_ERROR_REASONS.keys()))
+@pytest.mark.asyncio
+async def test_grpc_mapped_errors_rich(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+    error_cls,
+) -> None:
+    """Test handling of rich gRPC error responses with Status metadata."""
+
+    reason = A2A_ERROR_REASONS.get(error_cls, 'UNKNOWN_ERROR')
+
+    error_info = error_details_pb2.ErrorInfo(
+        reason=reason,
+        domain='a2a-protocol.org',
+    )
+
+    error_details = f'{error_cls.__name__}: Mapped Error'
+    status = status_pb2.Status(
+        code=grpc.StatusCode.INTERNAL.value[0], message=error_details
+    )
+    detail = any_pb2.Any()
+    detail.Pack(error_info)
+    status.details.append(detail)
+
+    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.INTERNAL,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details=error_details,
+    )
+
+    with pytest.raises(error_cls) as excinfo:
+        await grpc_transport.send_message(sample_message_send_params)
+
+    assert str(excinfo.value) == error_details
 
 
 @pytest.mark.asyncio
 async def test_send_message_message_response(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
-    sample_message_send_params: MessageSendParams,
+    sample_message_send_params: SendMessageRequest,
     sample_message: Message,
 ) -> None:
     """Test send_message that returns a Message."""
     mock_grpc_stub.SendMessage.return_value = a2a_pb2.SendMessageResponse(
-        msg=proto_utils.ToProto.message(sample_message)
+        message=sample_message
     )
 
     response = await grpc_transport.send_message(sample_message_send_params)
@@ -227,14 +305,11 @@ async def test_send_message_message_response(
     mock_grpc_stub.SendMessage.assert_awaited_once()
     _, kwargs = mock_grpc_stub.SendMessage.call_args
     assert kwargs['metadata'] == [
-        (
-            HTTP_EXTENSION_HEADER.lower(),
-            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-        )
+        (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
     ]
-    assert isinstance(response, Message)
-    assert response.message_id == sample_message.message_id
-    assert get_text_parts(response.parts) == get_text_parts(
+    assert response.HasField('message')
+    assert response.message.message_id == sample_message.message_id
+    assert get_text_parts(response.message.parts) == get_text_parts(
         sample_message.parts
     )
 
@@ -243,7 +318,7 @@ async def test_send_message_message_response(
 async def test_send_message_streaming(  # noqa: PLR0913
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
-    sample_message_send_params: MessageSendParams,
+    sample_message_send_params: SendMessageRequest,
     sample_message: Message,
     sample_task: Task,
     sample_task_status_update_event: TaskStatusUpdateEvent,
@@ -253,21 +328,15 @@ async def test_send_message_streaming(  # noqa: PLR0913
     stream = MagicMock()
     stream.read = AsyncMock(
         side_effect=[
+            a2a_pb2.StreamResponse(message=sample_message),
+            a2a_pb2.StreamResponse(task=sample_task),
             a2a_pb2.StreamResponse(
-                msg=proto_utils.ToProto.message(sample_message)
-            ),
-            a2a_pb2.StreamResponse(task=proto_utils.ToProto.task(sample_task)),
-            a2a_pb2.StreamResponse(
-                status_update=proto_utils.ToProto.task_status_update_event(
-                    sample_task_status_update_event
-                )
+                status_update=sample_task_status_update_event
             ),
             a2a_pb2.StreamResponse(
-                artifact_update=proto_utils.ToProto.task_artifact_update_event(
-                    sample_task_artifact_update_event
-                )
+                artifact_update=sample_task_artifact_update_event
             ),
-            grpc.aio.EOF,
+            grpc.aio.EOF,  # type: ignore[attr-defined]
         ]
     )
     mock_grpc_stub.SendStreamingMessage.return_value = stream
@@ -282,19 +351,23 @@ async def test_send_message_streaming(  # noqa: PLR0913
     mock_grpc_stub.SendStreamingMessage.assert_called_once()
     _, kwargs = mock_grpc_stub.SendStreamingMessage.call_args
     assert kwargs['metadata'] == [
-        (
-            HTTP_EXTENSION_HEADER.lower(),
-            'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-        )
+        (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
     ]
-    assert isinstance(responses[0], Message)
-    assert responses[0].message_id == sample_message.message_id
-    assert isinstance(responses[1], Task)
-    assert responses[1].id == sample_task.id
-    assert isinstance(responses[2], TaskStatusUpdateEvent)
-    assert responses[2].task_id == sample_task_status_update_event.task_id
-    assert isinstance(responses[3], TaskArtifactUpdateEvent)
-    assert responses[3].task_id == sample_task_artifact_update_event.task_id
+    # Responses are StreamResponse proto objects
+    assert responses[0].HasField('message')
+    assert responses[0].message.message_id == sample_message.message_id
+    assert responses[1].HasField('task')
+    assert responses[1].task.id == sample_task.id
+    assert responses[2].HasField('status_update')
+    assert (
+        responses[2].status_update.task_id
+        == sample_task_status_update_event.task_id
+    )
+    assert responses[3].HasField('artifact_update')
+    assert (
+        responses[3].artifact_update.task_id
+        == sample_task_artifact_update_event.task_id
+    )
 
 
 @pytest.mark.asyncio
@@ -302,23 +375,47 @@ async def test_get_task(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
 ) -> None:
     """Test retrieving a task."""
-    mock_grpc_stub.GetTask.return_value = proto_utils.ToProto.task(sample_task)
-    params = TaskQueryParams(id=sample_task.id)
+    mock_grpc_stub.GetTask.return_value = sample_task
+    params = GetTaskRequest(id=f'{sample_task.id}')
 
     response = await grpc_transport.get_task(params)
 
     mock_grpc_stub.GetTask.assert_awaited_once_with(
-        a2a_pb2.GetTaskRequest(
-            name=f'tasks/{sample_task.id}', history_length=None
-        ),
+        a2a_pb2.GetTaskRequest(id=f'{sample_task.id}', history_length=None),
         metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
         ],
+        timeout=None,
     )
     assert response.id == sample_task.id
+
+
+@pytest.mark.asyncio
+async def test_list_tasks(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task: Task,
+    sample_task_2: Task,
+):
+    """Test listing tasks."""
+    mock_grpc_stub.ListTasks.return_value = a2a_pb2.ListTasksResponse(
+        tasks=[sample_task, sample_task_2],
+        total_size=2,
+    )
+    params = a2a_pb2.ListTasksRequest()
+
+    result = await grpc_transport.list_tasks(params)
+
+    mock_grpc_stub.ListTasks.assert_awaited_once_with(
+        params,
+        metadata=[
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
+        ],
+        timeout=None,
+    )
+    assert result.total_size == 2
+    assert not result.next_page_token
+    assert [t.id for t in result.tasks] == [sample_task.id, sample_task_2.id]
 
 
 @pytest.mark.asyncio
@@ -326,22 +423,20 @@ async def test_get_task_with_history(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
 ) -> None:
     """Test retrieving a task with history."""
-    mock_grpc_stub.GetTask.return_value = proto_utils.ToProto.task(sample_task)
+    mock_grpc_stub.GetTask.return_value = sample_task
     history_len = 10
-    params = TaskQueryParams(id=sample_task.id, history_length=history_len)
+    params = GetTaskRequest(id=f'{sample_task.id}', history_length=history_len)
 
     await grpc_transport.get_task(params)
 
     mock_grpc_stub.GetTask.assert_awaited_once_with(
         a2a_pb2.GetTaskRequest(
-            name=f'tasks/{sample_task.id}', history_length=history_len
+            id=f'{sample_task.id}', history_length=history_len
         ),
         metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
         ],
+        timeout=None,
     )
 
 
@@ -350,195 +445,242 @@ async def test_cancel_task(
     grpc_transport: GrpcTransport, mock_grpc_stub: AsyncMock, sample_task: Task
 ) -> None:
     """Test cancelling a task."""
-    cancelled_task = sample_task.model_copy()
-    cancelled_task.status.state = TaskState.canceled
-    mock_grpc_stub.CancelTask.return_value = proto_utils.ToProto.task(
-        cancelled_task
+    cancelled_task = Task(
+        id=sample_task.id,
+        context_id=sample_task.context_id,
+        status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
     )
-    params = TaskIdParams(id=sample_task.id)
-    extensions = [
-        'https://example.com/test-ext/v3',
-    ]
-    response = await grpc_transport.cancel_task(params, extensions=extensions)
+    mock_grpc_stub.CancelTask.return_value = cancelled_task
+    extensions = 'https://example.com/test-ext/v3'
+
+    request = a2a_pb2.CancelTaskRequest(id=f'{sample_task.id}')
+    response = await grpc_transport.cancel_task(
+        request,
+        context=ClientCallContext(
+            service_parameters={HTTP_EXTENSION_HEADER: extensions}
+        ),
+    )
 
     mock_grpc_stub.CancelTask.assert_awaited_once_with(
-        a2a_pb2.CancelTaskRequest(name=f'tasks/{sample_task.id}'),
+        a2a_pb2.CancelTaskRequest(id=f'{sample_task.id}'),
         metadata=[
-            (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3')
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
+            (HTTP_EXTENSION_HEADER.lower(), 'https://example.com/test-ext/v3'),
         ],
+        timeout=None,
     )
-    assert response.status.state == TaskState.canceled
+    assert response.status.state == TaskState.TASK_STATE_CANCELED
 
 
 @pytest.mark.asyncio
-async def test_set_task_callback_with_valid_task(
+async def test_create_task_push_notification_config_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test setting a task push notification config with a valid task id."""
     mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
-        proto_utils.ToProto.task_push_notification_config(
-            sample_task_push_notification_config
-        )
-    )
-
-    response = await grpc_transport.set_task_callback(
         sample_task_push_notification_config
     )
 
+    # Create the request object expected by the transport
+    request = TaskPushNotificationConfig(
+        task_id='task-1',
+        url='https://example.com/notify',
+    )
+    response = await grpc_transport.create_task_push_notification_config(
+        request
+    )
+
     mock_grpc_stub.CreateTaskPushNotificationConfig.assert_awaited_once_with(
-        a2a_pb2.CreateTaskPushNotificationConfigRequest(
-            parent=f'tasks/{sample_task_push_notification_config.task_id}',
-            config_id=sample_task_push_notification_config.push_notification_config.id,
-            config=proto_utils.ToProto.task_push_notification_config(
-                sample_task_push_notification_config
-            ),
-        ),
+        request,
         metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
         ],
+        timeout=None,
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
 
 @pytest.mark.asyncio
-async def test_set_task_callback_with_invalid_task(
+async def test_create_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
-    """Test setting a task push notification config with an invalid task id."""
-    mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
-        name=(
-            f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
-            f'pushNotificationConfigs/{sample_task_push_notification_config.push_notification_config.id}'
-        ),
-        push_notification_config=proto_utils.ToProto.push_notification_config(
-            sample_task_push_notification_config.push_notification_config
-        ),
+    """Test setting a task push notification config with an invalid task name format."""
+    # Return a config with an invalid name format
+    mock_grpc_stub.CreateTaskPushNotificationConfig.return_value = (
+        a2a_pb2.TaskPushNotificationConfig(
+            task_id='invalid-path-to-task-1',
+            id='config-1',
+            url='https://example.com/notify',
+        )
     )
 
-    with pytest.raises(ServerError) as exc_info:
-        await grpc_transport.set_task_callback(
-            sample_task_push_notification_config
-        )
-    assert (
-        'Bad TaskPushNotificationConfig resource name'
-        in exc_info.value.error.message
+    request = TaskPushNotificationConfig(
+        task_id='task-1',
+        id='config-1',
+        url='https://example.com/notify',
     )
+
+    # Note: The transport doesn't validate the response name format
+    # It just returns the response from the stub
+    response = await grpc_transport.create_task_push_notification_config(
+        request
+    )
+    assert response.task_id == 'invalid-path-to-task-1'
 
 
 @pytest.mark.asyncio
-async def test_get_task_callback_with_valid_task(
+async def test_get_task_push_notification_config_with_valid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
     """Test retrieving a task push notification config with a valid task id."""
     mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
-        proto_utils.ToProto.task_push_notification_config(
-            sample_task_push_notification_config
+        sample_task_push_notification_config
+    )
+    config_id = sample_task_push_notification_config.id
+
+    response = await grpc_transport.get_task_push_notification_config(
+        GetTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id=config_id,
         )
     )
-    params = GetTaskPushNotificationConfigParams(
-        id=sample_task_push_notification_config.task_id,
-        push_notification_config_id=sample_task_push_notification_config.push_notification_config.id,
-    )
-
-    response = await grpc_transport.get_task_callback(params)
 
     mock_grpc_stub.GetTaskPushNotificationConfig.assert_awaited_once_with(
         a2a_pb2.GetTaskPushNotificationConfigRequest(
-            name=(
-                f'tasks/{params.id}/'
-                f'pushNotificationConfigs/{params.push_notification_config_id}'
-            ),
+            task_id='task-1',
+            id=config_id,
         ),
         metadata=[
-            (
-                HTTP_EXTENSION_HEADER.lower(),
-                'https://example.com/test-ext/v1,https://example.com/test-ext/v2',
-            )
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
         ],
+        timeout=None,
     )
     assert response.task_id == sample_task_push_notification_config.task_id
 
 
 @pytest.mark.asyncio
-async def test_get_task_callback_with_invalid_task(
+async def test_get_task_push_notification_config_with_invalid_task(
     grpc_transport: GrpcTransport,
     mock_grpc_stub: AsyncMock,
     sample_task_push_notification_config: TaskPushNotificationConfig,
 ) -> None:
-    """Test retrieving a task push notification config with an invalid task id."""
-    mock_grpc_stub.GetTaskPushNotificationConfig.return_value = a2a_pb2.TaskPushNotificationConfig(
-        name=(
-            f'invalid-path-to-tasks/{sample_task_push_notification_config.task_id}/'
-            f'pushNotificationConfigs/{sample_task_push_notification_config.push_notification_config.id}'
-        ),
-        push_notification_config=proto_utils.ToProto.push_notification_config(
-            sample_task_push_notification_config.push_notification_config
-        ),
-    )
-    params = GetTaskPushNotificationConfigParams(
-        id=sample_task_push_notification_config.task_id,
-        push_notification_config_id=sample_task_push_notification_config.push_notification_config.id,
+    """Test retrieving a task push notification config with an invalid task name."""
+    mock_grpc_stub.GetTaskPushNotificationConfig.return_value = (
+        a2a_pb2.TaskPushNotificationConfig(
+            task_id='invalid-path-to-task-1',
+            id='config-1',
+            url='https://example.com/notify',
+        )
     )
 
-    with pytest.raises(ServerError) as exc_info:
-        await grpc_transport.get_task_callback(params)
-    assert (
-        'Bad TaskPushNotificationConfig resource name'
-        in exc_info.value.error.message
+    response = await grpc_transport.get_task_push_notification_config(
+        GetTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id='config-1',
+        )
+    )
+    # The transport doesn't validate the response name format
+    assert response.task_id == 'invalid-path-to-task-1'
+
+
+@pytest.mark.asyncio
+async def test_list_task_push_notification_configs(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
+) -> None:
+    """Test retrieving task push notification configs."""
+    mock_grpc_stub.ListTaskPushNotificationConfigs.return_value = (
+        a2a_pb2.ListTaskPushNotificationConfigsResponse(
+            configs=[sample_task_push_notification_config]
+        )
+    )
+
+    response = await grpc_transport.list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='task-1')
+    )
+
+    mock_grpc_stub.ListTaskPushNotificationConfigs.assert_awaited_once_with(
+        a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id='task-1'),
+        metadata=[
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
+        ],
+        timeout=None,
+    )
+    assert len(response.configs) == 1
+    assert response.configs[0].task_id == 'task-1'
+
+
+@pytest.mark.asyncio
+async def test_delete_task_push_notification_config(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_task_push_notification_config: TaskPushNotificationConfig,
+) -> None:
+    """Test deleting task push notification config."""
+    mock_grpc_stub.DeleteTaskPushNotificationConfig.return_value = None
+
+    await grpc_transport.delete_task_push_notification_config(
+        DeleteTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id='config-1',
+        )
+    )
+
+    mock_grpc_stub.DeleteTaskPushNotificationConfig.assert_awaited_once_with(
+        a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+            task_id='task-1',
+            id='config-1',
+        ),
+        metadata=[
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT),
+        ],
+        timeout=None,
     )
 
 
 @pytest.mark.parametrize(
-    'initial_extensions, input_extensions, expected_metadata',
+    'input_extensions, expected_metadata',
     [
         (
             None,
-            None,
-            None,
-        ),  # Case 1: No initial, No input
+            [],
+        ),
         (
-            ['ext1'],
-            None,
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext1')],
-        ),  # Case 2: Initial, No input
-        (
-            None,
             ['ext2'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
-        ),  # Case 3: No initial, Input
+            [
+                (HTTP_EXTENSION_HEADER.lower(), 'ext2'),
+            ],
+        ),
         (
-            ['ext1'],
-            ['ext2'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2')],
-        ),  # Case 4: Initial, Input (override)
-        (
-            ['ext1'],
             ['ext2', 'ext3'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3')],
-        ),  # Case 5: Initial, Multiple inputs (override)
-        (
-            ['ext1', 'ext2'],
-            ['ext3'],
-            [(HTTP_EXTENSION_HEADER.lower(), 'ext3')],
-        ),  # Case 6: Multiple initial, Single input (override)
+            [
+                (HTTP_EXTENSION_HEADER.lower(), 'ext2,ext3'),
+            ],
+        ),
     ],
 )
 def test_get_grpc_metadata(
     grpc_transport: GrpcTransport,
-    initial_extensions: list[str] | None,
     input_extensions: list[str] | None,
     expected_metadata: list[tuple[str, str]] | None,
 ) -> None:
-    """Tests _get_grpc_metadata for correct metadata generation and self.extensions update."""
-    grpc_transport.extensions = initial_extensions
-    metadata = grpc_transport._get_grpc_metadata(input_extensions)
-    assert metadata == expected_metadata
+    """Tests _get_grpc_metadata for correct metadata generation."""
+    context = None
+    if input_extensions:
+        context = ClientCallContext(
+            service_parameters={
+                HTTP_EXTENSION_HEADER: ','.join(input_extensions)
+            }
+        )
+
+    metadata = grpc_transport._get_grpc_metadata(context)
+    # Filter out a2a-version as it's not being tested here directly and simplifies the assertion
+    filtered_metadata = [m for m in metadata if m[0] != VERSION_HEADER.lower()]
+    assert filtered_metadata == expected_metadata

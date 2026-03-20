@@ -13,10 +13,12 @@ except ImportError as e:
         "'pip install a2a-sdk[vertex]'"
     ) from e
 
+from a2a.compat.v0_3.conversions import to_compat_task, to_core_task
+from a2a.compat.v0_3.types import Task as CompatTask
 from a2a.contrib.tasks import vertex_task_converter
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import Task  # Task is the Pydantic model
+from a2a.types.a2a_pb2 import ListTasksRequest, ListTasksResponse, Task
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +32,7 @@ class VertexTaskStore(TaskStore):
 
     def __init__(
         self,
-        client: vertexai.Client,
+        client: vertexai.Client,  # type: ignore
         agent_engine_resource_id: str,
     ) -> None:
         """Initializes the VertexTaskStore.
@@ -46,13 +48,14 @@ class VertexTaskStore(TaskStore):
         self, task: Task, context: ServerCallContext | None = None
     ) -> None:
         """Saves or updates a task in the store."""
-        previous_task = await self._get_stored_task(task.id)
+        compat_task = to_compat_task(task)
+        previous_task = await self._get_stored_task(compat_task.id)
         if previous_task is None:
-            await self._create(task)
+            await self._create(compat_task)
         else:
-            await self._update(previous_task, task)
+            await self._update(previous_task, compat_task)
 
-    async def _create(self, sdk_task: Task) -> None:
+    async def _create(self, sdk_task: CompatTask) -> None:
         stored_task = vertex_task_converter.to_stored_task(sdk_task)
         await self._client.aio.agent_engines.a2a_tasks.create(
             name=self._agent_engine_resource_id,
@@ -65,7 +68,10 @@ class VertexTaskStore(TaskStore):
         )
 
     def _get_status_change_event(
-        self, previous_task: Task, task: Task, event_sequence_number: int
+        self,
+        previous_task: CompatTask,
+        task: CompatTask,
+        event_sequence_number: int,
     ) -> vertexai_types.TaskEvent | None:
         if task.status.state != previous_task.status.state:
             return vertexai_types.TaskEvent(
@@ -81,7 +87,10 @@ class VertexTaskStore(TaskStore):
         return None
 
     def _get_metadata_change_event(
-        self, previous_task: Task, task: Task, event_sequence_number: int
+        self,
+        previous_task: CompatTask,
+        task: CompatTask,
+        event_sequence_number: int,
     ) -> vertexai_types.TaskEvent | None:
         if task.metadata != previous_task.metadata:
             return vertexai_types.TaskEvent(
@@ -95,7 +104,10 @@ class VertexTaskStore(TaskStore):
         return None
 
     def _get_artifacts_change_event(
-        self, previous_task: Task, task: Task, event_sequence_number: int
+        self,
+        previous_task: CompatTask,
+        task: CompatTask,
+        event_sequence_number: int,
     ) -> vertexai_types.TaskEvent | None:
         if task.artifacts != previous_task.artifacts:
             task_artifact_change = vertexai_types.TaskArtifactChange()
@@ -145,7 +157,7 @@ class VertexTaskStore(TaskStore):
         return None
 
     async def _update(
-        self, previous_stored_task: vertexai_types.A2aTask, task: Task
+        self, previous_stored_task: vertexai_types.A2aTask, task: CompatTask
     ) -> None:
         previous_task = vertex_task_converter.to_sdk_task(previous_stored_task)
         events = []
@@ -200,7 +212,15 @@ class VertexTaskStore(TaskStore):
         a2a_task = await self._get_stored_task(task_id)
         if a2a_task is None:
             return None
-        return vertex_task_converter.to_sdk_task(a2a_task)
+        return to_core_task(vertex_task_converter.to_sdk_task(a2a_task))
+
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResponse:
+        """Retrieves a list of tasks from the store."""
+        raise NotImplementedError
 
     async def delete(
         self, task_id: str, context: ServerCallContext | None = None

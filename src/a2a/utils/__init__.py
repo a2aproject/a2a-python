@@ -1,5 +1,6 @@
 """Utility functions for the A2A Python SDK."""
 
+from a2a.utils import proto_utils
 from a2a.utils.artifact import (
     get_artifact_text,
     new_artifact,
@@ -9,8 +10,7 @@ from a2a.utils.artifact import (
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
+    TransportProtocol,
 )
 from a2a.utils.helpers import (
     append_artifact_to_task,
@@ -28,6 +28,7 @@ from a2a.utils.parts import (
     get_file_parts,
     get_text_parts,
 )
+from a2a.utils.proto_utils import to_stream_response
 from a2a.utils.task import (
     completed_task,
     new_task,
@@ -37,8 +38,7 @@ from a2a.utils.task import (
 __all__ = [
     'AGENT_CARD_WELL_KNOWN_PATH',
     'DEFAULT_RPC_URL',
-    'EXTENDED_AGENT_CARD_PATH',
-    'PREV_AGENT_CARD_WELL_KNOWN_PATH',
+    'TransportProtocol',
     'append_artifact_to_task',
     'are_modalities_compatible',
     'build_text_artifact',
@@ -55,4 +55,6 @@ __all__ = [
     'new_data_artifact',
     'new_task',
     'new_text_artifact',
+    'proto_utils',
+    'to_stream_response',
 ]

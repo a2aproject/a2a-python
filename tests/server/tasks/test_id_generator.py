@@ -52,7 +52,7 @@ class TestIDGeneratorContext:
     def test_context_validation(self):
         """Test that context raises validation error for invalid types."""
         with pytest.raises(ValidationError):
-            IDGeneratorContext(task_id={'not': 'a string'})
+            IDGeneratorContext(task_id={'not': 'a string'})  # type: ignore[arg-type]
 
 
 class TestIDGenerator:
@@ -61,7 +61,7 @@ class TestIDGenerator:
     def test_cannot_instantiate_abstract_class(self):
         """Test that IDGenerator cannot be instantiated directly."""
         with pytest.raises(TypeError):
-            IDGenerator()
+            IDGenerator()  # type: ignore[abstract]
 
     def test_subclass_must_implement_generate(self):
         """Test that subclasses must implement the generate method."""
@@ -70,7 +70,7 @@ class TestIDGenerator:
             pass
 
         with pytest.raises(TypeError):
-            IncompleteGenerator()
+            IncompleteGenerator()  # type: ignore[abstract]
 
     def test_valid_subclass_implementation(self):
         """Test that a valid subclass can be instantiated."""

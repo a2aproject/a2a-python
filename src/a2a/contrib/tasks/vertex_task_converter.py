@@ -10,7 +10,7 @@ except ImportError as e:
 import base64
 import json
 
-from a2a.types import (
+from a2a.compat.v0_3.types import (
     Artifact,
     DataPart,
     FilePart,

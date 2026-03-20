@@ -1,8 +1,5 @@
-from collections.abc import AsyncIterator, Callable
-from types import TracebackType
+from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
 from typing import Any
-
-from typing_extensions import Self
 
 from a2a.client.client import (
     Client,
@@ -12,21 +9,28 @@ from a2a.client.client import (
     Consumer,
 )
 from a2a.client.client_task_manager import ClientTaskManager
-from a2a.client.errors import A2AClientInvalidStateError
-from a2a.client.middleware import ClientCallInterceptor
+from a2a.client.interceptors import (
+    AfterArgs,
+    BeforeArgs,
+    ClientCallInterceptor,
+)
 from a2a.client.transports.base import ClientTransport
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    Message,
-    MessageSendConfiguration,
-    MessageSendParams,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    ListTasksResponse,
+    SendMessageRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskStatusUpdateEvent,
 )
 
 
@@ -39,35 +43,20 @@ class BaseClient(Client):
         config: ClientConfig,
         transport: ClientTransport,
         consumers: list[Consumer],
-        middleware: list[ClientCallInterceptor],
+        interceptors: list[ClientCallInterceptor],
     ):
-        super().__init__(consumers, middleware)
+        super().__init__(consumers, interceptors)
         self._card = card
         self._config = config
         self._transport = transport
-
-    async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the client itself."""
-        return self
-
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exits the async context manager, ensuring close() is called."""
-        await self.close()
+        self._interceptors = interceptors
 
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
-        configuration: MessageSendConfiguration | None = None,
         context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
-    ) -> AsyncIterator[ClientEvent | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the agent.
 
         This method handles both streaming and non-streaming (polling) interactions
@@ -76,172 +65,259 @@ class BaseClient(Client):
 
         Args:
             request: The message to send to the agent.
-            configuration: Optional per-call overrides for message sending behavior.
-            context: The client call context.
-            request_metadata: Extensions Metadata attached to the request.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Yields:
-            An async iterator of `ClientEvent` or a final `Message` response.
+            An async iterator of `ClientEvent`
         """
-        base_config = MessageSendConfiguration(
-            accepted_output_modes=self._config.accepted_output_modes,
-            blocking=not self._config.polling,
-            push_notification_config=(
-                self._config.push_notification_configs[0]
-                if self._config.push_notification_configs
-                else None
-            ),
-        )
-        if configuration is not None:
-            update_data = configuration.model_dump(
-                exclude_unset=True,
-                by_alias=False,
-            )
-            config = base_config.model_copy(update=update_data)
-        else:
-            config = base_config
-
-        params = MessageSendParams(
-            message=request, configuration=config, metadata=request_metadata
-        )
-
+        self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
-            response = await self._transport.send_message(
-                params, context=context, extensions=extensions
+            response = await self._execute_with_interceptors(
+                input_data=request,
+                method='send_message',
+                context=context,
+                transport_call=lambda req, ctx: self._transport.send_message(
+                    req, context=ctx
+                ),
             )
-            result = (
-                (response, None) if isinstance(response, Task) else response
-            )
-            await self.consume(result, self._card)
-            yield result
+
+            # In non-streaming case we convert to a StreamResponse so that the
+            # client always sees the same iterator.
+            stream_response = StreamResponse()
+            client_event: ClientEvent
+            if response.HasField('task'):
+                stream_response.task.CopyFrom(response.task)
+                client_event = (stream_response, response.task)
+            elif response.HasField('message'):
+                stream_response.message.CopyFrom(response.message)
+                client_event = (stream_response, None)
+            else:
+                # Response must have either task or message
+                raise ValueError('Response has neither task nor message')
+
+            await self.consume(client_event, self._card)
+            yield client_event
             return
 
-        tracker = ClientTaskManager()
-        stream = self._transport.send_message_streaming(
-            params, context=context, extensions=extensions
-        )
+        async for event in self._execute_stream_with_interceptors(
+            input_data=request,
+            method='send_message_streaming',
+            context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.send_message_streaming(req, context=ctx)
+            ),
+        ):
+            yield event
 
-        first_event = await anext(stream)
-        # The response from a server may be either exactly one Message or a
-        # series of Task updates. Separate out the first message for special
-        # case handling, which allows us to simplify further stream processing.
-        if isinstance(first_event, Message):
-            await self.consume(first_event, self._card)
-            yield first_event
-            return
+    def _apply_client_config(self, request: SendMessageRequest) -> None:
+        request.configuration.return_immediately |= self._config.polling
+        if (
+            not request.configuration.HasField('task_push_notification_config')
+            and self._config.push_notification_configs
+        ):
+            request.configuration.task_push_notification_config.CopyFrom(
+                self._config.push_notification_configs[0]
+            )
+        if (
+            not request.configuration.accepted_output_modes
+            and self._config.accepted_output_modes
+        ):
+            request.configuration.accepted_output_modes.extend(
+                self._config.accepted_output_modes
+            )
 
-        yield await self._process_response(tracker, first_event)
-
-        async for event in stream:
-            yield await self._process_response(tracker, event)
-
-    async def _process_response(
+    async def _process_stream(
         self,
-        tracker: ClientTaskManager,
-        event: Task | Message | TaskStatusUpdateEvent | TaskArtifactUpdateEvent,
-    ) -> ClientEvent:
-        if isinstance(event, Message):
-            raise A2AClientInvalidStateError(
-                'received a streamed Message from server after first response; this is not supported'
+        stream: AsyncIterator[StreamResponse],
+        before_args: BeforeArgs,
+    ) -> AsyncGenerator[ClientEvent]:
+        tracker = ClientTaskManager()
+        async for stream_response in stream:
+            after_args = AfterArgs(
+                result=stream_response,
+                method=before_args.method,
+                agent_card=self._card,
+                context=before_args.context,
             )
-        await tracker.process(event)
-        task = tracker.get_task_or_raise()
-        update = None if isinstance(event, Task) else event
-        client_event = (task, update)
-        await self.consume(client_event, self._card)
-        return client_event
+            await self._intercept_after(after_args)
+            intercepted_response = after_args.result
+            client_event = await self._format_stream_event(
+                intercepted_response, tracker
+            )
+            yield client_event
+            if intercepted_response.HasField('message'):
+                return
 
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task.
 
         Args:
-            request: The `TaskQueryParams` object specifying the task ID.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            request: The `GetTaskRequest` object specifying the task ID.
+            context: Optional client call context.
 
         Returns:
             A `Task` object representing the current state of the task.
         """
-        return await self._transport.get_task(
-            request, context=context, extensions=extensions
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='get_task',
+            context=context,
+            transport_call=lambda req, ctx: self._transport.get_task(
+                req, context=ctx
+            ),
+        )
+
+    async def list_tasks(
+        self,
+        request: ListTasksRequest,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> ListTasksResponse:
+        """Retrieves tasks for an agent."""
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='list_tasks',
+            context=context,
+            transport_call=lambda req, ctx: self._transport.list_tasks(
+                req, context=ctx
+            ),
         )
 
     async def cancel_task(
         self,
-        request: TaskIdParams,
+        request: CancelTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task.
 
         Args:
-            request: The `TaskIdParams` object specifying the task ID.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            request: The `CancelTaskRequest` object specifying the task ID.
+            context: Optional client call context.
 
         Returns:
             A `Task` object containing the updated task status.
         """
-        return await self._transport.cancel_task(
-            request, context=context, extensions=extensions
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='cancel_task',
+            context=context,
+            transport_call=lambda req, ctx: self._transport.cancel_task(
+                req, context=ctx
+            ),
         )
 
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task.
 
         Args:
             request: The `TaskPushNotificationConfig` object with the new configuration.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             The created or updated `TaskPushNotificationConfig` object.
         """
-        return await self._transport.set_task_callback(
-            request, context=context, extensions=extensions
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='create_task_push_notification_config',
+            context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.create_task_push_notification_config(
+                    req, context=ctx
+                )
+            ),
         )
 
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task.
 
         Args:
             request: The `GetTaskPushNotificationConfigParams` object specifying the task.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Returns:
             A `TaskPushNotificationConfig` object containing the configuration.
         """
-        return await self._transport.get_task_callback(
-            request, context=context, extensions=extensions
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='get_task_push_notification_config',
+            context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.get_task_push_notification_config(
+                    req, context=ctx
+                )
+            ),
         )
 
-    async def resubscribe(
+    async def list_task_push_notification_configs(
         self,
-        request: TaskIdParams,
+        request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task.
+
+        Args:
+            request: The `ListTaskPushNotificationConfigsRequest` object specifying the request.
+            context: Optional client call context.
+
+        Returns:
+            A `ListTaskPushNotificationConfigsResponse` object.
+        """
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='list_task_push_notification_configs',
+            context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.list_task_push_notification_configs(
+                    req, context=ctx
+                )
+            ),
+        )
+
+    async def delete_task_push_notification_config(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task.
+
+        Args:
+            request: The `DeleteTaskPushNotificationConfigRequest` object specifying the request.
+            context: Optional client call context.
+        """
+        return await self._execute_with_interceptors(
+            input_data=request,
+            method='delete_task_push_notification_config',
+            context=context,
+            transport_call=lambda req, ctx: (
+                self._transport.delete_task_push_notification_config(
+                    req, context=ctx
+                )
+            ),
+        )
+
+    async def subscribe(
+        self,
+        request: SubscribeToTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream.
 
@@ -249,8 +325,7 @@ class BaseClient(Client):
 
         Args:
             request: Parameters to identify the task to resubscribe to.
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            context: Optional client call context.
 
         Yields:
             An async iterator of `ClientEvent` objects.
@@ -263,20 +338,21 @@ class BaseClient(Client):
                 'client and/or server do not support resubscription.'
             )
 
-        tracker = ClientTaskManager()
-        # Note: resubscribe can only be called on an existing task. As such,
-        # we should never see Message updates, despite the typing of the service
-        # definition indicating it may be possible.
-        async for event in self._transport.resubscribe(
-            request, context=context, extensions=extensions
+        async for event in self._execute_stream_with_interceptors(
+            input_data=request,
+            method='subscribe',
+            context=context,
+            transport_call=lambda req, ctx: self._transport.subscribe(
+                req, context=ctx
+            ),
         ):
-            yield await self._process_response(tracker, event)
+            yield event
 
-    async def get_card(
+    async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card.
@@ -285,21 +361,153 @@ class BaseClient(Client):
         client's internal state with the new card.
 
         Args:
-            context: The client call context.
-            extensions: List of extensions to be activated.
+            request: The `GetExtendedAgentCardRequest` object specifying the request.
+            context: Optional client call context.
             signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
             The `AgentCard` for the agent.
         """
-        card = await self._transport.get_card(
+        card = await self._execute_with_interceptors(
+            input_data=request,
+            method='get_extended_agent_card',
             context=context,
-            extensions=extensions,
-            signature_verifier=signature_verifier,
+            transport_call=lambda req, ctx: (
+                self._transport.get_extended_agent_card(req, context=ctx)
+            ),
         )
+        if signature_verifier:
+            signature_verifier(card)
+
         self._card = card
         return card
 
     async def close(self) -> None:
         """Closes the underlying transport."""
         await self._transport.close()
+
+    async def _execute_with_interceptors(
+        self,
+        input_data: Any,
+        method: str,
+        context: ClientCallContext | None,
+        transport_call: Callable[
+            [Any, ClientCallContext | None], Awaitable[Any]
+        ],
+    ) -> Any:
+        before_args = BeforeArgs(
+            input=input_data,
+            method=method,
+            agent_card=self._card,
+            context=context,
+        )
+        before_result = await self._intercept_before(before_args)
+
+        if before_result is not None:
+            early_after_args = AfterArgs(
+                result=before_result['early_return'],
+                method=method,
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(
+                early_after_args,
+                before_result['executed'],
+            )
+            return early_after_args.result
+
+        result = await transport_call(before_args.input, before_args.context)
+
+        after_args = AfterArgs(
+            result=result,
+            method=method,
+            agent_card=self._card,
+            context=before_args.context,
+        )
+        await self._intercept_after(after_args)
+
+        return after_args.result
+
+    async def _execute_stream_with_interceptors(
+        self,
+        input_data: Any,
+        method: str,
+        context: ClientCallContext | None,
+        transport_call: Callable[
+            [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
+        ],
+    ) -> AsyncIterator[ClientEvent]:
+
+        before_args = BeforeArgs(
+            input=input_data,
+            method=method,
+            agent_card=self._card,
+            context=context,
+        )
+        before_result = await self._intercept_before(before_args)
+
+        if before_result:
+            after_args = AfterArgs(
+                result=before_result['early_return'],
+                method=method,
+                agent_card=self._card,
+                context=before_args.context,
+            )
+            await self._intercept_after(after_args, before_result['executed'])
+
+            tracker = ClientTaskManager()
+            yield await self._format_stream_event(after_args.result, tracker)
+            return
+
+        stream = transport_call(before_args.input, before_args.context)
+
+        async for client_event in self._process_stream(stream, before_args):
+            yield client_event
+
+    async def _intercept_before(
+        self,
+        args: BeforeArgs,
+    ) -> dict[str, Any] | None:
+        if not self._interceptors:
+            return None
+        executed: list[ClientCallInterceptor] = []
+        for interceptor in self._interceptors:
+            await interceptor.before(args)
+            executed.append(interceptor)
+            if args.early_return:
+                return {
+                    'early_return': args.early_return,
+                    'executed': executed,
+                }
+        return None
+
+    async def _intercept_after(
+        self,
+        args: AfterArgs,
+        interceptors: list[ClientCallInterceptor] | None = None,
+    ) -> None:
+        interceptors_to_use = (
+            interceptors if interceptors is not None else self._interceptors
+        )
+
+        reversed_interceptors = list(reversed(interceptors_to_use))
+        for interceptor in reversed_interceptors:
+            await interceptor.after(args)
+            if args.early_return:
+                return
+
+    async def _format_stream_event(
+        self, stream_response: StreamResponse, tracker: ClientTaskManager
+    ) -> ClientEvent:
+        client_event: ClientEvent
+        if stream_response.HasField('message'):
+            client_event = (stream_response, None)
+            await self.consume(client_event, self._card)
+            return client_event
+
+        await tracker.process(stream_response)
+        updated_task = tracker.get_task_or_raise()
+        client_event = (stream_response, updated_task)
+
+        await self.consume(client_event, self._card)
+        return client_event

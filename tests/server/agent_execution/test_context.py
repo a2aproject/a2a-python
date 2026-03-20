@@ -7,12 +7,12 @@ import pytest
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Message,
-    MessageSendParams,
+    SendMessageRequest,
     Task,
 )
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 class TestRequestContext:
@@ -25,8 +25,8 @@ class TestRequestContext:
 
     @pytest.fixture
     def mock_params(self, mock_message: Mock) -> Mock:
-        """Fixture for a mock MessageSendParams."""
-        return Mock(spec=MessageSendParams, message=mock_message)
+        """Fixture for a mock SendMessageRequest."""
+        return Mock(spec=SendMessageRequest, message=mock_message)
 
     @pytest.fixture
     def mock_task(self) -> Mock:
@@ -203,11 +203,11 @@ class TestRequestContext:
         self, mock_params: Mock, mock_task: Mock
     ) -> None:
         """Test that an error is raised if provided task_id mismatches task.id."""
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             RequestContext(
                 request=mock_params, task_id='wrong-task-id', task=mock_task
             )
-        assert 'bad task id' in str(exc_info.value.error.message)
+        assert 'bad task id' in exc_info.value.message
 
     def test_init_raises_error_on_context_id_mismatch(
         self, mock_params: Mock, mock_task: Mock
@@ -216,7 +216,7 @@ class TestRequestContext:
         # Set a valid task_id to avoid that error
         mock_params.message.task_id = mock_task.id
 
-        with pytest.raises(ServerError) as exc_info:
+        with pytest.raises(InvalidParamsError) as exc_info:
             RequestContext(
                 request=mock_params,
                 task_id=mock_task.id,
@@ -224,12 +224,12 @@ class TestRequestContext:
                 task=mock_task,
             )
 
-        assert 'bad context id' in str(exc_info.value.error.message)
+        assert 'bad context id' in exc_info.value.message
 
     def test_with_related_tasks_provided(self, mock_task: Mock) -> None:
         """Test initialization with related tasks provided."""
         related_tasks = [mock_task, Mock(spec=Task)]
-        context = RequestContext(related_tasks=related_tasks)
+        context = RequestContext(related_tasks=related_tasks)  # type: ignore[arg-type]
 
         assert context.related_tasks == related_tasks
         assert len(context.related_tasks) == 2

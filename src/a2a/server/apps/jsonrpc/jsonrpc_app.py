@@ -1,3 +1,5 @@
+"""JSON-RPC application for A2A server."""
+
 import contextlib
 import json
 import logging
@@ -7,52 +9,57 @@ from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from pydantic import ValidationError
+from google.protobuf.json_format import ParseDict
+from jsonrpc.jsonrpc2 import JSONRPC20Request
 
 from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
+from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
-from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types import (
-    A2AError,
-    A2ARequest,
-    AgentCard,
-    CancelTaskRequest,
-    DeleteTaskPushNotificationConfigRequest,
-    GetAuthenticatedExtendedCardRequest,
-    GetTaskPushNotificationConfigRequest,
-    GetTaskRequest,
+from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     JSONRPCError,
-    JSONRPCErrorResponse,
-    JSONRPCRequest,
-    JSONRPCResponse,
-    ListTaskPushNotificationConfigRequest,
     MethodNotFoundError,
+)
+from a2a.server.request_handlers.jsonrpc_handler import JSONRPCHandler
+from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
+    build_error_response,
+)
+from a2a.types import A2ARequest
+from a2a.types.a2a_pb2 import (
+    AgentCard,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTasksRequest,
     SendMessageRequest,
-    SendStreamingMessageRequest,
-    SendStreamingMessageResponse,
-    SetTaskPushNotificationConfigRequest,
-    TaskResubscriptionRequest,
-    UnsupportedOperationError,
+    SubscribeToTaskRequest,
+    TaskPushNotificationConfig,
 )
 from a2a.utils.constants import (
     AGENT_CARD_WELL_KNOWN_PATH,
     DEFAULT_RPC_URL,
-    EXTENDED_AGENT_CARD_PATH,
-    PREV_AGENT_CARD_WELL_KNOWN_PATH,
 )
-from a2a.utils.errors import MethodNotImplementedError
+from a2a.utils.errors import (
+    A2AError,
+    UnsupportedOperationError,
+)
 from a2a.utils.helpers import maybe_await
 
+
+INTERNAL_ERROR_CODE = -32603
 
 logger = logging.getLogger(__name__)
 
@@ -169,22 +176,20 @@ class JSONRPCApplication(ABC):
     """
 
     # Method-to-model mapping for centralized routing
-    A2ARequestModel = (
-        SendMessageRequest
-        | SendStreamingMessageRequest
-        | GetTaskRequest
-        | CancelTaskRequest
-        | SetTaskPushNotificationConfigRequest
-        | GetTaskPushNotificationConfigRequest
-        | ListTaskPushNotificationConfigRequest
-        | DeleteTaskPushNotificationConfigRequest
-        | TaskResubscriptionRequest
-        | GetAuthenticatedExtendedCardRequest
-    )
-
-    METHOD_TO_MODEL: dict[str, type[A2ARequestModel]] = {
-        model.model_fields['method'].default: model
-        for model in A2ARequestModel.__args__
+    # Proto types don't have model_fields, so we define the mapping explicitly
+    # Method names match gRPC service method names
+    METHOD_TO_MODEL: dict[str, type] = {
+        'SendMessage': SendMessageRequest,
+        'SendStreamingMessage': SendMessageRequest,  # Same proto type as SendMessage
+        'GetTask': GetTaskRequest,
+        'ListTasks': ListTasksRequest,
+        'CancelTask': CancelTaskRequest,
+        'CreateTaskPushNotificationConfig': TaskPushNotificationConfig,
+        'GetTaskPushNotificationConfig': GetTaskPushNotificationConfigRequest,
+        'ListTaskPushNotificationConfigs': ListTaskPushNotificationConfigsRequest,
+        'DeleteTaskPushNotificationConfig': DeleteTaskPushNotificationConfigRequest,
+        'SubscribeToTask': SubscribeToTaskRequest,
+        'GetExtendedAgentCard': GetExtendedAgentCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
@@ -200,6 +205,7 @@ class JSONRPCApplication(ABC):
         ]
         | None = None,
         max_content_length: int | None = 10 * 1024 * 1024,  # 10MB
+        enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the JSONRPCApplication.
 
@@ -219,6 +225,7 @@ class JSONRPCApplication(ABC):
               call context.
             max_content_length: The maximum allowed content length for incoming
               requests. Defaults to 10MB. Set to None for unbounded maximum.
+            enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -226,6 +233,7 @@ class JSONRPCApplication(ABC):
                 ' `JSONRPCApplication`. They can be added as a part of `a2a-sdk`'
                 ' optional dependencies, `a2a-sdk[http-server]`.'
             )
+
         self.agent_card = agent_card
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
@@ -238,9 +246,23 @@ class JSONRPCApplication(ABC):
         )
         self._context_builder = context_builder or DefaultCallContextBuilder()
         self._max_content_length = max_content_length
+        self.enable_v0_3_compat = enable_v0_3_compat
+        self._v03_adapter: JSONRPC03Adapter | None = None
+
+        if self.enable_v0_3_compat:
+            self._v03_adapter = JSONRPC03Adapter(
+                agent_card=agent_card,
+                http_handler=http_handler,
+                extended_agent_card=extended_agent_card,
+                context_builder=self._context_builder,
+                card_modifier=card_modifier,
+                extended_card_modifier=extended_card_modifier,
+            )
 
     def _generate_error_response(
-        self, request_id: str | int | None, error: JSONRPCError | A2AError
+        self,
+        request_id: str | int | None,
+        error: Exception | JSONRPCError | A2AError,
     ) -> JSONResponse:
         """Creates a Starlette JSONResponse for a JSON-RPC error.
 
@@ -248,34 +270,34 @@ class JSONRPCApplication(ABC):
 
         Args:
             request_id: The ID of the request that caused the error.
-            error: The `JSONRPCError` or `A2AError` object.
+            error: The error object (one of the JSONRPCError types).
 
         Returns:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
-        error_resp = JSONRPCErrorResponse(
-            id=request_id,
-            error=error if isinstance(error, JSONRPCError) else error.root,
-        )
+        if not isinstance(error, A2AError | JSONRPCError):
+            error = InternalError(message=str(error))
 
-        log_level = (
-            logging.ERROR
-            if not isinstance(error, A2AError)
-            or isinstance(error.root, InternalError)
-            else logging.WARNING
-        )
+        response_data = build_error_response(request_id, error)
+        error_info = response_data.get('error', {})
+        code = error_info.get('code')
+        message = error_info.get('message')
+        data = error_info.get('data')
+
+        log_level = logging.WARNING
+        if code == INTERNAL_ERROR_CODE:
+            log_level = logging.ERROR
+
         logger.log(
             log_level,
             "Request Error (ID: %s): Code=%s, Message='%s'%s",
             request_id,
-            error_resp.error.code,
-            error_resp.error.message,
-            ', Data=' + str(error_resp.error.data)
-            if error_resp.error.data
-            else '',
+            code,
+            message,
+            f', Data={data}' if data else '',
         )
         return JSONResponse(
-            error_resp.model_dump(mode='json', exclude_none=True),
+            response_data,
             status_code=200,
         )
 
@@ -295,7 +317,7 @@ class JSONRPCApplication(ABC):
                     return False
         return True
 
-    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911
+    async def _handle_requests(self, request: Request) -> Response:  # noqa: PLR0911, PLR0912
         """Handles incoming POST requests to the main A2A endpoint.
 
         Parses the request body as JSON, validates it against A2A request types,
@@ -329,113 +351,134 @@ class JSONRPCApplication(ABC):
             if not self._allowed_content_length(request):
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(message='Payload too large')
-                    ),
+                    InvalidRequestError(message='Payload too large'),
                 )
             logger.debug('Request body: %s', body)
             # 1) Validate base JSON-RPC structure only (-32600 on failure)
             try:
-                base_request = JSONRPCRequest.model_validate(body)
-            except ValidationError as e:
+                base_request = JSONRPC20Request.from_data(body)
+                if not isinstance(base_request, JSONRPC20Request):
+                    # Batch requests are not supported
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message='Batch requests are not supported'
+                        ),
+                    )
+                if body.get('jsonrpc') != '2.0':
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message="Invalid request: 'jsonrpc' must be exactly '2.0'"
+                        ),
+                    )
+            except Exception as e:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(data=json.loads(e.json()))
-                    ),
+                    InvalidRequestError(data=str(e)),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
-            method = base_request.method
+            method: str | None = base_request.method
+            request_id = base_request._id  # noqa: SLF001
+
+            if not method:
+                return self._generate_error_response(
+                    request_id,
+                    InvalidRequestError(message='Method is required'),
+                )
+
+            if (
+                self.enable_v0_3_compat
+                and self._v03_adapter
+                and self._v03_adapter.supports_method(method)
+            ):
+                return await self._v03_adapter.handle_request(
+                    request_id=request_id,
+                    method=method,
+                    body=body,
+                    request=request,
+                )
 
             model_class = self.METHOD_TO_MODEL.get(method)
             if not model_class:
                 return self._generate_error_response(
-                    request_id, A2AError(root=MethodNotFoundError())
+                    request_id, MethodNotFoundError()
                 )
             try:
-                specific_request = model_class.model_validate(body)
-            except ValidationError as e:
-                logger.exception('Failed to validate base JSON-RPC request')
+                # Parse the params field into the proto message type
+                params = body.get('params', {})
+                specific_request = ParseDict(params, model_class())
+            except Exception as e:
+                logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidParamsError(data=json.loads(e.json()))
-                    ),
+                    InvalidParamsError(data=str(e)),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
+            call_context.tenant = getattr(specific_request, 'tenant', '')
             call_context.state['method'] = method
+            call_context.state['request_id'] = request_id
 
-            request_id = specific_request.id
-            a2a_request = A2ARequest(root=specific_request)
-            request_obj = a2a_request.root
-
-            if isinstance(
-                request_obj,
-                TaskResubscriptionRequest | SendStreamingMessageRequest,
-            ):
+            # Route streaming requests by method name
+            if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 return await self._process_streaming_request(
-                    request_id, a2a_request, call_context
+                    request_id, specific_request, call_context
                 )
 
             return await self._process_non_streaming_request(
-                request_id, a2a_request, call_context
-            )
-        except MethodNotImplementedError:
-            traceback.print_exc()
-            return self._generate_error_response(
-                request_id, A2AError(root=UnsupportedOperationError())
+                request_id, specific_request, call_context
             )
         except json.decoder.JSONDecodeError as e:
             traceback.print_exc()
             return self._generate_error_response(
-                None, A2AError(root=JSONParseError(message=str(e)))
+                None, JSONParseError(message=str(e))
             )
         except HTTPException as e:
             if e.status_code == HTTP_413_CONTENT_TOO_LARGE:
                 return self._generate_error_response(
                     request_id,
-                    A2AError(
-                        root=InvalidRequestError(message='Payload too large')
-                    ),
+                    InvalidRequestError(message='Payload too large'),
                 )
             raise e
+        except A2AError as e:
+            return self._generate_error_response(request_id, e)
         except Exception as e:
             logger.exception('Unhandled exception')
             return self._generate_error_response(
-                request_id, A2AError(root=InternalError(message=str(e)))
+                request_id, InternalError(message=str(e))
             )
 
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
-        a2a_request: A2ARequest,
+        request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> Response:
-        """Processes streaming requests (message/stream or tasks/resubscribe).
+        """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
 
         Args:
             request_id: The ID of the request.
-            a2a_request: The validated A2ARequest object.
+            request_obj: The proto request message.
             context: The ServerCallContext for the request.
 
         Returns:
             An `EventSourceResponse` object to stream results to the client.
         """
-        request_obj = a2a_request.root
         handler_result: Any = None
+        # Check for streaming message request (same type as SendMessage, but handled differently)
         if isinstance(
             request_obj,
-            SendStreamingMessageRequest,
+            SendMessageRequest,
         ):
             handler_result = self.handler.on_message_send_stream(
                 request_obj, context
             )
-        elif isinstance(request_obj, TaskResubscriptionRequest):
-            handler_result = self.handler.on_resubscribe_to_task(
+        elif isinstance(request_obj, SubscribeToTaskRequest):
+            handler_result = self.handler.on_subscribe_to_task(
                 request_obj, context
             )
 
@@ -444,20 +487,19 @@ class JSONRPCApplication(ABC):
     async def _process_non_streaming_request(
         self,
         request_id: str | int | None,
-        a2a_request: A2ARequest,
+        request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> Response:
         """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
 
         Args:
             request_id: The ID of the request.
-            a2a_request: The validated A2ARequest object.
+            request_obj: The proto request message.
             context: The ServerCallContext for the request.
 
         Returns:
             A `JSONResponse` object containing the result or error.
         """
-        request_obj = a2a_request.root
         handler_result: Any = None
         match request_obj:
             case SendMessageRequest():
@@ -472,7 +514,11 @@ class JSONRPCApplication(ABC):
                 handler_result = await self.handler.on_get_task(
                     request_obj, context
                 )
-            case SetTaskPushNotificationConfigRequest():
+            case ListTasksRequest():
+                handler_result = await self.handler.list_tasks(
+                    request_obj, context
+                )
+            case TaskPushNotificationConfig():
                 handler_result = (
                     await self.handler.set_push_notification_config(
                         request_obj,
@@ -486,9 +532,9 @@ class JSONRPCApplication(ABC):
                         context,
                     )
                 )
-            case ListTaskPushNotificationConfigRequest():
+            case ListTaskPushNotificationConfigsRequest():
                 handler_result = (
-                    await self.handler.list_push_notification_config(
+                    await self.handler.list_push_notification_configs(
                         request_obj,
                         context,
                     )
@@ -500,7 +546,7 @@ class JSONRPCApplication(ABC):
                         context,
                     )
                 )
-            case GetAuthenticatedExtendedCardRequest():
+            case GetExtendedAgentCardRequest():
                 handler_result = (
                     await self.handler.get_authenticated_extended_card(
                         request_obj,
@@ -514,33 +560,25 @@ class JSONRPCApplication(ABC):
                 error = UnsupportedOperationError(
                     message=f'Request type {type(request_obj).__name__} is unknown.'
                 )
-                handler_result = JSONRPCErrorResponse(
-                    id=request_id, error=error
-                )
+                return self._generate_error_response(request_id, error)
 
         return self._create_response(context, handler_result)
 
     def _create_response(
         self,
         context: ServerCallContext,
-        handler_result: (
-            AsyncGenerator[SendStreamingMessageResponse]
-            | JSONRPCErrorResponse
-            | JSONRPCResponse
-        ),
+        handler_result: AsyncGenerator[dict[str, Any]] | dict[str, Any],
     ) -> Response:
         """Creates a Starlette Response based on the result from the request handler.
 
         Handles:
         - AsyncGenerator for Server-Sent Events (SSE).
-        - JSONRPCErrorResponse for explicit errors returned by handlers.
-        - Pydantic RootModels (like GetTaskResponse) containing success or error
-        payloads.
+        - Dict responses from handlers.
 
         Args:
             context: The ServerCallContext provided to the request handler.
             handler_result: The result from a request handler method. Can be an
-                async generator for streaming or a Pydantic model for non-streaming.
+                async generator for streaming or a dict for non-streaming.
 
         Returns:
             A Starlette JSONResponse or EventSourceResponse.
@@ -549,29 +587,19 @@ class JSONRPCApplication(ABC):
         if exts := context.activated_extensions:
             headers[HTTP_EXTENSION_HEADER] = ', '.join(sorted(exts))
         if isinstance(handler_result, AsyncGenerator):
-            # Result is a stream of SendStreamingMessageResponse objects
+            # Result is a stream of dict objects
             async def event_generator(
-                stream: AsyncGenerator[SendStreamingMessageResponse],
+                stream: AsyncGenerator[dict[str, Any]],
             ) -> AsyncGenerator[dict[str, str]]:
                 async for item in stream:
-                    yield {'data': item.root.model_dump_json(exclude_none=True)}
+                    yield {'data': json.dumps(item)}
 
             return EventSourceResponse(
                 event_generator(handler_result), headers=headers
             )
-        if isinstance(handler_result, JSONRPCErrorResponse):
-            return JSONResponse(
-                handler_result.model_dump(
-                    mode='json',
-                    exclude_none=True,
-                ),
-                headers=headers,
-            )
 
-        return JSONResponse(
-            handler_result.root.model_dump(mode='json', exclude_none=True),
-            headers=headers,
-        )
+        # handler_result is a dict (JSON-RPC response)
+        return JSONResponse(handler_result, headers=headers)
 
     async def _handle_get_agent_card(self, request: Request) -> JSONResponse:
         """Handles GET requests for the agent card endpoint.
@@ -582,64 +610,14 @@ class JSONRPCApplication(ABC):
         Returns:
             A JSONResponse containing the agent card data.
         """
-        if request.url.path == PREV_AGENT_CARD_WELL_KNOWN_PATH:
-            logger.warning(
-                "Deprecated agent card endpoint '%s' accessed. "
-                "Please use '%s' instead. This endpoint will be removed in a future version.",
-                PREV_AGENT_CARD_WELL_KNOWN_PATH,
-                AGENT_CARD_WELL_KNOWN_PATH,
-            )
-
         card_to_serve = self.agent_card
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
         return JSONResponse(
-            card_to_serve.model_dump(
-                exclude_none=True,
-                by_alias=True,
+            agent_card_to_dict(
+                card_to_serve,
             )
-        )
-
-    async def _handle_get_authenticated_extended_agent_card(
-        self, request: Request
-    ) -> JSONResponse:
-        """Handles GET requests for the authenticated extended agent card."""
-        logger.warning(
-            'HTTP GET for authenticated extended card has been called by a client. '
-            'This endpoint is deprecated in favor of agent/authenticatedExtendedCard JSON-RPC method and will be removed in a future release.'
-        )
-        if not self.agent_card.supports_authenticated_extended_card:
-            return JSONResponse(
-                {'error': 'Extended agent card not supported or not enabled.'},
-                status_code=404,
-            )
-
-        card_to_serve = self.extended_agent_card
-
-        if self.extended_card_modifier:
-            context = self._context_builder.build(request)
-            # If no base extended card is provided, pass the public card to the modifier
-            base_card = card_to_serve if card_to_serve else self.agent_card
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(base_card, context)
-            )
-
-        if card_to_serve:
-            return JSONResponse(
-                card_to_serve.model_dump(
-                    exclude_none=True,
-                    by_alias=True,
-                )
-            )
-        # If supports_authenticated_extended_card is true, but no
-        # extended_agent_card was provided, and no modifier produced a card,
-        # return a 404.
-        return JSONResponse(
-            {
-                'error': 'Authenticated extended agent card is supported but not configured on the server.'
-            },
-            status_code=404,
         )
 
     @abstractmethod
@@ -647,7 +625,6 @@ class JSONRPCApplication(ABC):
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = DEFAULT_RPC_URL,
-        extended_agent_card_url: str = EXTENDED_AGENT_CARD_PATH,
         **kwargs: Any,
     ) -> FastAPI | Starlette:
         """Builds and returns the JSONRPC application instance.
@@ -655,8 +632,6 @@ class JSONRPCApplication(ABC):
         Args:
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
-            extended_agent_card_url: The URL for the authenticated extended
-              agent card endpoint.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:

@@ -22,6 +22,8 @@ from collections.abc import AsyncGenerator
 import pytest
 import pytest_asyncio
 
+from .fake_vertex_client import FakeVertexClient
+
 
 # Skip the entire test module if vertexai is not installed
 pytest.importorskip(
@@ -40,7 +42,6 @@ missing_env_vars = not all(
         'VERTEX_API_VERSION',
     ]
 )
-import sys
 
 
 @pytest.fixture(
@@ -61,27 +62,22 @@ def backend_type(request) -> str:
 
 
 from a2a.contrib.tasks.vertex_task_store import VertexTaskStore
-from a2a.types import (
+from a2a.types.a2a_pb2 import (
     Artifact,
     Part,
     Task,
     TaskState,
     TaskStatus,
-    TextPart,
 )
 
 
-# Minimal Task object for testing - remains the same
-task_status_submitted = TaskStatus(state=TaskState.submitted)
+# Minimal Task object for testing
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
     context_id='session-xyz',
-    status=task_status_submitted,
-    kind='task',
-    metadata={'test_key': 'test_value'},
-    artifacts=[],
-    history=[],
+    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
 )
+MINIMAL_TASK_OBJ.metadata['test_key'] = 'test_value'
 
 
 from collections.abc import Generator
@@ -119,9 +115,6 @@ async def vertex_store(
     reusing the module-scoped engine. Uses fake client for 'fake' backend.
     """
     if backend_type == 'fake':
-        sys.path.append(os.path.dirname(__file__))
-        from fake_vertex_client import FakeVertexClient
-
         client = FakeVertexClient()
     else:
         project = os.environ.get('VERTEX_PROJECT')
@@ -143,8 +136,9 @@ async def vertex_store(
 @pytest.mark.asyncio
 async def test_save_task(vertex_store: VertexTaskStore) -> None:
     """Test saving a task to the VertexTaskStore."""
-    task_to_save = MINIMAL_TASK_OBJ.model_copy(deep=True)
     # Ensure unique ID for parameterized tests if needed, or rely on table isolation
+    task_to_save = Task()
+    task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
     task_to_save.id = 'save-test-task-2'
     await vertex_store.save(task_to_save)
 
@@ -152,21 +146,23 @@ async def test_save_task(vertex_store: VertexTaskStore) -> None:
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
 
-    assert retrieved_task.model_dump() == task_to_save.model_dump()
+    assert retrieved_task == task_to_save
 
 
 @pytest.mark.asyncio
 async def test_get_task(vertex_store: VertexTaskStore) -> None:
     """Test retrieving a task from the VertexTaskStore."""
     task_id = 'get-test-task-1'
-    task_to_save = MINIMAL_TASK_OBJ.model_copy(update={'id': task_id})
+    task_to_save = Task()
+    task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
+    task_to_save.id = task_id
     await vertex_store.save(task_to_save)
 
     retrieved_task = await vertex_store.get(task_to_save.id)
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
     assert retrieved_task.context_id == task_to_save.context_id
-    assert retrieved_task.status.state == TaskState.submitted
+    assert retrieved_task.status.state == TaskState.TASK_STATE_SUBMITTED
 
 
 @pytest.mark.asyncio
@@ -188,17 +184,17 @@ async def test_save_and_get_detailed_task(
         id=task_id,
         context_id='test-session-1',
         status=TaskStatus(
-            state=TaskState.submitted,
+            state=TaskState.TASK_STATE_SUBMITTED,
         ),
-        kind='task',
-        metadata={'key1': 'value1', 'key2': 123},
         artifacts=[
             Artifact(
                 artifact_id='artifact-1',
-                parts=[Part(root=TextPart(text='hello'))],
+                parts=[Part(text='hello')],
             )
         ],
     )
+    test_task.metadata['key1'] = 'value1'
+    test_task.metadata['key2'] = 123
 
     await vertex_store.save(test_task)
     retrieved_task = await vertex_store.get(test_task.id)
@@ -206,14 +202,10 @@ async def test_save_and_get_detailed_task(
     assert retrieved_task is not None
     assert retrieved_task.id == test_task.id
     assert retrieved_task.context_id == test_task.context_id
-    assert retrieved_task.status.state == TaskState.submitted
-    assert retrieved_task.metadata == {'key1': 'value1', 'key2': 123}
-
-    # Pydantic models handle their own serialization for comparison if model_dump is used
-    assert (
-        retrieved_task.model_dump()['artifacts']
-        == test_task.model_dump()['artifacts']
-    )
+    assert retrieved_task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert retrieved_task.metadata['key1'] == 'value1'
+    assert retrieved_task.metadata['key2'] == 123
+    assert retrieved_task.artifacts == test_task.artifacts
 
 
 @pytest.mark.asyncio
@@ -225,9 +217,7 @@ async def test_update_task_status_and_metadata(
     original_task = Task(
         id=task_id,
         context_id='session-update',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         artifacts=[],
         history=[],
     )
@@ -235,19 +225,22 @@ async def test_update_task_status_and_metadata(
 
     retrieved_before_update = await vertex_store.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.submitted
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
     assert retrieved_before_update.metadata == {}
 
-    updated_task = original_task.model_copy(deep=True)
-    updated_task.status.state = TaskState.completed
-    updated_task.status.timestamp = '2023-01-02T11:00:00Z'
-    updated_task.metadata = {'update_key': 'update_value'}
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_COMPLETED
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
+    updated_task.metadata.update({'update_key': 'update_value'})
 
     await vertex_store.save(updated_task)
 
     retrieved_after_update = await vertex_store.get(task_id)
     assert retrieved_after_update is not None
-    assert retrieved_after_update.status.state == TaskState.completed
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_COMPLETED
     assert retrieved_after_update.metadata == {'update_key': 'update_value'}
 
 
@@ -258,13 +251,11 @@ async def test_update_task_add_artifact(vertex_store: VertexTaskStore) -> None:
     original_task = Task(
         id=task_id,
         context_id='session-update',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         artifacts=[
             Artifact(
                 artifact_id='artifact-1',
-                parts=[Part(root=TextPart(text='hello'))],
+                parts=[Part(text='hello')],
             )
         ],
         history=[],
@@ -273,17 +264,20 @@ async def test_update_task_add_artifact(vertex_store: VertexTaskStore) -> None:
 
     retrieved_before_update = await vertex_store.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.submitted
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
     assert retrieved_before_update.metadata == {}
 
-    updated_task = original_task.model_copy(deep=True)
-    updated_task.status.state = TaskState.working
-    updated_task.status.timestamp = '2023-01-02T11:00:00Z'
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_WORKING
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
 
     updated_task.artifacts.append(
         Artifact(
             artifact_id='artifact-2',
-            parts=[Part(root=TextPart(text='world'))],
+            parts=[Part(text='world')],
         )
     )
 
@@ -291,16 +285,16 @@ async def test_update_task_add_artifact(vertex_store: VertexTaskStore) -> None:
 
     retrieved_after_update = await vertex_store.get(task_id)
     assert retrieved_after_update is not None
-    assert retrieved_after_update.status.state == TaskState.working
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
     assert retrieved_after_update.artifacts == [
         Artifact(
             artifact_id='artifact-1',
-            parts=[Part(root=TextPart(text='hello'))],
+            parts=[Part(text='hello')],
         ),
         Artifact(
             artifact_id='artifact-2',
-            parts=[Part(root=TextPart(text='world'))],
+            parts=[Part(text='world')],
         ),
     ]
 
@@ -314,17 +308,15 @@ async def test_update_task_update_artifact(
     original_task = Task(
         id=task_id,
         context_id='session-update',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,  # Explicitly None
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         artifacts=[
             Artifact(
                 artifact_id='artifact-1',
-                parts=[Part(root=TextPart(text='hello'))],
+                parts=[Part(text='hello')],
             ),
             Artifact(
                 artifact_id='artifact-2',
-                parts=[Part(root=TextPart(text='world'))],
+                parts=[Part(text='world')],
             ),
         ],
         history=[],
@@ -333,29 +325,32 @@ async def test_update_task_update_artifact(
 
     retrieved_before_update = await vertex_store.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.submitted
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
     assert retrieved_before_update.metadata == {}
 
-    updated_task = original_task.model_copy(deep=True)
-    updated_task.status.state = TaskState.working
-    updated_task.status.timestamp = '2023-01-02T11:00:00Z'
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_WORKING
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
 
-    updated_task.artifacts[0].parts[0].root.text = 'ahoy'
+    updated_task.artifacts[0].parts[0].text = 'ahoy'
 
     await vertex_store.save(updated_task)
 
     retrieved_after_update = await vertex_store.get(task_id)
     assert retrieved_after_update is not None
-    assert retrieved_after_update.status.state == TaskState.working
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
     assert retrieved_after_update.artifacts == [
         Artifact(
             artifact_id='artifact-1',
-            parts=[Part(root=TextPart(text='ahoy'))],
+            parts=[Part(text='ahoy')],
         ),
         Artifact(
             artifact_id='artifact-2',
-            parts=[Part(root=TextPart(text='world'))],
+            parts=[Part(text='world')],
         ),
     ]
 
@@ -369,17 +364,15 @@ async def test_update_task_delete_artifact(
     original_task = Task(
         id=task_id,
         context_id='session-update',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         artifacts=[
             Artifact(
                 artifact_id='artifact-1',
-                parts=[Part(root=TextPart(text='hello'))],
+                parts=[Part(text='hello')],
             ),
             Artifact(
                 artifact_id='artifact-2',
-                parts=[Part(root=TextPart(text='world'))],
+                parts=[Part(text='world')],
             ),
         ],
         history=[],
@@ -388,12 +381,15 @@ async def test_update_task_delete_artifact(
 
     retrieved_before_update = await vertex_store.get(task_id)
     assert retrieved_before_update is not None
-    assert retrieved_before_update.status.state == TaskState.submitted
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
     assert retrieved_before_update.metadata == {}
 
-    updated_task = original_task.model_copy(deep=True)
-    updated_task.status.state = TaskState.working
-    updated_task.status.timestamp = '2023-01-02T11:00:00Z'
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_WORKING
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
 
     del updated_task.artifacts[1]
 
@@ -401,12 +397,12 @@ async def test_update_task_delete_artifact(
 
     retrieved_after_update = await vertex_store.get(task_id)
     assert retrieved_after_update is not None
-    assert retrieved_after_update.status.state == TaskState.working
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
     assert retrieved_after_update.artifacts == [
         Artifact(
             artifact_id='artifact-1',
-            parts=[Part(root=TextPart(text='hello'))],
+            parts=[Part(text='hello')],
         )
     ]
 
@@ -415,7 +411,7 @@ async def test_update_task_delete_artifact(
 async def test_metadata_field_mapping(
     vertex_store: VertexTaskStore,
 ) -> None:
-    """Test that metadata field is correctly mapped between Pydantic and SQLAlchemy.
+    """Test that metadata field is correctly mapped between the core types and vertex.
 
     This test verifies:
     1. Metadata can be None
@@ -428,9 +424,7 @@ async def test_metadata_field_mapping(
     task_no_metadata = Task(
         id='task-metadata-test-1',
         context_id='session-meta-1',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
     await vertex_store.save(task_no_metadata)
     retrieved_no_metadata = await vertex_store.get('task-metadata-test-1')
@@ -442,8 +436,7 @@ async def test_metadata_field_mapping(
     task_simple_metadata = Task(
         id='task-metadata-test-2',
         context_id='session-meta-2',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         metadata=simple_metadata,
     )
     await vertex_store.save(task_simple_metadata)
@@ -467,8 +460,7 @@ async def test_metadata_field_mapping(
     task_complex_metadata = Task(
         id='task-metadata-test-3',
         context_id='session-meta-3',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         metadata=complex_metadata,
     )
     await vertex_store.save(task_complex_metadata)
@@ -480,14 +472,15 @@ async def test_metadata_field_mapping(
     task_update_metadata = Task(
         id='task-metadata-test-4',
         context_id='session-meta-4',
-        status=TaskStatus(state=TaskState.submitted),
-        kind='task',
-        metadata=None,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
     await vertex_store.save(task_update_metadata)
 
     # Update metadata
-    task_update_metadata.metadata = {'updated': True, 'timestamp': '2024-01-01'}
+    task_update_metadata.metadata.Clear()
+    task_update_metadata.metadata.update(
+        {'updated': True, 'timestamp': '2024-01-01'}
+    )
     await vertex_store.save(task_update_metadata)
 
     retrieved_updated = await vertex_store.get('task-metadata-test-4')
@@ -498,7 +491,7 @@ async def test_metadata_field_mapping(
     }
 
     # Test 5: Update metadata from dict to None
-    task_update_metadata.metadata = None
+    task_update_metadata.metadata.Clear()
     await vertex_store.save(task_update_metadata)
 
     retrieved_none = await vertex_store.get('task-metadata-test-4')

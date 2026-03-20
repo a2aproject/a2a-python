@@ -18,7 +18,7 @@ from a2a.contrib.tasks.vertex_task_converter import (
     to_stored_task,
     to_stored_task_state,
 )
-from a2a.types import (
+from a2a.compat.v0_3.types import (
     Artifact,
     DataPart,
     FilePart,

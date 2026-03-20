@@ -3,23 +3,36 @@ from __future__ import annotations
 import logging
 
 from collections.abc import Callable
-from typing import Any
+from typing import TYPE_CHECKING, Any, cast
 
 import httpx
+
+from packaging.version import InvalidVersion, Version
 
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig, Consumer
-from a2a.client.middleware import ClientCallInterceptor
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
-from a2a.types import (
+from a2a.client.transports.tenant_decorator import TenantTransportDecorator
+from a2a.compat.v0_3.versions import is_legacy_version
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+)
+from a2a.utils.constants import (
+    PROTOCOL_VERSION_0_3,
+    PROTOCOL_VERSION_1_0,
+    PROTOCOL_VERSION_CURRENT,
+    VERSION_HEADER,
     TransportProtocol,
 )
+
+
+if TYPE_CHECKING:
+    from a2a.client.interceptors import ClientCallInterceptor
 
 
 try:
@@ -28,11 +41,16 @@ except ImportError:
     GrpcTransport = None  # type: ignore # pyright: ignore
 
 
+try:
+    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
+except ImportError:
+    CompatGrpcTransport = None  # type: ignore # pyright: ignore
+
 logger = logging.getLogger(__name__)
 
 
 TransportProducer = Callable[
-    [AgentCard, str, ClientConfig, list[ClientCallInterceptor]],
+    [AgentCard, str, ClientConfig],
     ClientTransport,
 ]
 
@@ -63,47 +81,186 @@ class ClientFactory:
     ):
         if consumers is None:
             consumers = []
+
+        client = config.httpx_client or httpx.AsyncClient()
+        client.headers.setdefault(VERSION_HEADER, PROTOCOL_VERSION_CURRENT)
+        config.httpx_client = client
+
         self._config = config
         self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults(config.supported_transports)
+        self._register_defaults(config.supported_protocol_bindings)
 
-    def _register_defaults(
-        self, supported: list[str | TransportProtocol]
-    ) -> None:
+    def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
-        if TransportProtocol.jsonrpc in supported or not supported:
-            self.register(
-                TransportProtocol.jsonrpc,
-                lambda card, url, config, interceptors: JsonRpcTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+
+        if TransportProtocol.JSONRPC in supported or not supported:
+
+            def jsonrpc_transport_producer(
+                card: AgentCard,
+                url: str,
+                config: ClientConfig,
+            ) -> ClientTransport:
+                interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[TransportProtocol.JSONRPC],
+                    url=url,
+                )
+                version = (
+                    interface.protocol_version
+                    if interface
+                    else PROTOCOL_VERSION_CURRENT
+                )
+
+                if is_legacy_version(version):
+                    from a2a.compat.v0_3.jsonrpc_transport import (  # noqa: PLC0415
+                        CompatJsonRpcTransport,
+                    )
+
+                    return CompatJsonRpcTransport(
+                        cast('httpx.AsyncClient', config.httpx_client),
+                        card,
+                        url,
+                    )
+
+                return JsonRpcTransport(
+                    cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
-                    config.extensions or None,
-                ),
-            )
-        if TransportProtocol.http_json in supported:
+                )
+
             self.register(
-                TransportProtocol.http_json,
-                lambda card, url, config, interceptors: RestTransport(
-                    config.httpx_client or httpx.AsyncClient(),
+                TransportProtocol.JSONRPC,
+                jsonrpc_transport_producer,
+            )
+        if TransportProtocol.HTTP_JSON in supported:
+
+            def rest_transport_producer(
+                card: AgentCard,
+                url: str,
+                config: ClientConfig,
+            ) -> ClientTransport:
+                interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[TransportProtocol.HTTP_JSON],
+                    url=url,
+                )
+                version = (
+                    interface.protocol_version
+                    if interface
+                    else PROTOCOL_VERSION_CURRENT
+                )
+
+                if is_legacy_version(version):
+                    from a2a.compat.v0_3.rest_transport import (  # noqa: PLC0415
+                        CompatRestTransport,
+                    )
+
+                    return CompatRestTransport(
+                        cast('httpx.AsyncClient', config.httpx_client),
+                        card,
+                        url,
+                    )
+
+                return RestTransport(
+                    cast('httpx.AsyncClient', config.httpx_client),
                     card,
                     url,
-                    interceptors,
-                    config.extensions or None,
-                ),
+                )
+
+            self.register(
+                TransportProtocol.HTTP_JSON,
+                rest_transport_producer,
             )
-        if TransportProtocol.grpc in supported:
+        if TransportProtocol.GRPC in supported:
             if GrpcTransport is None:
                 raise ImportError(
                     'To use GrpcClient, its dependencies must be installed. '
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
+
+            def grpc_transport_producer(
+                card: AgentCard,
+                url: str,
+                config: ClientConfig,
+            ) -> ClientTransport:
+                # The interface has already been selected and passed as `url`.
+                # We determine its version to use the appropriate transport implementation.
+                interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[TransportProtocol.GRPC],
+                    url=url,
+                )
+                version = (
+                    interface.protocol_version
+                    if interface
+                    else PROTOCOL_VERSION_CURRENT
+                )
+
+                if (
+                    is_legacy_version(version)
+                    and CompatGrpcTransport is not None
+                ):
+                    return CompatGrpcTransport.create(card, url, config)
+
+                if GrpcTransport is not None:
+                    return GrpcTransport.create(card, url, config)
+
+                raise ImportError(
+                    'GrpcTransport is not available. '
+                    'You can install it with \'pip install "a2a-sdk[grpc]"\''
+                )
+
             self.register(
-                TransportProtocol.grpc,
-                GrpcTransport.create,
+                TransportProtocol.GRPC,
+                grpc_transport_producer,
             )
+
+    @staticmethod
+    def _find_best_interface(
+        interfaces: list[AgentInterface],
+        protocol_bindings: list[str] | None = None,
+        url: str | None = None,
+    ) -> AgentInterface | None:
+        """Finds the best interface based on protocol version priorities."""
+        candidates = [
+            i
+            for i in interfaces
+            if (
+                protocol_bindings is None
+                or i.protocol_binding in protocol_bindings
+            )
+            and (url is None or i.url == url)
+        ]
+
+        if not candidates:
+            return None
+
+        # Prefer interface with version 1.0
+        for i in candidates:
+            if i.protocol_version == PROTOCOL_VERSION_1_0:
+                return i
+
+        best_gt_1_0 = None
+        best_ge_0_3 = None
+        best_no_version = None
+
+        for i in candidates:
+            if not i.protocol_version:
+                if best_no_version is None:
+                    best_no_version = i
+                continue
+
+            try:
+                v = Version(i.protocol_version)
+                if best_gt_1_0 is None and v > Version(PROTOCOL_VERSION_1_0):
+                    best_gt_1_0 = i
+                if best_ge_0_3 is None and v >= Version(PROTOCOL_VERSION_0_3):
+                    best_ge_0_3 = i
+            except InvalidVersion:
+                pass
+
+        return best_gt_1_0 or best_ge_0_3 or best_no_version
 
     @classmethod
     async def connect(  # noqa: PLR0913
@@ -115,7 +272,6 @@ class ClientFactory:
         relative_card_path: str | None = None,
         resolver_http_kwargs: dict[str, Any] | None = None,
         extra_transports: dict[str, TransportProducer] | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> Client:
         """Convenience method for constructing a client.
@@ -146,7 +302,6 @@ class ClientFactory:
             A2AAgentCardResolver.get_agent_card as the http_kwargs parameter.
           extra_transports: Additional transport protocols to enable when
             constructing the client.
-          extensions: List of extensions to be activated.
           signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
@@ -174,7 +329,7 @@ class ClientFactory:
         factory = cls(client_config)
         for label, generator in (extra_transports or {}).items():
             factory.register(label, generator)
-        return factory.create(card, consumers, interceptors, extensions)
+        return factory.create(card, consumers, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:
         """Register a new transport producer for a given transport label."""
@@ -185,7 +340,6 @@ class ClientFactory:
         card: AgentCard,
         consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
-        extensions: list[str] | None = None,
     ) -> Client:
         """Create a new `Client` for the provided `AgentCard`.
 
@@ -195,7 +349,6 @@ class ClientFactory:
           interceptors: A list of interceptors to use for each request. These
             are used for things like attaching credentials or http headers
             to all outbound requests.
-          extensions: List of extensions to be activated.
 
         Returns:
           A `Client` object.
@@ -204,30 +357,30 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
-        server_preferred = card.preferred_transport or TransportProtocol.jsonrpc
-        server_set = {server_preferred: card.url}
-        if card.additional_interfaces:
-            server_set.update(
-                {x.transport: x.url for x in card.additional_interfaces}
-            )
-        client_set = self._config.supported_transports or [
-            TransportProtocol.jsonrpc
+        client_set = self._config.supported_protocol_bindings or [
+            TransportProtocol.JSONRPC
         ]
         transport_protocol = None
-        transport_url = None
+        selected_interface = None
         if self._config.use_client_preference:
-            for x in client_set:
-                if x in server_set:
-                    transport_protocol = x
-                    transport_url = server_set[x]
+            for protocol_binding in client_set:
+                selected_interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[protocol_binding],
+                )
+                if selected_interface:
+                    transport_protocol = protocol_binding
                     break
         else:
-            for x, url in server_set.items():
-                if x in client_set:
-                    transport_protocol = x
-                    transport_url = url
+            for supported_interface in card.supported_interfaces:
+                if supported_interface.protocol_binding in client_set:
+                    transport_protocol = supported_interface.protocol_binding
+                    selected_interface = ClientFactory._find_best_interface(
+                        list(card.supported_interfaces),
+                        protocol_bindings=[transport_protocol],
+                    )
                     break
-        if not transport_protocol or not transport_url:
+        if not transport_protocol or not selected_interface:
             raise ValueError('no compatible transports found.')
         if transport_protocol not in self._registry:
             raise ValueError(f'no client available for {transport_protocol}')
@@ -236,14 +389,14 @@ class ClientFactory:
         if consumers:
             all_consumers.extend(consumers)
 
-        all_extensions = self._config.extensions.copy()
-        if extensions:
-            all_extensions.extend(extensions)
-            self._config.extensions = all_extensions
-
         transport = self._registry[transport_protocol](
-            card, transport_url, self._config, interceptors or []
+            card, selected_interface.url, self._config
         )
+
+        if selected_interface.tenant:
+            transport = TenantTransportDecorator(
+                transport, selected_interface.tenant
+            )
 
         return BaseClient(
             card,
@@ -268,15 +421,10 @@ def minimal_agent_card(
     if transports is None:
         transports = []
     return AgentCard(
-        url=url,
-        preferred_transport=transports[0] if transports else None,
-        additional_interfaces=[
-            AgentInterface(transport=t, url=url) for t in transports[1:]
-        ]
-        if len(transports) > 1
-        else [],
-        supports_authenticated_extended_card=True,
-        capabilities=AgentCapabilities(),
+        supported_interfaces=[
+            AgentInterface(protocol_binding=t, url=url) for t in transports
+        ],
+        capabilities=AgentCapabilities(extended_agent_card=True),
         default_input_modes=[],
         default_output_modes=[],
         description='',

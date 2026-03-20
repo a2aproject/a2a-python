@@ -1,8 +1,12 @@
 import functools
+import json
 import logging
 
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
+
+from google.protobuf.json_format import MessageToDict
 
 from a2a.utils.helpers import maybe_await
 
@@ -35,19 +39,39 @@ from a2a.server.apps.jsonrpc import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.response_helpers import (
+    agent_card_to_dict,
+)
 from a2a.server.request_handlers.rest_handler import RESTHandler
-from a2a.types import AgentCard, AuthenticatedExtendedCardNotConfiguredError
+from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
-from a2a.utils.errors import InvalidRequestError, ServerError
+from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
+    InvalidRequestError,
+)
 
 
 logger = logging.getLogger(__name__)
 
 
-class RESTAdapter:
+class RESTAdapterInterface(ABC):
+    """Interface for RESTAdapter."""
+
+    @abstractmethod
+    async def handle_get_agent_card(
+        self, request: 'Request', call_context: ServerCallContext | None = None
+    ) -> dict[str, Any]:
+        """Handles GET requests for the agent card endpoint."""
+
+    @abstractmethod
+    def routes(self) -> dict[tuple[str, str], Callable[['Request'], Any]]:
+        """Constructs a dictionary of API routes and their corresponding handlers."""
+
+
+class RESTAdapter(RESTAdapterInterface):
     """Adapter to make RequestHandler work with RESTful API.
 
     Defines REST requests processors and the routes to attach them too, as well as
@@ -105,7 +129,8 @@ class RESTAdapter:
         method: Callable[[Request, ServerCallContext], Awaitable[Any]],
         request: Request,
     ) -> Response:
-        call_context = self._context_builder.build(request)
+        call_context = self._build_call_context(request)
+
         response = await method(request, call_context)
         return JSONResponse(content=response)
 
@@ -121,19 +146,17 @@ class RESTAdapter:
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
-            raise ServerError(
-                error=InvalidRequestError(
-                    message=f'Failed to pre-consume request body: {e}'
-                )
+            raise InvalidRequestError(
+                message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = self._context_builder.build(request)
+        call_context = self._build_call_context(request)
 
         async def event_generator(
             stream: AsyncIterable[Any],
-        ) -> AsyncIterator[dict[str, dict[str, Any]]]:
+        ) -> AsyncIterator[str]:
             async for item in stream:
-                yield {'data': item}
+                yield json.dumps(item)
 
         return EventSourceResponse(
             event_generator(method(request, call_context))
@@ -155,9 +178,9 @@ class RESTAdapter:
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return card_to_serve.model_dump(mode='json', exclude_none=True)
+        return agent_card_to_dict(card_to_serve)
 
-    async def handle_authenticated_agent_card(
+    async def _handle_authenticated_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
     ) -> dict[str, Any]:
         """Hook for per credential agent card response.
@@ -172,11 +195,9 @@ class RESTAdapter:
         Returns:
             A JSONResponse containing the authenticated card.
         """
-        if not self.agent_card.supports_authenticated_extended_card:
-            raise ServerError(
-                error=AuthenticatedExtendedCardNotConfiguredError(
-                    message='Authenticated card not supported'
-                )
+        if not self.agent_card.capabilities.extended_agent_card:
+            raise ExtendedAgentCardNotConfiguredError(
+                message='Authenticated card not supported'
             )
         card_to_serve = self.extended_agent_card
 
@@ -184,14 +205,14 @@ class RESTAdapter:
             card_to_serve = self.agent_card
 
         if self.extended_card_modifier:
-            context = self._context_builder.build(request)
+            context = self._build_call_context(request)
             card_to_serve = await maybe_await(
                 self.extended_card_modifier(card_to_serve, context)
             )
         elif self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return card_to_serve.model_dump(mode='json', exclude_none=True)
+        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:
         """Constructs a dictionary of API routes and their corresponding handlers.
@@ -204,49 +225,72 @@ class RESTAdapter:
             A dictionary where each key is a tuple of (path, http_method) and
             the value is the callable handler for that route.
         """
-        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
-            ('/v1/message:send', 'POST'): functools.partial(
+        base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+            ('/message:send', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_message_send
             ),
-            ('/v1/message:stream', 'POST'): functools.partial(
+            ('/message:stream', 'POST'): functools.partial(
                 self._handle_streaming_request,
                 self.handler.on_message_send_stream,
             ),
-            ('/v1/tasks/{id}:cancel', 'POST'): functools.partial(
+            ('/tasks/{id}:cancel', 'POST'): functools.partial(
                 self._handle_request, self.handler.on_cancel_task
             ),
-            ('/v1/tasks/{id}:subscribe', 'GET'): functools.partial(
+            ('/tasks/{id}:subscribe', 'GET'): functools.partial(
                 self._handle_streaming_request,
-                self.handler.on_resubscribe_to_task,
+                self.handler.on_subscribe_to_task,
             ),
-            ('/v1/tasks/{id}', 'GET'): functools.partial(
+            ('/tasks/{id}:subscribe', 'POST'): functools.partial(
+                self._handle_streaming_request,
+                self.handler.on_subscribe_to_task,
+            ),
+            ('/tasks/{id}', 'GET'): functools.partial(
                 self._handle_request, self.handler.on_get_task
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs/{push_id}',
+                '/tasks/{id}/pushNotificationConfigs/{push_id}',
                 'GET',
             ): functools.partial(
                 self._handle_request, self.handler.get_push_notification
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs',
+                '/tasks/{id}/pushNotificationConfigs/{push_id}',
+                'DELETE',
+            ): functools.partial(
+                self._handle_request, self.handler.delete_push_notification
+            ),
+            (
+                '/tasks/{id}/pushNotificationConfigs',
                 'POST',
             ): functools.partial(
                 self._handle_request, self.handler.set_push_notification
             ),
             (
-                '/v1/tasks/{id}/pushNotificationConfigs',
+                '/tasks/{id}/pushNotificationConfigs',
                 'GET',
             ): functools.partial(
                 self._handle_request, self.handler.list_push_notifications
             ),
-            ('/v1/tasks', 'GET'): functools.partial(
+            ('/tasks', 'GET'): functools.partial(
                 self._handle_request, self.handler.list_tasks
             ),
         }
-        if self.agent_card.supports_authenticated_extended_card:
-            routes[('/v1/card', 'GET')] = functools.partial(
-                self._handle_request, self.handle_authenticated_agent_card
+
+        if self.agent_card.capabilities.extended_agent_card:
+            base_routes[('/extendedAgentCard', 'GET')] = functools.partial(
+                self._handle_request, self._handle_authenticated_agent_card
             )
 
+        routes: dict[tuple[str, str], Callable[[Request], Any]] = {
+            (p, method): handler
+            for (path, method), handler in base_routes.items()
+            for p in (path, f'/{{tenant}}{path}')
+        }
+
         return routes
+
+    def _build_call_context(self, request: Request) -> ServerCallContext:
+        call_context = self._context_builder.build(request)
+        if 'tenant' in request.path_params:
+            call_context.tenant = request.path_params['tenant']
+        return call_context

@@ -3,11 +3,11 @@ import uuid
 
 from unittest.mock import patch
 
-from a2a.types import (
+from google.protobuf.struct_pb2 import Struct
+
+from a2a.types.a2a_pb2 import (
     Artifact,
-    DataPart,
     Part,
-    TextPart,
 )
 from a2a.utils.artifact import (
     get_artifact_text,
@@ -26,32 +26,32 @@ class TestArtifact(unittest.TestCase):
         self.assertEqual(artifact.artifact_id, str(mock_uuid))
 
     def test_new_artifact_assigns_parts_name_description(self):
-        parts = [Part(root=TextPart(text='Sample text'))]
+        parts = [Part(text='Sample text')]
         name = 'My Artifact'
         description = 'This is a test artifact.'
         artifact = new_artifact(parts=parts, name=name, description=description)
-        self.assertEqual(artifact.parts, parts)
+        assert len(artifact.parts) == len(parts)
         self.assertEqual(artifact.name, name)
         self.assertEqual(artifact.description, description)
 
     def test_new_artifact_empty_description_if_not_provided(self):
-        parts = [Part(root=TextPart(text='Another sample'))]
+        parts = [Part(text='Another sample')]
         name = 'Artifact_No_Desc'
         artifact = new_artifact(parts=parts, name=name)
-        self.assertEqual(artifact.description, None)
+        self.assertEqual(artifact.description, '')
 
     def test_new_text_artifact_creates_single_text_part(self):
         text = 'This is a text artifact.'
         name = 'Text_Artifact'
         artifact = new_text_artifact(text=text, name=name)
         self.assertEqual(len(artifact.parts), 1)
-        self.assertIsInstance(artifact.parts[0].root, TextPart)
+        self.assertTrue(artifact.parts[0].HasField('text'))
 
     def test_new_text_artifact_part_contains_provided_text(self):
         text = 'Hello, world!'
         name = 'Greeting_Artifact'
         artifact = new_text_artifact(text=text, name=name)
-        self.assertEqual(artifact.parts[0].root.text, text)
+        self.assertEqual(artifact.parts[0].text, text)
 
     def test_new_text_artifact_assigns_name_description(self):
         text = 'Some content.'
@@ -68,15 +68,17 @@ class TestArtifact(unittest.TestCase):
         name = 'Data_Artifact'
         artifact = new_data_artifact(data=sample_data, name=name)
         self.assertEqual(len(artifact.parts), 1)
-        self.assertIsInstance(artifact.parts[0].root, DataPart)
+        self.assertTrue(artifact.parts[0].HasField('data'))
 
     def test_new_data_artifact_part_contains_provided_data(self):
         sample_data = {'content': 'test_data', 'is_valid': True}
         name = 'Structured_Data_Artifact'
         artifact = new_data_artifact(data=sample_data, name=name)
-        self.assertIsInstance(artifact.parts[0].root, DataPart)
-        # Ensure the 'data' attribute of DataPart is accessed for comparison
-        self.assertEqual(artifact.parts[0].root.data, sample_data)
+        self.assertTrue(artifact.parts[0].HasField('data'))
+        # Compare via MessageToDict for proto Struct
+        from google.protobuf.json_format import MessageToDict
+
+        self.assertEqual(MessageToDict(artifact.parts[0].data), sample_data)
 
     def test_new_data_artifact_assigns_name_description(self):
         sample_data = {'info': 'some details'}
@@ -94,7 +96,7 @@ class TestGetArtifactText(unittest.TestCase):
         # Setup
         artifact = Artifact(
             name='test-artifact',
-            parts=[Part(root=TextPart(text='Hello world'))],
+            parts=[Part(text='Hello world')],
             artifact_id='test-artifact-id',
         )
 
@@ -109,9 +111,9 @@ class TestGetArtifactText(unittest.TestCase):
         artifact = Artifact(
             name='test-artifact',
             parts=[
-                Part(root=TextPart(text='First line')),
-                Part(root=TextPart(text='Second line')),
-                Part(root=TextPart(text='Third line')),
+                Part(text='First line'),
+                Part(text='Second line'),
+                Part(text='Third line'),
             ],
             artifact_id='test-artifact-id',
         )
@@ -127,9 +129,9 @@ class TestGetArtifactText(unittest.TestCase):
         artifact = Artifact(
             name='test-artifact',
             parts=[
-                Part(root=TextPart(text='First part')),
-                Part(root=TextPart(text='Second part')),
-                Part(root=TextPart(text='Third part')),
+                Part(text='First part'),
+                Part(text='Second part'),
+                Part(text='Third part'),
             ],
             artifact_id='test-artifact-id',
         )

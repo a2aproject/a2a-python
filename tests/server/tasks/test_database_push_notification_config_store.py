@@ -1,8 +1,13 @@
 import os
+from unittest.mock import MagicMock
 
 from collections.abc import AsyncGenerator
 
 import pytest
+from a2a.server.context import ServerCallContext
+from a2a.auth.user import User
+from a2a.compat.v0_3 import types as types_v03
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -25,16 +30,22 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.inspection import inspect
 
+from google.protobuf.json_format import MessageToJson
+from google.protobuf.timestamp_pb2 import Timestamp
+
 from a2a.server.models import (
     Base,
     PushNotificationConfigModel,
 )  # Important: To get Base.metadata
 from a2a.server.tasks import DatabasePushNotificationConfigStore
-from a2a.types import (
-    PushNotificationConfig,
+from a2a.types.a2a_pb2 import (
+    TaskPushNotificationConfig,
     Task,
     TaskState,
     TaskStatus,
+)
+from a2a.compat.v0_3.conversions import (
+    core_to_compat_push_notification_config_model,
 )
 
 
@@ -79,19 +90,42 @@ else:
     )
 
 
+# Create a proper Timestamp for TaskStatus
+def _create_timestamp() -> Timestamp:
+    """Create a Timestamp from ISO format string."""
+    ts = Timestamp()
+    ts.FromJsonString('2023-01-01T00:00:00Z')
+    return ts
+
+
 # Minimal Task object for testing - remains the same
 task_status_submitted = TaskStatus(
-    state=TaskState.submitted, timestamp='2023-01-01T00:00:00Z'
+    state=TaskState.TASK_STATE_SUBMITTED, timestamp=_create_timestamp()
 )
 MINIMAL_TASK_OBJ = Task(
     id='task-abc',
     context_id='session-xyz',
     status=task_status_submitted,
-    kind='task',
     metadata={'test_key': 'test_value'},
-    artifacts=[],
-    history=[],
 )
+
+
+class SampleUser(User):
+    """A test implementation of the User interface."""
+
+    def __init__(self, user_name: str):
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
+
+
+MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
 
 
 @pytest_asyncio.fixture(params=DB_CONFIGS)
@@ -171,10 +205,12 @@ async def test_set_and_get_info_single_config(
 ):
     """Test setting and retrieving a single configuration."""
     task_id = 'task-1'
-    config = PushNotificationConfig(id='config-1', url='http://example.com')
+    config = TaskPushNotificationConfig(id='config-1', url='http://example.com')
 
-    await db_store_parameterized.set_info(task_id, config)
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert len(retrieved_configs) == 1
     assert retrieved_configs[0] == config
@@ -187,12 +223,22 @@ async def test_set_and_get_info_multiple_configs(
     """Test setting and retrieving multiple configurations for a single task."""
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    config2 = PushNotificationConfig(id='config-2', url='http://example.com/2')
+    config1 = TaskPushNotificationConfig(
+        id='config-1', task_id=task_id, url='http://example.com/1'
+    )
+    config2 = TaskPushNotificationConfig(
+        id='config-2', task_id=task_id, url='http://example.com/2'
+    )
 
-    await db_store_parameterized.set_info(task_id, config1)
-    await db_store_parameterized.set_info(task_id, config2)
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.set_info(
+        task_id, config1, MINIMAL_CALL_CONTEXT
+    )
+    await db_store_parameterized.set_info(
+        task_id, config2, MINIMAL_CALL_CONTEXT
+    )
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert len(retrieved_configs) == 2
     assert config1 in retrieved_configs
@@ -206,16 +252,22 @@ async def test_set_info_updates_existing_config(
     """Test that setting an existing config ID updates the record."""
     task_id = 'task-1'
     config_id = 'config-1'
-    initial_config = PushNotificationConfig(
+    initial_config = TaskPushNotificationConfig(
         id=config_id, url='http://initial.url'
     )
-    updated_config = PushNotificationConfig(
+    updated_config = TaskPushNotificationConfig(
         id=config_id, url='http://updated.url'
     )
 
-    await db_store_parameterized.set_info(task_id, initial_config)
-    await db_store_parameterized.set_info(task_id, updated_config)
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.set_info(
+        task_id, initial_config, MINIMAL_CALL_CONTEXT
+    )
+    await db_store_parameterized.set_info(
+        task_id, updated_config, MINIMAL_CALL_CONTEXT
+    )
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert len(retrieved_configs) == 1
     assert retrieved_configs[0].url == 'http://updated.url'
@@ -227,10 +279,12 @@ async def test_set_info_defaults_config_id_to_task_id(
 ):
     """Test that config.id defaults to task_id if not provided."""
     task_id = 'task-1'
-    config = PushNotificationConfig(url='http://example.com')  # id is None
+    config = TaskPushNotificationConfig(url='http://example.com')  # id is None
 
-    await db_store_parameterized.set_info(task_id, config)
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert len(retrieved_configs) == 1
     assert retrieved_configs[0].id == task_id
@@ -242,7 +296,7 @@ async def test_get_info_not_found(
 ):
     """Test getting info for a task with no configs returns an empty list."""
     retrieved_configs = await db_store_parameterized.get_info(
-        'non-existent-task'
+        'non-existent-task', MINIMAL_CALL_CONTEXT
     )
     assert retrieved_configs == []
 
@@ -253,14 +307,22 @@ async def test_delete_info_specific_config(
 ):
     """Test deleting a single, specific configuration."""
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://a.com')
-    config2 = PushNotificationConfig(id='config-2', url='http://b.com')
+    config1 = TaskPushNotificationConfig(id='config-1', url='http://a.com')
+    config2 = TaskPushNotificationConfig(id='config-2', url='http://b.com')
 
-    await db_store_parameterized.set_info(task_id, config1)
-    await db_store_parameterized.set_info(task_id, config2)
+    await db_store_parameterized.set_info(
+        task_id, config1, MINIMAL_CALL_CONTEXT
+    )
+    await db_store_parameterized.set_info(
+        task_id, config2, MINIMAL_CALL_CONTEXT
+    )
 
-    await db_store_parameterized.delete_info(task_id, 'config-1')
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.delete_info(
+        task_id, MINIMAL_CALL_CONTEXT, 'config-1'
+    )
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert len(retrieved_configs) == 1
     assert retrieved_configs[0] == config2
@@ -273,14 +335,22 @@ async def test_delete_info_all_for_task(
     """Test deleting all configurations for a task when config_id is None."""
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://a.com')
-    config2 = PushNotificationConfig(id='config-2', url='http://b.com')
+    config1 = TaskPushNotificationConfig(id='config-1', url='http://a.com')
+    config2 = TaskPushNotificationConfig(id='config-2', url='http://b.com')
 
-    await db_store_parameterized.set_info(task_id, config1)
-    await db_store_parameterized.set_info(task_id, config2)
+    await db_store_parameterized.set_info(
+        task_id, config1, MINIMAL_CALL_CONTEXT
+    )
+    await db_store_parameterized.set_info(
+        task_id, config2, MINIMAL_CALL_CONTEXT
+    )
 
-    await db_store_parameterized.delete_info(task_id, None)
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    await db_store_parameterized.delete_info(
+        task_id, MINIMAL_CALL_CONTEXT, None
+    )
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     assert retrieved_configs == []
 
@@ -291,7 +361,9 @@ async def test_delete_info_not_found(
 ):
     """Test that deleting a non-existent config does not raise an error."""
     # Should not raise
-    await db_store_parameterized.delete_info('task-1', 'non-existent-config')
+    await db_store_parameterized.delete_info(
+        'task-1', MINIMAL_CALL_CONTEXT, 'non-existent-config'
+    )
 
 
 @pytest.mark.asyncio
@@ -300,12 +372,12 @@ async def test_data_is_encrypted_in_db(
 ):
     """Verify that the data stored in the database is actually encrypted."""
     task_id = 'encrypted-task'
-    config = PushNotificationConfig(
+    config = TaskPushNotificationConfig(
         id='config-1', url='http://secret.url', token='secret-token'
     )
-    plain_json = config.model_dump_json()
+    plain_json = MessageToJson(config)
 
-    await db_store_parameterized.set_info(task_id, config)
+    await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # Directly query the database to inspect the raw data
     async_session = async_sessionmaker(
@@ -334,8 +406,8 @@ async def test_decryption_error_with_wrong_key(
     # 1. Store with one key
 
     task_id = 'wrong-key-task'
-    config = PushNotificationConfig(id='config-1', url='http://secret.url')
-    await db_store_parameterized.set_info(task_id, config)
+    config = TaskPushNotificationConfig(id='config-1', url='http://secret.url')
+    await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with a different key
     # Directly query the database to inspect the raw data
@@ -344,7 +416,7 @@ async def test_decryption_error_with_wrong_key(
         db_store_parameterized.engine, encryption_key=wrong_key
     )
 
-    retrieved_configs = await store2.get_info(task_id)
+    retrieved_configs = await store2.get_info(task_id, MINIMAL_CALL_CONTEXT)
     assert retrieved_configs == []
 
     # _from_orm should raise a ValueError
@@ -368,14 +440,14 @@ async def test_decryption_error_with_no_key(
     # 1. Store with one key
 
     task_id = 'wrong-key-task'
-    config = PushNotificationConfig(id='config-1', url='http://secret.url')
-    await db_store_parameterized.set_info(task_id, config)
+    config = TaskPushNotificationConfig(id='config-1', url='http://secret.url')
+    await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with no key set
     # Directly query the database to inspect the raw data
     store2 = DatabasePushNotificationConfigStore(db_store_parameterized.engine)
 
-    retrieved_configs = await store2.get_info(task_id)
+    retrieved_configs = await store2.get_info(task_id, MINIMAL_CALL_CONTEXT)
     assert retrieved_configs == []
 
     # _from_orm should raise a ValueError
@@ -409,11 +481,15 @@ async def test_custom_table_name(
         )
 
         task_id = 'custom-table-task'
-        config = PushNotificationConfig(id='config-1', url='http://custom.url')
+        config = TaskPushNotificationConfig(
+            id='config-1', url='http://custom.url'
+        )
 
         # This will create the table on first use
-        await custom_store.set_info(task_id, config)
-        retrieved_configs = await custom_store.get_info(task_id)
+        await custom_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
+        retrieved_configs = await custom_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
 
         assert len(retrieved_configs) == 1
         assert retrieved_configs[0] == config
@@ -454,12 +530,16 @@ async def test_set_and_get_info_multiple_configs_no_key(
     await store.initialize()
 
     task_id = 'task-1'
-    config1 = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    config2 = PushNotificationConfig(id='config-2', url='http://example.com/2')
+    config1 = TaskPushNotificationConfig(
+        id='config-1', url='http://example.com/1'
+    )
+    config2 = TaskPushNotificationConfig(
+        id='config-2', url='http://example.com/2'
+    )
 
-    await store.set_info(task_id, config1)
-    await store.set_info(task_id, config2)
-    retrieved_configs = await store.get_info(task_id)
+    await store.set_info(task_id, config1, MINIMAL_CALL_CONTEXT)
+    await store.set_info(task_id, config2, MINIMAL_CALL_CONTEXT)
+    retrieved_configs = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
 
     assert len(retrieved_configs) == 2
     assert config1 in retrieved_configs
@@ -480,10 +560,12 @@ async def test_data_is_not_encrypted_in_db_if_no_key_is_set(
     await store.initialize()
 
     task_id = 'task-1'
-    config = PushNotificationConfig(id='config-1', url='http://example.com/1')
-    plain_json = config.model_dump_json()
+    config = TaskPushNotificationConfig(
+        id='config-1', url='http://example.com/1'
+    )
+    plain_json = MessageToJson(config)
 
-    await store.set_info(task_id, config)
+    await store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # Directly query the database to inspect the raw data
     async_session = async_sessionmaker(
@@ -513,11 +595,13 @@ async def test_decryption_fallback_for_unencrypted_data(
     await unencrypted_store.initialize()
 
     task_id = 'mixed-encryption-task'
-    config = PushNotificationConfig(id='config-1', url='http://plain.url')
-    await unencrypted_store.set_info(task_id, config)
+    config = TaskPushNotificationConfig(id='config-1', url='http://plain.url')
+    await unencrypted_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with the encryption-enabled store from the fixture
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
 
     # Should fall back to parsing as plain JSON and not fail
     assert len(retrieved_configs) == 1
@@ -547,12 +631,15 @@ async def test_parsing_error_after_successful_decryption(
             task_id=task_id,
             config_id=config_id,
             config_data=encrypted_data,
+            owner='user',
         )
         session.add(db_model)
         await session.commit()
 
     # 3. get_info should log an error and return an empty list
-    retrieved_configs = await db_store_parameterized.get_info(task_id)
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
     assert retrieved_configs == []
 
     # 4. _from_orm should raise a ValueError
@@ -563,3 +650,221 @@ async def test_parsing_error_after_successful_decryption(
 
         with pytest.raises(ValueError):
             db_store_parameterized._from_orm(db_model_retrieved)  # type: ignore
+
+
+@pytest.mark.asyncio
+async def test_owner_resource_scoping(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test that operations are scoped to the correct owner."""
+    config_store = db_store_parameterized
+
+    context_user1 = ServerCallContext(user=SampleUser(user_name='user1'))
+    context_user2 = ServerCallContext(user=SampleUser(user_name='user2'))
+
+    # Create configs for different owners
+    task1_u1_config1 = TaskPushNotificationConfig(
+        id='t1-u1-c1', url='http://u1.com/1'
+    )
+    task1_u1_config2 = TaskPushNotificationConfig(
+        id='t1-u1-c2', url='http://u1.com/2'
+    )
+    task1_u2_config1 = TaskPushNotificationConfig(
+        id='t1-u2-c1', url='http://u2.com/1'
+    )
+    task2_u1_config1 = TaskPushNotificationConfig(
+        id='t2-u1-c1', url='http://u1.com/3'
+    )
+
+    await config_store.set_info('task1', task1_u1_config1, context_user1)
+    await config_store.set_info('task1', task1_u1_config2, context_user1)
+    await config_store.set_info('task1', task1_u2_config1, context_user2)
+    await config_store.set_info('task2', task2_u1_config1, context_user1)
+
+    # Test GET_INFO
+    # User 1 should get only their configs for task1
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 2
+    assert {c.id for c in u1_task1_configs} == {'t1-u1-c1', 't1-u1-c2'}
+
+    # User 2 should get only their configs for task1
+    u2_task1_configs = await config_store.get_info('task1', context_user2)
+    assert len(u2_task1_configs) == 1
+    assert u2_task1_configs[0].id == 't1-u2-c1'
+
+    # User 2 should get no configs for task2
+    u2_task2_configs = await config_store.get_info('task2', context_user2)
+    assert len(u2_task2_configs) == 0
+
+    # User 1 should get their config for task2
+    u1_task2_configs = await config_store.get_info('task2', context_user1)
+    assert len(u1_task2_configs) == 1
+    assert u1_task2_configs[0].id == 't2-u1-c1'
+
+    # Test DELETE_INFO
+    # User 2 deleting User 1's config should not work
+    await config_store.delete_info('task1', context_user2, 't1-u1-c1')
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 2
+
+    # User 1 deleting their own config
+    await config_store.delete_info(
+        'task1',
+        context_user1,
+        't1-u1-c1',
+    )
+    u1_task1_configs = await config_store.get_info('task1', context_user1)
+    assert len(u1_task1_configs) == 1
+    assert u1_task1_configs[0].id == 't1-u1-c2'
+
+    # User 1 deleting all configs for task2
+    await config_store.delete_info('task2', context=context_user1)
+    u1_task2_configs = await config_store.get_info('task2', context_user1)
+    assert len(u1_task2_configs) == 0
+
+    # Cleanup remaining
+    await config_store.delete_info('task1', context=context_user1)
+    await config_store.delete_info('task1', context=context_user2)
+
+
+@pytest.mark.asyncio
+async def test_get_0_3_push_notification_config_detailed(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test retrieving a legacy v0.3 push notification config from the database.
+
+    This test simulates a database that already contains legacy v0.3 JSON data
+    and verifies that the store correctly converts it to the modern Protobuf model.
+    """
+    task_id = 'legacy-push-1'
+    config_id = 'config-legacy-1'
+    owner = 'legacy_user'
+    context_user = ServerCallContext(user=SampleUser(user_name=owner))
+
+    # 1. Create a legacy PushNotificationConfig using v0.3 models
+    legacy_config = types_v03.PushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+        authentication=types_v03.PushNotificationAuthenticationInfo(
+            schemes=['bearer'],
+            credentials='legacy-creds',
+        ),
+    )
+
+    # 2. Manually insert the legacy data into the database
+    # For PushNotificationConfigStore, the data is stored in the config_data column.
+    async with db_store_parameterized.async_session_maker.begin() as session:
+        # Pydantic model_dump_json() produces the JSON that we'll store.
+        # Note: DatabasePushNotificationConfigStore normally encrypts this, but here
+        # we'll store it as plain JSON bytes to simulate legacy data.
+        legacy_json = legacy_config.model_dump_json()
+
+        stmt = insert(db_store_parameterized.config_model).values(
+            task_id=task_id,
+            config_id=config_id,
+            owner=owner,
+            config_data=legacy_json.encode('utf-8'),
+        )
+        await session.execute(stmt)
+
+    # 3. Retrieve the config using the standard store.get_info()
+    # This will trigger the DatabasePushNotificationConfigStore._from_orm legacy conversion
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, context_user
+    )
+
+    # 4. Verify the conversion to modern Protobuf
+    assert len(retrieved_configs) == 1
+    retrieved = retrieved_configs[0]
+    assert retrieved.task_id == task_id
+    assert retrieved.id == config_id
+    assert retrieved.url == 'https://example.com/push'
+    assert retrieved.token == 'legacy-token'
+    assert retrieved.authentication.scheme == 'bearer'
+    assert retrieved.authentication.credentials == 'legacy-creds'
+
+
+@pytest.mark.asyncio
+async def test_custom_conversion():
+    engine = MagicMock()
+
+    # Custom callables
+    mock_to_orm = MagicMock(
+        return_value=PushNotificationConfigModel(task_id='t1', config_id='c1')
+    )
+    mock_from_orm = MagicMock(
+        return_value=TaskPushNotificationConfig(id='custom_config')
+    )
+    store = DatabasePushNotificationConfigStore(
+        engine=engine,
+        core_to_model_conversion=mock_to_orm,
+        model_to_core_conversion=mock_from_orm,
+    )
+
+    config = TaskPushNotificationConfig(id='orig')
+    model = store._to_orm('t1', config, 'owner')
+    assert model.config_id == 'c1'
+    mock_to_orm.assert_called_once_with('t1', config, 'owner', None)
+
+    model_instance = PushNotificationConfigModel(task_id='t1', config_id='c1')
+    loaded_config = store._from_orm(model_instance)
+    assert loaded_config.id == 'custom_config'
+    mock_from_orm.assert_called_once_with(model_instance)
+
+
+@pytest.mark.asyncio
+async def test_core_to_0_3_model_conversion(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """Test storing and retrieving push notification configs in v0.3 format using conversion utilities.
+
+    Tests both class-level and instance-level assignment of the conversion function.
+    Setting the model_to_core_conversion to compat_push_notification_config_model_to_core would be redundant as
+    it is always called when retrieving 0.3 PushNotificationConfigs.
+    """
+    store = db_store_parameterized
+
+    # Set the v0.3 persistence utilities
+    store.core_to_model_conversion = (
+        core_to_compat_push_notification_config_model
+    )
+
+    task_id = 'v03-persistence-task'
+    config_id = 'c1'
+    original_config = TaskPushNotificationConfig(
+        id=config_id,
+        url='https://example.com/push',
+        token='legacy-token',
+    )
+    # 1. Save the config (will use core_to_compat_push_notification_config_model)
+    await store.set_info(task_id, original_config, MINIMAL_CALL_CONTEXT)
+
+    # 2. Verify it's stored in v0.3 format directly in DB
+    async with store.async_session_maker() as session:
+        db_model = await session.get(store.config_model, (task_id, config_id))
+        assert db_model is not None
+        assert db_model.protocol_version == '0.3'
+        # v0.3 JSON structure for PushNotificationConfig (unwrapped)
+        import json
+
+        raw_data = db_model.config_data
+        if store._fernet:
+            raw_data = store._fernet.decrypt(raw_data)
+        data = json.loads(raw_data.decode('utf-8'))
+        assert data['url'] == 'https://example.com/push'
+        assert data['id'] == 'c1'
+        assert data['token'] == 'legacy-token'
+        assert 'taskId' not in data
+
+    # 3. Retrieve the config (will use compat_push_notification_config_model_to_core)
+    retrieved_configs = await store.get_info(task_id, MINIMAL_CALL_CONTEXT)
+    assert len(retrieved_configs) == 1
+    retrieved = retrieved_configs[0]
+    assert retrieved.id == original_config.id
+    assert retrieved.url == original_config.url
+    assert retrieved.token == original_config.token
+
+    # Reset conversion attributes
+    store.core_to_model_conversion = None
+    await store.delete_info(task_id, MINIMAL_CALL_CONTEXT)

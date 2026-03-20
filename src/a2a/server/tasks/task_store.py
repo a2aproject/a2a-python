@@ -1,7 +1,7 @@
 from abc import ABC, abstractmethod
 
 from a2a.server.context import ServerCallContext
-from a2a.types import Task
+from a2a.types.a2a_pb2 import ListTasksRequest, ListTasksResponse, Task
 
 
 class TaskStore(ABC):
@@ -21,6 +21,14 @@ class TaskStore(ABC):
         self, task_id: str, context: ServerCallContext | None = None
     ) -> Task | None:
         """Retrieves a task from the store by ID."""
+
+    @abstractmethod
+    async def list(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> ListTasksResponse:
+        """Retrieves a list of tasks from the store."""
 
     @abstractmethod
     async def delete(

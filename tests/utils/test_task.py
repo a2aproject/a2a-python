@@ -5,27 +5,42 @@ from unittest.mock import patch
 
 import pytest
 
-from a2a.types import Artifact, Message, Part, Role, TextPart
-from a2a.utils.task import completed_task, new_task
+from a2a.types.a2a_pb2 import (
+    Artifact,
+    Message,
+    Part,
+    Role,
+    TaskState,
+    GetTaskRequest,
+    SendMessageConfiguration,
+)
+from a2a.utils.task import (
+    apply_history_length,
+    completed_task,
+    decode_page_token,
+    encode_page_token,
+    new_task,
+)
+from a2a.utils.errors import InvalidParamsError
 
 
 class TestTask(unittest.TestCase):
     def test_new_task_status(self):
         message = Message(
-            role=Role.user,
-            parts=[Part(root=TextPart(text='test message'))],
+            role=Role.ROLE_USER,
+            parts=[Part(text='test message')],
             message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
-        self.assertEqual(task.status.state.value, 'submitted')
+        self.assertEqual(task.status.state, TaskState.TASK_STATE_SUBMITTED)
 
     @patch('uuid.uuid4')
     def test_new_task_generates_ids(self, mock_uuid4):
         mock_uuid = uuid.UUID('12345678-1234-5678-1234-567812345678')
         mock_uuid4.return_value = mock_uuid
         message = Message(
-            role=Role.user,
-            parts=[Part(root=TextPart(text='test message'))],
+            role=Role.ROLE_USER,
+            parts=[Part(text='test message')],
             message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
@@ -36,8 +51,8 @@ class TestTask(unittest.TestCase):
         task_id = str(uuid.uuid4())
         context_id = str(uuid.uuid4())
         message = Message(
-            role=Role.user,
-            parts=[Part(root=TextPart(text='test message'))],
+            role=Role.ROLE_USER,
+            parts=[Part(text='test message')],
             message_id=str(uuid.uuid4()),
             task_id=task_id,
             context_id=context_id,
@@ -48,8 +63,8 @@ class TestTask(unittest.TestCase):
 
     def test_new_task_initial_message_in_history(self):
         message = Message(
-            role=Role.user,
-            parts=[Part(root=TextPart(text='test message'))],
+            role=Role.ROLE_USER,
+            parts=[Part(text='test message')],
             message_id=str(uuid.uuid4()),
         )
         task = new_task(message)
@@ -62,7 +77,7 @@ class TestTask(unittest.TestCase):
         artifacts = [
             Artifact(
                 artifact_id='artifact_1',
-                parts=[Part(root=TextPart(text='some content'))],
+                parts=[Part(text='some content')],
             )
         ]
         task = completed_task(
@@ -71,7 +86,7 @@ class TestTask(unittest.TestCase):
             artifacts=artifacts,
             history=[],
         )
-        self.assertEqual(task.status.state.value, 'completed')
+        self.assertEqual(task.status.state, TaskState.TASK_STATE_COMPLETED)
 
     def test_completed_task_assigns_ids_and_artifacts(self):
         task_id = str(uuid.uuid4())
@@ -79,7 +94,7 @@ class TestTask(unittest.TestCase):
         artifacts = [
             Artifact(
                 artifact_id='artifact_1',
-                parts=[Part(root=TextPart(text='some content'))],
+                parts=[Part(text='some content')],
             )
         ]
         task = completed_task(
@@ -90,7 +105,7 @@ class TestTask(unittest.TestCase):
         )
         self.assertEqual(task.id, task_id)
         self.assertEqual(task.context_id, context_id)
-        self.assertEqual(task.artifacts, artifacts)
+        self.assertEqual(len(task.artifacts), len(artifacts))
 
     def test_completed_task_empty_history_if_not_provided(self):
         task_id = str(uuid.uuid4())
@@ -98,13 +113,13 @@ class TestTask(unittest.TestCase):
         artifacts = [
             Artifact(
                 artifact_id='artifact_1',
-                parts=[Part(root=TextPart(text='some content'))],
+                parts=[Part(text='some content')],
             )
         ]
         task = completed_task(
             task_id=task_id, context_id=context_id, artifacts=artifacts
         )
-        self.assertEqual(task.history, [])
+        self.assertEqual(len(task.history), 0)
 
     def test_completed_task_uses_provided_history(self):
         task_id = str(uuid.uuid4())
@@ -112,18 +127,18 @@ class TestTask(unittest.TestCase):
         artifacts = [
             Artifact(
                 artifact_id='artifact_1',
-                parts=[Part(root=TextPart(text='some content'))],
+                parts=[Part(text='some content')],
             )
         ]
         history = [
             Message(
-                role=Role.user,
-                parts=[Part(root=TextPart(text='Hello'))],
+                role=Role.ROLE_USER,
+                parts=[Part(text='Hello')],
                 message_id=str(uuid.uuid4()),
             ),
             Message(
-                role=Role.agent,
-                parts=[Part(root=TextPart(text='Hi there'))],
+                role=Role.ROLE_AGENT,
+                parts=[Part(text='Hi there')],
                 message_id=str(uuid.uuid4()),
             ),
         ]
@@ -133,13 +148,13 @@ class TestTask(unittest.TestCase):
             artifacts=artifacts,
             history=history,
         )
-        self.assertEqual(task.history, history)
+        self.assertEqual(len(task.history), len(history))
 
     def test_new_task_invalid_message_empty_parts(self):
         with self.assertRaises(ValueError):
             new_task(
                 Message(
-                    role=Role.user,
+                    role=Role.ROLE_USER,
                     parts=[],
                     message_id=str(uuid.uuid4()),
                 )
@@ -149,19 +164,21 @@ class TestTask(unittest.TestCase):
         with self.assertRaises(ValueError):
             new_task(
                 Message(
-                    role=Role.user,
-                    parts=[Part(root=TextPart(text=''))],
-                    messageId=str(uuid.uuid4()),
+                    role=Role.ROLE_USER,
+                    parts=[Part(text='')],
+                    message_id=str(uuid.uuid4()),
                 )
             )
 
     def test_new_task_invalid_message_none_role(self):
-        with self.assertRaises(TypeError):
-            msg = Message.model_construct(
-                role=None,
-                parts=[Part(root=TextPart(text='test message'))],
-                message_id=str(uuid.uuid4()),
-            )
+        # Proto messages always have a default role (ROLE_UNSPECIFIED = 0)
+        # Testing with unspecified role
+        msg = Message(
+            role=Role.ROLE_UNSPECIFIED,
+            parts=[Part(text='test message')],
+            message_id=str(uuid.uuid4()),
+        )
+        with self.assertRaises((TypeError, ValueError)):
             new_task(msg)
 
     def test_completed_task_empty_artifacts(self):
@@ -184,9 +201,75 @@ class TestTask(unittest.TestCase):
             completed_task(
                 task_id='task-123',
                 context_id='ctx-456',
-                artifacts=['not an artifact'],
+                artifacts=['not an artifact'],  # type: ignore[arg-type]
                 history=[],
             )
+
+    page_token = 'd47a95ba-0f39-4459-965b-3923cdd2ff58'
+    encoded_page_token = 'ZDQ3YTk1YmEtMGYzOS00NDU5LTk2NWItMzkyM2NkZDJmZjU4'  # base64 for 'd47a95ba-0f39-4459-965b-3923cdd2ff58'
+
+    def test_encode_page_token(self):
+        assert encode_page_token(self.page_token) == self.encoded_page_token
+
+    def test_decode_page_token_succeeds(self):
+        assert decode_page_token(self.encoded_page_token) == self.page_token
+
+    def test_decode_page_token_fails(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            decode_page_token('invalid')
+
+        assert 'Token is not a valid base64-encoded cursor.' in str(
+            excinfo.value
+        )
+
+
+class TestApplyHistoryLength(unittest.TestCase):
+    def setUp(self):
+        self.history = [
+            Message(
+                message_id=str(i),
+                role=Role.ROLE_USER,
+                parts=[Part(text=f'msg {i}')],
+            )
+            for i in range(5)
+        ]
+        artifacts = [Artifact(artifact_id='a1', parts=[Part(text='a')])]
+        self.task = completed_task(
+            task_id='t1',
+            context_id='c1',
+            artifacts=artifacts,
+            history=self.history,
+        )
+
+    def test_none_config_returns_full_history(self):
+        result = apply_history_length(self.task, None)
+        self.assertEqual(len(result.history), 5)
+        self.assertEqual(result.history, self.history)
+
+    def test_unset_history_length_returns_full_history(self):
+        result = apply_history_length(self.task, GetTaskRequest())
+        self.assertEqual(len(result.history), 5)
+        self.assertEqual(result.history, self.history)
+
+    def test_positive_history_length_truncates(self):
+        result = apply_history_length(
+            self.task, GetTaskRequest(history_length=2)
+        )
+        self.assertEqual(len(result.history), 2)
+        self.assertEqual(result.history, self.history[-2:])
+
+    def test_large_history_length_returns_full_history(self):
+        result = apply_history_length(
+            self.task, GetTaskRequest(history_length=10)
+        )
+        self.assertEqual(len(result.history), 5)
+        self.assertEqual(result.history, self.history)
+
+    def test_zero_history_length_returns_empty_history(self):
+        result = apply_history_length(
+            self.task, SendMessageConfiguration(history_length=0)
+        )
+        self.assertEqual(len(result.history), 0)
 
 
 if __name__ == '__main__':

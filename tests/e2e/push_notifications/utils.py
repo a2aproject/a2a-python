@@ -1,8 +1,8 @@
 import contextlib
+import multiprocessing
 import socket
+import sys
 import time
-
-from multiprocessing import Process
 
 import httpx
 import uvicorn
@@ -36,9 +36,19 @@ def wait_for_server_ready(url: str, timeout: int = 10) -> None:
         time.sleep(0.1)
 
 
-def create_app_process(app, host, port) -> Process:
-    """Creates a separate process for a given application."""
-    return Process(
+def create_app_process(app, host, port) -> 'Any':  # type: ignore[name-defined]
+    """Creates a separate process for a given application.
+
+    Uses 'fork' context on non-Windows platforms to avoid pickle issues
+    with FastAPI apps (which have closures that can't be pickled).
+    """
+    # Use fork on Unix-like systems to avoid pickle issues with FastAPI
+    if sys.platform != 'win32':
+        ctx = multiprocessing.get_context('fork')
+    else:
+        ctx = multiprocessing.get_context('spawn')
+
+    return ctx.Process(
         target=run_server,
         args=(app, host, port),
         daemon=True,

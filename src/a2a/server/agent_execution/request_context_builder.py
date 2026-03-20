@@ -2,7 +2,7 @@ from abc import ABC, abstractmethod
 
 from a2a.server.agent_execution import RequestContext
 from a2a.server.context import ServerCallContext
-from a2a.types import MessageSendParams, Task
+from a2a.types.a2a_pb2 import SendMessageRequest, Task
 
 
 class RequestContextBuilder(ABC):
@@ -11,7 +11,7 @@ class RequestContextBuilder(ABC):
     @abstractmethod
     async def build(
         self,
-        params: MessageSendParams | None = None,
+        params: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,

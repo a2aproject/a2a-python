@@ -2,25 +2,34 @@ import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Coroutine
+from collections.abc import AsyncIterator, Callable, Coroutine, MutableMapping
+from types import TracebackType
 from typing import Any
 
 import httpx
 
-from a2a.client.middleware import ClientCallContext, ClientCallInterceptor
+from pydantic import BaseModel, Field
+from typing_extensions import Self
+
+from a2a.client.interceptors import ClientCallInterceptor
 from a2a.client.optionals import Channel
-from a2a.types import (
+from a2a.client.service_parameters import ServiceParameters
+from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigParams,
-    Message,
-    PushNotificationConfig,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    ListTasksResponse,
+    SendMessageRequest,
+    StreamResponse,
+    SubscribeToTaskRequest,
     Task,
-    TaskArtifactUpdateEvent,
-    TaskIdParams,
     TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskStatusUpdateEvent,
-    TransportProtocol,
 )
 
 
@@ -45,7 +54,7 @@ class ClientConfig:
     grpc_channel_factory: Callable[[str], Channel] | None = None
     """Generates a grpc connection channel for a given url."""
 
-    supported_transports: list[TransportProtocol | str] = dataclasses.field(
+    supported_protocol_bindings: list[str] = dataclasses.field(
         default_factory=list
     )
     """Ordered list of transports for connecting to agent
@@ -62,23 +71,29 @@ class ClientConfig:
     accepted_output_modes: list[str] = dataclasses.field(default_factory=list)
     """The set of accepted output modes for the client."""
 
-    push_notification_configs: list[PushNotificationConfig] = dataclasses.field(
-        default_factory=list
+    push_notification_configs: list[TaskPushNotificationConfig] = (
+        dataclasses.field(default_factory=list)
     )
-    """Push notification callbacks to use for every request."""
-
-    extensions: list[str] = dataclasses.field(default_factory=list)
-    """A list of extension URIs the client supports."""
+    """Push notification configurations to use for every request."""
 
 
-UpdateEvent = TaskStatusUpdateEvent | TaskArtifactUpdateEvent | None
-# Alias for emitted events from client
-ClientEvent = tuple[Task, UpdateEvent]
+ClientEvent = tuple[StreamResponse, Task | None]
+
 # Alias for an event consuming callback. It takes either a (task, update) pair
 # or a message as well as the agent card for the agent this came from.
-Consumer = Callable[
-    [ClientEvent | Message, AgentCard], Coroutine[None, Any, Any]
-]
+Consumer = Callable[[ClientEvent, AgentCard], Coroutine[None, Any, Any]]
+
+
+class ClientCallContext(BaseModel):
+    """A context passed with each client call, allowing for call-specific.
+
+    configuration and data passing. Such as authentication details or
+    request deadlines.
+    """
+
+    state: MutableMapping[str, Any] = Field(default_factory=dict)
+    timeout: float | None = None
+    service_parameters: ServiceParameters | None = None
 
 
 class Client(ABC):
@@ -92,30 +107,37 @@ class Client(ABC):
     def __init__(
         self,
         consumers: list[Consumer] | None = None,
-        middleware: list[ClientCallInterceptor] | None = None,
+        interceptors: list[ClientCallInterceptor] | None = None,
     ):
-        """Initializes the client with consumers and middleware.
+        """Initializes the client with consumers and interceptors.
 
         Args:
             consumers: A list of callables to process events from the agent.
-            middleware: A list of interceptors to process requests and responses.
+            interceptors: A list of interceptors to process requests and responses.
         """
-        if middleware is None:
-            middleware = []
-        if consumers is None:
-            consumers = []
-        self._consumers = consumers
-        self._middleware = middleware
+        self._consumers = consumers or []
+        self._interceptors = interceptors or []
+
+    async def __aenter__(self) -> Self:
+        """Enters the async context manager."""
+        return self
+
+    async def __aexit__(
+        self,
+        exc_type: type[BaseException] | None,
+        exc_val: BaseException | None,
+        exc_tb: TracebackType | None,
+    ) -> None:
+        """Exits the async context manager and closes the client."""
+        await self.close()
 
     @abstractmethod
     async def send_message(
         self,
-        request: Message,
+        request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-        request_metadata: dict[str, Any] | None = None,
-        extensions: list[str] | None = None,
-    ) -> AsyncIterator[ClientEvent | Message]:
+    ) -> AsyncIterator[ClientEvent]:
         """Sends a message to the server.
 
         This will automatically use the streaming or non-streaming approach
@@ -130,61 +152,83 @@ class Client(ABC):
     @abstractmethod
     async def get_task(
         self,
-        request: TaskQueryParams,
+        request: GetTaskRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> Task:
         """Retrieves the current state and history of a specific task."""
 
     @abstractmethod
-    async def cancel_task(
+    async def list_tasks(
         self,
-        request: TaskIdParams,
+        request: ListTasksRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+    ) -> ListTasksResponse:
+        """Retrieves tasks for an agent."""
+
+    @abstractmethod
+    async def cancel_task(
+        self,
+        request: CancelTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
     ) -> Task:
         """Requests the agent to cancel a specific task."""
 
     @abstractmethod
-    async def set_task_callback(
+    async def create_task_push_notification_config(
         self,
         request: TaskPushNotificationConfig,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def get_task_callback(
+    async def get_task_push_notification_config(
         self,
-        request: GetTaskPushNotificationConfigParams,
+        request: GetTaskPushNotificationConfigRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
     ) -> TaskPushNotificationConfig:
         """Retrieves the push notification configuration for a specific task."""
 
     @abstractmethod
-    async def resubscribe(
+    async def list_task_push_notification_configs(
         self,
-        request: TaskIdParams,
+        request: ListTaskPushNotificationConfigsRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Lists push notification configurations for a specific task."""
+
+    @abstractmethod
+    async def delete_task_push_notification_config(
+        self,
+        request: DeleteTaskPushNotificationConfigRequest,
+        *,
+        context: ClientCallContext | None = None,
+    ) -> None:
+        """Deletes the push notification configuration for a specific task."""
+
+    @abstractmethod
+    async def subscribe(
+        self,
+        request: SubscribeToTaskRequest,
+        *,
+        context: ClientCallContext | None = None,
     ) -> AsyncIterator[ClientEvent]:
         """Resubscribes to a task's event stream."""
         return
         yield
 
     @abstractmethod
-    async def get_card(
+    async def get_extended_agent_card(
         self,
+        request: GetExtendedAgentCardRequest,
         *,
         context: ClientCallContext | None = None,
-        extensions: list[str] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
         """Retrieves the agent's card."""
@@ -193,15 +237,13 @@ class Client(ABC):
         """Attaches additional consumers to the `Client`."""
         self._consumers.append(consumer)
 
-    async def add_request_middleware(
-        self, middleware: ClientCallInterceptor
-    ) -> None:
-        """Attaches additional middleware to the `Client`."""
-        self._middleware.append(middleware)
+    async def add_interceptor(self, interceptor: ClientCallInterceptor) -> None:
+        """Attaches additional interceptors to the `Client`."""
+        self._interceptors.append(interceptor)
 
     async def consume(
         self,
-        event: tuple[Task, UpdateEvent] | Message | None,
+        event: ClientEvent,
         card: AgentCard,
     ) -> None:
         """Processes the event via all the registered `Consumer`s."""
@@ -209,3 +251,7 @@ class Client(ABC):
             return
         for c in self._consumers:
             await c(event, card)
+
+    @abstractmethod
+    async def close(self) -> None:
+        """Closes the client and releases any underlying resources."""
