@@ -7,7 +7,8 @@ import pytest
 
 from pydantic import ValidationError
 
-from a2a.server.events.event_consumer import EventConsumer, QueueClosed
+from a2a.server.events.event_consumer import EventConsumer
+from a2a.server.events.event_queue import QueueShutDown
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
@@ -256,9 +257,9 @@ async def test_consume_all_raises_stored_exception(
 async def test_consume_all_stops_on_queue_closed_and_confirmed_closed(
     event_consumer: EventConsumer, mock_event_queue: AsyncMock
 ):
-    """Test consume_all stops if QueueClosed is raised and queue.is_closed() is True."""
-    # Simulate the queue raising QueueClosed (which is asyncio.QueueEmpty or QueueShutdown)
-    mock_event_queue.dequeue_event.side_effect = QueueClosed(
+    """Test consume_all stops if QueueShutDown is raised and queue.is_closed() is True."""
+    # Simulate the queue raising QueueShutDown (which is asyncio.QueueEmpty or QueueShutdown)
+    mock_event_queue.dequeue_event.side_effect = QueueShutDown(
         'Queue is empty/closed'
     )
     # Simulate the queue confirming it's closed
@@ -270,7 +271,7 @@ async def test_consume_all_stops_on_queue_closed_and_confirmed_closed(
 
     assert (
         len(consumed_events) == 0
-    )  # No events should be consumed as it breaks on QueueClosed
+    )  # No events should be consumed as it breaks on QueueShutDown
     mock_event_queue.dequeue_event.assert_called_once()  # Should attempt to dequeue once
     mock_event_queue.is_closed.assert_called_once()  # Should check if closed
 
@@ -279,28 +280,28 @@ async def test_consume_all_stops_on_queue_closed_and_confirmed_closed(
 async def test_consume_all_continues_on_queue_empty_if_not_really_closed(
     event_consumer: EventConsumer, mock_event_queue: AsyncMock
 ):
-    """Test that QueueClosed with is_closed=False allows loop to continue via timeout."""
+    """Test that QueueShutDown with is_closed=False allows loop to continue via timeout."""
     final_event = create_sample_message(message_id='final_event_id')
 
     # Setup dequeue_event behavior:
-    # 1. Raise QueueClosed (e.g., asyncio.QueueEmpty)
+    # 1. Raise QueueShutDown (e.g., asyncio.QueueEmpty)
     # 2. Return the final_event
-    # 3. Raise QueueClosed again (to terminate after final_event)
+    # 3. Raise QueueShutDown again (to terminate after final_event)
     dequeue_effects = [
-        QueueClosed('Simulated temporary empty'),
+        QueueShutDown('Simulated temporary empty'),
         final_event,
-        QueueClosed('Queue closed after final event'),
+        QueueShutDown('Queue closed after final event'),
     ]
     mock_event_queue.dequeue_event.side_effect = dequeue_effects
 
     # Setup is_closed behavior:
-    # 1. False when QueueClosed is first raised (so loop doesn't break)
-    # 2. True after final_event is processed and QueueClosed is raised again
+    # 1. False when QueueShutDown is first raised (so loop doesn't break)
+    # 2. True after final_event is processed and QueueShutDown is raised again
     is_closed_effects = [False, True]
     mock_event_queue.is_closed.side_effect = is_closed_effects
 
     # Patch asyncio.wait_for used inside consume_all
-    # The goal is that the first QueueClosed leads to a TimeoutError inside consume_all,
+    # The goal is that the first QueueShutDown leads to a TimeoutError inside consume_all,
     # the loop continues, and then the final_event is fetched.
 
     # To reliably test the timeout behavior within consume_all, we adjust the consumer's
@@ -315,15 +316,15 @@ async def test_consume_all_continues_on_queue_empty_if_not_really_closed(
     assert consumed_events[0] == final_event
 
     # Dequeue attempts:
-    # 1. Raises QueueClosed (is_closed=False, leads to TimeoutError, loop continues)
+    # 1. Raises QueueShutDown (is_closed=False, leads to TimeoutError, loop continues)
     # 2. Returns final_event (which is a Message, causing consume_all to break)
     assert (
         mock_event_queue.dequeue_event.call_count == 2
     )  # Only two calls needed
 
     # is_closed calls:
-    # 1. After first QueueClosed (returns False)
-    # The second QueueClosed is not reached because Message breaks the loop.
+    # 1. After first QueueShutDown (returns False)
+    # The second QueueShutDown is not reached because Message breaks the loop.
     assert mock_event_queue.is_closed.call_count == 1
 
 
@@ -332,13 +333,13 @@ async def test_consume_all_handles_queue_empty_when_closed_python_version_agnost
     event_consumer: EventConsumer, mock_event_queue: AsyncMock, monkeypatch
 ):
     """Ensure consume_all stops with no events when queue is closed and dequeue_event raises asyncio.QueueEmpty (Python version-agnostic)."""
-    # Make QueueClosed a distinct exception (not QueueEmpty) to emulate py3.13 semantics
+    # Make QueueShutDown a distinct exception (not QueueEmpty) to emulate py3.13 semantics
     from a2a.server.events import event_consumer as ec
 
     class QueueShutDown(Exception):
         pass
 
-    monkeypatch.setattr(ec, 'QueueClosed', QueueShutDown, raising=True)
+    monkeypatch.setattr(ec, 'QueueShutDown', QueueShutDown, raising=True)
 
     # Simulate queue reporting closed while dequeue raises QueueEmpty
     mock_event_queue.dequeue_event.side_effect = asyncio.QueueEmpty(
@@ -538,3 +539,23 @@ async def test_background_close_deadlocks_on_trailing_events() -> None:
         await asyncio.wait_for(consumer._close_task, timeout=0.1)
     except asyncio.TimeoutError:
         pytest.fail('Background close task deadlocked on trailing events!')
+
+
+@pytest.mark.asyncio
+async def test_consume_all_handles_actual_queue_shutdown(
+    event_consumer: EventConsumer, mock_event_queue: AsyncMock
+):
+    """Ensure consume_all stops when queue is closed and dequeue_event raises the actual QueueShutDown from event_queue."""
+    from a2a.server.events.event_queue import QueueShutDown
+
+    mock_event_queue.dequeue_event.side_effect = QueueShutDown(
+        'Queue is closed'
+    )
+    mock_event_queue.is_closed.return_value = True
+
+    consumed_events = []
+    # This should exit cleanly because consume_all correctly catches the QueueShutDown exception.
+    async for event in event_consumer.consume_all():
+        consumed_events.append(event)
+
+    assert len(consumed_events) == 0
