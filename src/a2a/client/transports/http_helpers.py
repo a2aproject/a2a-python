@@ -78,8 +78,20 @@ async def send_http_stream_request(
         async with aconnect_sse(
             httpx_client, method, url, **kwargs
         ) as event_source:
-            event_source.response.raise_for_status()
-            async for sse in event_source.aiter_sse():
-                if not sse.data:
-                    continue
-                yield sse.data
+            try:
+                event_source.response.raise_for_status()
+            except httpx.HTTPStatusError as e:
+                await event_source.response.aread()
+                raise e
+
+            try:
+                async for sse in event_source.aiter_sse():
+                    if not sse.data:
+                        continue
+                    yield sse.data
+            except SSEError as e:
+                if 'application/json' in event_source.response.headers.get('content-type', ''):
+                    content = await event_source.response.aread()
+                    yield content.decode('utf-8')
+                else:
+                    raise e

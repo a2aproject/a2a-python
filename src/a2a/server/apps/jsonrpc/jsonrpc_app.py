@@ -482,7 +482,7 @@ class JSONRPCApplication(ABC):
                 request_obj, context
             )
 
-        return self._create_response(context, handler_result)
+        return await self._create_response(context, handler_result)
 
     async def _process_non_streaming_request(
         self,
@@ -562,9 +562,9 @@ class JSONRPCApplication(ABC):
                 )
                 return self._generate_error_response(request_id, error)
 
-        return self._create_response(context, handler_result)
+        return await self._create_response(context, handler_result)
 
-    def _create_response(
+    async def _create_response(
         self,
         context: ServerCallContext,
         handler_result: AsyncGenerator[dict[str, Any]] | dict[str, Any],
@@ -587,15 +587,35 @@ class JSONRPCApplication(ABC):
         if exts := context.activated_extensions:
             headers[HTTP_EXTENSION_HEADER] = ', '.join(sorted(exts))
         if isinstance(handler_result, AsyncGenerator):
+            try:
+                # Prime to see if it fails upfront
+                first_item = await handler_result.__anext__()
+            except StopAsyncIteration:
+
+                async def empty_generator() -> AsyncGenerator[dict[str, str], None]:
+                    if False:
+                        yield {}
+
+                return EventSourceResponse(empty_generator(), headers=headers)
+            except Exception as e:
+                logger.debug('Upfront exception in streaming handler: %s', e)
+                if not isinstance(e, A2AError | JSONRPCError):
+                    e = InternalError(message=str(e))
+                request_id = context.state.get('request_id')
+                error_payload = build_error_response(request_id, e)
+                return JSONResponse(error_payload, headers=headers)
+
             # Result is a stream of dict objects
             async def event_generator(
                 stream: AsyncGenerator[dict[str, Any]],
-            ) -> AsyncGenerator[dict[str, str]]:
+                first_item: dict[str, Any],
+            ) -> AsyncGenerator[dict[str, str], None]:
+                yield {'data': json.dumps(first_item)}
                 async for item in stream:
                     yield {'data': json.dumps(item)}
 
             return EventSourceResponse(
-                event_generator(handler_result), headers=headers
+                event_generator(handler_result, first_item), headers=headers
             )
 
         # handler_result is a dict (JSON-RPC response)
