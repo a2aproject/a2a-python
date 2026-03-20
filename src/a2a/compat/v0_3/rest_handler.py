@@ -31,7 +31,6 @@ from a2a.server.context import ServerCallContext
 from a2a.utils import constants
 from a2a.utils.helpers import (
     validate,
-    validate_async_generator,
     validate_version,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -85,7 +84,7 @@ class REST03Handler:
         return MessageToDict(pb2_v03_resp)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -143,7 +142,7 @@ class REST03Handler:
         return MessageToDict(pb2_v03_task)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
