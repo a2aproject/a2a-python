@@ -1,5 +1,11 @@
+import functools
+import inspect
+
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
+
+from google.protobuf.message import Message as ProtoMessage
 
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
@@ -19,6 +25,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import UnsupportedOperationError
+from a2a.utils.proto_utils import validate_proto_required_fields
 
 
 class RequestHandler(ABC):
@@ -218,3 +225,36 @@ class RequestHandler(ABC):
         Returns:
             None
         """
+
+
+def validate_request_params(method: Callable) -> Callable:
+    """Decorator for RequestHandler methods to validate required fields on incoming requests."""
+    if inspect.iscoroutinefunction(method):
+
+        @functools.wraps(method)
+        async def async_wrapper(
+            self: RequestHandler,
+            params: ProtoMessage,
+            context: ServerCallContext,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            if params is not None:
+                validate_proto_required_fields(params)
+            return await method(self, params, context, *args, **kwargs)
+
+        return async_wrapper
+
+    @functools.wraps(method)
+    def sync_wrapper(
+        self: RequestHandler,
+        params: ProtoMessage,
+        context: ServerCallContext,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if params is not None:
+            validate_proto_required_fields(params)
+        return method(self, params, context, *args, **kwargs)
+
+    return sync_wrapper
