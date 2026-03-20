@@ -76,7 +76,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
                 data = {'errors': errors}
                 exception_cls = InvalidParamsError
                 break
-            elif detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+            if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)
                 if error_info.domain == 'a2a-protocol.org':

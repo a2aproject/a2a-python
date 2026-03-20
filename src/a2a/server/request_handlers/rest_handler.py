@@ -116,11 +116,14 @@ class RESTHandler:
         body = await request.body()
         params = a2a_pb2.SendMessageRequest()
         Parse(body, params)
-        async for event in self.request_handler.on_message_send_stream(
-            params, context
-        ):
-            response = proto_utils.to_stream_response(event)
-            yield MessageToDict(response)
+        stream = self.request_handler.on_message_send_stream(params, context)
+
+        async def _generator() -> AsyncIterator[dict[str, Any]]:
+            async for event in stream:
+                response = proto_utils.to_stream_response(event)
+                yield MessageToDict(response)
+
+        return _generator()
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def on_cancel_task(
@@ -167,10 +170,15 @@ class RESTHandler:
             JSON serialized objects containing streaming events
         """
         task_id = request.path_params['id']
-        async for event in self.request_handler.on_subscribe_to_task(
+        stream = self.request_handler.on_subscribe_to_task(
             SubscribeToTaskRequest(id=task_id), context
-        ):
-            yield MessageToDict(proto_utils.to_stream_response(event))
+        )
+
+        async def _generator() -> AsyncIterator[dict[str, Any]]:
+            async for event in stream:
+                yield MessageToDict(proto_utils.to_stream_response(event))
+
+        return _generator()
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def get_push_notification(
