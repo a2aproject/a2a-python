@@ -31,7 +31,6 @@ from a2a.utils import constants, proto_utils
 from a2a.utils.errors import TaskNotFoundError
 from a2a.utils.helpers import (
     validate,
-    validate_async_generator,
     validate_version,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -93,7 +92,7 @@ class RESTHandler:
         return MessageToDict(response)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -147,7 +146,7 @@ class RESTHandler:
         raise TaskNotFoundError
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )

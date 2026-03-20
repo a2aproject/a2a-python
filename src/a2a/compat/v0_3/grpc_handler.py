@@ -29,7 +29,7 @@ from a2a.server.request_handlers.grpc_handler import (
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.errors import A2AError, InvalidParamsError
-from a2a.utils.helpers import maybe_await, validate, validate_async_generator
+from a2a.utils.helpers import maybe_await, validate
 
 
 logger = logging.getLogger(__name__)
@@ -177,7 +177,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'SendStreamingMessage' gRPC method (v0.3)."""
 
-        @validate_async_generator(
+        @validate(
             lambda _: self.agent_card.capabilities.streaming,
             'Streaming is not supported by the agent',
         )
@@ -240,7 +240,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'TaskSubscription' gRPC method (v0.3)."""
 
-        @validate_async_generator(
+        @validate(
             lambda _: self.agent_card.capabilities.streaming,
             'Streaming is not supported by the agent',
         )

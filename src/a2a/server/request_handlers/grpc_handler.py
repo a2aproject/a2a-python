@@ -40,7 +40,7 @@ from a2a.utils.errors import (
     A2AError,
     TaskNotFoundError,
 )
-from a2a.utils.helpers import maybe_await, validate, validate_async_generator
+from a2a.utils.helpers import maybe_await, validate
 
 
 logger = logging.getLogger(__name__)
@@ -197,7 +197,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
         """Handles the 'StreamMessage' gRPC method."""
 
-        @validate_async_generator(
+        @validate(
             lambda _: self.agent_card.capabilities.streaming,
             'Streaming is not supported by the agent',
         )
@@ -238,7 +238,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
         """Handles the 'SubscribeToTask' gRPC method."""
 
-        @validate_async_generator(
+        @validate(
             lambda _: self.agent_card.capabilities.streaming,
             'Streaming is not supported by the agent',
         )

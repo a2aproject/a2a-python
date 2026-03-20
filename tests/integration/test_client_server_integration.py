@@ -1032,10 +1032,10 @@ async def test_validate_decorator_push_notifications_disabled(
 
 
 @pytest.mark.asyncio
-async def test_validate_async_generator_streaming_disabled(
+async def test_validate_streaming_disabled(
     error_handling_setups, agent_card: AgentCard
 ) -> None:
-    """Integration test for @validate_async_generator decorator when streaming is disabled."""
+    """Integration test for @validate decorator when streaming is disabled."""
     client = error_handling_setups.client
     transport = client._transport
 
