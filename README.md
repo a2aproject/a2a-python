@@ -36,7 +36,10 @@
 
 ## 🧩 Compatibility
 
-This SDK implements the A2A Protocol Specification [`v0.3.0`](https://a2a-protocol.org/v0.3.0/specification).
+This SDK implements the A2A Protocol Specification [`0.3`](https://a2a-protocol.org/v0.3.0/specification).
+
+> [!IMPORTANT]
+> There is an [**alpha version**](https://github.com/a2aproject/a2a-python/releases?q=%22v1.0.0-alpha%22&expanded=true) available with support for both [`1.0`](https://a2a-protocol.org/v1.0.0/specification/) and [`0.3`](https://a2a-protocol.org/v0.3.0/specification) versions. Development for this version is taking place in the [`1.0-dev`](https://github.com/a2aproject/a2a-python/tree/1.0-dev) branch, tracked in [#701](https://github.com/a2aproject/a2a-python/issues/701).
 
 | Transport | Client | Server |
 | :--- | :---: | :---: |
@@ -65,6 +68,7 @@ Install the core SDK and any desired extras using your preferred package manager
 | **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
 | **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
 | **Encryption**           | `uv add "a2a-sdk[encryption]"`             | `pip install "a2a-sdk[encryption]"`          |
+| **Vertex AI Task Store** | `uv add "a2a-sdk[vertex]"`                 | `pip install "a2a-sdk[vertex]"`              |
 |                          |                                            |                                              |
 | **Database Drivers**     |                                            |                                              |
 | **PostgreSQL**           | `uv add "a2a-sdk[postgresql]"`             | `pip install "a2a-sdk[postgresql]"`          |

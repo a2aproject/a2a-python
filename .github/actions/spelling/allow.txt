@@ -35,6 +35,7 @@ cls
 coc
 codegen
 coro
+culsans
 datamodel
 deepwiki
 drivername
@@ -127,7 +128,7 @@ taskupdate
 testuuid
 Tful
 tiangolo
+TResponse
 typ
 typeerror
 vulnz
-TResponse
