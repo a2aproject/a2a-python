@@ -4,6 +4,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
+from typing import TypeVar
 
 
 try:
@@ -34,7 +35,11 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
+from a2a.utils.errors import (
+    A2A_ERROR_REASONS,
+    A2AError,
+    TaskNotFoundError,
+)
 from a2a.utils.helpers import maybe_await, validate, validate_async_generator
 
 
@@ -101,6 +106,9 @@ _ERROR_CODE_MAP = {
 }
 
 
+TResponse = TypeVar('TResponse')
+
+
 class GrpcHandler(a2a_grpc.A2AServiceServicer):
     """Maps incoming gRPC requests to the appropriate request handler method."""
 
@@ -128,284 +136,241 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self.context_builder = context_builder or DefaultCallContextBuilder()
         self.card_modifier = card_modifier
 
+    async def _handle_unary(
+        self,
+        request: message.Message,
+        context: grpc.aio.ServicerContext,
+        handler_func: Callable[[ServerCallContext], Awaitable[TResponse]],
+        default_response: TResponse,
+    ) -> TResponse:
+        """Centralized error handling and context management for unary calls."""
+        try:
+            server_context = self._build_call_context(context, request)
+            result = await handler_func(server_context)
+            self._set_extension_metadata(context, server_context)
+        except A2AError as e:
+            await self.abort_context(e, context)
+        else:
+            return result
+        return default_response
+
+    async def _handle_stream(
+        self,
+        request: message.Message,
+        context: grpc.aio.ServicerContext,
+        handler_func: Callable[[ServerCallContext], AsyncIterable[TResponse]],
+    ) -> AsyncIterable[TResponse]:
+        """Centralized error handling and context management for streaming calls."""
+        try:
+            server_context = self._build_call_context(context, request)
+            async for item in handler_func(server_context):
+                yield item
+            self._set_extension_metadata(context, server_context)
+        except A2AError as e:
+            await self.abort_context(e, context)
+
     async def SendMessage(
         self,
         request: a2a_pb2.SendMessageRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.SendMessageResponse:
-        """Handles the 'SendMessage' gRPC method.
+        """Handles the 'SendMessage' gRPC method."""
 
-        Args:
-            request: The incoming `SendMessageRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `SendMessageResponse` object containing the result (Task or
-            Message) or throws an error response if an A2AError is raised
-            by the handler.
-        """
-        try:
-            # Construct the server context object
-            server_context = self._build_call_context(context, request)
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.SendMessageResponse:
             task_or_message = await self.request_handler.on_message_send(
                 request, server_context
             )
-            self._set_extension_metadata(context, server_context)
             if isinstance(task_or_message, a2a_pb2.Task):
                 return a2a_pb2.SendMessageResponse(task=task_or_message)
             return a2a_pb2.SendMessageResponse(message=task_or_message)
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.SendMessageResponse()
 
-    @validate_async_generator(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.SendMessageResponse()
+        )
+
     async def SendStreamingMessage(
         self,
         request: a2a_pb2.SendMessageRequest,
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
-        """Handles the 'StreamMessage' gRPC method.
+        """Handles the 'StreamMessage' gRPC method."""
 
-        Yields response objects as they are produced by the underlying handler's
-        stream.
-
-        Args:
-            request: The incoming `SendMessageRequest` object.
-            context: Context provided by the server.
-
-        Yields:
-            `StreamResponse` objects containing streaming events
-            (Task, Message, TaskStatusUpdateEvent, TaskArtifactUpdateEvent)
-            or gRPC error responses if an A2AError is raised.
-        """
-        server_context = self._build_call_context(context, request)
-        try:
+        @validate_async_generator(
+            lambda _: self.agent_card.capabilities.streaming,
+            'Streaming is not supported by the agent',
+        )
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> AsyncIterable[a2a_pb2.StreamResponse]:
             async for event in self.request_handler.on_message_send_stream(
                 request, server_context
             ):
                 yield proto_utils.to_stream_response(event)
-            self._set_extension_metadata(context, server_context)
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return
+
+        async for item in self._handle_stream(request, context, _handler):
+            yield item
 
     async def CancelTask(
         self,
         request: a2a_pb2.CancelTaskRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.Task:
-        """Handles the 'CancelTask' gRPC method.
+        """Handles the 'CancelTask' gRPC method."""
 
-        Args:
-            request: The incoming `CancelTaskRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `Task` object containing the updated Task or a gRPC error.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(server_context: ServerCallContext) -> a2a_pb2.Task:
             task = await self.request_handler.on_cancel_task(
                 request, server_context
             )
             if task:
                 return task
-            await self.abort_context(TaskNotFoundError(), context)
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.Task()
+            raise TaskNotFoundError
 
-    @validate_async_generator(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.Task()
+        )
+
     async def SubscribeToTask(
         self,
         request: a2a_pb2.SubscribeToTaskRequest,
         context: grpc.aio.ServicerContext,
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
-        """Handles the 'SubscribeToTask' gRPC method.
+        """Handles the 'SubscribeToTask' gRPC method."""
 
-        Yields response objects as they are produced by the underlying handler's
-        stream.
-
-        Args:
-            request: The incoming `SubscribeToTaskRequest` object.
-            context: Context provided by the server.
-
-        Yields:
-            `StreamResponse` objects containing streaming events
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        @validate_async_generator(
+            lambda _: self.agent_card.capabilities.streaming,
+            'Streaming is not supported by the agent',
+        )
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> AsyncIterable[a2a_pb2.StreamResponse]:
             async for event in self.request_handler.on_subscribe_to_task(
-                request,
-                server_context,
+                request, server_context
             ):
                 yield proto_utils.to_stream_response(event)
-        except A2AError as e:
-            await self.abort_context(e, context)
+
+        async for item in self._handle_stream(request, context, _handler):
+            yield item
 
     async def GetTaskPushNotificationConfig(
         self,
         request: a2a_pb2.GetTaskPushNotificationConfigRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.TaskPushNotificationConfig:
-        """Handles the 'GetTaskPushNotificationConfig' gRPC method.
+        """Handles the 'GetTaskPushNotificationConfig' gRPC method."""
 
-        Args:
-            request: The incoming `GetTaskPushNotificationConfigRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `TaskPushNotificationConfig` object containing the config.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.TaskPushNotificationConfig:
             return (
                 await self.request_handler.on_get_task_push_notification_config(
-                    request,
-                    server_context,
+                    request, server_context
                 )
             )
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.TaskPushNotificationConfig()
 
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.TaskPushNotificationConfig()
+        )
+
     async def CreateTaskPushNotificationConfig(
         self,
         request: a2a_pb2.TaskPushNotificationConfig,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.TaskPushNotificationConfig:
-        """Handles the 'CreateTaskPushNotificationConfig' gRPC method.
+        """Handles the 'CreateTaskPushNotificationConfig' gRPC method."""
 
-        Requires the agent to support push notifications.
-
-        Args:
-            request: The incoming `TaskPushNotificationConfig` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `TaskPushNotificationConfig` object
-
-        Raises:
-            A2AError: If push notifications are not supported by the agent
-                (due to the `@validate` decorator).
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        @validate(
+            lambda _: self.agent_card.capabilities.push_notifications,
+            'Push notifications are not supported by the agent',
+        )
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.TaskPushNotificationConfig:
             return await self.request_handler.on_create_task_push_notification_config(
-                request,
-                server_context,
+                request, server_context
             )
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.TaskPushNotificationConfig()
+
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.TaskPushNotificationConfig()
+        )
 
     async def ListTaskPushNotificationConfigs(
         self,
         request: a2a_pb2.ListTaskPushNotificationConfigsRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.ListTaskPushNotificationConfigsResponse:
-        """Handles the 'ListTaskPushNotificationConfig' gRPC method.
+        """Handles the 'ListTaskPushNotificationConfig' gRPC method."""
 
-        Args:
-            request: The incoming `ListTaskPushNotificationConfigsRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `ListTaskPushNotificationConfigsResponse` object containing the configs.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.ListTaskPushNotificationConfigsResponse:
             return await self.request_handler.on_list_task_push_notification_configs(
-                request,
-                server_context,
+                request, server_context
             )
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.ListTaskPushNotificationConfigsResponse()
+
+        return await self._handle_unary(
+            request,
+            context,
+            _handler,
+            a2a_pb2.ListTaskPushNotificationConfigsResponse(),
+        )
 
     async def DeleteTaskPushNotificationConfig(
         self,
         request: a2a_pb2.DeleteTaskPushNotificationConfigRequest,
         context: grpc.aio.ServicerContext,
     ) -> empty_pb2.Empty:
-        """Handles the 'DeleteTaskPushNotificationConfig' gRPC method.
+        """Handles the 'DeleteTaskPushNotificationConfig' gRPC method."""
 
-        Args:
-            request: The incoming `DeleteTaskPushNotificationConfigRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            An empty `Empty` object.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> empty_pb2.Empty:
             await self.request_handler.on_delete_task_push_notification_config(
-                request,
-                server_context,
+                request, server_context
             )
             return empty_pb2.Empty()
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return empty_pb2.Empty()
+
+        return await self._handle_unary(
+            request, context, _handler, empty_pb2.Empty()
+        )
 
     async def GetTask(
         self,
         request: a2a_pb2.GetTaskRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.Task:
-        """Handles the 'GetTask' gRPC method.
+        """Handles the 'GetTask' gRPC method."""
 
-        Args:
-            request: The incoming `GetTaskRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `Task` object.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(server_context: ServerCallContext) -> a2a_pb2.Task:
             task = await self.request_handler.on_get_task(
                 request, server_context
             )
             if task:
                 return task
-            await self.abort_context(TaskNotFoundError(), context)
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.Task()
+            raise TaskNotFoundError
+
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.Task()
+        )
 
     async def ListTasks(
         self,
         request: a2a_pb2.ListTasksRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.ListTasksResponse:
-        """Handles the 'ListTasks' gRPC method.
+        """Handles the 'ListTasks' gRPC method."""
 
-        Args:
-            request: The incoming `ListTasksRequest` object.
-            context: Context provided by the server.
-
-        Returns:
-            A `ListTasksResponse` object.
-        """
-        try:
-            server_context = self._build_call_context(context, request)
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.ListTasksResponse:
             return await self.request_handler.on_list_tasks(
                 request, server_context
             )
-        except A2AError as e:
-            await self.abort_context(e, context)
-        return a2a_pb2.ListTasksResponse()
+
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.ListTasksResponse()
+        )
 
     async def GetExtendedAgentCard(
         self,

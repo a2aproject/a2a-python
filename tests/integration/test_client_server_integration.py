@@ -73,6 +73,10 @@ from a2a.utils.signing import (
     create_signature_verifier,
 )
 
+# Compat v0.3 imports for dedicated tests
+from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+
 
 # --- Test Constants ---
 
@@ -296,6 +300,19 @@ def transport_setups(request) -> TransportSetup:
     params=[
         pytest.param('jsonrpc_setup', id='JSON-RPC'),
         pytest.param('rest_setup', id='REST'),
+        pytest.param('grpc_setup', id='gRPC'),
+        pytest.param('grpc_03_setup', id='gRPC-0.3'),
+    ]
+)
+def error_handling_setups(request) -> TransportSetup:
+    """Parametrized fixture for error tests including compat 0.3 endpoint verification."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
     ]
 )
 def http_transport_setups(request) -> TransportSetup:
@@ -318,7 +335,46 @@ async def grpc_server_and_handler(
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
     yield server_address, mock_request_handler
-    await server.stop(0)
+
+
+@pytest_asyncio.fixture
+async def grpc_03_server_and_handler(
+    mock_request_handler: AsyncMock, agent_card: AgentCard
+) -> AsyncGenerator[tuple[str, AsyncMock], None]:
+    """Creates and manages an in-process v0.3 compat gRPC test server."""
+    server = grpc.aio.server()
+    port = server.add_insecure_port('[::]:0')
+    server_address = f'localhost:{port}'
+    servicer = CompatGrpcHandler(agent_card, mock_request_handler)
+    a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+    await server.start()
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
+
+
+@pytest.fixture
+def grpc_03_setup(
+    grpc_03_server_and_handler, agent_card: AgentCard
+) -> TransportSetup:
+    """Sets up the CompatGrpcTransport and in-process 0.3 server."""
+    server_address, handler = grpc_03_server_and_handler
+    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
+    from a2a.client.base_client import BaseClient
+    from a2a.client.client import ClientConfig
+
+    channel = grpc.aio.insecure_channel(server_address)
+    transport = CompatGrpcTransport(channel=channel, agent_card=agent_card)
+
+    client = BaseClient(
+        card=agent_card,
+        config=ClientConfig(),
+        transport=transport,
+        consumers=[],
+        interceptors=[],
+    )
+    return TransportSetup(client=client, handler=handler)
 
 
 # --- The Integration Tests ---
@@ -959,10 +1015,10 @@ async def test_validate_version_unsupported(http_transport_setups) -> None:
 
 @pytest.mark.asyncio
 async def test_validate_decorator_push_notifications_disabled(
-    transport_setups, agent_card: AgentCard
+    error_handling_setups, agent_card: AgentCard
 ) -> None:
     """Integration test for @validate decorator with push notifications disabled."""
-    client = transport_setups.client
+    client = error_handling_setups.client
 
     agent_card.capabilities.push_notifications = False
 
@@ -977,10 +1033,10 @@ async def test_validate_decorator_push_notifications_disabled(
 
 @pytest.mark.asyncio
 async def test_validate_async_generator_streaming_disabled(
-    transport_setups, agent_card: AgentCard
+    error_handling_setups, agent_card: AgentCard
 ) -> None:
     """Integration test for @validate_async_generator decorator when streaming is disabled."""
-    client = transport_setups.client
+    client = error_handling_setups.client
     transport = client._transport
 
     agent_card.capabilities.streaming = False
