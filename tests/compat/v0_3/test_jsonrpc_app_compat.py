@@ -51,13 +51,13 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
     mock_agent_card.capabilities.push_notifications = True
     mock_agent_card.capabilities.extended_agent_card = True
-    router = JsonRpcRoutes(
+    jsonrpc_routes = JsonRpcRoutes(
         agent_card=mock_agent_card,
         request_handler=mock_handler,
         enable_v0_3_compat=True,
         rpc_url='/',
     )
-    return Starlette(routes=router.routes)
+    return Starlette(routes=jsonrpc_routes.routes)
 
 
 @pytest.fixture
