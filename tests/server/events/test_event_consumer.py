@@ -461,6 +461,7 @@ async def test_consume_all_handles_validation_error(
         )
 
 
+@pytest.mark.xfail(reason='https://github.com/a2aproject/a2a-python/issues/869')
 @pytest.mark.asyncio
 async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
 
@@ -515,30 +516,28 @@ async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
     assert len(slow_events) == 3
 
 
+@pytest.mark.xfail(
+    reason='https://github.com/a2aproject/a2a-python/issues/869',
+    raises=asyncio.TimeoutError,
+)
 @pytest.mark.asyncio
 async def test_background_close_deadlocks_on_trailing_events() -> None:
     queue = EventQueue()
-    consumer = EventConsumer(queue)
 
     # Producer enqueues a final event, but then enqueues another event
     # (e.g., simulating a delayed log message, race condition, or multiple messages).
     await queue.enqueue_event(Message(message_id='final'))
     await queue.enqueue_event(Message(message_id='trailing_log'))
 
-    # Consume events. The consumer will break its internal loop on the 'final' message,
-    # leaving 'trailing_log' in the queue forever.
-    events = [event async for event in consumer.consume_all()]
+    # Consumer dequeues 'final' but stops there (e.g. because it is a final event).
+    event = await queue.dequeue_event()
+    assert isinstance(event, Message) and event.message_id == 'final'
+    queue.task_done()
 
-    assert len(events) == 1
-    assert consumer._close_task is not None
-
-    # The background close task awaits queue.close(immediate=False), which waits for
-    # queue.join(). Since we passed clear_parent_events=True, it clears trailing events
-    # and successfully completes without deadlocking.
-    try:
-        await asyncio.wait_for(consumer._close_task, timeout=0.1)
-    except asyncio.TimeoutError:
-        pytest.fail('Background close task deadlocked on trailing events!')
+    # Now attempt a graceful close. This demonstrates the deadlock that
+    # the previous implementation (with background task and clear_parent_events)
+    # was trying to solve.
+    await asyncio.wait_for(queue.close(immediate=False), timeout=0.1)
 
 
 @pytest.mark.asyncio

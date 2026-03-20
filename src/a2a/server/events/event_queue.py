@@ -172,9 +172,7 @@ class EventQueue:
         self._children.append(queue)
         return queue
 
-    async def close(
-        self, immediate: bool = False, clear_parent_events: bool = False
-    ) -> None:
+    async def close(self, immediate: bool = False) -> None:
         """Closes the queue for future push events and also closes all child queues.
 
         Args:
@@ -183,9 +181,6 @@ class EventQueue:
                 `QueueShutDown`. If False (default), the queue is marked as closed to new
                 events, but existing events can still be dequeued and processed until the
                 queue is fully drained.
-            clear_parent_events: If True, completely clears all pending events from this
-                specific parent queue without processing them. This parameter is ignored if
-                `immediate=True`.
         """
         logger.debug('Closing EventQueue.')
         async with self._lock:
@@ -194,9 +189,6 @@ class EventQueue:
             self._is_closed = True
 
         self.queue.shutdown(immediate)
-
-        if clear_parent_events and not immediate:
-            await self.clear_events(clear_child_queues=False)
 
         await asyncio.gather(
             *(child.close(immediate) for child in self._children)

@@ -32,7 +32,6 @@ class EventConsumer:
         self.queue = queue
         self._timeout = 0.5
         self._exception: BaseException | None = None
-        self._close_task: asyncio.Task[None] | None = None
         logger.debug('EventConsumer initialized')
 
     async def consume_one(self) -> Event:
@@ -107,25 +106,13 @@ class EventConsumer:
                     )
                 )
 
-                # Initiate a graceful close in the background.
-                # We use immediate=False to ensure tapped child queues can finish
-                # draining their events (preventing data loss for slow consumers).
-                # We use clear_parent_events=True to prevent deadlocks since this
-                # consumer is stopping and won't dequeue any remaining trailing events.
-                # We use create_task instead of awaiting it directly because awaiting
-                # immediate=False would block this consumer until all child queues
-                # are also drained.
                 # Make sure the yield is after the close events, otherwise
                 # the caller may end up in a blocked state where this
                 # generator isn't called again to close things out and the
                 # other part is waiting for an event or a closed queue.
                 if is_final_event:
                     logger.debug('Stopping event consumption in consume_all.')
-                    self._close_task = asyncio.create_task(
-                        self.queue.close(
-                            immediate=False, clear_parent_events=True
-                        )
-                    )
+                    await self.queue.close(True)
                     yield event
                     break
                 yield event

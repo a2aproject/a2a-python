@@ -482,15 +482,14 @@ async def test_close_propagates_to_children(event_queue: EventQueue) -> None:
     assert child_queue2.is_closed()
 
 
+@pytest.mark.xfail(reason='https://github.com/a2aproject/a2a-python/issues/869')
 @pytest.mark.asyncio
 async def test_enqueue_close_race_condition() -> None:
     queue = EventQueue()
     event = create_sample_message()
 
     enqueue_task = asyncio.create_task(queue.enqueue_event(event))
-    close_task = asyncio.create_task(
-        queue.close(immediate=False, clear_parent_events=True)
-    )
+    close_task = asyncio.create_task(queue.close(immediate=False))
 
     try:
         results = await asyncio.wait_for(
@@ -582,19 +581,16 @@ async def test_event_queue_shutdown_wakes_getter(
 
 
 @pytest.mark.parametrize(
-    'immediate, clear_parent_events, expected_events, close_blocks',
+    'immediate, expected_events, close_blocks',
     [
-        (False, False, (1, 1), True),
-        (False, True, (0, 1), True),
-        (True, False, (0, 0), False),
-        (True, True, (0, 0), False),
+        (False, (1, 1), True),
+        (True, (0, 0), False),
     ],
 )
 @pytest.mark.asyncio
 async def test_event_queue_close_behaviors(
     event_queue: EventQueue,
     immediate: bool,
-    clear_parent_events: bool,
     expected_events: tuple[int, int],
     close_blocks: bool,
 ) -> None:
@@ -611,11 +607,7 @@ async def test_event_queue_close_behaviors(
     event_queue.queue = QueueJoinWrapper(event_queue.queue, join_reached)
     child_queue.queue = QueueJoinWrapper(child_queue.queue, join_reached)
 
-    close_task = asyncio.create_task(
-        event_queue.close(
-            immediate=immediate, clear_parent_events=clear_parent_events
-        )
-    )
+    close_task = asyncio.create_task(event_queue.close(immediate=immediate))
 
     if close_blocks:
         await join_reached.wait()
