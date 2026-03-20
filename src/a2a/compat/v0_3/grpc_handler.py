@@ -29,7 +29,7 @@ from a2a.server.request_handlers.grpc_handler import (
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.errors import A2AError, InvalidParamsError
-from a2a.utils.helpers import maybe_await, validate, validate_async_generator
+from a2a.utils.helpers import maybe_await, validate
 
 
 logger = logging.getLogger(__name__)
@@ -170,10 +170,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             context, _handler, a2a_v0_3_pb2.SendMessageResponse()
         )
 
-    @validate_async_generator(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def SendStreamingMessage(
         self,
         request: a2a_v0_3_pb2.SendMessageRequest,
@@ -181,6 +177,10 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'SendStreamingMessage' gRPC method (v0.3)."""
 
+        @validate(
+            lambda _: self.agent_card.capabilities.streaming,
+            'Streaming is not supported by the agent',
+        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -233,10 +233,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
 
         return await self._handle_unary(context, _handler, a2a_v0_3_pb2.Task())
 
-    @validate_async_generator(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def TaskSubscription(
         self,
         request: a2a_v0_3_pb2.TaskSubscriptionRequest,
@@ -244,6 +240,10 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'TaskSubscription' gRPC method (v0.3)."""
 
+        @validate(
+            lambda _: self.agent_card.capabilities.streaming,
+            'Streaming is not supported by the agent',
+        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -260,10 +260,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         async for item in self._handle_stream(context, _handler):
             yield item
 
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
     async def CreateTaskPushNotificationConfig(
         self,
         request: a2a_v0_3_pb2.CreateTaskPushNotificationConfigRequest,
@@ -271,6 +267,10 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:
         """Handles the 'CreateTaskPushNotificationConfig' gRPC method (v0.3)."""
 
+        @validate(
+            lambda _: self.agent_card.capabilities.push_notifications,
+            'Push notifications are not supported by the agent',
+        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:

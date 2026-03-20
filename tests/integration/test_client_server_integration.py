@@ -73,6 +73,10 @@ from a2a.utils.signing import (
     create_signature_verifier,
 )
 
+# Compat v0.3 imports for dedicated tests
+from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+
 
 # --- Test Constants ---
 
@@ -292,6 +296,30 @@ def transport_setups(request) -> TransportSetup:
     return request.getfixturevalue(request.param)
 
 
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+        pytest.param('grpc_setup', id='gRPC'),
+        pytest.param('grpc_03_setup', id='gRPC-0.3'),
+    ]
+)
+def error_handling_setups(request) -> TransportSetup:
+    """Parametrized fixture for error tests including compat 0.3 endpoint verification."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ]
+)
+def http_transport_setups(request) -> TransportSetup:
+    """Parametrized fixture that runs tests against HTTP-based transports only."""
+    return request.getfixturevalue(request.param)
+
+
 # --- gRPC Setup ---
 
 
@@ -307,7 +335,46 @@ async def grpc_server_and_handler(
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
     yield server_address, mock_request_handler
-    await server.stop(0)
+
+
+@pytest_asyncio.fixture
+async def grpc_03_server_and_handler(
+    mock_request_handler: AsyncMock, agent_card: AgentCard
+) -> AsyncGenerator[tuple[str, AsyncMock], None]:
+    """Creates and manages an in-process v0.3 compat gRPC test server."""
+    server = grpc.aio.server()
+    port = server.add_insecure_port('[::]:0')
+    server_address = f'localhost:{port}'
+    servicer = CompatGrpcHandler(agent_card, mock_request_handler)
+    a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+    await server.start()
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
+
+
+@pytest.fixture
+def grpc_03_setup(
+    grpc_03_server_and_handler, agent_card: AgentCard
+) -> TransportSetup:
+    """Sets up the CompatGrpcTransport and in-process 0.3 server."""
+    server_address, handler = grpc_03_server_and_handler
+    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
+    from a2a.client.base_client import BaseClient
+    from a2a.client.client import ClientConfig
+
+    channel = grpc.aio.insecure_channel(server_address)
+    transport = CompatGrpcTransport(channel=channel, agent_card=agent_card)
+
+    client = BaseClient(
+        card=agent_card,
+        config=ClientConfig(),
+        transport=transport,
+        consumers=[],
+        interceptors=[],
+    )
+    return TransportSetup(client=client, handler=handler)
 
 
 # --- The Integration Tests ---
@@ -925,5 +992,61 @@ async def test_rest_malformed_payload(
 
     response = await client.request(method, f'{url}{path}', **request_kwargs)
     assert response.status_code == 400
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_version_unsupported(http_transport_setups) -> None:
+    """Integration test for @validate_version decorator."""
+    client = http_transport_setups.client
+
+    service_params = {'A2A-Version': '2.0.0'}
+    context = ClientCallContext(service_parameters=service_params)
+
+    params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
+
+    with pytest.raises(VersionNotSupportedError) as exc_info:
+        await client.get_task(request=params, context=context)
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_decorator_push_notifications_disabled(
+    error_handling_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate decorator with push notifications disabled."""
+    client = error_handling_setups.client
+
+    agent_card.capabilities.push_notifications = False
+
+    params = TaskPushNotificationConfig(task_id='123')
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        await client.create_task_push_notification_config(request=params)
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_streaming_disabled(
+    error_handling_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate decorator when streaming is disabled."""
+    client = error_handling_setups.client
+    transport = client._transport
+
+    agent_card.capabilities.streaming = False
+
+    params = SendMessageRequest(
+        message=Message(role=Role.ROLE_USER, parts=[Part(text='hi')])
+    )
+
+    stream = transport.send_message_streaming(request=params)
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        async for _ in stream:
+            pass
 
     await transport.close()

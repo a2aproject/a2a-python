@@ -15,6 +15,7 @@ dependencies = [
   "google-api-core>=1.26.0",
   "json-rpc>=1.15.0",
   "googleapis-common-protos>=1.70.0",
+  "culsans>=0.11.0 ; python_full_version < '3.13'",
 ]
 
 classifiers = [
@@ -25,6 +26,7 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "License :: OSI Approved :: Apache Software License",

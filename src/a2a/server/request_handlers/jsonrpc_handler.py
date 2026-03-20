@@ -52,7 +52,6 @@ from a2a.utils.errors import (
 from a2a.utils.helpers import (
     maybe_await,
     validate,
-    validate_async_generator,
     validate_version,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -179,7 +178,7 @@ class JSONRPCHandler:
             return _build_error_response(request_id, e)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -245,7 +244,7 @@ class JSONRPCHandler:
         return _build_error_response(request_id, TaskNotFoundError())
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate_async_generator(
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
