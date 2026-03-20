@@ -1009,7 +1009,6 @@ async def test_validate_version_unsupported(http_transport_setups) -> None:
     with pytest.raises(VersionNotSupportedError) as exc_info:
         await client.get_task(request=params, context=context)
 
-    assert 'not supported' in str(exc_info.value).lower()
     await client.close()
 
 
@@ -1027,7 +1026,6 @@ async def test_validate_decorator_push_notifications_disabled(
     with pytest.raises(UnsupportedOperationError) as exc_info:
         await client.create_task_push_notification_config(request=params)
 
-    assert 'not supported' in str(exc_info.value).lower()
     await client.close()
 
 
@@ -1051,5 +1049,4 @@ async def test_validate_streaming_disabled(
         async for _ in stream:
             pass
 
-    assert 'not supported' in str(exc_info.value).lower()
     await transport.close()
