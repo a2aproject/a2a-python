@@ -3,9 +3,9 @@ import logging
 
 try:
     import vertexai
-
-    from google.genai import errors as genai_errors
     from vertexai import types as vertexai_types
+    from google.genai import types as genai_types
+    from google.genai import errors as genai_errors
 except ImportError as e:
     raise ImportError(
         'VertexTaskStore requires vertexai. '
