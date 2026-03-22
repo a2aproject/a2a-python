@@ -4,7 +4,8 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from a2a.server.apps import A2ARESTFastAPIApplication
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -56,10 +57,18 @@ def test_app():
     handler.on_message_send_stream = mock_on_message_send_stream
 
     app = FastAPI()
-    jsonrpc_app = A2AFastAPIApplication(
-        http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
-    ).build()
-    app.mount('/jsonrpc', jsonrpc_app)
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=handler,
+        extended_agent_card=agent_card,
+        rpc_url='/jsonrpc',
+        enable_v0_3_compat=True,
+    )
+    app.routes.extend(agent_card_routes)
+    app.routes.extend(jsonrpc_routes)
     rest_app = A2ARESTFastAPIApplication(
         http_handler=handler, agent_card=agent_card, enable_v0_3_compat=True
     ).build()
