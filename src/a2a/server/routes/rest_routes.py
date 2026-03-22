@@ -1,14 +1,16 @@
 import functools
 import json
 import logging
+
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict
 
+from a2a.compat.v0_3.rest_adapter import REST03Adapter
+from a2a.utils.constants import DEFAULT_RPC_URL
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
 from a2a.types.a2a_pb2 import AgentCard
@@ -21,6 +23,7 @@ from a2a.utils.errors import (
     InvalidRequestError,
 )
 from a2a.utils.helpers import maybe_await
+
 
 if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
@@ -61,7 +64,8 @@ def create_rest_routes(  # noqa: PLR0913
     ]
     | None = None,
     enable_v0_3_compat: bool = False,
-) -> list['Route']:
+    rpc_url: str = DEFAULT_RPC_URL,
+) -> list[Route]:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
     Args:
@@ -104,7 +108,6 @@ def create_rest_routes(  # noqa: PLR0913
         method: Callable[['Request', ServerCallContext], Awaitable[Any]],
         request: 'Request',
     ) -> 'Response':
-        from starlette.responses import JSONResponse
 
         call_context = _build_call_context(request)
         response = await method(request, call_context)
@@ -115,8 +118,6 @@ def create_rest_routes(  # noqa: PLR0913
         method: Callable[['Request', ServerCallContext], AsyncIterable[Any]],
         request: 'Request',
     ) -> 'EventSourceResponse':
-        from sse_starlette.sse import EventSourceResponse
-
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
@@ -157,7 +158,7 @@ def create_rest_routes(  # noqa: PLR0913
         return MessageToDict(card_to_serve, preserving_proto_field_name=True)
 
     # Dictionary of routes, mapping to bound helper methods
-    base_routes: dict[tuple[str, str], Callable[['Request'], Any]] = {
+    base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
         ('/message:send', 'POST'): functools.partial(
             _handle_request, handler.on_message_send
         ),
@@ -203,8 +204,6 @@ def create_rest_routes(  # noqa: PLR0913
 
     v03_routes = {}
     if enable_v0_3_compat:
-        from a2a.compat.v0_3.rest_adapter import REST03Adapter
-
         v03_adapter = REST03Adapter(
             agent_card=agent_card,
             http_handler=request_handler,
@@ -215,18 +214,18 @@ def create_rest_routes(  # noqa: PLR0913
         )
         v03_routes = v03_adapter.routes()
 
-    routes: list['Route'] = []
+    routes: list[Route] = []
     for (path, method), endpoint in base_routes.items():
         routes.append(
             Route(
-                path=path,
+                path=f'{rpc_url}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )
         )
         routes.append(
             Route(
-                path=f'/{{tenant}}{path}',
+                path=f'/{{tenant}}{rpc_url}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )
@@ -235,7 +234,7 @@ def create_rest_routes(  # noqa: PLR0913
     for (path, method), endpoint in v03_routes.items():
         routes.append(
             Route(
-                path=path,
+                path=f'{rpc_url}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )

@@ -1,4 +1,3 @@
-# ruff: noqa: INP001
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch

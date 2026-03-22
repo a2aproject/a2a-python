@@ -63,7 +63,6 @@ def test_app():
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=handler,
-        extended_agent_card=agent_card,
         rpc_url='/jsonrpc',
         enable_v0_3_compat=True,
     )
@@ -71,10 +70,9 @@ def test_app():
     app.routes.extend(jsonrpc_routes)
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card, request_handler=handler, enable_v0_3_compat=True
+        agent_card=agent_card, request_handler=handler, rpc_url='/rest', enable_v0_3_compat=True
     )
-    rest_app = Starlette(routes=rest_routes)
-    app.mount('/rest', rest_app)
+    app.routes.extend(rest_routes)
     return app
 
 

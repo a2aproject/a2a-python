@@ -24,7 +24,11 @@ from a2a.client.service_parameters import (
 )
 from a2a.client.transports import JsonRpcTransport, RestTransport
 from starlette.applications import Starlette
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
