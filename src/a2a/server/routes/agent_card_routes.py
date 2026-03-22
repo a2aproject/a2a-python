@@ -1,11 +1,8 @@
-import logging
-
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from starlette.middleware import Middleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Route
@@ -13,14 +10,12 @@ if TYPE_CHECKING:
     _package_starlette_installed = True
 else:
     try:
-        from starlette.middleware import Middleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
         from starlette.routing import Route
 
         _package_starlette_installed = True
     except ImportError:
-        Middleware = Any
         Route = Any
         Request = Any
         Response = Any
@@ -32,9 +27,6 @@ from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from a2a.utils.helpers import maybe_await
-
-
-logger = logging.getLogger(__name__)
 
 
 def create_agent_card_routes(

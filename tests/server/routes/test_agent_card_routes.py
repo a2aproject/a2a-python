@@ -1,11 +1,9 @@
-# ruff: noqa: INP001
 import asyncio
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.testclient import TestClient
-from starlette.middleware import Middleware
 from starlette.applications import Starlette
 
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
