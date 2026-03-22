@@ -179,12 +179,14 @@ def create_rest_routes(  # noqa: PLR0913
         ('/tasks/{id}', 'GET'): functools.partial(
             _handle_request, handler.on_get_task
         ),
-        ('/tasks/{id}/pushNotificationConfigs/{push_id}', 'GET'): functools.partial(
-            _handle_request, handler.get_push_notification
-        ),
-        ('/tasks/{id}/pushNotificationConfigs/{push_id}', 'DELETE'): functools.partial(
-            _handle_request, handler.delete_push_notification
-        ),
+        (
+            '/tasks/{id}/pushNotificationConfigs/{push_id}',
+            'GET',
+        ): functools.partial(_handle_request, handler.get_push_notification),
+        (
+            '/tasks/{id}/pushNotificationConfigs/{push_id}',
+            'DELETE',
+        ): functools.partial(_handle_request, handler.delete_push_notification),
         ('/tasks/{id}/pushNotificationConfigs', 'POST'): functools.partial(
             _handle_request, handler.set_push_notification
         ),
@@ -196,8 +198,8 @@ def create_rest_routes(  # noqa: PLR0913
         ),
         ('/extendedAgentCard', 'GET'): functools.partial(
             _handle_request, _handle_authenticated_agent_card
-        )
-    }       
+        ),
+    }
 
     v03_routes = {}
     if enable_v0_3_compat:
