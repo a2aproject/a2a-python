@@ -8,7 +8,6 @@ from typing import TYPE_CHECKING, Any
 from google.protobuf.json_format import MessageToDict
 
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
-from a2a.utils.constants import DEFAULT_RPC_URL
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
@@ -64,7 +63,7 @@ def create_rest_routes(  # noqa: PLR0913
     ]
     | None = None,
     enable_v0_3_compat: bool = False,
-    rpc_url: str = DEFAULT_RPC_URL,
+    rpc_url: str = '',
 ) -> list[Route]:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
@@ -84,12 +83,35 @@ def create_rest_routes(  # noqa: PLR0913
           call context.
         enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
           endpoints using REST03Adapter.
+        rpc_url: The URL prefix for the REST endpoints.
     """
     if not _package_starlette_installed:
         raise ImportError(
             'Packages `starlette` and `sse-starlette` are required to use'
             ' the `create_rest_routes`. They can be added as a part of `a2a-sdk` '
             'optional dependencies, `a2a-sdk[http-server]`.'
+        )
+
+    v03_routes = {}
+    if enable_v0_3_compat:
+        v03_adapter = REST03Adapter(
+            agent_card=agent_card,
+            http_handler=request_handler,
+            extended_agent_card=extended_agent_card,
+            context_builder=context_builder,
+            card_modifier=card_modifier,
+            extended_card_modifier=extended_card_modifier,
+        )
+        v03_routes = v03_adapter.routes()
+
+    routes: list[Route] = []
+    for (path, method), endpoint in v03_routes.items():
+        routes.append(
+            Route(
+                path=f'{rpc_url}{path}',
+                endpoint=endpoint,
+                methods=[method],
+            )
         )
 
     handler = RESTHandler(
@@ -202,19 +224,6 @@ def create_rest_routes(  # noqa: PLR0913
         ),
     }
 
-    v03_routes = {}
-    if enable_v0_3_compat:
-        v03_adapter = REST03Adapter(
-            agent_card=agent_card,
-            http_handler=request_handler,
-            extended_agent_card=extended_agent_card,
-            context_builder=context_builder,
-            card_modifier=card_modifier,
-            extended_card_modifier=extended_card_modifier,
-        )
-        v03_routes = v03_adapter.routes()
-
-    routes: list[Route] = []
     for (path, method), endpoint in base_routes.items():
         routes.append(
             Route(
@@ -226,15 +235,6 @@ def create_rest_routes(  # noqa: PLR0913
         routes.append(
             Route(
                 path=f'/{{tenant}}{rpc_url}{path}',
-                endpoint=endpoint,
-                methods=[method],
-            )
-        )
-
-    for (path, method), endpoint in v03_routes.items():
-        routes.append(
-            Route(
-                path=f'{rpc_url}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )

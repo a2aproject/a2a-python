@@ -34,10 +34,14 @@ def test_routes_creation(agent_card, mock_handler):
 def test_routes_creation_v03_compat(agent_card, mock_handler):
     """Tests that create_rest_routes creates more routes with enable_v0_3_compat."""
     routes_without_compat = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler, enable_v0_3_compat=False
+        agent_card=agent_card,
+        request_handler=mock_handler,
+        enable_v0_3_compat=False,
     )
     routes_with_compat = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler, enable_v0_3_compat=True
+        agent_card=agent_card,
+        request_handler=mock_handler,
+        enable_v0_3_compat=True,
     )
 
     assert len(routes_with_compat) > len(routes_without_compat)
@@ -54,7 +58,9 @@ def test_rest_endpoints_routing(agent_card, mock_handler):
     client = TestClient(app)
 
     # Test POST /message:send
-    response = client.post('/message:send', json={}, headers={'A2A-Version': '1.0'})
+    response = client.post(
+        '/message:send', json={}, headers={'A2A-Version': '1.0'}
+    )
     assert response.status_code == 200
     assert response.json()['task']['id'] == '123'
     assert mock_handler.on_message_send.called
@@ -71,9 +77,11 @@ def test_rest_endpoints_routing_tenant(agent_card, mock_handler):
     client = TestClient(app)
 
     # Test POST /{tenant}/message:send
-    response = client.post('/my-tenant/message:send', json={}, headers={'A2A-Version': '1.0'})
+    response = client.post(
+        '/my-tenant/message:send', json={}, headers={'A2A-Version': '1.0'}
+    )
     assert response.status_code == 200
-    
+
     # Verify that tenant was set in call context
     call_args = mock_handler.on_message_send.call_args
     assert call_args is not None

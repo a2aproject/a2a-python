@@ -70,7 +70,10 @@ def test_app():
     app.routes.extend(jsonrpc_routes)
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card, request_handler=handler, rpc_url='/rest', enable_v0_3_compat=True
+        agent_card=agent_card,
+        request_handler=handler,
+        rpc_url='/rest',
+        enable_v0_3_compat=True,
     )
     app.routes.extend(rest_routes)
     return app
