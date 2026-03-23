@@ -23,7 +23,9 @@ def mock_handler():
 def test_routes_creation(agent_card, mock_handler):
     """Tests that create_jsonrpc_routes creates Route objects list."""
     routes = create_jsonrpc_routes(
-        agent_card=agent_card, request_handler=mock_handler, rpc_url='/a2a/jsonrpc'
+        agent_card=agent_card,
+        request_handler=mock_handler,
+        rpc_url='/a2a/jsonrpc',
     )
 
     assert isinstance(routes, list)
