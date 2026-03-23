@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import logging
 
-from collections.abc import AsyncGenerator
-from typing import cast
+from typing import TYPE_CHECKING, Any, cast
 
 from a2a.server.agent_execution import (
     AgentExecutor,
@@ -10,20 +11,12 @@ from a2a.server.agent_execution import (
     RequestContextBuilder,
     SimpleRequestContextBuilder,
 )
+from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import (
-    Event,
-    EventConsumer,
-    EventQueue,
-    InMemoryQueueManager,
-    QueueManager,
-)
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import (
     PushNotificationConfigStore,
-    PushNotificationEvent,
     PushNotificationSender,
-    ResultAggregator,
     TaskManager,
     TaskStore,
 )
@@ -42,11 +35,11 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
     TaskState,
+    TaskStatus,
 )
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
-    TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -56,6 +49,13 @@ from a2a.utils.task import (
     validate_page_size,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from a2a.server.agent_execution.active_task import ActiveTask
+    from a2a.server.events import Event
 
 
 logger = logging.getLogger(__name__)
@@ -70,39 +70,22 @@ TERMINAL_TASK_STATES = {
 
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandler(RequestHandler):
-    """Default request handler for all incoming requests.
+    """Default request handler for all incoming requests."""
 
-    This handler provides default implementations for all A2A JSON-RPC methods,
-    coordinating between the `AgentExecutor`, `TaskStore`, `QueueManager`,
-    and optional `PushNotifier`.
-    """
-
-    _running_agents: dict[str, asyncio.Task]
     _background_tasks: set[asyncio.Task]
 
     def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
-        queue_manager: QueueManager | None = None,
+        queue_manager: Any
+        | None = None,  # Kept for backward compat in signature
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
     ) -> None:
-        """Initializes the DefaultRequestHandler.
-
-        Args:
-            agent_executor: The `AgentExecutor` instance to run agent logic.
-            task_store: The `TaskStore` instance to manage task persistence.
-            queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
-            push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
-            push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
-            request_context_builder: The `RequestContextBuilder` instance used
-              to build request contexts. Defaults to `SimpleRequestContextBuilder`.
-        """
         self.agent_executor = agent_executor
         self.task_store = task_store
-        self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self._request_context_builder = (
@@ -111,19 +94,18 @@ class DefaultRequestHandler(RequestHandler):
                 should_populate_referred_tasks=False, task_store=self.task_store
             )
         )
-        # TODO: Likely want an interface for managing this, like AgentExecutionManager.
-        self._running_agents = {}
-        self._running_agents_lock = asyncio.Lock()
-        # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
-        # asyncio tasks and to surface unexpected exceptions.
+        self._active_task_registry = ActiveTaskRegistry(
+            agent_executor=self.agent_executor,
+            task_store=self.task_store,
+            push_sender=self._push_sender,
+        )
         self._background_tasks = set()
 
-    async def on_get_task(
+    async def on_get_task(  # noqa: D102
         self,
         params: GetTaskRequest,
         context: ServerCallContext,
     ) -> Task | None:
-        """Default handler for 'tasks/get'."""
         validate_history_length(params)
 
         task_id = params.id
@@ -133,12 +115,11 @@ class DefaultRequestHandler(RequestHandler):
 
         return apply_history_length(task, params)
 
-    async def on_list_tasks(
+    async def on_list_tasks(  # noqa: D102
         self,
         params: ListTasksRequest,
         context: ServerCallContext,
     ) -> ListTasksResponse:
-        """Default handler for 'tasks/list'."""
         validate_history_length(params)
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
@@ -154,120 +135,91 @@ class DefaultRequestHandler(RequestHandler):
 
         return page
 
-    async def on_cancel_task(
+    async def on_cancel_task(  # noqa: D102
         self,
         params: CancelTaskRequest,
         context: ServerCallContext,
     ) -> Task | None:
-        """Default handler for 'tasks/cancel'.
-
-        Attempts to cancel the task managed by the `AgentExecutor`.
-        """
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
 
-        # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
-            raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {task.status.state}'
+            logger.warning(
+                'Task %s is in terminal state: %s, returning as is',
+                task.id,
+                task.status.state,
             )
+            return task
 
-        task_manager = TaskManager(
+        active_task = await self._active_task_registry.get_or_create(task.id)
+
+        request_context = RequestContext(
+            None,
             task_id=task.id,
             context_id=task.context_id,
-            task_store=self.task_store,
-            initial_message=None,
-            context=context,
+            task=task,
+            call_context=context,
         )
-        result_aggregator = ResultAggregator(task_manager)
 
-        tapped_queue: EventQueue | None = None
-        main_queue = await self._queue_manager.get(task.id)
-        if not main_queue:
-            main_queue = EventQueue()
-            tapped_queue = await main_queue.tap()
-        else:
-            tapped_queue = await self._queue_manager.tap(task.id)
-            if not tapped_queue:
-                tapped_queue = await main_queue.tap()
+        await active_task.cancel(request_context)
 
-        await self.agent_executor.cancel(
-            RequestContext(
-                None,
-                task_id=task.id,
-                context_id=task.context_id,
-                task=task,
-            ),
-            main_queue,
-        )
-        # Cancel the ongoing task, if one exists.
-        if producer_task := self._running_agents.get(task.id):
-            producer_task.cancel()
-
-        consumer = EventConsumer(tapped_queue)
-        result = await result_aggregator.consume_all(consumer)
+        result = await active_task.wait()
         if not isinstance(result, Task):
             raise InternalError(
                 message='Agent did not return valid response for cancel'
             )
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
-            raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {result.status.state}'
+            logger.warning(
+                'Task %s is in terminal state: %s, returning as is',
+                task.id,
+                result.status.state,
             )
 
         return result
 
-    async def _run_event_stream(
-        self, request: RequestContext, queue: EventQueue
-    ) -> None:
-        """Runs the agent's `execute` method and closes the queue afterwards.
+    def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
+        if task_id != event_task_id:
+            logger.error(
+                'Agent generated task_id=%s does not match the RequestContext task_id=%s.',
+                event_task_id,
+                task_id,
+            )
+            raise InternalError(message='Task ID mismatch in agent response')
 
-        Args:
-            request: The request context for the agent.
-            queue: The event queue for the agent to publish to.
-        """
-        await self.agent_executor.execute(request, queue)
-        await queue.close()
-
-    async def _setup_message_execution(
+    async def _setup_active_task(
         self,
         params: SendMessageRequest,
         context: ServerCallContext,
-    ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
-        """Common setup logic for both streaming and non-streaming message handling.
+    ) -> tuple[ActiveTask, RequestContext]:
+        validate_history_length(params.configuration)
 
-        Returns:
-            A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
-        """
-        # Create task manager and validate existing task
-        # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
         context_id = params.message.context_id or None
-        task_manager = TaskManager(
+
+        temp_task_manager = TaskManager(
             task_id=task_id,
             context_id=context_id,
             task_store=self.task_store,
             initial_message=params.message,
             context=context,
         )
-        task: Task | None = await task_manager.get_task()
+        task: Task | None = await temp_task_manager.get_task()
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
                 raise InvalidParamsError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
-
-            task = task_manager.update_with_message(params.message, task)
+            task = temp_task_manager.update_with_message(params.message, task)
+            await temp_task_manager.save_task_event(task)
         elif params.message.task_id:
             raise TaskNotFoundError(
                 message=f'Task {params.message.task_id} was specified but does not exist'
             )
 
-        # Build request context
         request_context = await self._request_context_builder.build(
             params=params,
             task_id=task.id if task else None,
@@ -277,9 +229,6 @@ class DefaultRequestHandler(RequestHandler):
         )
 
         task_id = cast('str', request_context.task_id)
-        # Always assign a task ID. We may not actually upgrade to a task, but
-        # dictating the task ID at this layer is useful for tracking running
-        # agents.
 
         if (
             self._push_config_store
@@ -292,203 +241,71 @@ class DefaultRequestHandler(RequestHandler):
                 context or ServerCallContext(),
             )
 
-        queue = await self._queue_manager.create_or_tap(task_id)
-        result_aggregator = ResultAggregator(task_manager)
-        # TODO: to manage the non-blocking flows.
-        producer_task = asyncio.create_task(
-            self._run_event_stream(request_context, queue)
+        active_task = await self._active_task_registry.get_or_create(
+            task_id, context=context, initial_message=params.message
         )
-        await self._register_producer(task_id, producer_task)
+        await active_task.start(request_context)
+        return active_task, request_context
 
-        return task_manager, task_id, queue, result_aggregator, producer_task
-
-    def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
-        """Validates that agent-generated task ID matches the expected task ID."""
-        if task_id != event_task_id:
-            logger.error(
-                'Agent generated task_id=%s does not match the RequestContext task_id=%s.',
-                event_task_id,
-                task_id,
-            )
-            raise InternalError(message='Task ID mismatch in agent response')
-
-    async def _send_push_notification_if_needed(
-        self, task_id: str, event: Event
-    ) -> None:
-        """Sends push notification if configured."""
-        if (
-            self._push_sender
-            and task_id
-            and isinstance(event, PushNotificationEvent)
-        ):
-            await self._push_sender.send_notification(task_id, event)
-
-    async def on_message_send(
+    async def on_message_send(  # noqa: D102
         self,
         params: SendMessageRequest,
         context: ServerCallContext,
     ) -> Message | Task:
-        """Default handler for 'message/send' interface (non-streaming).
+        active_task, request_context = await self._setup_active_task(
+            params, context
+        )
 
-        Starts the agent execution for the message and waits for the final
-        result (Task or Message).
-        """
-        validate_history_length(params.configuration)
+        if params.configuration and params.configuration.return_immediately:
+            task = request_context.current_task
+            if not task:
+                task = Task(
+                    id=cast('str', request_context.task_id),
+                    context_id=cast('str', request_context.context_id),
+                    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+                )
+                task.history.append(params.message)
 
-        (
-            _task_manager,
-            task_id,
-            queue,
-            result_aggregator,
-            producer_task,
-        ) = await self._setup_message_execution(params, context)
+            if params.configuration:
+                task = apply_history_length(task, params.configuration)
+            return task
 
-        consumer = EventConsumer(queue)
-        producer_task.add_done_callback(consumer.agent_task_callback)
-
-        blocking = not params.configuration.return_immediately
-
-        interrupted_or_non_blocking = False
         try:
-            # Create async callback for push notifications
-            async def push_notification_callback(event: Event) -> None:
-                await self._send_push_notification_if_needed(task_id, event)
-
-            (
-                result,
-                interrupted_or_non_blocking,
-                bg_consume_task,
-            ) = await result_aggregator.consume_and_break_on_interrupt(
-                consumer,
-                blocking=blocking,
-                event_callback=push_notification_callback,
-            )
-
-            if bg_consume_task is not None:
-                bg_consume_task.set_name(f'continue_consuming:{task_id}')
-                self._track_background_task(bg_consume_task)
-
+            result = await active_task.wait()
         except Exception:
             logger.exception('Agent execution failed')
-            producer_task.cancel()
             raise
-        finally:
-            if interrupted_or_non_blocking:
-                cleanup_task = asyncio.create_task(
-                    self._cleanup_producer(producer_task, task_id)
-                )
-                cleanup_task.set_name(f'cleanup_producer:{task_id}')
-                self._track_background_task(cleanup_task)
-            else:
-                await self._cleanup_producer(producer_task, task_id)
-
-        if not result:
-            raise InternalError
 
         if isinstance(result, Task):
-            self._validate_task_id_match(task_id, result.id)
+            self._validate_task_id_match(
+                cast('str', request_context.task_id), result.id
+            )
             if params.configuration:
                 result = apply_history_length(result, params.configuration)
 
         return result
 
-    async def on_message_send_stream(
+    async def on_message_send_stream(  # noqa: D102
         self,
         params: SendMessageRequest,
         context: ServerCallContext,
-    ) -> AsyncGenerator[Event]:
-        """Default handler for 'message/stream' (streaming).
+    ) -> AsyncGenerator[Event, None]:
+        active_task, request_context = await self._setup_active_task(
+            params, context
+        )
 
-        Starts the agent execution and yields events as they are produced
-        by the agent.
-        """
-        (
-            _task_manager,
-            task_id,
-            queue,
-            result_aggregator,
-            producer_task,
-        ) = await self._setup_message_execution(params, context)
-        consumer = EventConsumer(queue)
-        producer_task.add_done_callback(consumer.agent_task_callback)
+        task_id = cast('str', request_context.task_id)
 
-        try:
-            async for event in result_aggregator.consume_and_emit(consumer):
-                if isinstance(event, Task):
-                    self._validate_task_id_match(task_id, event.id)
+        async for event in active_task.subscribe():
+            if isinstance(event, Task):
+                self._validate_task_id_match(task_id, event.id)
+            yield event
 
-                await self._send_push_notification_if_needed(task_id, event)
-                yield event
-        except (asyncio.CancelledError, GeneratorExit):
-            # Client disconnected: continue consuming and persisting events in the background
-            bg_task = asyncio.create_task(
-                result_aggregator.consume_all(consumer)
-            )
-            bg_task.set_name(f'background_consume:{task_id}')
-            self._track_background_task(bg_task)
-            raise
-        finally:
-            cleanup_task = asyncio.create_task(
-                self._cleanup_producer(producer_task, task_id)
-            )
-            cleanup_task.set_name(f'cleanup_producer:{task_id}')
-            self._track_background_task(cleanup_task)
-
-    async def _register_producer(
-        self, task_id: str, producer_task: asyncio.Task
-    ) -> None:
-        """Registers the agent execution task with the handler."""
-        async with self._running_agents_lock:
-            self._running_agents[task_id] = producer_task
-
-    def _track_background_task(self, task: asyncio.Task) -> None:
-        """Tracks a background task and logs exceptions on completion.
-
-        This avoids unreferenced tasks (and associated lint warnings) while
-        ensuring any exceptions are surfaced in logs.
-        """
-        self._background_tasks.add(task)
-
-        def _on_done(completed: asyncio.Task) -> None:
-            try:
-                # Retrieve result to raise exceptions, if any
-                completed.result()
-            except asyncio.CancelledError:
-                name = completed.get_name()
-                logger.debug('Background task %s cancelled', name)
-            except Exception:
-                name = completed.get_name()
-                logger.exception('Background task %s failed', name)
-            finally:
-                self._background_tasks.discard(completed)
-
-        task.add_done_callback(_on_done)
-
-    async def _cleanup_producer(
-        self,
-        producer_task: asyncio.Task,
-        task_id: str,
-    ) -> None:
-        """Cleans up the agent execution task and queue manager entry."""
-        try:
-            await producer_task
-        except asyncio.CancelledError:
-            logger.debug(
-                'Producer task %s was cancelled during cleanup', task_id
-            )
-        await self._queue_manager.close(task_id)
-        async with self._running_agents_lock:
-            self._running_agents.pop(task_id, None)
-
-    async def on_create_task_push_notification_config(
+    async def on_create_task_push_notification_config(  # noqa: D102
         self,
         params: TaskPushNotificationConfig,
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
-        """Default handler for 'tasks/pushNotificationConfig/create'.
-
-        Requires a `PushNotifier` to be configured.
-        """
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -505,15 +322,11 @@ class DefaultRequestHandler(RequestHandler):
 
         return params
 
-    async def on_get_task_push_notification_config(
+    async def on_get_task_push_notification_config(  # noqa: D102
         self,
         params: GetTaskPushNotificationConfigRequest,
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
-        """Default handler for 'tasks/pushNotificationConfig/get'.
-
-        Requires a `PushConfigStore` to be configured.
-        """
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -536,16 +349,11 @@ class DefaultRequestHandler(RequestHandler):
 
         raise InternalError(message='Push notification config not found')
 
-    async def on_subscribe_to_task(
+    async def on_subscribe_to_task(  # noqa: D102
         self,
         params: SubscribeToTaskRequest,
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
-        """Default handler for 'SubscribeToTask'.
-
-        Allows a client to re-attach to a running streaming task's event stream.
-        Requires the task and its queue to still be active.
-        """
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -556,37 +364,20 @@ class DefaultRequestHandler(RequestHandler):
                 message=f'Task {task.id} is in terminal state: {task.status.state}'
             )
 
-        # The operation MUST return a Task object as the first event in the stream
-        # https://a2a-protocol.org/latest/specification/#316-subscribe-to-task
         yield task
 
-        task_manager = TaskManager(
-            task_id=task.id,
-            context_id=task.context_id,
-            task_store=self.task_store,
-            initial_message=None,
-            context=context,
-        )
-
-        result_aggregator = ResultAggregator(task_manager)
-
-        queue = await self._queue_manager.tap(task.id)
-        if not queue:
+        active_task = await self._active_task_registry.get(task_id)
+        if not active_task:
             raise TaskNotFoundError
 
-        consumer = EventConsumer(queue)
-        async for event in result_aggregator.consume_and_emit(consumer):
+        async for event in active_task.subscribe():
             yield event
 
-    async def on_list_task_push_notification_configs(
+    async def on_list_task_push_notification_configs(  # noqa: D102
         self,
         params: ListTaskPushNotificationConfigsRequest,
         context: ServerCallContext,
     ) -> ListTaskPushNotificationConfigsResponse:
-        """Default handler for 'ListTaskPushNotificationConfigs'.
-
-        Requires a `PushConfigStore` to be configured.
-        """
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -603,15 +394,11 @@ class DefaultRequestHandler(RequestHandler):
             configs=push_notification_config_list
         )
 
-    async def on_delete_task_push_notification_config(
+    async def on_delete_task_push_notification_config(  # noqa: D102
         self,
         params: DeleteTaskPushNotificationConfigRequest,
         context: ServerCallContext,
     ) -> None:
-        """Default handler for 'tasks/pushNotificationConfig/delete'.
-
-        Requires a `PushConfigStore` to be configured.
-        """
         if not self._push_config_store:
             raise UnsupportedOperationError
 

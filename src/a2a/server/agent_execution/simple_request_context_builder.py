@@ -3,7 +3,7 @@ import asyncio
 from a2a.server.agent_execution import RequestContext, RequestContextBuilder
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import IDGenerator
-from a2a.server.tasks import TaskStore
+from a2a.server.tasks.task_store import TaskStore
 from a2a.types.a2a_pb2 import SendMessageRequest, Task
 
 

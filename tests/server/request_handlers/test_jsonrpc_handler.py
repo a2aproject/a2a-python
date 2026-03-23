@@ -276,17 +276,18 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             }
         )
 
-        async def streaming_coro():
-            mock_task.status.state = TaskState.TASK_STATE_CANCELED
-            yield mock_task
+        mock_active_task = AsyncMock()
+        mock_task_canceled = create_task(task_id=task_id)
+        mock_task_canceled.status.state = TaskState.TASK_STATE_CANCELED
+        mock_active_task.wait.return_value = mock_task_canceled
 
-        with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
-            return_value=streaming_coro(),
+        with patch.object(
+            request_handler._active_task_registry,
+            'get_or_create',
+            return_value=mock_active_task,
         ):
             request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
-            assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
             self.assertTrue(is_success_response(response))
             # Result is converted to dict for JSON serialization
@@ -294,7 +295,8 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             assert (
                 response['result']['status']['state'] == 'TASK_STATE_CANCELED'
             )  # type: ignore
-            mock_agent_executor.cancel.assert_called_once()
+            mock_active_task.cancel.assert_called_once()
+            mock_active_task.wait.assert_called_once()
 
     async def test_on_cancel_task_not_supported(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -315,21 +317,21 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             }
         )
 
-        async def streaming_coro():
-            raise UnsupportedOperationError()
-            yield
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.side_effect = UnsupportedOperationError()
 
-        with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
-            return_value=streaming_coro(),
+        with patch.object(
+            request_handler._active_task_registry,
+            'get_or_create',
+            return_value=mock_active_task,
         ):
             request = CancelTaskRequest(id=f'{task_id}')
             response = await handler.on_cancel_task(request, call_context)
-            assert mock_agent_executor.cancel.call_count == 1
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
             assert response['error']['code'] == -32004
-            mock_agent_executor.cancel.assert_called_once()
+            mock_active_task.cancel.assert_called_once()
+            mock_active_task.wait.assert_called_once()
 
     async def test_on_cancel_task_not_found(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -372,9 +374,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             related_tasks=None,
         )
 
-        with patch(
-            'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False, None),
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.return_value = mock_task
+        mock_request_context = MagicMock()
+        mock_request_context.task_id = 'task_123'
+
+        with patch.object(
+            request_handler,
+            '_setup_active_task',
+            return_value=(mock_active_task, mock_request_context),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -385,9 +393,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 request,
                 self._ctx(),
             )
-            # execute is called asynchronously in background task
             self.assertIsInstance(response, dict)
             self.assertTrue(is_success_response(response))
+            mock_active_task.wait.assert_awaited_once()
 
     async def test_on_message_new_message_with_existing_task_success(
         self,
@@ -402,9 +410,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.execute.return_value = None
 
-        with patch(
-            'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False, None),
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.return_value = mock_task
+        mock_request_context = MagicMock()
+        mock_request_context.task_id = mock_task.id
+
+        with patch.object(
+            request_handler,
+            '_setup_active_task',
+            return_value=(mock_active_task, mock_request_context),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -416,9 +430,9 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 request,
                 self._ctx(),
             )
-            # execute is called asynchronously in background task
             self.assertIsInstance(response, dict)
             self.assertTrue(is_success_response(response))
+            mock_active_task.wait.assert_awaited_once()
 
     async def test_on_message_error(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -431,13 +445,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = mock_task
         mock_agent_executor.execute.return_value = None
 
-        async def streaming_coro():
-            raise UnsupportedOperationError()
-            yield
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.side_effect = UnsupportedOperationError()
+        mock_request_context = MagicMock()
+        mock_request_context.task_id = mock_task.id
 
-        with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
-            return_value=streaming_coro(),
+        with patch.object(
+            request_handler,
+            '_setup_active_task',
+            return_value=(mock_active_task, mock_request_context),
         ):
             request = SendMessageRequest(
                 message=create_message(
@@ -449,14 +465,10 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 self._ctx(),
             )
 
-            # Allow the background event loop to start the execution_task
-            import asyncio
-
-            await asyncio.sleep(0)
-
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
             assert response['error']['code'] == -32004
+            mock_active_task.wait.assert_awaited_once()
 
     @patch(
         'a2a.server.agent_execution.simple_request_context_builder.SimpleRequestContextBuilder.build'
@@ -508,7 +520,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_agent_executor.execute.side_effect = exec_side_effect
 
         with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
+            'a2a.server.agent_execution.active_task.ActiveTask.subscribe',
             return_value=streaming_coro(),
         ):
             mock_task_store.get.return_value = mock_task
@@ -570,7 +582,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_agent_executor.execute.side_effect = exec_side_effect
 
         with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
+            'a2a.server.agent_execution.active_task.ActiveTask.subscribe',
             return_value=streaming_coro(),
         ):
             mock_task_store.get.return_value = mock_task
@@ -714,7 +726,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 yield event
 
         with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
+            'a2a.server.agent_execution.active_task.ActiveTask.subscribe',
             return_value=streaming_coro(),
         ):
             mock_task_store.get.return_value = None
@@ -769,12 +781,21 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             for event in events:
                 yield event
 
-        with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
-            return_value=streaming_coro(),
+        mock_active_task = MagicMock()
+        mock_active_task.subscribe.side_effect = streaming_coro
+
+        with (
+            patch(
+                'a2a.server.agent_execution.active_task.ActiveTask.subscribe',
+                side_effect=streaming_coro,
+            ),
+            patch.object(
+                request_handler._active_task_registry,
+                'get',
+                return_value=mock_active_task,
+            ),
         ):
             mock_task_store.get.return_value = mock_task
-            mock_queue_manager.tap.return_value = EventQueue()
             request = SubscribeToTaskRequest(id=f'{mock_task.id}')
             response = handler.on_subscribe_to_task(
                 request,
@@ -784,9 +805,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             collected_events: list[Any] = []
             async for event in response:
                 collected_events.append(event)
-            assert (
-                len(collected_events) == len(events) + 1
-            )  # First event is task itself
+            assert len(collected_events) == len(events) + 1
             assert mock_task.history is not None and len(mock_task.history) == 0
 
     async def test_on_subscribe_no_existing_task_error(self) -> None:
@@ -1035,7 +1054,6 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         # Assert
         self.assertEqual(handler.agent_executor, mock_agent_executor)
         self.assertEqual(handler.task_store, mock_task_store)
-        self.assertEqual(handler._queue_manager, mock_queue_manager)
         self.assertEqual(handler._push_config_store, mock_push_config_store)
         self.assertEqual(handler._push_sender, mock_push_sender)
         self.assertEqual(
@@ -1056,13 +1074,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task = create_task()
         mock_task_store.get.return_value = mock_task
 
-        # Set up consume_and_break_on_interrupt to raise UnsupportedOperationError
-        async def consume_raises_error(*args, **kwargs) -> NoReturn:
-            raise UnsupportedOperationError()
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.side_effect = UnsupportedOperationError()
+        mock_request_context = MagicMock()
+        mock_request_context.task_id = mock_task.id
 
-        with patch(
-            'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            side_effect=consume_raises_error,
+        with patch.object(
+            request_handler,
+            '_setup_active_task',
+            return_value=(mock_active_task, mock_request_context),
         ):
             # Act
             request = SendMessageRequest(
@@ -1081,6 +1101,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
             self.assertEqual(response['error']['code'], -32004)
+            mock_active_task.wait.assert_awaited_once()
 
     async def test_on_message_send_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1094,10 +1115,15 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
         mock_task_store.get.return_value = None  # No existing task
         mock_agent_executor.execute.return_value = None
 
-        # Task returned has task_id='task_123' but request_context will have generated UUID
-        with patch(
-            'a2a.server.tasks.result_aggregator.ResultAggregator.consume_and_break_on_interrupt',
-            return_value=(mock_task, False, None),
+        mock_active_task = AsyncMock()
+        mock_active_task.wait.return_value = mock_task
+        mock_request_context = MagicMock()
+        mock_request_context.task_id = 'generated_uuid'
+
+        with patch.object(
+            request_handler,
+            '_setup_active_task',
+            return_value=(mock_active_task, mock_request_context),
         ):
             request = SendMessageRequest(
                 message=create_message(),  # No task_id, so UUID is generated
@@ -1110,6 +1136,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
             self.assertIsInstance(response, dict)
             self.assertTrue(is_error_response(response))
             self.assertEqual(response['error']['code'], -32603)
+            mock_active_task.wait.assert_awaited_once()
 
     async def test_on_message_stream_task_id_mismatch(self) -> None:
         mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1127,7 +1154,7 @@ class TestJSONRPCtHandler(unittest.async_case.IsolatedAsyncioTestCase):
                 yield event
 
         with patch(
-            'a2a.server.request_handlers.default_request_handler.EventConsumer.consume_all',
+            'a2a.server.agent_execution.active_task.ActiveTask.subscribe',
             return_value=streaming_coro(),
         ):
             mock_task_store.get.return_value = None

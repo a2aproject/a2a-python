@@ -33,6 +33,12 @@ class TaskNotFoundError(A2AError):
     message = 'Task not found'
 
 
+class TaskAlreadyStartedError(A2AError):
+    """Exception raised when a task has already been started."""
+
+    message = 'Task already started'
+
+
 class TaskNotCancelableError(A2AError):
     """Exception raised when a task cannot be canceled."""
 
