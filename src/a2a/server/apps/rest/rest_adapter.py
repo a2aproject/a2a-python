@@ -159,7 +159,7 @@ class RESTAdapter(RESTAdapterInterface):
                 yield json.dumps(item)
 
         return EventSourceResponse(
-            event_generator(await method(request, call_context))
+            event_generator(method(request, call_context))
         )
 
     async def handle_get_agent_card(
