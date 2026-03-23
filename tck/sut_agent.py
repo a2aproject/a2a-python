@@ -8,9 +8,6 @@ from datetime import datetime, timezone
 import grpc.aio
 import uvicorn
 
-from a2a.server.apps import (
-    A2ARESTFastAPIApplication,
-)
 from starlette.applications import Starlette
 
 import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc

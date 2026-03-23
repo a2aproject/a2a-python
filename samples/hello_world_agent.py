@@ -5,7 +5,6 @@ import logging
 import grpc
 import uvicorn
 
-from a2a.server.apps import A2ARESTFastAPIApplication
 from fastapi import FastAPI
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
@@ -17,7 +16,11 @@ from a2a.server.request_handlers import GrpcHandler
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
