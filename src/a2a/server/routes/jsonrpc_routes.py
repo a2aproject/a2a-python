@@ -5,18 +5,15 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from starlette.middleware import Middleware
     from starlette.routing import Route, Router
 
     _package_starlette_installed = True
 else:
     try:
-        from starlette.middleware import Middleware
         from starlette.routing import Route, Router
 
         _package_starlette_installed = True
     except ImportError:
-        Middleware = Any
         Route = Any
         Router = Any
 

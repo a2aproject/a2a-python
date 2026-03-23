@@ -5,7 +5,6 @@ from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from starlette.middleware import Middleware
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
     from starlette.routing import Route
@@ -13,14 +12,12 @@ if TYPE_CHECKING:
     _package_starlette_installed = True
 else:
     try:
-        from starlette.middleware import Middleware
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
         from starlette.routing import Route
 
         _package_starlette_installed = True
     except ImportError:
-        Middleware = Any
         Route = Any
         Request = Any
         Response = Any
