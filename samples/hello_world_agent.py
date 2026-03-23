@@ -193,7 +193,7 @@ async def serve(
 
     rest_routes = create_rest_routes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
         enable_v0_3_compat=True,
     )
     jsonrpc_routes = create_jsonrpc_routes(
