@@ -227,7 +227,7 @@ class RequestHandler(ABC):
         """
 
 
-def validate_request_params(method: Callable) -> Callable:
+def _validate_request_params(method: Callable) -> Callable:
     """Decorator for RequestHandler methods to validate required fields on incoming requests."""
     if inspect.iscoroutinefunction(method):
 
