@@ -191,13 +191,11 @@ async def serve(
         agent_executor=SampleAgentExecutor(), task_store=task_store
     )
 
-    rest_app_builder = A2ARESTFastAPIApplication(
+    rest_routes = create_rest_routes(
         agent_card=agent_card,
         http_handler=request_handler,
         enable_v0_3_compat=True,
     )
-    rest_app = rest_app_builder.build()
-
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=request_handler,
@@ -209,7 +207,7 @@ async def serve(
     app = FastAPI()
     app.routes.extend(jsonrpc_routes)
     app.routes.extend(agent_card_routes)
-    app.mount('/a2a/rest', rest_app)
+    app.routes.extend(rest_routes)
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')
