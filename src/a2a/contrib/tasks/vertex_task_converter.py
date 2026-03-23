@@ -98,7 +98,7 @@ def to_sdk_part(stored_part: genai_types.Part) -> Part:
                 )
             )
         )
-    if stored_part.file_data:
+    if stored_part.file_data and stored_part.file_data.file_uri:
         return Part(
             root=FilePart(
                 file=FileWithUri(
