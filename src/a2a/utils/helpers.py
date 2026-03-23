@@ -389,8 +389,27 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
 
             return cast('F', async_gen_wrapper)
 
+        if inspect.iscoroutinefunction(inspect.unwrap(func)):
+
+            @functools.wraps(func)
+            async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+                actual_version = _get_actual_version(args, kwargs)
+                if not _is_version_compatible(actual_version):
+                    logger.warning(
+                        "Version mismatch: actual='%s', expected='%s'",
+                        actual_version,
+                        expected_version,
+                    )
+                    raise VersionNotSupportedError(
+                        message=f"A2A version '{actual_version}' is not supported by this handler. "
+                        f"Expected version '{expected_version}'."
+                    )
+                return await func(self, *args, **kwargs)
+
+            return cast('F', async_wrapper)
+
         @functools.wraps(func)
-        async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        def sync_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
             actual_version = _get_actual_version(args, kwargs)
             if not _is_version_compatible(actual_version):
                 logger.warning(
@@ -402,8 +421,8 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
                     message=f"A2A version '{actual_version}' is not supported by this handler. "
                     f"Expected version '{expected_version}'."
                 )
-            return await func(self, *args, **kwargs)
+            return func(self, *args, **kwargs)
 
-        return cast('F', async_wrapper)
+        return cast('F', sync_wrapper)
 
     return decorator
