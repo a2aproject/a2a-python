@@ -63,7 +63,7 @@ def create_rest_routes(  # noqa: PLR0913
     ]
     | None = None,
     enable_v0_3_compat: bool = False,
-    rpc_url: str = '',
+    path_prefix: str = '',
 ) -> list[Route]:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
@@ -83,7 +83,7 @@ def create_rest_routes(  # noqa: PLR0913
           call context.
         enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
           endpoints using REST03Adapter.
-        rpc_url: The URL prefix for the REST endpoints.
+        path_prefix: The URL prefix for the REST endpoints.
     """
     if not _package_starlette_installed:
         raise ImportError(
@@ -108,7 +108,7 @@ def create_rest_routes(  # noqa: PLR0913
     for (path, method), endpoint in v03_routes.items():
         routes.append(
             Route(
-                path=f'{rpc_url}{path}',
+                path=f'{path_prefix}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )
@@ -227,14 +227,14 @@ def create_rest_routes(  # noqa: PLR0913
     for (path, method), endpoint in base_routes.items():
         routes.append(
             Route(
-                path=f'{rpc_url}{path}',
+                path=f'{path_prefix}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )
         )
         routes.append(
             Route(
-                path=f'/{{tenant}}{rpc_url}{path}',
+                path=f'/{{tenant}}{path_prefix}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )

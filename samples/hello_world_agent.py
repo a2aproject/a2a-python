@@ -17,7 +17,7 @@ from a2a.server.request_handlers import GrpcHandler
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
@@ -166,22 +166,22 @@ async def serve(
             AgentInterface(
                 protocol_binding='JSONRPC',
                 protocol_version='1.0',
-                url=f'http://{host}:{port}/a2a/jsonrpc/',
+                url=f'http://{host}:{port}/a2a/jsonrpc',
             ),
             AgentInterface(
                 protocol_binding='JSONRPC',
                 protocol_version='0.3',
-                url=f'http://{host}:{port}/a2a/jsonrpc/',
+                url=f'http://{host}:{port}/a2a/jsonrpc',
             ),
             AgentInterface(
                 protocol_binding='HTTP+JSON',
                 protocol_version='1.0',
-                url=f'http://{host}:{port}/a2a/rest/',
+                url=f'http://{host}:{port}/a2a/rest',
             ),
             AgentInterface(
                 protocol_binding='HTTP+JSON',
                 protocol_version='0.3',
-                url=f'http://{host}:{port}/a2a/rest/',
+                url=f'http://{host}:{port}/a2a/rest',
             ),
         ],
     )
@@ -194,12 +194,14 @@ async def serve(
     rest_routes = create_rest_routes(
         agent_card=agent_card,
         request_handler=request_handler,
+        path_prefix='/a2a/rest',
         enable_v0_3_compat=True,
     )
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=request_handler,
-        rpc_url='/a2a/jsonrpc/',
+        rpc_url='/a2a/jsonrpc',
+        enable_v0_3_compat=True,
     )
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card,

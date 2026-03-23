@@ -214,7 +214,7 @@ def serve(task_store: TaskStore) -> None:
     rest_routes = create_rest_routes(
         agent_card=agent_card,
         request_handler=request_handler,
-        rpc_url=REST_URL,
+        path_prefix=REST_URL,
     )
 
     routes = [
