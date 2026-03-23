@@ -38,18 +38,28 @@ def test_to_sdk_task_state() -> None:
         == TaskState.unknown
     )
     assert (
-        to_sdk_task_state(vertexai_types.A2aTaskState.SUBMITTED) == TaskState.submitted
-    )
-    assert to_sdk_task_state(vertexai_types.A2aTaskState.WORKING) == TaskState.working
-    assert (
-        to_sdk_task_state(vertexai_types.A2aTaskState.COMPLETED) == TaskState.completed
+        to_sdk_task_state(vertexai_types.A2aTaskState.SUBMITTED)
+        == TaskState.submitted
     )
     assert (
-        to_sdk_task_state(vertexai_types.A2aTaskState.CANCELLED) == TaskState.canceled
+        to_sdk_task_state(vertexai_types.A2aTaskState.WORKING)
+        == TaskState.working
     )
-    assert to_sdk_task_state(vertexai_types.A2aTaskState.FAILED) == TaskState.failed
     assert (
-        to_sdk_task_state(vertexai_types.A2aTaskState.REJECTED) == TaskState.rejected
+        to_sdk_task_state(vertexai_types.A2aTaskState.COMPLETED)
+        == TaskState.completed
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.CANCELLED)
+        == TaskState.canceled
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.FAILED)
+        == TaskState.failed
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.REJECTED)
+        == TaskState.rejected
     )
     assert (
         to_sdk_task_state(vertexai_types.A2aTaskState.INPUT_REQUIRED)
@@ -72,7 +82,8 @@ def test_to_stored_task_state() -> None:
         == vertexai_types.A2aTaskState.SUBMITTED
     )
     assert (
-        to_stored_task_state(TaskState.working) == vertexai_types.A2aTaskState.WORKING
+        to_stored_task_state(TaskState.working)
+        == vertexai_types.A2aTaskState.WORKING
     )
     assert (
         to_stored_task_state(TaskState.completed)
@@ -82,7 +93,10 @@ def test_to_stored_task_state() -> None:
         to_stored_task_state(TaskState.canceled)
         == vertexai_types.A2aTaskState.CANCELLED
     )
-    assert to_stored_task_state(TaskState.failed) == vertexai_types.A2aTaskState.FAILED
+    assert (
+        to_stored_task_state(TaskState.failed)
+        == vertexai_types.A2aTaskState.FAILED
+    )
     assert (
         to_stored_task_state(TaskState.rejected)
         == vertexai_types.A2aTaskState.REJECTED
