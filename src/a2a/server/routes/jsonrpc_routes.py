@@ -36,6 +36,7 @@ logger = logging.getLogger(__name__)
 def create_jsonrpc_routes(  # noqa: PLR0913
     agent_card: AgentCard,
     request_handler: RequestHandler,
+    rpc_url: str,
     extended_agent_card: AgentCard | None = None,
     context_builder: CallContextBuilder | None = None,
     card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
@@ -45,7 +46,6 @@ def create_jsonrpc_routes(  # noqa: PLR0913
     ]
     | None = None,
     enable_v0_3_compat: bool = False,
-    rpc_url: str = DEFAULT_RPC_URL,
 ) -> list['Route']:
     """Creates the Starlette Route for the A2A protocol JSON-RPC endpoint.
 
