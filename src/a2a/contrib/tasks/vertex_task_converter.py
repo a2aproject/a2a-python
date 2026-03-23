@@ -87,9 +87,9 @@ def to_sdk_part(stored_part: genai_types.Part) -> Part:
     if stored_part.text:
         return Part(root=TextPart(text=stored_part.text))
     if stored_part.inline_data:
-        encoded_bytes = base64.b64encode(stored_part.inline_data.data or b'').decode(
-            'utf-8'
-        )
+        encoded_bytes = base64.b64encode(
+            stored_part.inline_data.data or b''
+        ).decode('utf-8')
         return Part(
             root=FilePart(
                 file=FileWithBytes(
