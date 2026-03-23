@@ -33,16 +33,13 @@ else:
 
         _package_starlette_installed = False
 
-from a2a.server.apps.jsonrpc import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
-)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
     agent_card_to_dict,
 )
 from a2a.server.request_handlers.rest_handler import RESTHandler
+from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
     rest_error_handler,

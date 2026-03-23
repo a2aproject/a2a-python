@@ -20,7 +20,6 @@ class TransportProtocol(str, Enum):
     GRPC = 'GRPC'
 
 
-DEFAULT_MAX_CONTENT_LENGTH = 10 * 1024 * 1024  # 10MB
 JSONRPC_PARSE_ERROR_CODE = -32700
 VERSION_HEADER = 'A2A-Version'
 
