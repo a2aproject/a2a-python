@@ -1,5 +1,3 @@
-import logging
-
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
@@ -29,9 +27,6 @@ from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 from a2a.utils.helpers import maybe_await
-
-
-logger = logging.getLogger(__name__)
 
 
 def create_agent_card_routes(

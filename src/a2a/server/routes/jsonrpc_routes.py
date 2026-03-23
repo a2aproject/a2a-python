@@ -1,21 +1,18 @@
-import logging
-
 from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
-    from starlette.routing import Route, Router
+    from starlette.routing import Route
 
     _package_starlette_installed = True
 else:
     try:
-        from starlette.routing import Route, Router
+        from starlette.routing import Route
 
         _package_starlette_installed = True
     except ImportError:
         Route = Any
-        Router = Any
 
         _package_starlette_installed = False
 
@@ -27,10 +24,6 @@ from a2a.server.routes.jsonrpc_dispatcher import (
     JsonRpcDispatcher,
 )
 from a2a.types.a2a_pb2 import AgentCard
-from a2a.utils.constants import DEFAULT_RPC_URL
-
-
-logger = logging.getLogger(__name__)
 
 
 def create_jsonrpc_routes(  # noqa: PLR0913
@@ -57,6 +50,7 @@ def create_jsonrpc_routes(  # noqa: PLR0913
         agent_card: The AgentCard describing the agent's capabilities.
         request_handler: The handler instance responsible for processing A2A
           requests via http.
+        rpc_url: The URL prefix for the RPC endpoints.
         extended_agent_card: An optional, distinct AgentCard to be served
           at the authenticated extended card endpoint.
         context_builder: The CallContextBuilder used to construct the
@@ -68,7 +62,6 @@ def create_jsonrpc_routes(  # noqa: PLR0913
           the extended agent card before it is served. It receives the
           call context.
         enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
-        rpc_url: The URL prefix for the RPC endpoints.
     """
     if not _package_starlette_installed:
         raise ImportError(
