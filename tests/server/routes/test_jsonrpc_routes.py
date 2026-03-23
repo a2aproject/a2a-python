@@ -3,7 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 from starlette.testclient import TestClient
-from starlette.middleware import Middleware
 from starlette.applications import Starlette
 
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
@@ -24,7 +23,7 @@ def mock_handler():
 def test_routes_creation(agent_card, mock_handler):
     """Tests that create_jsonrpc_routes creates Route objects list."""
     routes = create_jsonrpc_routes(
-        agent_card=agent_card, request_handler=mock_handler
+        agent_card=agent_card, request_handler=mock_handler, rpc_url='/a2a/jsonrpc'
     )
 
     assert isinstance(routes, list)
