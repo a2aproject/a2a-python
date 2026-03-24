@@ -227,8 +227,25 @@ class RequestHandler(ABC):
         """
 
 
-def _validate_request_params(method: Callable) -> Callable:
+def validate_request_params(method: Callable) -> Callable:
     """Decorator for RequestHandler methods to validate required fields on incoming requests."""
+    if inspect.isasyncgenfunction(method):
+
+        @functools.wraps(method)
+        async def async_gen_wrapper(
+            self: RequestHandler,
+            params: ProtoMessage,
+            context: ServerCallContext,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            if params is not None:
+                validate_proto_required_fields(params)
+            async for item in method(self, params, context, *args, **kwargs):
+                yield item
+
+        return async_gen_wrapper
+
     if inspect.iscoroutinefunction(method):
 
         @functools.wraps(method)

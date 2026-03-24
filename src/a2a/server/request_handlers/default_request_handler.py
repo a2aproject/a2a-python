@@ -20,6 +20,7 @@ from a2a.server.events import (
 )
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
+    validate_request_params,
 )
 from a2a.server.tasks import (
     PushNotificationConfigStore,
@@ -58,7 +59,6 @@ from a2a.utils.task import (
     validate_page_size,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
-from a2a.utils.proto_utils import validate_proto_required_fields
 
 
 logger = logging.getLogger(__name__)
@@ -121,13 +121,13 @@ class DefaultRequestHandler(RequestHandler):
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
 
+    @validate_request_params
     async def on_get_task(
         self,
         params: GetTaskRequest,
         context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
-        validate_proto_required_fields(params)
         validate_history_length(params)
 
         task_id = params.id
@@ -137,13 +137,13 @@ class DefaultRequestHandler(RequestHandler):
 
         return apply_history_length(task, params)
 
+    @validate_request_params
     async def on_list_tasks(
         self,
         params: ListTasksRequest,
         context: ServerCallContext,
     ) -> ListTasksResponse:
         """Default handler for 'tasks/list'."""
-        validate_proto_required_fields(params)
         validate_history_length(params)
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
@@ -159,6 +159,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return page
 
+    @validate_request_params
     async def on_cancel_task(
         self,
         params: CancelTaskRequest,
@@ -168,7 +169,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
-        validate_proto_required_fields(params)
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -323,6 +323,7 @@ class DefaultRequestHandler(RequestHandler):
         ):
             await self._push_sender.send_notification(task_id, event)
 
+    @validate_request_params
     async def on_message_send(
         self,
         params: SendMessageRequest,
@@ -333,7 +334,6 @@ class DefaultRequestHandler(RequestHandler):
         Starts the agent execution for the message and waits for the final
         result (Task or Message).
         """
-        validate_proto_required_fields(params)
         validate_history_length(params.configuration)
 
         (
@@ -393,6 +393,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return result
 
+    @validate_request_params
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
@@ -403,7 +404,6 @@ class DefaultRequestHandler(RequestHandler):
         Starts the agent execution and yields events as they are produced
         by the agent.
         """
-        validate_proto_required_fields(params)
         (
             _task_manager,
             task_id,
@@ -482,6 +482,7 @@ class DefaultRequestHandler(RequestHandler):
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
+    @validate_request_params
     async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
@@ -491,7 +492,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushNotifier` to be configured.
         """
-        validate_proto_required_fields(params)
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -508,6 +508,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return params
 
+    @validate_request_params
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -517,7 +518,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        validate_proto_required_fields(params)
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -540,6 +540,7 @@ class DefaultRequestHandler(RequestHandler):
 
         raise InternalError(message='Push notification config not found')
 
+    @validate_request_params
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
@@ -550,7 +551,6 @@ class DefaultRequestHandler(RequestHandler):
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        validate_proto_required_fields(params)
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
@@ -583,6 +583,7 @@ class DefaultRequestHandler(RequestHandler):
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
+    @validate_request_params
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -592,7 +593,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        validate_proto_required_fields(params)
         if not self._push_config_store:
             raise UnsupportedOperationError
 
@@ -609,6 +609,7 @@ class DefaultRequestHandler(RequestHandler):
             configs=push_notification_config_list
         )
 
+    @validate_request_params
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
@@ -618,7 +619,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        validate_proto_required_fields(params)
         if not self._push_config_store:
             raise UnsupportedOperationError
 
