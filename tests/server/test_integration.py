@@ -18,10 +18,8 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from a2a.server.apps import (
-    A2AFastAPIApplication,
-    A2AStarletteApplication,
-)
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
     InternalError,
@@ -148,14 +146,48 @@ def handler():
     return handler
 
 
+class AppBuilder:
+    def __init__(self, agent_card, handler, card_modifier=None):
+        self.agent_card = agent_card
+        self.handler = handler
+        self.card_modifier = card_modifier
+
+    def build(
+        self,
+        rpc_url='/',
+        agent_card_url=AGENT_CARD_WELL_KNOWN_PATH,
+        middleware=None,
+        routes=None,
+    ):
+        from starlette.applications import Starlette
+
+        app_instance = Starlette(middleware=middleware, routes=routes or [])
+
+        # Agent card router
+        card_routes = create_agent_card_routes(
+            self.agent_card,
+            card_url=agent_card_url,
+            card_modifier=self.card_modifier,
+        )
+        app_instance.routes.extend(card_routes)
+
+        # JSON-RPC router
+        rpc_routes = create_jsonrpc_routes(
+            self.agent_card, self.handler, rpc_url=rpc_url
+        )
+        app_instance.routes.extend(rpc_routes)
+
+        return app_instance
+
+
 @pytest.fixture
 def app(agent_card: AgentCard, handler: mock.AsyncMock):
-    return A2AStarletteApplication(agent_card, handler)
+    return AppBuilder(agent_card, handler)
 
 
 @pytest.fixture
-def client(app: A2AStarletteApplication, **kwargs):
-    """Create a test client with the Starlette app."""
+def client(app, **kwargs):
+    """Create a test client with the app builder."""
     return TestClient(app.build(**kwargs), headers={'A2A-Version': '1.0'})
 
 
@@ -172,9 +204,7 @@ def test_agent_card_endpoint(client: TestClient, agent_card: AgentCard):
     assert 'streaming' in data['capabilities']
 
 
-def test_agent_card_custom_url(
-    app: A2AStarletteApplication, agent_card: AgentCard
-):
+def test_agent_card_custom_url(app, agent_card: AgentCard):
     """Test the agent card endpoint with a custom URL."""
     client = TestClient(app.build(agent_card_url='/my-agent'))
     response = client.get('/my-agent')
@@ -183,9 +213,7 @@ def test_agent_card_custom_url(
     assert data['name'] == agent_card.name
 
 
-def test_starlette_rpc_endpoint_custom_url(
-    app: A2AStarletteApplication, handler: mock.AsyncMock
-):
+def test_starlette_rpc_endpoint_custom_url(app, handler: mock.AsyncMock):
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
     task_status = MINIMAL_TASK_STATUS
@@ -208,9 +236,7 @@ def test_starlette_rpc_endpoint_custom_url(
     assert data['result']['id'] == 'task1'
 
 
-def test_fastapi_rpc_endpoint_custom_url(
-    app: A2AFastAPIApplication, handler: mock.AsyncMock
-):
+def test_fastapi_rpc_endpoint_custom_url(app, handler: mock.AsyncMock):
     """Test the RPC endpoint with a custom URL."""
     # Provide a valid Task object as the return value
     task_status = MINIMAL_TASK_STATUS
@@ -233,9 +259,29 @@ def test_fastapi_rpc_endpoint_custom_url(
     assert data['result']['id'] == 'task1'
 
 
-def test_starlette_build_with_extra_routes(
-    app: A2AStarletteApplication, agent_card: AgentCard
-):
+def test_starlette_build_with_extra_routes(app, agent_card: AgentCard):
+    """Test building the app with additional routes."""
+
+    def custom_handler(request):
+        return JSONResponse({'message': 'Hello'})
+
+    extra_route = Route('/hello', custom_handler, methods=['GET'])
+    test_app = app.build(routes=[extra_route])
+    client = TestClient(test_app, headers={'A2A-Version': '1.0'})
+
+    # Test the added route
+    response = client.get('/hello')
+    assert response.status_code == 200
+    assert response.json() == {'message': 'Hello'}
+
+    # Ensure default routes still work
+    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
+    assert response.status_code == 200
+    data = response.json()
+    assert data['name'] == agent_card.name
+
+
+def test_fastapi_build_with_extra_routes(app, agent_card: AgentCard):
     """Test building the app with additional routes."""
 
     def custom_handler(request):
@@ -257,33 +303,7 @@ def test_starlette_build_with_extra_routes(
     assert data['name'] == agent_card.name
 
 
-def test_fastapi_build_with_extra_routes(
-    app: A2AFastAPIApplication, agent_card: AgentCard
-):
-    """Test building the app with additional routes."""
-
-    def custom_handler(request):
-        return JSONResponse({'message': 'Hello'})
-
-    extra_route = Route('/hello', custom_handler, methods=['GET'])
-    test_app = app.build(routes=[extra_route])
-    client = TestClient(test_app)
-
-    # Test the added route
-    response = client.get('/hello')
-    assert response.status_code == 200
-    assert response.json() == {'message': 'Hello'}
-
-    # Ensure default routes still work
-    response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
-    assert response.status_code == 200
-    data = response.json()
-    assert data['name'] == agent_card.name
-
-
-def test_fastapi_build_custom_agent_card_path(
-    app: A2AFastAPIApplication, agent_card: AgentCard
-):
+def test_fastapi_build_custom_agent_card_path(app, agent_card: AgentCard):
     """Test building the app with a custom agent card path."""
 
     test_app = app.build(agent_card_url='/agent-card')
@@ -471,7 +491,7 @@ def test_get_push_notification_config(
     handler.on_get_task_push_notification_config.assert_awaited_once()
 
 
-def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
+def test_server_auth(app, handler: mock.AsyncMock):
     class TestAuthMiddleware(AuthenticationBackend):
         async def authenticate(
             self, conn: HTTPConnection
@@ -534,9 +554,7 @@ def test_server_auth(app: A2AStarletteApplication, handler: mock.AsyncMock):
 
 
 @pytest.mark.asyncio
-async def test_message_send_stream(
-    app: A2AStarletteApplication, handler: mock.AsyncMock
-) -> None:
+async def test_message_send_stream(app, handler: mock.AsyncMock) -> None:
     """Test streaming message sending."""
 
     # Setup mock streaming response
@@ -614,9 +632,7 @@ async def test_message_send_stream(
 
 
 @pytest.mark.asyncio
-async def test_task_resubscription(
-    app: A2AStarletteApplication, handler: mock.AsyncMock
-) -> None:
+async def test_task_resubscription(app, handler: mock.AsyncMock) -> None:
     """Test task resubscription streaming."""
 
     # Setup mock streaming response
@@ -751,9 +767,7 @@ def test_dynamic_agent_card_modifier(
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
-    app_instance = A2AStarletteApplication(
-        agent_card, handler, card_modifier=modifier
-    )
+    app_instance = AppBuilder(agent_card, handler, card_modifier=modifier)
     client = TestClient(app_instance.build())
 
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
@@ -776,9 +790,7 @@ def test_dynamic_agent_card_modifier_sync(
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
-    app_instance = A2AStarletteApplication(
-        agent_card, handler, card_modifier=modifier
-    )
+    app_instance = AppBuilder(agent_card, handler, card_modifier=modifier)
     client = TestClient(app_instance.build())
 
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
@@ -801,9 +813,7 @@ def test_fastapi_dynamic_agent_card_modifier(
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
-    app_instance = A2AFastAPIApplication(
-        agent_card, handler, card_modifier=modifier
-    )
+    app_instance = AppBuilder(agent_card, handler, card_modifier=modifier)
     client = TestClient(app_instance.build())
 
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
@@ -823,9 +833,7 @@ def test_fastapi_dynamic_agent_card_modifier_sync(
         modified_card.name = 'Dynamically Modified Agent'
         return modified_card
 
-    app_instance = A2AFastAPIApplication(
-        agent_card, handler, card_modifier=modifier
-    )
+    app_instance = AppBuilder(agent_card, handler, card_modifier=modifier)
     client = TestClient(app_instance.build())
 
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
@@ -937,7 +945,7 @@ def test_agent_card_backward_compatibility_supports_extended_card(
 ):
     """Test that supportsAuthenticatedExtendedCard is injected when extended_agent_card is True."""
     agent_card.capabilities.extended_agent_card = True
-    app_instance = A2AStarletteApplication(agent_card, handler)
+    app_instance = AppBuilder(agent_card, handler)
     client = TestClient(app_instance.build())
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 200
@@ -950,7 +958,7 @@ def test_agent_card_backward_compatibility_no_extended_card(
 ):
     """Test that supportsAuthenticatedExtendedCard is absent when extended_agent_card is False."""
     agent_card.capabilities.extended_agent_card = False
-    app_instance = A2AStarletteApplication(agent_card, handler)
+    app_instance = AppBuilder(agent_card, handler)
     client = TestClient(app_instance.build())
     response = client.get(AGENT_CARD_WELL_KNOWN_PATH)
     assert response.status_code == 200

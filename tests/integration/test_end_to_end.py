@@ -10,7 +10,9 @@ from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+from a2a.server.apps import A2ARESTFastAPIApplication
+from a2a.server.routes import create_jsonrpc_routes, create_agent_card_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
@@ -193,10 +195,16 @@ def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
 @pytest.fixture
 def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    app_builder = A2AFastAPIApplication(
-        agent_card, handler, extended_agent_card=agent_card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )

@@ -33,16 +33,13 @@ else:
 
         _package_starlette_installed = False
 
-from a2a.server.apps.jsonrpc import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
-)
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
     agent_card_to_dict,
 )
 from a2a.server.request_handlers.rest_handler import RESTHandler
+from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
     rest_error_handler,
@@ -152,15 +149,26 @@ class RESTAdapter(RESTAdapterInterface):
 
         call_context = self._build_call_context(request)
 
-        async def event_generator(
-            stream: AsyncIterable[Any],
-        ) -> AsyncIterator[str]:
+        # Eagerly fetch the first item from the stream so that errors raised
+        # before any event is yielded (e.g. validation, parsing, or handler
+        # failures) propagate here and are caught by
+        # @rest_stream_error_handler, which returns a JSONResponse with
+        # the correct HTTP status code instead of starting an SSE stream.
+        # Without this, the error would be raised after SSE headers are
+        # already sent, and the client would see a broken stream instead
+        # of a proper error response.
+        stream = aiter(method(request, call_context))
+        try:
+            first_item = await anext(stream)
+        except StopAsyncIteration:
+            return EventSourceResponse(iter([]))
+
+        async def event_generator() -> AsyncIterator[str]:
+            yield json.dumps(first_item)
             async for item in stream:
                 yield json.dumps(item)
 
-        return EventSourceResponse(
-            event_generator(method(request, call_context))
-        )
+        return EventSourceResponse(event_generator())
 
     async def handle_get_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None

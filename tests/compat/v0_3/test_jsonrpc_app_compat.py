@@ -6,7 +6,8 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.testclient import TestClient
 
-from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
+from starlette.applications import Starlette
+from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -50,16 +51,18 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
     mock_agent_card.capabilities.push_notifications = True
     mock_agent_card.capabilities.extended_agent_card = True
-    return A2AStarletteApplication(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=mock_agent_card,
-        http_handler=mock_handler,
+        request_handler=mock_handler,
         enable_v0_3_compat=True,
+        rpc_url='/',
     )
+    return Starlette(routes=jsonrpc_routes)
 
 
 @pytest.fixture
 def client(test_app):
-    return TestClient(test_app.build())
+    return TestClient(test_app)
 
 
 def test_send_message_v03_compat(
