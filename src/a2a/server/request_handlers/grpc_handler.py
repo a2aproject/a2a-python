@@ -35,11 +35,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.errors import (
-    A2A_ERROR_REASONS,
-    A2AError,
-    TaskNotFoundError,
-)
+from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.proto_utils import validation_errors_to_bad_request
 
@@ -426,7 +422,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             rich_status = rpc_status.to_status(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
-
             trailing = context.trailing_metadata()
             if trailing:
                 for k, v in trailing:
