@@ -1,5 +1,5 @@
 from collections.abc import AsyncGenerator
-from typing import Any, NamedTuple
+from typing import NamedTuple
 
 import grpc
 import httpx

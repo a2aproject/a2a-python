@@ -23,6 +23,7 @@ from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
 from google.protobuf.descriptor import FieldDescriptor
 from google.protobuf.json_format import ParseDict
 from google.protobuf.message import Message as ProtobufMessage
+from google.rpc import error_details_pb2
 
 from a2a.utils.errors import InvalidParamsError
 
@@ -296,3 +297,25 @@ def validate_proto_required_fields(msg: ProtobufMessage) -> None:
         raise InvalidParamsError(
             message='Validation failed', data={'errors': errors}
         )
+
+
+def validation_errors_to_bad_request(
+    errors: list[ValidationDetail],
+) -> error_details_pb2.BadRequest:
+    """Convert validation error details to a gRPC BadRequest proto."""
+    bad_request = error_details_pb2.BadRequest()
+    for err in errors:
+        violation = bad_request.field_violations.add()
+        violation.field = err['field']
+        violation.description = err['message']
+    return bad_request
+
+
+def bad_request_to_validation_errors(
+    bad_request: error_details_pb2.BadRequest,
+) -> list[ValidationDetail]:
+    """Convert a gRPC BadRequest proto to validation error details."""
+    return [
+        ValidationDetail(field=v.field, message=v.description)
+        for v in bad_request.field_violations
+    ]

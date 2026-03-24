@@ -41,6 +41,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
 )
 from a2a.utils.helpers import maybe_await, validate
+from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 
 logger = logging.getLogger(__name__)
@@ -403,26 +404,23 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 error.message if hasattr(error, 'message') else str(error)
             )
 
-            # Create standard Status
+            # Create standard Status with ErrorInfo for all A2A errors
             status = status_pb2.Status(code=status_code, message=error_msg)
+            error_info_detail = any_pb2.Any()
+            error_info_detail.Pack(error_info)
+            status.details.append(error_info_detail)
 
+            # Append structured field violations for validation errors
             if (
                 isinstance(error, types.InvalidParamsError)
                 and error.data
                 and error.data.get('errors')
             ):
-                bad_request = error_details_pb2.BadRequest()
-                for err_dict in error.data['errors']:
-                    violation = bad_request.field_violations.add()
-                    violation.field = err_dict.get('field', '')
-                    violation.description = err_dict.get('message', '')
-                any_bad_request = any_pb2.Any()
-                any_bad_request.Pack(bad_request)
-                status.details.append(any_bad_request)
-            else:
-                detail = any_pb2.Any()
-                detail.Pack(error_info)
-                status.details.append(detail)
+                bad_request_detail = any_pb2.Any()
+                bad_request_detail.Pack(
+                    validation_errors_to_bad_request(error.data['errors'])
+                )
+                status.details.append(bad_request_detail)
 
             # Use grpc_status to safely generate standard trailing metadata
             rich_status = rpc_status.to_status(status)

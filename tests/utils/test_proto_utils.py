@@ -5,12 +5,13 @@ This module tests the proto utilities including to_stream_response and dictionar
 
 import httpx
 import pytest
+
 from google.protobuf.json_format import MessageToDict, Parse
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.datastructures import QueryParams
 
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     AgentSkill,
     ListTasksRequest,
     Message,
@@ -23,8 +24,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from starlette.datastructures import QueryParams
 from a2a.utils import proto_utils
+from a2a.utils.errors import InvalidParamsError
 
 
 class TestToStreamResponse:
@@ -255,8 +256,6 @@ class TestValidateProtoRequiredFields:
 
     def test_missing_required_fields(self):
         """Test with empty message raising InvalidParamsError containing all errors."""
-        from a2a.utils.errors import InvalidParamsError
-
         msg = Message()
         with pytest.raises(InvalidParamsError) as exc_info:
             proto_utils.validate_proto_required_fields(msg)
@@ -268,8 +267,6 @@ class TestValidateProtoRequiredFields:
 
     def test_nested_required_fields(self):
         """Test nested required fields inside TaskStatus."""
-        from a2a.utils.errors import InvalidParamsError
-
         # Task Status requires 'state'
         task = Task(id='task-1', status=TaskStatus())
         with pytest.raises(InvalidParamsError) as exc_info:

@@ -246,24 +246,8 @@ def validate_request_params(method: Callable) -> Callable:
 
         return async_gen_wrapper
 
-    if inspect.iscoroutinefunction(method):
-
-        @functools.wraps(method)
-        async def async_wrapper(
-            self: RequestHandler,
-            params: ProtoMessage,
-            context: ServerCallContext,
-            *args: Any,
-            **kwargs: Any,
-        ) -> Any:
-            if params is not None:
-                validate_proto_required_fields(params)
-            return await method(self, params, context, *args, **kwargs)
-
-        return async_wrapper
-
     @functools.wraps(method)
-    def sync_wrapper(
+    async def async_wrapper(
         self: RequestHandler,
         params: ProtoMessage,
         context: ServerCallContext,
@@ -272,6 +256,6 @@ def validate_request_params(method: Callable) -> Callable:
     ) -> Any:
         if params is not None:
             validate_proto_required_fields(params)
-        return method(self, params, context, *args, **kwargs)
+        return await method(self, params, context, *args, **kwargs)
 
-    return sync_wrapper
+    return async_wrapper

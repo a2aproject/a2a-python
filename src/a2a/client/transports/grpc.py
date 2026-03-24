@@ -47,7 +47,8 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
-from a2a.utils.errors import A2A_REASON_TO_ERROR, A2AError, InvalidParamsError
+from a2a.utils.errors import A2A_REASON_TO_ERROR, A2AError
+from a2a.utils.proto_utils import bad_request_to_validation_errors
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -66,22 +67,15 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if status is not None:
         exception_cls: type[A2AError] | None = None
         for detail in status.details:
-            if detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):
-                bad_request = error_details_pb2.BadRequest()
-                detail.Unpack(bad_request)
-                errors = [
-                    {'field': v.field, 'message': v.description}
-                    for v in bad_request.field_violations
-                ]
-                data = {'errors': errors}
-                exception_cls = InvalidParamsError
-                break
             if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)
                 if error_info.domain == 'a2a-protocol.org':
                     exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
-                    break
+            elif detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):
+                bad_request = error_details_pb2.BadRequest()
+                detail.Unpack(bad_request)
+                data = {'errors': bad_request_to_validation_errors(bad_request)}
 
         if exception_cls:
             raise exception_cls(status.message, data=data) from e
