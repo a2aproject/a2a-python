@@ -139,7 +139,6 @@ def create_rest_routes(  # noqa: PLR0913
 
     @rest_stream_error_handler
     async def _handle_streaming_request(
-        self,
         method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
         request: Request,
     ) -> EventSourceResponse:
@@ -153,7 +152,7 @@ def create_rest_routes(  # noqa: PLR0913
                 message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = self._build_call_context(request)
+        call_context = _build_call_context(request)
 
         # Eagerly fetch the first item from the stream so that errors raised
         # before any event is yielded (e.g. validation, parsing, or handler
