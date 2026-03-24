@@ -61,6 +61,26 @@ class TestA2AFastAPIApplicationOptionalDeps:
                 ' A2AFastAPIApplication instance should not raise ImportError'
             )
 
+    def test_build_a2a_fastapi_app_with_dependencies_succeeds(
+        self, mock_app_params: dict
+    ):
+        from fastapi import Depends
+
+        def mock_dependency():
+            return 'mock'
+
+        app = A2AFastAPIApplication(**mock_app_params)
+        fastapi_app = app.build(dependencies=[Depends(mock_dependency)])
+
+        from fastapi.routing import APIRoute
+
+        # Check that routes have the dependency
+        for route in fastapi_app.routes:
+            if getattr(route, 'path', '') in ['/v1/message:send', '/v1/card']:
+                assert isinstance(route, APIRoute)
+                assert len(route.dependencies) == 1
+                assert route.dependencies[0].dependency == mock_dependency
+
     def test_create_a2a_fastapi_app_with_missing_deps_raises_importerror(
         self,
         mock_app_params: dict,

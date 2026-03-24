@@ -1,17 +1,19 @@
 import logging
 
-from collections.abc import Awaitable, Callable
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
     from fastapi import APIRouter, FastAPI, Request, Response
+    from fastapi.params import Depends
     from fastapi.responses import JSONResponse
 
     _package_fastapi_installed = True
 else:
     try:
         from fastapi import APIRouter, FastAPI, Request, Response
+        from fastapi.params import Depends
         from fastapi.responses import JSONResponse
 
         _package_fastapi_installed = True
@@ -92,6 +94,8 @@ class A2ARESTFastAPIApplication:
         self,
         agent_card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
         rpc_url: str = '',
+        extended_agent_card_url: str = '',
+        dependencies: Sequence[Depends] | None = None,
         **kwargs: Any,
     ) -> FastAPI:
         """Builds and returns the FastAPI application instance.
@@ -100,16 +104,29 @@ class A2ARESTFastAPIApplication:
             agent_card_url: The URL for the agent card endpoint.
             rpc_url: The URL for the A2A JSON-RPC endpoint.
             extended_agent_card_url: The URL for the authenticated extended agent card endpoint.
+            dependencies: Optional sequence of FastAPI dependencies (e.g.
+                `[Security(get_current_active_user, scopes=["a2a"])]`)
+                applied to the RPC endpoint and the authenticated extended
+                agent card endpoint. The public agent card endpoint is left
+                unprotected.
             **kwargs: Additional keyword arguments to pass to the FastAPI constructor.
 
         Returns:
             A configured FastAPI application instance.
         """
         app = FastAPI(**kwargs)
+
+        route_deps: dict[str, Any] = {}
+        if dependencies:
+            route_deps['dependencies'] = list(dependencies)
+
         router = APIRouter()
         for route, callback in self._adapter.routes().items():
             router.add_api_route(
-                f'{rpc_url}{route[0]}', callback, methods=[route[1]]
+                f'{rpc_url}{route[0]}',
+                callback,
+                methods=[route[1]],
+                **route_deps,
             )
 
         @router.get(f'{rpc_url}{agent_card_url}')
