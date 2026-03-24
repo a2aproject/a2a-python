@@ -125,7 +125,7 @@ async def test_rest_error_handler_success():
 
 @pytest.mark.asyncio
 async def test_rest_stream_error_handler_generator_error(caplog):
-    """Test rest_stream_error_handler logs error during async generation and ends stream gracefully."""
+    """Test rest_stream_error_handler catches error during async generation after first success."""
     error = InternalError(message='Stream error during generation')
 
     async def failing_generator():
@@ -141,18 +141,21 @@ async def test_rest_stream_error_handler_generator_error(caplog):
     # Assert it returns successfully
     assert isinstance(response, MockEventSourceResponse)
 
-    # Consume the stream - error should be logged but not re-raised
+    # Now consume the stream
     chunks = []
-    with caplog.at_level(logging.ERROR):
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(InternalError) as exc_info,
+    ):
         async for chunk in response.body_iterator:
             chunks.append(chunk)  # noqa: PERF401
     assert chunks == ['success chunk 1']
-    assert 'Stream error during generation' in caplog.text
+    assert exc_info.value == error
 
 
 @pytest.mark.asyncio
 async def test_rest_stream_error_handler_generator_unknown_error(caplog):
-    """Test rest_stream_error_handler logs unknown error during async generation and ends stream gracefully."""
+    """Test rest_stream_error_handler catches unknown error during async generation."""
 
     async def failing_generator():
         yield 'success chunk 1'
@@ -164,9 +167,11 @@ async def test_rest_stream_error_handler_generator_unknown_error(caplog):
 
     response = await successful_prep_failing_stream()
 
-    # Consume the stream - error should be logged but not re-raised
     chunks = []
-    with caplog.at_level(logging.ERROR):
+    with (
+        caplog.at_level(logging.ERROR),
+        pytest.raises(RuntimeError, match='Unknown stream failure'),
+    ):
         async for chunk in response.body_iterator:
             chunks.append(chunk)  # noqa: PERF401
     assert chunks == ['success chunk 1']

@@ -175,6 +175,7 @@ def rest_stream_error_handler(
                             yield item
                     except Exception as stream_error:  # noqa: BLE001
                         _log_error(stream_error)
+                        raise stream_error
 
                 response.body_iterator = error_catching_iterator()
 
