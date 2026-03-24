@@ -241,17 +241,8 @@ def validate_request_params(method: Callable) -> Callable:
         ) -> Any:
             if params is not None:
                 validate_proto_required_fields(params)
-            # Explicitly close the inner async generator in a finally block
-            # so that its cleanup (except/finally) runs deterministically
-            # during aclose(). On Python < 3.13, async-for does NOT call
-            # aclose() on the iterator when an exception (e.g. GeneratorExit)
-            # propagates through the loop body, leaving cleanup to the GC.
-            inner = method(self, params, context, *args, **kwargs)
-            try:
-                async for item in inner:
-                    yield item
-            finally:
-                await inner.aclose()
+            async for item in method(self, params, context, *args, **kwargs):
+                yield item
 
         return async_gen_wrapper
 
