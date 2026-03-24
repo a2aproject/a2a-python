@@ -3,7 +3,7 @@ from unittest.mock import AsyncMock
 import pytest
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
-from starlette.routing import Route
+from starlette.routing import BaseRoute, Route
 
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.rest_routes import create_rest_routes
@@ -28,7 +28,7 @@ def test_routes_creation(agent_card, mock_handler):
 
     assert isinstance(routes, list)
     assert len(routes) > 0
-    assert all(isinstance(r, Route) for r in routes)
+    assert all(isinstance(r, BaseRoute) for r in routes)
 
 
 def test_routes_creation_v03_compat(agent_card, mock_handler):

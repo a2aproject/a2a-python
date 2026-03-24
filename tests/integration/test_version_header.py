@@ -153,7 +153,7 @@ def test_version_header_integration(  # noqa: PLR0912, PLR0913, PLR0915
                 assert response.status_code == 400, response.text
 
     else:
-        url = '/jsonrpc/'
+        url = '/jsonrpc'
         if endpoint_ver == '0.3':
             payload = {
                 'jsonrpc': '2.0',

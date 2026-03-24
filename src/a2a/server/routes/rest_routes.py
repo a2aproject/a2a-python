@@ -28,7 +28,7 @@ if TYPE_CHECKING:
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
-    from starlette.routing import Route
+    from starlette.routing import BaseRoute, Route
 
     _package_starlette_installed = True
 else:
@@ -36,7 +36,7 @@ else:
         from sse_starlette.sse import EventSourceResponse
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
-        from starlette.routing import Route
+        from starlette.routing import BaseRoute, Mount, Route
 
         _package_starlette_installed = True
     except ImportError:
@@ -45,6 +45,8 @@ else:
         JSONResponse = Any
         Response = Any
         Route = Any
+        Mount = Any
+        BaseRoute = Any
 
         _package_starlette_installed = False
 
@@ -64,7 +66,7 @@ def create_rest_routes(  # noqa: PLR0913
     | None = None,
     enable_v0_3_compat: bool = False,
     path_prefix: str = '',
-) -> list[Route]:
+) -> list['BaseRoute']:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
     Args:
@@ -104,7 +106,7 @@ def create_rest_routes(  # noqa: PLR0913
         )
         v03_routes = v03_adapter.routes()
 
-    routes: list[Route] = []
+    routes: list['BaseRoute'] = []
     for (path, method), endpoint in v03_routes.items():
         routes.append(
             Route(
@@ -224,20 +226,16 @@ def create_rest_routes(  # noqa: PLR0913
         ),
     }
 
+    base_route_objects = []
     for (path, method), endpoint in base_routes.items():
-        routes.append(
+        base_route_objects.append(
             Route(
                 path=f'{path_prefix}{path}',
                 endpoint=endpoint,
                 methods=[method],
             )
         )
-        routes.append(
-            Route(
-                path=f'/{{tenant}}{path_prefix}{path}',
-                endpoint=endpoint,
-                methods=[method],
-            )
-        )
+    routes.extend(base_route_objects)
+    routes.append(Mount(path='/{tenant}', routes=base_route_objects))
 
     return routes
