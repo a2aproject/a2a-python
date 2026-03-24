@@ -139,9 +139,13 @@ def create_rest_routes(  # noqa: PLR0913
 
     @rest_stream_error_handler
     async def _handle_streaming_request(
-        method: Callable[['Request', ServerCallContext], AsyncIterable[Any]],
-        request: 'Request',
-    ) -> 'EventSourceResponse':
+        self,
+        method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
+        request: Request,
+    ) -> EventSourceResponse:
+        # Pre-consume and cache the request body to prevent deadlock in streaming context
+        # This is required because Starlette's request.body() can only be consumed once,
+        # and attempting to consume it after EventSourceResponse starts causes deadlock
         try:
             await request.body()
         except (ValueError, RuntimeError, OSError) as e:
@@ -149,17 +153,28 @@ def create_rest_routes(  # noqa: PLR0913
                 message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = _build_call_context(request)
+        call_context = self._build_call_context(request)
 
-        async def event_generator(
-            stream: AsyncIterable[Any],
-        ) -> AsyncIterator[str]:
+        # Eagerly fetch the first item from the stream so that errors raised
+        # before any event is yielded (e.g. validation, parsing, or handler
+        # failures) propagate here and are caught by
+        # @rest_stream_error_handler, which returns a JSONResponse with
+        # the correct HTTP status code instead of starting an SSE stream.
+        # Without this, the error would be raised after SSE headers are
+        # already sent, and the client would see a broken stream instead
+        # of a proper error response.
+        stream = aiter(method(request, call_context))
+        try:
+            first_item = await anext(stream)
+        except StopAsyncIteration:
+            return EventSourceResponse(iter([]))
+
+        async def event_generator() -> AsyncIterator[str]:
+            yield json.dumps(first_item)
             async for item in stream:
                 yield json.dumps(item)
 
-        return EventSourceResponse(
-            event_generator(method(request, call_context))
-        )
+        return EventSourceResponse(event_generator())
 
     async def _handle_authenticated_agent_card(
         request: 'Request', call_context: ServerCallContext | None = None
