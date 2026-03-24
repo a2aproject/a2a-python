@@ -10,8 +10,8 @@ from starlette.responses import JSONResponse
 if TYPE_CHECKING:
     from starlette.requests import Request
 
-    from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
     from a2a.server.request_handlers.request_handler import RequestHandler
+    from a2a.server.routes import CallContextBuilder
     from a2a.types.a2a_pb2 import AgentCard
 
     _package_starlette_installed = True
