@@ -152,15 +152,26 @@ class RESTAdapter(RESTAdapterInterface):
 
         call_context = self._build_call_context(request)
 
-        async def event_generator(
-            stream: AsyncIterable[Any],
-        ) -> AsyncIterator[str]:
+        # Eagerly fetch the first item from the stream so that errors raised
+        # before any event is yielded (e.g. validation, parsing, or handler
+        # failures) propagate here and are caught by
+        # @rest_stream_error_handler, which returns a JSONResponse with
+        # the correct HTTP status code instead of starting an SSE stream.
+        # Without this, the error would be raised after SSE headers are
+        # already sent, and the client would see a broken stream instead
+        # of a proper error response.
+        stream = aiter(method(request, call_context))
+        try:
+            first_item = await anext(stream)
+        except StopAsyncIteration:
+            return EventSourceResponse(iter([]))
+
+        async def event_generator() -> AsyncIterator[str]:
+            yield json.dumps(first_item)
             async for item in stream:
                 yield json.dumps(item)
 
-        return EventSourceResponse(
-            event_generator(method(request, call_context))
-        )
+        return EventSourceResponse(event_generator())
 
     async def handle_get_agent_card(
         self, request: Request, call_context: ServerCallContext | None = None
