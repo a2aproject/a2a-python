@@ -236,19 +236,6 @@ async def test_enqueue_event_when_closed(
     with pytest.raises(expected_queue_closed_exception):
         await event_queue.tap()
 
-    return
-    child_queue = (
-        await event_queue.tap()
-    )  # Tap after close might be weird, but let's see
-    # The current implementation would add it to _children
-    # and then child.close() would be called.
-    # A more robust test for child propagation is in test_close_propagates
-    await (
-        child_queue.close()
-    )  # ensure child is also seen as closed for this test's purpose
-    with pytest.raises(expected_queue_closed_exception):
-        await child_queue.dequeue_event(no_wait=True)
-
 
 @pytest.fixture
 def expected_queue_closed_exception() -> type[Exception]:
@@ -854,4 +841,3 @@ async def test_concurrent_close_immediate_false() -> None:
 
     # Now both tasks should complete
     await asyncio.wait_for(asyncio.gather(close_task_1, close_task_2), timeout=1.0)
-

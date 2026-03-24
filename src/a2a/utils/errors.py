@@ -144,6 +144,7 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     ExtendedAgentCardNotConfiguredError: -32007,
     ExtensionSupportRequiredError: -32008,
     VersionNotSupportedError: -32009,
+    TaskAlreadyStartedError: -32010,
     InvalidParamsError: -32602,
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
@@ -153,6 +154,9 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
 
 A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
     TaskNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
+    TaskAlreadyStartedError: RestErrorMap(
+        409, 'FAILED_PRECONDITION', 'TASK_ALREADY_STARTED'
+    ),
     TaskNotCancelableError: RestErrorMap(
         409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
     ),

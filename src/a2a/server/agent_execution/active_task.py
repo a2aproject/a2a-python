@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator, Callable
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.agent_execution.context import RequestContext
@@ -85,11 +85,16 @@ class ActiveTask:
         """The ID of the task."""
         return self._task_id
 
-    async def start(self, request: RequestContext) -> None:
+    async def start(
+        self,
+        request: RequestContext,
+        setup_callback: Callable[[], Awaitable[None]] | None = None,
+    ) -> None:
         """Starts the active task background processes.
 
         Args:
             request: The request context to execute.
+            setup_callback: Optional async callback executed before starting the producer, while the lock is held.
 
         Raises:
             TaskAlreadyStartedError: If the task is already running.
@@ -99,6 +104,15 @@ class ActiveTask:
                 raise TaskAlreadyStartedError(
                     f'Task {self._task_id} already started'
                 )
+
+            if setup_callback:
+                try:
+                    await setup_callback()
+                except Exception:
+                    self._is_finished.set()
+                    if self._subscribers_count == 0 and self._on_cleanup:
+                        self._on_cleanup(self)
+                    raise
 
             self._producer_task = asyncio.create_task(
                 self._run_producer(request), name=f'producer:{self._task_id}'

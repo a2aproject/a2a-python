@@ -537,7 +537,7 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=long_execute)
         await active_task.start(request_context)
 
-        tapped = event_queue.tap()
+        tapped = await event_queue.tap()
 
         with patch.object(event_queue, 'tap', return_value=tapped):
             # Close the queue while subscribe is waiting

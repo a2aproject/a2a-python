@@ -196,35 +196,15 @@ class DefaultRequestHandler(RequestHandler):
     ) -> tuple[ActiveTask, RequestContext]:
         validate_history_length(params.configuration)
 
-        task_id = params.message.task_id or None
-        context_id = params.message.context_id or None
+        original_task_id = params.message.task_id or None
+        original_context_id = params.message.context_id or None
 
-        temp_task_manager = TaskManager(
-            task_id=task_id,
-            context_id=context_id,
-            task_store=self.task_store,
-            initial_message=params.message,
-            context=context,
-        )
-        task: Task | None = await temp_task_manager.get_task()
-
-        if task:
-            if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
-                )
-            task = temp_task_manager.update_with_message(params.message, task)
-            await temp_task_manager.save_task_event(task)
-        elif params.message.task_id:
-            raise TaskNotFoundError(
-                message=f'Task {params.message.task_id} was specified but does not exist'
-            )
-
+        # Build preliminary context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
             params=params,
-            task_id=task.id if task else None,
-            context_id=params.message.context_id,
-            task=task,
+            task_id=original_task_id,
+            context_id=original_context_id,
+            task=None,
             context=context,
         )
 
@@ -244,7 +224,32 @@ class DefaultRequestHandler(RequestHandler):
         active_task = await self._active_task_registry.get_or_create(
             task_id, context=context, initial_message=params.message
         )
-        await active_task.start(request_context)
+
+        async def setup_db() -> None:
+            temp_task_manager = TaskManager(
+                task_id=task_id,
+                context_id=original_context_id,
+                task_store=self.task_store,
+                initial_message=params.message,
+                context=context,
+            )
+            task: Task | None = await temp_task_manager.get_task()
+
+            if task:
+                if task.status.state in TERMINAL_TASK_STATES:
+                    raise InvalidParamsError(
+                        message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    )
+                task = temp_task_manager.update_with_message(params.message, task)
+                await temp_task_manager.save_task_event(task)
+            elif original_task_id:
+                raise TaskNotFoundError(
+                    message=f'Task {original_task_id} was specified but does not exist'
+                )
+
+            request_context.current_task = task
+
+        await active_task.start(request_context, setup_callback=setup_db)
         return active_task, request_context
 
     async def on_message_send(  # noqa: D102
