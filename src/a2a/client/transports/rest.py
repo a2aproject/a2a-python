@@ -41,6 +41,47 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
+def _parse_rest_error(
+    error_payload: dict[str, Any],
+    fallback_message: str,
+) -> Exception | None:
+    """Parses a REST error payload and returns the appropriate A2AError.
+
+    Args:
+        error_payload: The parsed JSON error payload.
+        fallback_message: Message to use if the payload has no ``message``.
+
+    Returns:
+        The mapped A2AError if a known reason was found, otherwise ``None``.
+    """
+    error_data = error_payload.get('error', {})
+    message = error_data.get('message', fallback_message)
+    details = error_data.get('details', [])
+    if not isinstance(details, list):
+        return None
+
+    # The `details` array can contain multiple different error objects.
+    # We extract the first `ErrorInfo` object because it contains the
+    # specific `reason` code needed to map this back to a Python A2AError.
+    for d in details:
+        if (
+            isinstance(d, dict)
+            and d.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo'
+        ):
+            reason = d.get('reason')
+            metadata = d.get('metadata') or {}
+            if isinstance(reason, str):
+                exception_cls = A2A_REASON_TO_ERROR.get(reason)
+                if exception_cls:
+                    exc = exception_cls(message)
+                    if metadata:
+                        exc.data = metadata
+                    return exc
+            break
+
+    return None
+
+
 @trace_class(kind=SpanKind.CLIENT)
 class RestTransport(ClientTransport):
     """A REST transport for the A2A client."""
@@ -294,39 +335,12 @@ class RestTransport(ClientTransport):
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
             error_payload = e.response.json()
-            error_data = error_payload.get('error', {})
-
-            message = error_data.get('message', str(e))
-            details = error_data.get('details', [])
-            if not isinstance(details, list):
-                details = []
-
-            # The `details` array can contain multiple different error objects.
-            # We extract the first `ErrorInfo` object because it contains the
-            # specific `reason` code needed to map this back to a Python A2AError.
-            error_info = {}
-            for d in details:
-                if (
-                    isinstance(d, dict)
-                    and d.get('@type')
-                    == 'type.googleapis.com/google.rpc.ErrorInfo'
-                ):
-                    error_info = d
-                    break
-            reason = error_info.get('reason')
-            metadata = error_info.get('metadata') or {}
-
-            if isinstance(reason, str):
-                exception_cls = A2A_REASON_TO_ERROR.get(reason)
-                if exception_cls:
-                    exc = exception_cls(message)
-                    if metadata:
-                        exc.data = metadata
-                    raise exc from e
+            mapped = _parse_rest_error(error_payload, str(e))
+            if mapped:
+                raise mapped from e
         except (json.JSONDecodeError, ValueError):
             pass
 
-        # Fallback mappings for status codes if 'type' is missing or unknown
         status_code = e.response.status_code
         if status_code == httpx.codes.NOT_FOUND:
             raise MethodNotFoundError(
@@ -334,6 +348,14 @@ class RestTransport(ClientTransport):
             ) from e
 
         raise A2AClientError(f'HTTP Error {status_code}: {e}') from e
+
+    def _handle_sse_error(self, sse_data: str) -> NoReturn:
+        """Handles SSE error events by parsing the REST error payload and raising the appropriate A2AError."""
+        error_payload = json.loads(sse_data)
+        mapped = _parse_rest_error(error_payload, sse_data)
+        if mapped:
+            raise mapped
+        raise A2AClientError(sse_data)
 
     async def _send_stream_request(
         self,
@@ -352,6 +374,7 @@ class RestTransport(ClientTransport):
             method,
             f'{self.url}{path}',
             self._handle_http_error,
+            self._handle_sse_error,
             json=json,
             **http_kwargs,
         ):

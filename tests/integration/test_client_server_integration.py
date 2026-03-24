@@ -1129,3 +1129,79 @@ async def test_validate_streaming_disabled(
             pass
 
     await transport.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error_cls',
+    [
+        TaskNotFoundError,
+        TaskNotCancelableError,
+        PushNotificationNotSupportedError,
+        UnsupportedOperationError,
+        ContentTypeNotSupportedError,
+        InvalidAgentResponseError,
+        ExtendedAgentCardNotConfiguredError,
+        ExtensionSupportRequiredError,
+        VersionNotSupportedError,
+    ],
+)
+@pytest.mark.parametrize(
+    'handler_attr, client_method, request_params',
+    [
+        pytest.param(
+            'on_message_send_stream',
+            'send_message',
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-midstream-test',
+                    parts=[Part(text='Hello, mid-stream test!')],
+                )
+            ),
+            id='stream',
+        ),
+        pytest.param(
+            'on_subscribe_to_task',
+            'subscribe',
+            SubscribeToTaskRequest(id='some-id'),
+            id='subscribe',
+        ),
+    ],
+)
+async def test_client_handles_mid_stream_a2a_errors(
+    transport_setups,
+    error_cls,
+    handler_attr,
+    client_method,
+    request_params,
+) -> None:
+    """Integration test for mid-stream errors sent as SSE error events.
+
+    The handler yields one event successfully, then raises an A2AError.
+    The client must receive the first event and then get the error as the
+    exact error_cls exception. This mirrors test_client_handles_a2a_errors_streaming
+    but verifies the error occurs *after* the stream has started producing events.
+    """
+    client = transport_setups.client
+    handler = transport_setups.handler
+
+    async def mock_generator(*args, **kwargs):
+        yield TASK_FROM_STREAM
+        raise error_cls('Mid-stream error')
+
+    getattr(handler, handler_attr).side_effect = mock_generator
+
+    received_events = []
+    with pytest.raises(error_cls) as exc_info:
+        async for event in getattr(client, client_method)(
+            request=request_params
+        ):
+            received_events.append(event)  # noqa: PERF401
+
+    assert 'Mid-stream error' in str(exc_info.value)
+    assert len(received_events) == 1
+
+    getattr(handler, handler_attr).side_effect = None
+
+    await client.close()

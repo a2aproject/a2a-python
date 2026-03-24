@@ -54,16 +54,43 @@ def _build_error_payload(
     return {'error': payload}
 
 
-def _create_error_response(error: Exception) -> Response:
-    """Helper function to create a JSONResponse for an error."""
+def build_rest_error_payload(error: Exception) -> dict[str, Any]:
+    """Build a REST error payload dict from an exception.
+
+    Returns:
+        A dict with the error payload in the standard REST error format.
+    """
     if isinstance(error, A2AError):
         mapping = A2A_REST_ERROR_MAPPING.get(
             type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
         )
-        http_code = mapping.http_code
-        grpc_status = mapping.grpc_status
-        reason = mapping.reason
+        # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
+        metadata = getattr(error, 'data', None) or {}
+        return _build_error_payload(
+            code=mapping.http_code,
+            status=mapping.grpc_status,
+            message=getattr(error, 'message', str(error)),
+            reason=mapping.reason,
+            metadata=metadata,
+        )
+    if isinstance(error, ParseError):
+        return _build_error_payload(
+            code=400,
+            status='INVALID_ARGUMENT',
+            message=str(error),
+            reason='INVALID_REQUEST',
+            metadata={},
+        )
+    return _build_error_payload(
+        code=500,
+        status='INTERNAL',
+        message='unknown exception',
+    )
 
+
+def _create_error_response(error: Exception) -> Response:
+    """Helper function to create a JSONResponse for an error."""
+    if isinstance(error, A2AError):
         log_level = (
             logging.ERROR
             if isinstance(error, InternalError)
@@ -76,42 +103,17 @@ def _create_error_response(error: Exception) -> Response:
             getattr(error, 'message', str(error)),
             f', Data={error.data}' if error.data else '',
         )
-
-        # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
-        metadata = getattr(error, 'data', None) or {}
-
-        return JSONResponse(
-            content=_build_error_payload(
-                code=http_code,
-                status=grpc_status,
-                message=getattr(error, 'message', str(error)),
-                reason=reason,
-                metadata=metadata,
-            ),
-            status_code=http_code,
-            media_type='application/json',
-        )
-    if isinstance(error, ParseError):
+    elif isinstance(error, ParseError):
         logger.warning('Parse error: %s', str(error))
-        return JSONResponse(
-            content=_build_error_payload(
-                code=400,
-                status='INVALID_ARGUMENT',
-                message=str(error),
-                reason='INVALID_REQUEST',
-                metadata={},
-            ),
-            status_code=400,
-            media_type='application/json',
-        )
-    logger.exception('Unknown error occurred')
+    else:
+        logger.exception('Unknown error occurred')
+
+    payload = build_rest_error_payload(error)
+    # Extract HTTP status code from the payload
+    http_code = payload.get('error', {}).get('code', 500)
     return JSONResponse(
-        content=_build_error_payload(
-            code=500,
-            status='INTERNAL',
-            message='unknown exception',
-        ),
-        status_code=500,
+        content=payload,
+        status_code=http_code,
         media_type='application/json',
     )
 
@@ -171,9 +173,8 @@ def rest_stream_error_handler(
                     try:
                         async for item in original_iterator:
                             yield item
-                    except Exception as stream_error:
+                    except Exception as stream_error:  # noqa: BLE001
                         _log_error(stream_error)
-                        raise stream_error
 
                 response.body_iterator = error_catching_iterator()
 

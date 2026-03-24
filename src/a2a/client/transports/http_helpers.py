@@ -69,11 +69,23 @@ async def send_http_stream_request(
     httpx_client: httpx.AsyncClient,
     method: str,
     url: str,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
-    | None = None,
+    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn],
+    sse_error_handler: Callable[[str], NoReturn],
     **kwargs: Any,
 ) -> AsyncGenerator[str]:
-    """Sends a streaming HTTP request, yielding SSE data strings and handling exceptions."""
+    """Sends a streaming HTTP request, yielding SSE data strings and handling exceptions.
+
+    Args:
+        httpx_client: The async HTTP client.
+        method: The HTTP method (e.g. 'POST', 'GET').
+        url: The URL to send the request to.
+        status_error_handler: Handler for HTTP status errors. Should raise an
+            appropriate domain-specific exception.
+        sse_error_handler: Handler for SSE error events. Called with the
+            raw SSE data string when an ``event: error`` SSE event is received.
+            Should raise an appropriate domain-specific exception.
+        **kwargs: Additional keyword arguments forwarded to ``aconnect_sse``.
+    """
     with handle_http_exceptions(status_error_handler):
         async with aconnect_sse(
             httpx_client, method, url, **kwargs
@@ -97,4 +109,6 @@ async def send_http_stream_request(
             async for sse in event_source.aiter_sse():
                 if not sse.data:
                     continue
+                if sse.event == 'error':
+                    sse_error_handler(sse.data)
                 yield sse.data

@@ -1,5 +1,5 @@
-import logging
 import json
+import logging
 
 from typing import Any
 from unittest.mock import MagicMock
@@ -27,6 +27,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from a2a.utils.errors import InternalError
 
 
 logger = logging.getLogger(__name__)
@@ -722,6 +723,128 @@ async def test_global_http_exception_handler_returns_rpc_status(
 
     # Standard HTTP errors shouldn't leak details
     assert 'details' not in error_payload
+
+
+@pytest.mark.anyio
+async def test_streaming_mid_stream_error_emits_sse_error_event(
+    streaming_client: AsyncClient, request_handler: MagicMock
+) -> None:
+    """Test that mid-stream errors are sent as SSE error events instead of crashing the stream."""
+
+    async def mock_stream_then_error():
+        yield Message(
+            message_id='stream_msg_1',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='First chunk')],
+        )
+        raise InternalError(message='Something went wrong mid-stream')
+
+    request_handler.on_message_send_stream.return_value = (
+        mock_stream_then_error()
+    )
+
+    request = a2a_pb2.SendMessageRequest(
+        message=a2a_pb2.Message(
+            message_id='test_stream_msg',
+            role=a2a_pb2.ROLE_USER,
+            parts=[a2a_pb2.Part(text='Test message')],
+        ),
+    )
+
+    response = await streaming_client.post(
+        '/message:stream',
+        headers={'Accept': 'text/event-stream'},
+        json=json_format.MessageToDict(request),
+    )
+
+    response.raise_for_status()
+    assert 'text/event-stream' in response.headers.get('content-type', '')
+
+    lines = [line async for line in response.aiter_lines()]
+
+    # First event should be a normal data event with the message
+    data_lines = [
+        json.loads(line[6:]) for line in lines if line.startswith('data: ')
+    ]
+    assert len(data_lines) >= 1
+    assert 'message' in data_lines[0]
+    assert data_lines[0]['message']['messageId'] == 'stream_msg_1'
+
+    # Last event should be an SSE error event
+    error_event_lines = [line for line in lines if line.startswith('event: ')]
+    assert any('error' in line for line in error_event_lines)
+
+    # Find the data line after the error event
+    error_data = None
+    for i, line in enumerate(lines):
+        if line == 'event: error':
+            # The next non-empty line should be the error data
+            for j in range(i + 1, len(lines)):
+                if lines[j].startswith('data: '):
+                    error_data = json.loads(lines[j][6:])
+                    break
+            break
+
+    assert error_data is not None
+    assert 'error' in error_data
+    assert error_data['error']['code'] == 500
+    assert error_data['error']['status'] == 'INTERNAL'
+    assert 'Something went wrong mid-stream' in error_data['error']['message']
+
+
+@pytest.mark.anyio
+async def test_streaming_mid_stream_unknown_error_emits_sse_error_event(
+    streaming_client: AsyncClient, request_handler: MagicMock
+) -> None:
+    """Test that non-A2AError mid-stream errors also produce SSE error events."""
+
+    async def mock_stream_then_error():
+        yield Message(
+            message_id='stream_msg_1',
+            role=Role.ROLE_AGENT,
+            parts=[Part(text='First chunk')],
+        )
+        raise RuntimeError('Unexpected failure')
+
+    request_handler.on_message_send_stream.return_value = (
+        mock_stream_then_error()
+    )
+
+    request = a2a_pb2.SendMessageRequest(
+        message=a2a_pb2.Message(
+            message_id='test_stream_msg',
+            role=a2a_pb2.ROLE_USER,
+            parts=[a2a_pb2.Part(text='Test message')],
+        ),
+    )
+
+    response = await streaming_client.post(
+        '/message:stream',
+        headers={'Accept': 'text/event-stream'},
+        json=json_format.MessageToDict(request),
+    )
+
+    response.raise_for_status()
+
+    lines = [line async for line in response.aiter_lines()]
+
+    # Should have an error event
+    error_event_lines = [line for line in lines if line.startswith('event: ')]
+    assert any('error' in line for line in error_event_lines)
+
+    # Find the error data
+    error_data = None
+    for i, line in enumerate(lines):
+        if line == 'event: error':
+            for j in range(i + 1, len(lines)):
+                if lines[j].startswith('data: '):
+                    error_data = json.loads(lines[j][6:])
+                    break
+            break
+
+    assert error_data is not None
+    assert error_data['error']['code'] == 500
+    assert error_data['error']['status'] == 'INTERNAL'
 
 
 if __name__ == '__main__':

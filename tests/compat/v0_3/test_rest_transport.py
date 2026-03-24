@@ -634,6 +634,7 @@ async def test_compat_rest_transport_send_stream_request(
         'POST',
         'http://example.com/test',
         transport._handle_http_error,
+        transport._handle_sse_error,
         json=None,
         headers={'a2a-version': '0.3'},
     )

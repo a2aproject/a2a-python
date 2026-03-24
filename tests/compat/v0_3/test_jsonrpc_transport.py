@@ -480,6 +480,7 @@ async def test_compat_jsonrpc_transport_send_stream_request(
         'POST',
         'http://example.com',
         transport._handle_http_error,
+        transport._handle_sse_error,
         json={'some': 'data'},
         headers={'a2a-version': '0.3'},
     )

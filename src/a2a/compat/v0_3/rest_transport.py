@@ -44,7 +44,11 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, MethodNotFoundError
+from a2a.utils.errors import (
+    A2A_REASON_TO_ERROR,
+    JSON_RPC_ERROR_CODE_MAP,
+    MethodNotFoundError,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -369,6 +373,30 @@ class CompatRestTransport(ClientTransport):
 
         raise A2AClientError(f'HTTP Error {status_code}: {e}') from e
 
+    def _handle_sse_error(self, sse_data: str) -> NoReturn:
+        """Handles SSE error events by parsing the REST error payload and raising the appropriate A2AError."""
+        error_payload = json.loads(sse_data)
+        error_data = error_payload.get('error', {})
+
+        message = error_data.get('message', sse_data)
+        details = error_data.get('details', [])
+        if not isinstance(details, list):
+            details = []
+
+        for d in details:
+            if (
+                isinstance(d, dict)
+                and d.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo'
+            ):
+                reason = d.get('reason')
+                if isinstance(reason, str):
+                    exception_cls = A2A_REASON_TO_ERROR.get(reason)
+                    if exception_cls:
+                        raise exception_cls(message)
+                break
+
+        raise A2AClientError(message)
+
     async def _send_stream_request(
         self,
         method: str,
@@ -386,6 +414,7 @@ class CompatRestTransport(ClientTransport):
             method,
             f'{self.url}{path}',
             self._handle_http_error,
+            self._handle_sse_error,
             json=json,
             **http_kwargs,
         ):
