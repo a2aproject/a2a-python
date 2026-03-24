@@ -5,7 +5,7 @@ from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from starlette.applications import Starlette
-from a2a.server.apps import A2ARESTFastAPIApplication
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -83,10 +83,13 @@ async def test_agent_card_integration(header_val: str | None) -> None:
     jsonrpc_app = Starlette(routes=jsonrpc_routes)
     app.mount('/jsonrpc', jsonrpc_app)
 
-    # Mount REST application
-    rest_app = A2ARESTFastAPIApplication(
-        http_handler=handler, agent_card=agent_card
-    ).build()
+    rest_routes = [
+        *create_agent_card_routes(
+            agent_card=agent_card, card_url='/.well-known/agent-card.json'
+        ),
+        *create_rest_routes(agent_card=agent_card, request_handler=handler),
+    ]
+    rest_app = Starlette(routes=rest_routes)
     app.mount('/rest', rest_app)
 
     expected_content = {

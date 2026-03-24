@@ -6,6 +6,7 @@ from a2a.server.routes.jsonrpc_dispatcher import (
     DefaultCallContextBuilder,
 )
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 
 
 __all__ = [
@@ -13,4 +14,5 @@ __all__ = [
     'DefaultCallContextBuilder',
     'create_agent_card_routes',
     'create_jsonrpc_routes',
+    'create_rest_routes',
 ]
