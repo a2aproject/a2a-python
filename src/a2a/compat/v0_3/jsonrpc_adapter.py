@@ -306,10 +306,9 @@ class JSONRPC03Adapter:
                     )
                 )
                 yield {
-                    'event': 'error',
                     'data': err_resp.model_dump_json(
                         by_alias=True, exclude_none=True
-                    ),
+                    )
                 }
 
         return EventSourceResponse(event_generator(stream_gen))

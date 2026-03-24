@@ -415,13 +415,6 @@ class CompatJsonRpcTransport(ClientTransport):
         """Handles HTTP errors for standard requests."""
         raise A2AClientError(f'HTTP Error: {e.response.status_code}') from e
 
-    def _handle_sse_error(self, sse_data: str) -> NoReturn:
-        """Handles SSE error events by parsing JSON-RPC error payload and raising the appropriate domain error."""
-        data = json.loads(sse_data)
-        if 'error' in data:
-            raise self._create_jsonrpc_error(data['error'])
-        raise A2AClientError(f'SSE stream error: {sse_data}')
-
     async def _send_stream_request(
         self,
         json_data: dict[str, Any],
@@ -437,7 +430,6 @@ class CompatJsonRpcTransport(ClientTransport):
             'POST',
             self.url,
             self._handle_http_error,
-            self._handle_sse_error,
             json=json_data,
             **http_kwargs,
         ):

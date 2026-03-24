@@ -12,6 +12,10 @@ from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 
 
+def _default_sse_error_handler(sse_data: str) -> NoReturn:
+    raise A2AClientError(f'SSE stream error event received: {sse_data}')
+
+
 @contextmanager
 def handle_http_exceptions(
     status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
@@ -70,7 +74,7 @@ async def send_http_stream_request(
     method: str,
     url: str,
     status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn],
-    sse_error_handler: Callable[[str], NoReturn],
+    sse_error_handler: Callable[[str], NoReturn] = _default_sse_error_handler,
     **kwargs: Any,
 ) -> AsyncGenerator[str]:
     """Sends a streaming HTTP request, yielding SSE data strings and handling exceptions.
