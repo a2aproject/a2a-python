@@ -46,6 +46,7 @@ CORE_MODULES = [
     'a2a.server.agent_execution',
     'a2a.server.context',
     'a2a.server.events',
+    'a2a.server.request_handlers',
     'a2a.server.tasks',
     'a2a.types',
     'a2a.utils',
