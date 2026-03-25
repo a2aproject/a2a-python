@@ -344,10 +344,10 @@ async def test_inmemory_task_store_copying_behavior(use_copying: bool):
     original_task = Task(
         id='test_task', status=TaskStatus(state=TaskState.TASK_STATE_WORKING)
     )
-    await store.save(original_task)
+    await store.save(original_task, TEST_CONTEXT)
 
     # Retrieve it
-    retrieved_task = await store.get('test_task')
+    retrieved_task = await store.get('test_task', TEST_CONTEXT)
     assert retrieved_task is not None
 
     if use_copying:
@@ -359,7 +359,7 @@ async def test_inmemory_task_store_copying_behavior(use_copying: bool):
     retrieved_task.status.state = TaskState.TASK_STATE_COMPLETED
 
     # Retrieve it again, it should NOT be modified in the store if use_copying=True
-    retrieved_task_2 = await store.get('test_task')
+    retrieved_task_2 = await store.get('test_task', TEST_CONTEXT)
     assert retrieved_task_2 is not None
 
     if use_copying:

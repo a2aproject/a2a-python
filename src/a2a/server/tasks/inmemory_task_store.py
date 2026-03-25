@@ -208,13 +208,13 @@ class InMemoryTaskStore(TaskStore):
         )
 
     async def save(
-        self, task: Task, context: ServerCallContext | None = None
+        self, task: Task, context: ServerCallContext
     ) -> None:
         """Saves or updates a task in the store."""
         await self._store.save(task, context)
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the store by ID."""
         return await self._store.get(task_id, context)
@@ -222,13 +222,13 @@ class InMemoryTaskStore(TaskStore):
     async def list(
         self,
         params: a2a_pb2.ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> a2a_pb2.ListTasksResponse:
         """Retrieves a list of tasks from the store."""
         return await self._store.list(params, context)
 
     async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> None:
         """Deletes a task from the store by ID."""
         await self._store.delete(task_id, context)
