@@ -194,7 +194,7 @@ class JsonRpcDispatcher:
     def __init__(  # noqa: PLR0913
         self,
         agent_card: AgentCard,
-        http_handler: RequestHandler,
+        request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
         context_builder: CallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
@@ -209,12 +209,12 @@ class JsonRpcDispatcher:
 
         Args:
             agent_card: The AgentCard describing the agent's capabilities.
-            http_handler: The handler instance responsible for processing A2A
+            request_handler: The handler instance responsible for processing A2A
               requests via http.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
             context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the http_handler. If None, no
+              ServerCallContext passed to the request_handler. If None, no
               ServerCallContext is passed.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
@@ -231,7 +231,7 @@ class JsonRpcDispatcher:
             )
 
         self.agent_card = agent_card
-        self.http_handler = http_handler
+        self.request_handler = request_handler
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
@@ -242,7 +242,7 @@ class JsonRpcDispatcher:
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
                 agent_card=agent_card,
-                http_handler=http_handler,
+                http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
                 context_builder=self._context_builder,
                 card_modifier=card_modifier,
@@ -433,7 +433,6 @@ class JsonRpcDispatcher:
     )
     async def _require_push_notifications(self) -> None:
         """Helper to enforce push notifications capability."""
-        pass
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate(
@@ -445,7 +444,7 @@ class JsonRpcDispatcher:
         request_id: str | int | None,
         request_obj: A2ARequest,
         context: ServerCallContext,
-    ) -> Response:
+    ) -> AsyncGenerator[dict[str, Any], None]:
         """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
 
         Args:
@@ -454,15 +453,15 @@ class JsonRpcDispatcher:
             context: The ServerCallContext for the request.
 
         Returns:
-            An `EventSourceResponse` object to stream results to the client.
+            An `AsyncGenerator` object to stream results to the client.
         """
         stream: AsyncGenerator | None = None
         if isinstance(request_obj, SendMessageRequest):
-            stream = self.http_handler.on_message_send_stream(
+            stream = self.request_handler.on_message_send_stream(
                 request_obj, context
             )
         elif isinstance(request_obj, SubscribeToTaskRequest):
-            stream = self.http_handler.on_subscribe_to_task(
+            stream = self.request_handler.on_subscribe_to_task(
                 request_obj, context
             )
 
@@ -485,12 +484,12 @@ class JsonRpcDispatcher:
         return _wrap_stream(stream)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    async def _process_non_streaming_request(
+    async def _process_non_streaming_request(  # noqa: PLR0911, PLR0912
         self,
         request_id: str | int | None,
         request_obj: A2ARequest,
         context: ServerCallContext,
-    ) -> Response:
+    ) -> dict[str, Any] | None:
         """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
 
         Args:
@@ -499,48 +498,71 @@ class JsonRpcDispatcher:
             context: The ServerCallContext for the request.
 
         Returns:
-            A `JSONResponse` object containing the result or error.
+            A dict containing the result or error.
         """
-        handler_result: Any = None
         match request_obj:
             case SendMessageRequest():
-                task_or_message = await self.http_handler.on_message_send(request_obj, context)
+                task_or_message = await self.request_handler.on_message_send(
+                    request_obj, context
+                )
                 if isinstance(task_or_message, Task):
-                    response = SendMessageResponse(task=task_or_message)
-                else:
-                    response = SendMessageResponse(message=task_or_message)
-                return MessageToDict(response)
-            case CancelTaskRequest():
-                task = await self.http_handler.on_cancel_task(request_obj, context)
-                if task:
-                    return MessageToDict(task, preserving_proto_field_name=False)
-                else:
-                    raise TaskNotFoundError()
-            case GetTaskRequest():
-                task = await self.http_handler.on_get_task(request_obj, context)
-                if task:
-                    return MessageToDict(task, preserving_proto_field_name=False)
-                else:
-                    raise TaskNotFoundError()
-            case ListTasksRequest():
-                response = await self.http_handler.on_list_tasks(request_obj, context)
+                    return MessageToDict(
+                        SendMessageResponse(task=task_or_message)
+                    )
                 return MessageToDict(
-                    response,
+                    SendMessageResponse(message=task_or_message)
+                )
+            case CancelTaskRequest():
+                task = await self.request_handler.on_cancel_task(
+                    request_obj, context
+                )
+                if task:
+                    return MessageToDict(
+                        task, preserving_proto_field_name=False
+                    )
+                raise TaskNotFoundError
+            case GetTaskRequest():
+                task = await self.request_handler.on_get_task(
+                    request_obj, context
+                )
+                if task:
+                    return MessageToDict(
+                        task, preserving_proto_field_name=False
+                    )
+                raise TaskNotFoundError
+            case ListTasksRequest():
+                tasks_response = await self.request_handler.on_list_tasks(
+                    request_obj, context
+                )
+                return MessageToDict(
+                    tasks_response,
                     preserving_proto_field_name=False,
                     always_print_fields_with_no_presence=True,
                 )
             case TaskPushNotificationConfig():
                 await self._require_push_notifications()
-                result_config = await self.http_handler.on_create_task_push_notification_config(request_obj, context)
-                return MessageToDict(result_config, preserving_proto_field_name=False)
+                result_config = await self.request_handler.on_create_task_push_notification_config(
+                    request_obj, context
+                )
+                return MessageToDict(
+                    result_config, preserving_proto_field_name=False
+                )
             case GetTaskPushNotificationConfigRequest():
-                config = await self.http_handler.on_get_task_push_notification_config(request_obj, context)
+                config = await self.request_handler.on_get_task_push_notification_config(
+                    request_obj, context
+                )
                 return MessageToDict(config, preserving_proto_field_name=False)
             case ListTaskPushNotificationConfigsRequest():
-                response = await self.http_handler.on_list_task_push_notification_configs(request_obj, context)
-                return MessageToDict(response, preserving_proto_field_name=False)
+                configs_response = await self.request_handler.on_list_task_push_notification_configs(
+                    request_obj, context
+                )
+                return MessageToDict(
+                    configs_response, preserving_proto_field_name=False
+                )
             case DeleteTaskPushNotificationConfigRequest():
-                await self.http_handler.on_delete_task_push_notification_config(request_obj, context)
+                await self.request_handler.on_delete_task_push_notification_config(
+                    request_obj, context
+                )
                 return None
             case GetExtendedAgentCardRequest():
                 if not self.agent_card.capabilities.extended_agent_card:
@@ -554,9 +576,13 @@ class JsonRpcDispatcher:
                         self.extended_card_modifier(base_card, context)
                     )
                 elif self.card_modifier:
-                    card_to_serve = await maybe_await(self.card_modifier(base_card))
+                    card_to_serve = await maybe_await(
+                        self.card_modifier(base_card)
+                    )
 
-                return MessageToDict(card_to_serve, preserving_proto_field_name=False)
+                return MessageToDict(
+                    card_to_serve, preserving_proto_field_name=False
+                )
             case _:
                 logger.error(
                     'Unhandled validated request type: %s', type(request_obj)
