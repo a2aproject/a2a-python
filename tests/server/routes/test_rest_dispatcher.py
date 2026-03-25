@@ -145,7 +145,7 @@ class TestRestDispatcherEndpoints:
         # 0.3 is currently not supported for direct message sending on RestDispatcher
         req = make_mock_request(method='POST', headers={'a2a-version': '0.3.0'})
         response = await rest_dispatcher_instance.on_message_send(req)
-        
+
         # VersionNotSupportedError maps to 400 Bad Request
         assert response.status_code == 400
 
@@ -302,26 +302,24 @@ class TestRestDispatcherStreaming:
     ):
         req = make_mock_request(method='POST')
         response = await rest_dispatcher_instance.on_message_send_stream(req)
-        
+
         assert response.status_code == 200
-        
+
         chunks = []
         async for chunk in response.body_iterator:
             chunks.append(chunk)
-            
+
         assert len(chunks) == 2
         # sse-starlette yields strings or bytes formatted as Server-Sent Events
         assert 'chunk1' in str(chunks[0])
         assert 'chunk2' in str(chunks[1])
 
-    async def test_on_subscribe_to_task_success(
-        self, rest_dispatcher_instance
-    ):
+    async def test_on_subscribe_to_task_success(self, rest_dispatcher_instance):
         req = make_mock_request(method='GET', path_params={'id': 'test_task'})
         response = await rest_dispatcher_instance.on_subscribe_to_task(req)
-        
+
         assert response.status_code == 200
-        
+
         chunks = []
         async for chunk in response.body_iterator:
             chunks.append(chunk)
