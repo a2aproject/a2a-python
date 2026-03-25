@@ -33,7 +33,6 @@ else:
 
 from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3.rest_handler import REST03Handler
-from a2a.server.apps.rest.rest_adapter import RESTAdapterInterface
 from a2a.server.context import ServerCallContext
 from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
 from a2a.utils.error_handlers import (
@@ -50,7 +49,7 @@ from a2a.utils.helpers import maybe_await
 logger = logging.getLogger(__name__)
 
 
-class REST03Adapter(RESTAdapterInterface):
+class REST03Adapter:
     """Adapter to make RequestHandler work with v0.3 RESTful API.
 
     Defines v0.3 REST request processors and their routes, as well as managing response generation including Server-Sent Events (SSE).

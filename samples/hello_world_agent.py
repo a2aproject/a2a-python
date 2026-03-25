@@ -11,13 +11,16 @@ from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps import A2ARESTFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers import GrpcHandler
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
@@ -166,22 +169,22 @@ async def serve(
             AgentInterface(
                 protocol_binding='JSONRPC',
                 protocol_version='1.0',
-                url=f'http://{host}:{port}/a2a/jsonrpc/',
+                url=f'http://{host}:{port}/a2a/jsonrpc',
             ),
             AgentInterface(
                 protocol_binding='JSONRPC',
                 protocol_version='0.3',
-                url=f'http://{host}:{port}/a2a/jsonrpc/',
+                url=f'http://{host}:{port}/a2a/jsonrpc',
             ),
             AgentInterface(
                 protocol_binding='HTTP+JSON',
                 protocol_version='1.0',
-                url=f'http://{host}:{port}/a2a/rest/',
+                url=f'http://{host}:{port}/a2a/rest',
             ),
             AgentInterface(
                 protocol_binding='HTTP+JSON',
                 protocol_version='0.3',
-                url=f'http://{host}:{port}/a2a/rest/',
+                url=f'http://{host}:{port}/a2a/rest',
             ),
         ],
     )
@@ -191,17 +194,17 @@ async def serve(
         agent_executor=SampleAgentExecutor(), task_store=task_store
     )
 
-    rest_app_builder = A2ARESTFastAPIApplication(
+    rest_routes = create_rest_routes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        path_prefix='/a2a/rest',
         enable_v0_3_compat=True,
     )
-    rest_app = rest_app_builder.build()
-
     jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
         request_handler=request_handler,
-        rpc_url='/a2a/jsonrpc/',
+        rpc_url='/a2a/jsonrpc',
+        enable_v0_3_compat=True,
     )
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card,
@@ -209,7 +212,7 @@ async def serve(
     app = FastAPI()
     app.routes.extend(jsonrpc_routes)
     app.routes.extend(agent_card_routes)
-    app.mount('/a2a/rest', rest_app)
+    app.routes.extend(rest_routes)
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')
