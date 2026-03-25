@@ -32,7 +32,7 @@ jobs:
           uv venv .venv-minimal
           # Install only the built wheel -- no extras, no dev deps.
           # This simulates what an end-user gets with `pip install a2a-sdk`.
-          .venv-minimal/bin/pip install dist/*.whl
+          VIRTUAL_ENV=.venv-minimal uv pip install dist/*.whl
 
       - name: Run import smoke test
         run: .venv-minimal/bin/python scripts/test_minimal_install.py
