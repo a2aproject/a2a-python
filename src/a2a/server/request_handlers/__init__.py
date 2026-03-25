@@ -38,7 +38,6 @@ except ImportError as e:
 __all__ = [
     'DefaultRequestHandler',
     'GrpcHandler',
-    'JSONRPCHandler',
     'RequestHandler',
     'build_error_response',
     'prepare_response_object',
