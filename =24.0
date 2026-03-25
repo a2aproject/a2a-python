@@ -1,0 +1,5 @@
+Collecting packaging
+  Using cached packaging-26.0-py3-none-any.whl.metadata (3.3 kB)
+Using cached packaging-26.0-py3-none-any.whl (74 kB)
+Installing collected packages: packaging
+Successfully installed packaging-26.0
