@@ -57,7 +57,11 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import (
+    PROTOCOL_VERSION_CURRENT,
+    VERSION_HEADER,
+    TransportProtocol,
+)
 from a2a.utils.errors import (
     ContentTypeNotSupportedError,
     ExtendedAgentCardNotConfiguredError,
@@ -705,7 +709,10 @@ async def test_json_transport_get_signed_base_card(
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
@@ -776,7 +783,10 @@ async def test_client_get_signed_extended_card(
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     transport = JsonRpcTransport(
         httpx_client=httpx_client,
@@ -847,7 +857,10 @@ async def test_client_get_signed_base_and_extended_cards(
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
