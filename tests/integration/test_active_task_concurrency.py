@@ -31,7 +31,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
     Artifact,
 )
-from a2a.server.apps import A2ARESTFastAPIApplication
+from fastapi import FastAPI
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.client.client_factory import ClientFactory
 from a2a.client.client import ClientConfig
 from a2a.client.base_client import BaseClient
@@ -153,7 +154,8 @@ async def client(trigger_events):
         task_store=task_store,
         push_config_store=InMemoryPushNotificationConfigStore(),
     )
-    app = A2ARESTFastAPIApplication(agent_card, handler).build()
+    app = FastAPI()
+    app.routes.extend(create_rest_routes(agent_card, handler))
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url='http://testserver',

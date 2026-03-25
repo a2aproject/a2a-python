@@ -26,12 +26,13 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     GetTaskRequest,
 )
-from a2a.server.apps import A2ARESTFastAPIApplication
+from fastapi import FastAPI
+from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.routes import CallContextBuilder
 from a2a.client.client_factory import ClientFactory
 from a2a.client.client import ClientConfig
 from a2a.utils import TransportProtocol
 from a2a.types.a2a_pb2 import AgentCard, AgentCapabilities, AgentInterface
-from a2a.server.apps.jsonrpc.jsonrpc_app import CallContextBuilder
 
 
 class MockUser(User):
@@ -67,9 +68,8 @@ def agent_card():
 
 
 async def create_client(handler, agent_card):
-    app = A2ARESTFastAPIApplication(
-        agent_card, handler, context_builder=MockCallContextBuilder()
-    ).build()
+    app = FastAPI()
+    app.routes.extend(create_rest_routes(agent_card, handler, context_builder=MockCallContextBuilder()))
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )

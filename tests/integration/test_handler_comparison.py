@@ -41,7 +41,8 @@ from a2a.utils.errors import (
     TaskAlreadyStartedError,
     VersionNotSupportedError,
 )
-from a2a.server.apps import A2ARESTFastAPIApplication
+from fastapi import FastAPI
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.client.client_factory import ClientFactory
 from a2a.client.client import ClientConfig
 from a2a.client.base_client import BaseClient
@@ -563,7 +564,8 @@ async def client(request, trigger_events):
     task_store = InMemoryTaskStore(use_copying=False)
     queue_manager = InMemoryQueueManager()
     handler = create_handler(use_legacy, executor, task_store, queue_manager)
-    app = A2ARESTFastAPIApplication(agent_card, handler).build()
+    app = FastAPI()
+    app.routes.extend(create_rest_routes(agent_card, handler))
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app),
         base_url='http://testserver',
