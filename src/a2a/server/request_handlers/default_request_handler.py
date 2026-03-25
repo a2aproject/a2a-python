@@ -183,9 +183,15 @@ class DefaultRequestHandler(RequestHandler):
         )
         result_aggregator = ResultAggregator(task_manager)
 
-        queue = await self._queue_manager.tap(task.id)
-        if not queue:
-            queue = EventQueue()
+        tapped_queue: EventQueue | None = None
+        main_queue = await self._queue_manager.get(task.id)
+        if not main_queue:
+            main_queue = EventQueue()
+            tapped_queue = await main_queue.tap()
+        else:
+            tapped_queue = await self._queue_manager.tap(task.id)
+            if not tapped_queue:
+                tapped_queue = await main_queue.tap()
 
         await self.agent_executor.cancel(
             RequestContext(
@@ -194,13 +200,13 @@ class DefaultRequestHandler(RequestHandler):
                 context_id=task.context_id,
                 task=task,
             ),
-            queue,
+            main_queue,
         )
         # Cancel the ongoing task, if one exists.
         if producer_task := self._running_agents.get(task.id):
             producer_task.cancel()
 
-        consumer = EventConsumer(queue)
+        consumer = EventConsumer(tapped_queue)
         result = await result_aggregator.consume_all(consumer)
         if not isinstance(result, Task):
             raise InternalError(

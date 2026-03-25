@@ -15,7 +15,9 @@ from a2a.server.agent_execution.request_context_builder import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.events import QueueManager
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.event_queue import (
+    EventQueue,
+)
 from a2a.server.request_handlers import DefaultRequestHandler, JSONRPCHandler
 from a2a.server.tasks import (
     BasePushNotificationSender,

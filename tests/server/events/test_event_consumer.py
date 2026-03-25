@@ -9,7 +9,9 @@ from pydantic import ValidationError
 
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.events.event_queue import QueueShutDown
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.event_queue import (
+    EventQueue,
+)
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
     InternalError,
@@ -466,7 +468,7 @@ async def test_consume_all_handles_validation_error(
 async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
 
     parent_queue = EventQueue(max_queue_size=10)
-    child_queue = parent_queue.tap()
+    child_queue = await parent_queue.tap()
 
     fast_consumer_done = asyncio.Event()
 

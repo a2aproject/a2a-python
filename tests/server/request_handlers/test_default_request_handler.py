@@ -297,10 +297,10 @@ async def test_on_cancel_task_queue_tap_returns_none():
     mock_task_store.get.return_value = sample_task
 
     mock_queue_manager = AsyncMock(spec=QueueManager)
+    mock_queue_manager.get.return_value = None
     mock_queue_manager.tap.return_value = (
         None  # Simulate queue not found / tap returns None
     )
-
     mock_agent_executor = AsyncMock(
         spec=AgentExecutor
     )  # Use AsyncMock for agent_executor
@@ -329,8 +329,8 @@ async def test_on_cancel_task_queue_tap_returns_none():
         result_task = await request_handler.on_cancel_task(params, context)
 
     mock_task_store.get.assert_awaited_once_with('tap_none_task', context)
-    mock_queue_manager.tap.assert_awaited_once_with('tap_none_task')
-    # agent_executor.cancel should be called with a new EventQueue if tap returned None
+    mock_queue_manager.get.assert_awaited_once_with('tap_none_task')
+    # agent_executor.cancel should be called with a new EventQueue if get returned None
     mock_agent_executor.cancel.assert_awaited_once()
     # Verify the EventQueue passed to cancel was a new one
     call_args_list = mock_agent_executor.cancel.call_args_list

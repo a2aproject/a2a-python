@@ -104,6 +104,7 @@ class MockAgentExecutor(AgentExecutor):
             await event.wait()
             bg_task.cancel()
             print(f'SERVER: stream event triggered for task {context.task_id}')
+            return  # If it was cancelled, don't update to COMPLETED
 
         await task_updater.update_status(
             TaskState.TASK_STATE_COMPLETED,
@@ -116,13 +117,15 @@ class MockAgentExecutor(AgentExecutor):
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         print(f'SERVER: cancel called for task {context.task_id}')
         assert context.task_id in self.events
-        self.events[context.task_id].set()
+
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
             context.context_id,
         )
         await task_updater.update_status(TaskState.TASK_STATE_CANCELED)
+
+        self.events[context.task_id].set()
 
 
 async def main_async(http_port: int, grpc_port: int):

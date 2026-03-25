@@ -1,9 +1,10 @@
 import asyncio
+import contextlib
 import logging
 import sys
 
 from types import TracebackType
-from typing import Any
+from typing import Any, cast
 
 from typing_extensions import Self
 
@@ -39,41 +40,65 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 logger = logging.getLogger(__name__)
 
-
 Event = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
 """Type alias for events that can be enqueued."""
 
 DEFAULT_MAX_QUEUE_SIZE = 1024
 
 
-@trace_class(kind=SpanKind.SERVER)
 class EventQueue:
-    """Event queue for A2A responses from agent.
+    """Base class and factory for EventQueueSource."""
 
-    Acts as a buffer between the agent's asynchronous execution and the
-    server's response handling (e.g., streaming via SSE). Supports tapping
-    to create child queues that receive the same events.
-    """
+    def __new__(cls, *args: Any, **kwargs: Any) -> Self:
+        """Redirects instantiation to EventQueueSource for backwards compatibility."""
+        print(f'EventQueue.__new__ called: {cls}')
+        if cls is EventQueue:
+            return cast('Self', EventQueueSource.__new__(EventQueueSource, *args, **kwargs))
+        return super().__new__(cls)
 
-    def __init__(self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE) -> None:
-        """Initializes the EventQueue."""
-        # Make sure the `asyncio.Queue` is bounded.
-        # If it's unbounded (maxsize=0), then `queue.put()` never needs to wait,
-        # and so the streaming won't work correctly.
-        if max_queue_size <= 0:
-            raise ValueError('max_queue_size must be greater than 0')
+    @property
+    def queue(self) -> AsyncQueue[Event]:
+        """Returns the underlying asyncio.Queue.
 
-        self.queue: AsyncQueue[Event] = _create_async_queue(
-            maxsize=max_queue_size
-        )
-        self._children: list[EventQueue] = []
-        self._is_closed = False
-        self._lock = asyncio.Lock()
-        logger.debug('EventQueue initialized.')
+        NOTE: Interacting directly with this property is error-prone for concurrency
+        bugs and should generally be restricted to tests or specific edge-case workarounds.
+        """
+        raise NotImplementedError
+
+    async def enqueue_event(self, event: Event) -> None:
+        """Pushes an event into the queue."""
+        raise NotImplementedError
+
+    async def dequeue_event(self, no_wait: bool = False) -> Event:
+        """Pulls an event from the queue."""
+        raise NotImplementedError
+
+    def task_done(self) -> None:
+        """Signals that a formerly enqueued task is complete."""
+        raise NotImplementedError
+
+    async def tap(
+        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
+    ) -> 'EventQueue':
+        """Creates a child queue that receives all future events."""
+        raise NotImplementedError
+
+    async def close(self, immediate: bool = False) -> None:
+        """Closes the queue and all its child sinks."""
+        raise NotImplementedError
+
+    def is_closed(self) -> bool:
+        """Checks if the queue is closed.
+
+        NOTE: Relying on this for enqueue logic introduces race conditions.
+        It is maintained primarily for backwards compatibility, workarounds for
+        Python 3.10/3.12 async queues in consumers, and for the test suite.
+        """
+        raise NotImplementedError
 
     async def __aenter__(self) -> Self:
         """Enters the async context manager, returning the queue itself."""
-        return self
+        return self  # type: ignore
 
     async def __aexit__(
         self,
@@ -84,164 +109,263 @@ class EventQueue:
         """Exits the async context manager, ensuring close() is called."""
         await self.close()
 
-    async def enqueue_event(self, event: Event) -> None:
-        """Enqueues an event to this queue and all its children.
 
-        Args:
-            event: The event object to enqueue.
-        """
-        async with self._lock:
-            if self._is_closed:
-                logger.warning('Queue is closed. Event will not be enqueued.')
-                return
+@trace_class(kind=SpanKind.SERVER)
+class EventQueueSource(EventQueue):
+    """The Parent EventQueue.
 
-        logger.debug('Enqueuing event of type: %s', type(event))
+    Acts as the single entry point for producers. Events pushed here are buffered
+    in `_incoming_queue` and distributed to all child Sinks by a background dispatcher task.
+    """
+
+    def __init__(self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE) -> None:
+        """Initializes the EventQueueSource."""
+        if max_queue_size <= 0:
+            raise ValueError('max_queue_size must be greater than 0')
+
+        self._incoming_queue: AsyncQueue[Event] = _create_async_queue(
+            maxsize=max_queue_size
+        )
+        self._lock = asyncio.Lock()
+        self._sinks: set[EventQueueSink] = set()
+        self._is_closed = False
+
+        # Internal sink for backward compatibility
+        self._default_sink = EventQueueSink(
+            parent=self, max_queue_size=max_queue_size
+        )
+        self._sinks.add(self._default_sink)
+        self._dispatcher_task = asyncio.create_task(self._dispatch_loop())
+
+        logger.debug('EventQueueSource initialized.')
+        print(f'EventQueueSource initialized: {self}')
+
+    @property
+    def queue(self) -> AsyncQueue[Event]:
+        """Returns the underlying asyncio.Queue of the default sink."""
+        return self._default_sink.queue
+
+    async def _dispatch_loop(self) -> None:
+        try:
+            while True:
+                event = await self._incoming_queue.get()
+
+                async with self._lock:
+                    active_sinks = list(self._sinks)
+
+                if active_sinks:
+                    await asyncio.gather(
+                        *(
+                            sink._put_internal(event)  # noqa: SLF001
+                            for sink in active_sinks
+                        ),
+                        return_exceptions=True,
+                    )
+
+                self._incoming_queue.task_done()
+        except asyncio.CancelledError:
+            logger.debug('EventQueueSource._dispatch_loop() cancelled %s', self)
+        except QueueShutDown:
+            logger.debug('EventQueueSource._dispatch_loop() shutdown %s', self)
+        except Exception:
+            logger.exception(
+                'EventQueueSource._dispatch_loop() failed %s', self
+            )
+            raise
+        finally:
+            logger.debug('EventQueueSource._dispatch_loop() finished %s', self)
+
+    async def _join_incoming_queue(self) -> None:
+        """Helper to wait for join() while monitoring the dispatcher task."""
+        if self._dispatcher_task.done():
+            logger.warning(
+                'Dispatcher task is not running. Cannot wait for event dispatch.'
+            )
+            return
+
+        join_task = asyncio.create_task(self._incoming_queue.join())
+        done, _pending = await asyncio.wait(
+            [join_task, self._dispatcher_task],
+            return_when=asyncio.FIRST_COMPLETED,
+        )
+
+        if join_task in done:
+            return
+
+        # Dispatcher task finished before join()
+        join_task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await join_task
 
         try:
-            await self.queue.put(event)
+            if self._dispatcher_task.exception():
+                logger.error(
+                    'Dispatcher task failed. Events may be lost.',
+                    exc_info=self._dispatcher_task.exception(),
+                )
+            else:
+                logger.warning(
+                    'Dispatcher task finished unexpectedly. Events may be lost.'
+                )
+        except (asyncio.CancelledError, asyncio.InvalidStateError):
+            logger.warning(
+                'Dispatcher task was cancelled or finished. Events may be lost.'
+            )
+
+    async def tap(
+        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
+    ) -> 'EventQueue':
+        """Taps the event queue to create a new child queue that receives all future events."""
+        async with self._lock:
+            if self._is_closed:
+                raise QueueShutDown('Cannot tap a closed EventQueueSource.')
+            sink = EventQueueSink(parent=self, max_queue_size=max_queue_size)
+            self._sinks.add(sink)
+            return sink
+
+    async def remove_sink(self, sink: 'EventQueueSink') -> None:
+        """Removes a sink from the source's internal list."""
+        async with self._lock:
+            self._sinks.remove(sink)
+
+    async def enqueue_event(self, event: Event) -> None:
+        """Enqueues an event to this queue and all its children."""
+        logger.debug('Enqueuing event of type: %s', type(event))
+        try:
+            # NO LOCK NEEDED. We rely entirely on the underlying queue's atomic shutdown.
+            await self._incoming_queue.put(event)
+            # await self._join_incoming_queue()
         except QueueShutDown:
             logger.warning('Queue was closed during enqueuing. Event dropped.')
             return
 
-        for child in self._children:
-            await child.enqueue_event(event)
+    async def dequeue_event(self, no_wait: bool = False) -> Event:
+        """Dequeues an event from the default internal sink queue."""
+        return await self._default_sink.dequeue_event(no_wait=no_wait)
+
+    def task_done(self) -> None:
+        """Signals that a formerly enqueued task is complete via the default internal sink queue."""
+        self._default_sink.task_done()
+
+    async def close(self, immediate: bool = False) -> None:
+        """Closes the queue for future push events and also closes all child sinks."""
+        logger.debug('Closing EventQueueSource: immediate=%s', immediate)
+        async with self._lock:
+            self._is_closed = True
+            sinks_to_close = list(self._sinks)
+
+        self._incoming_queue.shutdown(immediate=immediate)
+
+        if immediate:
+            self._dispatcher_task.cancel()
+            await asyncio.gather(
+                *(sink.close(immediate=True) for sink in sinks_to_close)
+            )
+        else:
+            # Wait for all already-enqueued events to be dispatched
+            await self._join_incoming_queue()
+            self._dispatcher_task.cancel()
+            await asyncio.gather(
+                *(sink.close(immediate=False) for sink in sinks_to_close)
+            )
+
+    def is_closed(self) -> bool:
+        """Checks if the queue is closed."""
+        return self._is_closed
+
+    async def test_only_join_incoming_queue(self) -> None:
+        await self._join_incoming_queue()
+
+
+class EventQueueSink(EventQueue):
+    """The Child EventQueue.
+
+    Acts as a read-only consumer endpoint. Events are pushed here exclusively
+    by the parent EventQueueSource's dispatcher task.
+    """
+
+    def __init__(
+        self,
+        parent: EventQueueSource,
+        max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+    ) -> None:
+        """Initializes the EventQueueSink."""
+        if max_queue_size <= 0:
+            raise ValueError('max_queue_size must be greater than 0')
+
+        self._parent = parent
+        self._queue: AsyncQueue[Event] = _create_async_queue(
+            maxsize=max_queue_size
+        )
+        self._is_closed = False
+        self._lock = asyncio.Lock()
+
+        logger.debug('EventQueueSink initialized.')
+
+    @property
+    def queue(self) -> AsyncQueue[Event]:
+        """Returns the underlying asyncio.Queue of this sink."""
+        return self._queue
+
+    async def _put_internal(self, event: Event) -> None:
+        with contextlib.suppress(QueueShutDown):
+            await self._queue.put(event)
+
+    async def enqueue_event(self, event: Event) -> None:
+        """Sinks are read-only and cannot have events directly enqueued to them."""
+        raise RuntimeError('Cannot enqueue to a sink-only queue')
 
     async def dequeue_event(self, no_wait: bool = False) -> Event:
-        """Dequeues an event from the queue.
-
-        This implementation expects that dequeue to raise an exception when
-        the queue has been closed. In python 3.13+ this is naturally provided
-        by the QueueShutDown exception generated when the queue has closed and
-        the user is awaiting the queue.get method. Python<=3.12 this needs to
-        manage this lifecycle itself. The current implementation can lead to
-        blocking if the dequeue_event is called before the EventQueue has been
-        closed but when there are no events on the queue. Two ways to avoid this
-        are to call this with no_wait = True which won't block, but is the
-        callers responsibility to retry as appropriate. Alternatively, one can
-        use an async Task management solution to cancel the get task if the queue
-        has closed or some other condition is met. The implementation of the
-        EventConsumer uses an async.wait with a timeout to abort the
-        dequeue_event call and retry, when it will return with a closed error.
-
-        Args:
-            no_wait: If True, retrieve an event immediately or raise `asyncio.QueueEmpty`.
-                     If False (default), wait until an event is available.
-
-        Returns:
-            The next event from the queue.
-
-        Raises:
-            asyncio.QueueEmpty: If `no_wait` is True and the queue is empty.
-            asyncio.QueueShutDown: If the queue has been closed and is empty.
-        """
+        """Dequeues an event from the sink queue."""
         async with self._lock:
-            if self._is_closed and self.queue.empty():
+            if self._is_closed and self._queue.empty():
                 logger.warning('Queue is closed. Event will not be dequeued.')
                 raise QueueShutDown('Queue is closed.')
 
         if no_wait:
             logger.debug('Attempting to dequeue event (no_wait=True).')
-            event = self.queue.get_nowait()
+            event = self._queue.get_nowait()
             logger.debug(
                 'Dequeued event (no_wait=True) of type: %s', type(event)
             )
             return event
 
         logger.debug('Attempting to dequeue event (waiting).')
-        event = await self.queue.get()
+        event = await self._queue.get()
         logger.debug('Dequeued event (waited) of type: %s', type(event))
         return event
 
     def task_done(self) -> None:
-        """Signals that a formerly enqueued task is complete.
+        """Signals that a formerly enqueued task is complete in this sink queue."""
+        logger.debug('Marking task as done in EventQueueSink.')
+        self._queue.task_done()
 
-        Used in conjunction with `dequeue_event` to track processed items.
-        """
-        logger.debug('Marking task as done in EventQueue.')
-        self.queue.task_done()
-
-    def tap(self) -> 'EventQueue':
-        """Taps the event queue to create a new child queue that receives all future events.
-
-        Returns:
-            A new `EventQueue` instance that will receive all events enqueued
-            to this parent queue from this point forward.
-        """
-        logger.debug('Tapping EventQueue to create a child queue.')
-        queue = EventQueue()
-        self._children.append(queue)
-        return queue
+    async def tap(
+        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
+    ) -> 'EventQueue':
+        """Taps the event queue to create a new child queue that receives all future events."""
+        # Delegate tap to the parent source so all sinks are flat under the source
+        return await self._parent.tap(max_queue_size=max_queue_size)
 
     async def close(self, immediate: bool = False) -> None:
-        """Closes the queue for future push events and also closes all child queues.
-
-        Args:
-            immediate: If True, immediately flushes the queue, discarding all pending
-                events, and causes any currently blocked `dequeue_event` calls to raise
-                `QueueShutDown`. If False (default), the queue is marked as closed to new
-                events, but existing events can still be dequeued and processed until the
-                queue is fully drained.
-        """
-        logger.debug('Closing EventQueue.')
+        """Closes the child sink queue."""
+        logger.debug('Closing EventQueueSink.')
         async with self._lock:
-            if self._is_closed and not immediate:
-                return
-            self._is_closed = True
+            if not self._is_closed:
+                self._is_closed = True
 
-        self.queue.shutdown(immediate)
+        try:
+            await self._parent.remove_sink(self)
+        except KeyError:
+            # Guarantee idempotency.
+            pass
 
-        await asyncio.gather(
-            *(child.close(immediate) for child in self._children)
-        )
+        # Atomic shutdown of the consumer queue
+        self._queue.shutdown(immediate=immediate)
+
         if not immediate:
-            await self.queue.join()
+            await self._queue.join()
 
     def is_closed(self) -> bool:
-        """Checks if the queue is closed."""
+        """Checks if the sink queue is closed."""
         return self._is_closed
-
-    async def clear_events(self, clear_child_queues: bool = True) -> None:
-        """Clears all events from the current queue and optionally all child queues.
-
-        This method removes all pending events from the queue without processing them.
-        Child queues can be optionally cleared based on the clear_child_queues parameter.
-
-        Args:
-            clear_child_queues: If True (default), clear all child queues as well.
-                              If False, only clear the current queue, leaving child queues untouched.
-        """
-        logger.debug('Clearing all events from EventQueue and child queues.')
-
-        # Clear all events from the queue, even if closed
-        cleared_count = 0
-        async with self._lock:
-            try:
-                while True:
-                    event = self.queue.get_nowait()
-                    logger.debug(
-                        'Discarding unprocessed event of type: %s, content: %s',
-                        type(event),
-                        event,
-                    )
-                    self.queue.task_done()
-                    cleared_count += 1
-            except asyncio.QueueEmpty:
-                pass
-            except QueueShutDown:
-                pass
-
-            if cleared_count > 0:
-                logger.debug(
-                    'Cleared %d unprocessed events from EventQueue.',
-                    cleared_count,
-                )
-
-        # Clear all child queues (lock released before awaiting child tasks)
-        if clear_child_queues and self._children:
-            child_tasks = [
-                asyncio.create_task(child.clear_events())
-                for child in self._children
-            ]
-
-            if child_tasks:
-                await asyncio.gather(*child_tasks, return_exceptions=True)
