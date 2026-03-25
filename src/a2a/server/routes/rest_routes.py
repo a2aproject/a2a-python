@@ -1,34 +1,16 @@
-import functools
-import json
 import logging
 
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
+from collections.abc import Awaitable, Callable
 from typing import TYPE_CHECKING, Any
-
-from google.protobuf.json_format import MessageToDict, Parse
 
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
+from a2a.server.routes import CallContextBuilder
 from a2a.server.routes.rest_dispatcher import RestDispatcher
-from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCard,
-    GetTaskPushNotificationConfigRequest,
 )
-from a2a.utils import constants, proto_utils
-from a2a.utils.error_handlers import (
-    rest_error_handler,
-    rest_stream_error_handler,
-)
-from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
-    InvalidRequestError,
-    TaskNotFoundError,
-    UnsupportedOperationError,
-)
-from a2a.utils.helpers import maybe_await, validate_version
 
 
 if TYPE_CHECKING:
@@ -145,10 +127,19 @@ def create_rest_routes(  # noqa: PLR0913
             '/tasks/{id}/pushNotificationConfigs/{push_id}',
             'DELETE',
         ): dispatcher.delete_push_notification,
-        ('/tasks/{id}/pushNotificationConfigs', 'POST'): dispatcher.set_push_notification,
-        ('/tasks/{id}/pushNotificationConfigs', 'GET'): dispatcher.list_push_notifications,
+        (
+            '/tasks/{id}/pushNotificationConfigs',
+            'POST',
+        ): dispatcher.set_push_notification,
+        (
+            '/tasks/{id}/pushNotificationConfigs',
+            'GET',
+        ): dispatcher.list_push_notifications,
         ('/tasks', 'GET'): dispatcher.list_tasks,
-        ('/extendedAgentCard', 'GET'): dispatcher.handle_authenticated_agent_card,
+        (
+            '/extendedAgentCard',
+            'GET',
+        ): dispatcher.handle_authenticated_agent_card,
     }
 
     base_route_objects = []
@@ -164,4 +155,3 @@ def create_rest_routes(  # noqa: PLR0913
     routes.append(Mount(path='/{tenant}', routes=base_route_objects))
 
     return routes
-
