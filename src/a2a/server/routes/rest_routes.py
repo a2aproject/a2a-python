@@ -5,14 +5,19 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict
+from google.protobuf.json_format import MessageToDict, Parse
 
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
-from a2a.types.a2a_pb2 import AgentCard
+from a2a.server.routes.rest_dispatcher import RestDispatcher
+from a2a.types import a2a_pb2
+from a2a.types.a2a_pb2 import (
+    AgentCard,
+    GetTaskPushNotificationConfigRequest,
+)
+from a2a.utils import constants, proto_utils
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -20,8 +25,10 @@ from a2a.utils.error_handlers import (
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
 )
-from a2a.utils.helpers import maybe_await
+from a2a.utils.helpers import maybe_await, validate_version
 
 
 if TYPE_CHECKING:
@@ -94,7 +101,16 @@ def create_rest_routes(  # noqa: PLR0913
             'optional dependencies, `a2a-sdk[http-server]`.'
         )
 
-    v03_routes = {}
+    dispatcher = RestDispatcher(
+        agent_card=agent_card,
+        request_handler=request_handler,
+        extended_agent_card=extended_agent_card,
+        context_builder=context_builder,
+        card_modifier=card_modifier,
+        extended_card_modifier=extended_card_modifier,
+    )
+
+    routes: list[BaseRoute] = []
     if enable_v0_3_compat:
         v03_adapter = REST03Adapter(
             agent_card=agent_card,
@@ -105,139 +121,34 @@ def create_rest_routes(  # noqa: PLR0913
             extended_card_modifier=extended_card_modifier,
         )
         v03_routes = v03_adapter.routes()
-
-    routes: list[BaseRoute] = []
-    for (path, method), endpoint in v03_routes.items():
-        routes.append(
-            Route(
-                path=f'{path_prefix}{path}',
-                endpoint=endpoint,
-                methods=[method],
+        for (path, method), endpoint in v03_routes.items():
+            routes.append(
+                Route(
+                    path=f'{path_prefix}{path}',
+                    endpoint=endpoint,
+                    methods=[method],
+                )
             )
-        )
 
-    handler = RESTHandler(
-        agent_card=agent_card, request_handler=request_handler
-    )
-    _context_builder = context_builder or DefaultCallContextBuilder()
-
-    def _build_call_context(request: 'Request') -> ServerCallContext:
-        call_context = _context_builder.build(request)
-        if 'tenant' in request.path_params:
-            call_context.tenant = request.path_params['tenant']
-        return call_context
-
-    @rest_error_handler
-    async def _handle_request(
-        method: Callable[['Request', ServerCallContext], Awaitable[Any]],
-        request: 'Request',
-    ) -> 'Response':
-
-        call_context = _build_call_context(request)
-        response = await method(request, call_context)
-        return JSONResponse(content=response)
-
-    @rest_stream_error_handler
-    async def _handle_streaming_request(
-        method: Callable[[Request, ServerCallContext], AsyncIterable[Any]],
-        request: Request,
-    ) -> EventSourceResponse:
-        # Pre-consume and cache the request body to prevent deadlock in streaming context
-        # This is required because Starlette's request.body() can only be consumed once,
-        # and attempting to consume it after EventSourceResponse starts causes deadlock
-        try:
-            await request.body()
-        except (ValueError, RuntimeError, OSError) as e:
-            raise InvalidRequestError(
-                message=f'Failed to pre-consume request body: {e}'
-            ) from e
-
-        call_context = _build_call_context(request)
-
-        # Eagerly fetch the first item from the stream so that errors raised
-        # before any event is yielded (e.g. validation, parsing, or handler
-        # failures) propagate here and are caught by
-        # @rest_stream_error_handler, which returns a JSONResponse with
-        # the correct HTTP status code instead of starting an SSE stream.
-        # Without this, the error would be raised after SSE headers are
-        # already sent, and the client would see a broken stream instead
-        # of a proper error response.
-        stream = aiter(method(request, call_context))
-        try:
-            first_item = await anext(stream)
-        except StopAsyncIteration:
-            return EventSourceResponse(iter([]))
-
-        async def event_generator() -> AsyncIterator[str]:
-            yield json.dumps(first_item)
-            async for item in stream:
-                yield json.dumps(item)
-
-        return EventSourceResponse(event_generator())
-
-    async def _handle_authenticated_agent_card(
-        request: 'Request', call_context: ServerCallContext | None = None
-    ) -> dict[str, Any]:
-        if not agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='Authenticated card not supported'
-            )
-        card_to_serve = extended_agent_card or agent_card
-
-        if extended_card_modifier:
-            # Re-generate context if none passed to replicate RESTAdapter exact logic
-            context = call_context or _build_call_context(request)
-            card_to_serve = await maybe_await(
-                extended_card_modifier(card_to_serve, context)
-            )
-        elif card_modifier:
-            card_to_serve = await maybe_await(card_modifier(card_to_serve))
-
-        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
-
-    # Dictionary of routes, mapping to bound helper methods
-    base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
-        ('/message:send', 'POST'): functools.partial(
-            _handle_request, handler.on_message_send
-        ),
-        ('/message:stream', 'POST'): functools.partial(
-            _handle_streaming_request,
-            handler.on_message_send_stream,
-        ),
-        ('/tasks/{id}:cancel', 'POST'): functools.partial(
-            _handle_request, handler.on_cancel_task
-        ),
-        ('/tasks/{id}:subscribe', 'GET'): functools.partial(
-            _handle_streaming_request,
-            handler.on_subscribe_to_task,
-        ),
-        ('/tasks/{id}:subscribe', 'POST'): functools.partial(
-            _handle_streaming_request,
-            handler.on_subscribe_to_task,
-        ),
-        ('/tasks/{id}', 'GET'): functools.partial(
-            _handle_request, handler.on_get_task
-        ),
+    base_routes = {
+        ('/message:send', 'POST'): dispatcher.on_message_send,
+        ('/message:stream', 'POST'): dispatcher.on_message_send_stream,
+        ('/tasks/{id}:cancel', 'POST'): dispatcher.on_cancel_task,
+        ('/tasks/{id}:subscribe', 'GET'): dispatcher.on_subscribe_to_task,
+        ('/tasks/{id}:subscribe', 'POST'): dispatcher.on_subscribe_to_task,
+        ('/tasks/{id}', 'GET'): dispatcher.on_get_task,
         (
             '/tasks/{id}/pushNotificationConfigs/{push_id}',
             'GET',
-        ): functools.partial(_handle_request, handler.get_push_notification),
+        ): dispatcher.get_push_notification,
         (
             '/tasks/{id}/pushNotificationConfigs/{push_id}',
             'DELETE',
-        ): functools.partial(_handle_request, handler.delete_push_notification),
-        ('/tasks/{id}/pushNotificationConfigs', 'POST'): functools.partial(
-            _handle_request, handler.set_push_notification
-        ),
-        ('/tasks/{id}/pushNotificationConfigs', 'GET'): functools.partial(
-            _handle_request, handler.list_push_notifications
-        ),
-        ('/tasks', 'GET'): functools.partial(
-            _handle_request, handler.list_tasks
-        ),
-        ('/extendedAgentCard', 'GET'): functools.partial(
-            _handle_request, _handle_authenticated_agent_card
-        ),
+        ): dispatcher.delete_push_notification,
+        ('/tasks/{id}/pushNotificationConfigs', 'POST'): dispatcher.set_push_notification,
+        ('/tasks/{id}/pushNotificationConfigs', 'GET'): dispatcher.list_push_notifications,
+        ('/tasks', 'GET'): dispatcher.list_tasks,
+        ('/extendedAgentCard', 'GET'): dispatcher.handle_authenticated_agent_card,
     }
 
     base_route_objects = []
@@ -253,3 +164,4 @@ def create_rest_routes(  # noqa: PLR0913
     routes.append(Mount(path='/{tenant}', routes=base_route_objects))
 
     return routes
+
