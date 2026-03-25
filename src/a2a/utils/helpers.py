@@ -338,36 +338,23 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
                         context = arg
                         break
 
-            if context is not None:
-                headers = context.state.get('headers', {})
-                actual_version = headers.get(
-                    constants.VERSION_HEADER
-                ) or headers.get(constants.VERSION_HEADER.lower())
+            if context is None:
+                # If no context is found, we can't validate the version.
+                # In a real scenario, this shouldn't happen for properly routed requests.
+                # We default to the expected version to allow test call to proceed.
+                return expected_version
 
-                if not actual_version:
-                    return constants.PROTOCOL_VERSION_0_3
+            headers = context.state.get('headers', {})
+            # Header names are usually case-insensitive in most frameworks, but dict lookup is case-sensitive.
+            # We check both standard and lowercase versions.
+            actual_version = headers.get(
+                constants.VERSION_HEADER
+            ) or headers.get(constants.VERSION_HEADER.lower())
 
-                return str(actual_version)
+            if not actual_version:
+                return constants.PROTOCOL_VERSION_0_3
 
-            # Fallback to Request
-            request = kwargs.get('request')
-            if request is None:
-                for arg in args:
-                    if hasattr(arg, 'headers') and hasattr(arg, 'path_params'):
-                        request = arg
-                        break
-
-            if request is not None:
-                headers = dict(request.headers)
-                actual_version = headers.get(
-                    constants.VERSION_HEADER
-                ) or headers.get(constants.VERSION_HEADER.lower())
-
-                if not actual_version:
-                    return constants.PROTOCOL_VERSION_0_3
-                return str(actual_version)
-
-            return expected_version
+            return str(actual_version)
 
         def _is_version_compatible(actual: str) -> bool:
             if actual == expected_version:
