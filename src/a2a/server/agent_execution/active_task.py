@@ -77,8 +77,6 @@ class ActiveTask:
         self._result_available = False
         self._first_result: Task | Message | None = None
         self._message: Message | None = None
-        self._interrupted = False
-        self._cancelled = False
 
     @property
     def task_id(self) -> str:
@@ -99,16 +97,26 @@ class ActiveTask:
         Raises:
             TaskAlreadyStartedError: If the task is already running.
         """
+        logger.debug('ActiveTask[%s]: Starting', self._task_id)
         async with self._lock:
             if self._producer_task is not None:
+                logger.debug(
+                    'ActiveTask[%s]: Already started, ignoring start request',
+                    self._task_id,
+                )
                 raise TaskAlreadyStartedError(
                     f'Task {self._task_id} already started'
                 )
 
             if setup_callback:
+                logger.debug('ActiveTask[%s]: Executing setup callback', self._task_id)
                 try:
                     await setup_callback()
                 except Exception:
+                    logger.debug(
+                        'ActiveTask[%s]: Setup callback failed, cleaning up',
+                        self._task_id,
+                    )
                     self._is_finished.set()
                     if self._subscribers_count == 0 and self._on_cleanup:
                         self._on_cleanup(self)
@@ -120,31 +128,46 @@ class ActiveTask:
             self._consumer_task = asyncio.create_task(
                 self._run_consumer(), name=f'consumer:{self._task_id}'
             )
+            logger.debug('ActiveTask[%s]: Background tasks created', self._task_id)
 
     async def _run_producer(self, request: RequestContext) -> None:
+        logger.debug('Producer[%s]: Started', self._task_id)
         try:
             await self._agent_executor.execute(request, self._event_queue)
+            logger.debug('Producer[%s]: Execution finished', self._task_id)
         except asyncio.CancelledError:
+            logger.debug('Producer[%s]: Cancelled', self._task_id)
             raise
         except Exception as e:
-            logger.exception('Producer failed for task %s', self._task_id)
+            logger.exception('Producer[%s]: Failed', self._task_id)
             self._exception = e
         finally:
             async with self._state_changed:
                 self._state_changed.notify_all()
             # Important: Non-immediate close to allow consumer to drain
+            logger.debug('Producer[%s]: Closing event queue', self._task_id)
             await self._event_queue.close(immediate=False)
 
     async def _run_consumer(self) -> None:
+        logger.debug('Consumer[%s]: Started', self._task_id)
         try:
             try:
                 while True:
                     # Dequeue event. This raises QueueShutDown when finished.
                     event = await self._event_queue.dequeue_event()
+                    logger.debug(
+                        'Consumer[%s]: Dequeued event %s',
+                        self._task_id,
+                        type(event).__name__,
+                    )
 
                     try:
                         if isinstance(event, Message):
                             if not self._result_available:
+                                logger.debug(
+                                    'Consumer[%s]: Setting first result as Message',
+                                    self._task_id,
+                                )
                                 self._first_result = event
                                 self._result_available = True
                             self._message = event
@@ -169,21 +192,39 @@ class ActiveTask:
                                 and (is_interrupted or is_terminal)
                                 and res
                             ):
+                                logger.debug(
+                                    'Consumer[%s]: Setting first result as Task (state=%s)',
+                                    self._task_id,
+                                    res.status.state,
+                                )
                                 self._first_result = Task()
                                 self._first_result.CopyFrom(res)
                                 self._result_available = True
 
                             if is_terminal:
+                                logger.debug(
+                                    'Consumer[%s]: Reached terminal state %s',
+                                    self._task_id,
+                                    res.status.state if res else 'unknown',
+                                )
                                 self._is_finished.set()
 
                             if is_interrupted:
-                                self._interrupted = True
+                                logger.debug(
+                                    'Consumer[%s]: Interrupted with state %s',
+                                    self._task_id,
+                                    res.status.state if res else 'unknown',
+                                )
 
                             if (
                                 self._push_sender
                                 and self._task_id
                                 and isinstance(event, PushNotificationEvent)
                             ):
+                                logger.debug(
+                                    'Consumer[%s]: Sending push notification',
+                                    self._task_id,
+                                )
                                 await self._push_sender.send_notification(
                                     self._task_id, event
                                 )
@@ -193,24 +234,42 @@ class ActiveTask:
                     finally:
                         self._event_queue.task_done()
             except QueueShutDown:
+                logger.debug(
+                    'Consumer[%s]: Event queue shut down', self._task_id
+                )
                 pass
         except Exception as e:
-            logger.exception('Consumer failed for task %s', self._task_id)
+            logger.exception('Consumer[%s]: Failed', self._task_id)
             self._exception = e
         finally:
             self._is_finished.set()
             async with self._state_changed:
                 self._state_changed.notify_all()
+            logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
     async def subscribe(self) -> AsyncGenerator[Event, None]:
         """Creates a queue tap and yields events as they are produced."""
+        logger.debug('Subscribe[%s]: New subscriber', self._task_id)
         async with self._lock:
             if self._exception:
+                logger.debug(
+                    'Subscribe[%s]: Failed, exception already set',
+                    self._task_id,
+                )
                 raise self._exception
             if self._is_finished.is_set():
+                logger.debug(
+                    'Subscribe[%s]: Finished, already finished',
+                    self._task_id,
+                )
                 return
             self._subscribers_count += 1
+            logger.debug(
+                'Subscribe[%s]: Subscribers count: %d',
+                self._task_id,
+                self._subscribers_count,
+            )
 
         tapped_queue = await self._event_queue.tap()
         try:
@@ -240,9 +299,15 @@ class ActiveTask:
                         raise self._exception from None
                     break
         finally:
+            logger.debug('Subscribe[%s]: Unsubscribing', self._task_id)
             await tapped_queue.close(immediate=True)
             async with self._lock:
                 self._subscribers_count -= 1
+                logger.debug(
+                    'Subscribe[%s]: Subscribers count: %d',
+                    self._task_id,
+                    self._subscribers_count,
+                )
             await self._maybe_cleanup()
 
     async def wait(self) -> Task | Message:
@@ -254,8 +319,12 @@ class ActiveTask:
         Raises:
             Exception: If the agent execution failed.
         """
+        logger.debug('Wait[%s]: Waiting for result', self._task_id)
         while not self._result_available and not self._is_finished.is_set():
             if self._exception:
+                logger.debug(
+                    'Wait[%s]: Failed, exception set', self._task_id
+                )
                 raise self._exception
             async with self._state_changed:
                 with contextlib.suppress(asyncio.TimeoutError):
@@ -264,48 +333,66 @@ class ActiveTask:
                     )
 
         if self._exception:
+            logger.debug('Wait[%s]: Failed, exception set', self._task_id)
             raise self._exception
 
         if self._first_result:
+            logger.debug('Wait[%s]: Returning first result', self._task_id)
             return self._first_result
 
         # Fallback to current task from manager if finished
+        logger.debug(
+            'Wait[%s]: Falling back to TaskManager', self._task_id
+        )
         res = await self._task_manager.get_task()
         if res:
+            logger.debug('Wait[%s]: Returning Task from manager', self._task_id)
             # Update result_available so subsequent wait() calls are fast
             self._first_result = res
             self._result_available = True
             return res
 
         if self._message:
+            logger.debug('Wait[%s]: Returning Message', self._task_id)
             return self._message
 
         if self._is_finished.is_set():
+            logger.debug(
+                'Wait[%s]: Task finished without result or message', self._task_id
+            )
             raise RuntimeError('Task finished without result or message')
 
+        logger.debug('Wait[%s]: Exited without result', self._task_id)
         raise RuntimeError('Wait exited without result')
 
     async def cancel(self, request: RequestContext) -> Task | Message:
         """Cancels the running active task."""
+        logger.debug('Cancel[%s]: Cancelling task', self._task_id)
         async with self._lock:
+            # if self._producer_task and not self._producer_task.done():
             if not self._is_finished.is_set() and self._producer_task:
+                logger.debug('Cancel[%s]: Cancelling producer task', self._task_id)
                 # We do NOT await self._agent_executor.cancel here
                 # because it might take a while and we want to await wait()
                 self._producer_task.cancel()
-                self._cancelled = True
                 try:
                     await self._agent_executor.cancel(
                         request, self._event_queue
                     )
                 except Exception as e:
                     logger.exception(
-                        'Agent cancel failed for task %s', self._task_id
+                        'Cancel[%s]: Agent cancel failed', self._task_id
                     )
                     if not self._exception:
                         self._exception = e
                     async with self._state_changed:
                         self._state_changed.notify_all()
                     raise
+            else:
+                logger.debug(
+                    'Cancel[%s]: Task already finished or producer not started, not cancelling',
+                    self._task_id,
+                )
 
         return await self.wait()
 
@@ -317,4 +404,5 @@ class ActiveTask:
                 and self._subscribers_count == 0
                 and self._on_cleanup
             ):
+                logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
                 self._on_cleanup(self)

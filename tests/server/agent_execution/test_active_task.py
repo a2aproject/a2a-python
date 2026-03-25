@@ -1,13 +1,16 @@
 import asyncio
-import pytest
+
 from unittest.mock import AsyncMock, Mock, patch
+
+import pytest
+import pytest_asyncio
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
-from a2a.server.tasks.task_manager import TaskManager
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
+from a2a.server.tasks.task_manager import TaskManager
 from a2a.types.a2a_pb2 import (
     Message,
     Task,
@@ -16,7 +19,9 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import TaskAlreadyStartedError
+import logging
 
+logger = logging.getLogger(__name__)
 
 class TestActiveTask:
     """Tests for the ActiveTask class."""
@@ -32,8 +37,8 @@ class TestActiveTask:
         tm.get_task = AsyncMock(return_value=None)
         return tm
 
-    @pytest.fixture
-    def event_queue(self) -> EventQueue:
+    @pytest_asyncio.fixture
+    async def event_queue(self) -> EventQueue:
         return EventQueue()
 
     @pytest.fixture
@@ -679,13 +684,18 @@ class TestActiveTask:
         """Test cancel when the event queue is already closed."""
         agent_executor.execute = AsyncMock(return_value=None)
         task_manager.get_task.return_value = Task(id='test')
-
         await active_task.start(request_context)
+
+        # Forced queue close.
         await active_task._event_queue.close()
 
-        # Now cancel
+        # Now cancel the task itself.
         await active_task.cancel(request_context)
-        assert active_task._cancelled is True
+        await asyncio.wait_for(active_task.wait(), timeout=0.1)
+
+        # Cancel again should not do anything.
+        await active_task.cancel(request_context)
+        await asyncio.wait_for(active_task.wait(), timeout=0.1)
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe_dequeue_failure(
@@ -753,7 +763,6 @@ class TestActiveTask:
 
         result = await active_task.wait()
         assert result.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
-        assert active_task._interrupted is True
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe_immediate_finish(
