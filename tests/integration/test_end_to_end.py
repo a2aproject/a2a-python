@@ -22,17 +22,23 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     Message,
     Part,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
+    SubscribeToTaskRequest,
     TaskState,
     a2a_pb2_grpc,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.errors import InvalidParamsError
 
 
 def assert_message_matches(message, expected_role, expected_text):
@@ -274,6 +280,22 @@ async def grpc_setup(
 )
 def transport_setups(request) -> ClientSetup:
     """Parametrized fixture that runs tests against all supported transports."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('grpc_setup', id='gRPC'),
+    ]
+)
+def rpc_transport_setups(request) -> ClientSetup:
+    """Parametrized fixture for RPC transports only (excludes REST).
+
+    REST encodes some required fields in URL paths, so empty-field validation
+    tests hit routing errors before reaching the handler. JSON-RPC and gRPC
+    send the full request message, allowing server-side validation to work.
+    """
     return request.getfixturevalue(request.param)
 
 
@@ -559,3 +581,104 @@ async def test_end_to_end_input_required(transport_setups):
         ],
     )
     assert_message_matches(task.status.message, Role.ROLE_AGENT, 'done')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'empty_request, expected_fields',
+    [
+        (
+            SendMessageRequest(),
+            {'message'},
+        ),
+        (
+            SendMessageRequest(message=Message()),
+            {'message.message_id', 'message.role', 'message.parts'},
+        ),
+        (
+            SendMessageRequest(
+                message=Message(message_id='m1', role=Role.ROLE_USER)
+            ),
+            {'message.parts'},
+        ),
+    ],
+)
+async def test_end_to_end_send_message_validation_errors(
+    transport_setups,
+    empty_request: SendMessageRequest,
+    expected_fields: set[str],
+) -> None:
+    client = transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in client.send_message(request=empty_request):
+            pass
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == expected_fields
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'method, invalid_request, expected_fields',
+    [
+        (
+            'get_task',
+            GetTaskRequest(),
+            {'id'},
+        ),
+        (
+            'cancel_task',
+            CancelTaskRequest(),
+            {'id'},
+        ),
+        (
+            'get_task_push_notification_config',
+            GetTaskPushNotificationConfigRequest(),
+            {'task_id', 'id'},
+        ),
+        (
+            'list_task_push_notification_configs',
+            ListTaskPushNotificationConfigsRequest(),
+            {'task_id'},
+        ),
+        (
+            'delete_task_push_notification_config',
+            DeleteTaskPushNotificationConfigRequest(),
+            {'task_id', 'id'},
+        ),
+    ],
+)
+async def test_end_to_end_unary_validation_errors(
+    rpc_transport_setups,
+    method: str,
+    invalid_request,
+    expected_fields: set[str],
+) -> None:
+    client = rpc_transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await getattr(client, method)(request=invalid_request)
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == expected_fields
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_subscribe_validation_error(
+    rpc_transport_setups,
+) -> None:
+    client = rpc_transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in client.subscribe(request=SubscribeToTaskRequest()):
+            pass
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == {'id'}
+
+    await client.close()

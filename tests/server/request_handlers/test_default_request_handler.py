@@ -451,7 +451,9 @@ async def test_on_cancel_task_invalid_result_type():
     # Mock ResultAggregator to return a Message
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     mock_result_aggregator_instance.consume_all.return_value = Message(
-        message_id='unexpected_msg', role=Role.ROLE_AGENT, parts=[]
+        message_id='unexpected_msg',
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='Test')],
     )
 
     request_handler = DefaultRequestHandler(
@@ -524,7 +526,7 @@ async def test_on_message_send_with_push_notification():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -630,7 +632,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_non_blocking',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -750,7 +752,11 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg_push', parts=[]),
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push',
+            parts=[Part(text='Test')],
+        ),
         configuration=message_config,
     )
 
@@ -815,7 +821,11 @@ async def test_on_message_send_no_result_from_aggregator():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg_no_res', parts=[])
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_no_res',
+            parts=[Part(text='Test')],
+        )
     )
 
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
@@ -863,7 +873,9 @@ async def test_on_message_send_task_id_mismatch():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_id_mismatch', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_id_mismatch',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1067,7 +1079,9 @@ async def test_on_message_send_interrupted_flow():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_interrupt', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_interrupt',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1178,7 +1192,7 @@ async def test_on_message_send_stream_with_push_notification():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_stream_push',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -1460,7 +1474,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_reconn',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1558,7 +1572,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
         message=Message(
             role=Role.ROLE_USER,
             message_id='mid',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1698,7 +1712,7 @@ async def test_disconnect_persists_final_task_to_store():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_persist',
-            parts=[],
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1785,7 +1799,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
         message=Message(
             role=Role.ROLE_USER,
             message_id='mid_track',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1890,7 +1904,9 @@ async def test_on_message_send_stream_task_id_mismatch():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_stream_mismatch', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_stream_mismatch',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -2586,7 +2602,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
         )
     )
@@ -2627,7 +2643,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal_stream',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
         )
     )
@@ -2869,7 +2885,9 @@ async def test_on_message_send_negative_history_length_error():
         accepted_output_modes=['text/plain'],
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg1', parts=[]),
+        message=Message(
+            role=Role.ROLE_USER, message_id='msg1', parts=[Part(text='Test')]
+        ),
         configuration=message_config,
     )
     context = create_server_call_context()

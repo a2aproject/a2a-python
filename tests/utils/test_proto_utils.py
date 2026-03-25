@@ -5,12 +5,13 @@ This module tests the proto utilities including to_stream_response and dictionar
 
 import httpx
 import pytest
+
 from google.protobuf.json_format import MessageToDict, Parse
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.datastructures import QueryParams
 
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     AgentSkill,
     ListTasksRequest,
     Message,
@@ -23,8 +24,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from starlette.datastructures import QueryParams
 from a2a.utils import proto_utils
+from a2a.utils.errors import InvalidParamsError
 
 
 class TestToStreamResponse:
@@ -239,3 +240,40 @@ class TestRestParams:
         return httpx.Request(
             'GET', 'http://api.example.com', params=rest_dict
         ).url.params
+
+
+class TestValidateProtoRequiredFields:
+    """Tests for validate_proto_required_fields function."""
+
+    def test_valid_required_fields(self):
+        """Test with all required fields present."""
+        msg = Message(
+            message_id='msg-1',
+            role=Role.ROLE_USER,
+            parts=[Part(text='hello')],
+        )
+        proto_utils.validate_proto_required_fields(msg)
+
+    def test_missing_required_fields(self):
+        """Test with empty message raising InvalidParamsError containing all errors."""
+        msg = Message()
+        with pytest.raises(InvalidParamsError) as exc_info:
+            proto_utils.validate_proto_required_fields(msg)
+
+        err = exc_info.value
+        errors = err.data.get('errors', []) if err.data else []
+
+        assert {e['field'] for e in errors} == {'message_id', 'role', 'parts'}
+
+    def test_nested_required_fields(self):
+        """Test nested required fields inside TaskStatus."""
+        # Task Status requires 'state'
+        task = Task(id='task-1', status=TaskStatus())
+        with pytest.raises(InvalidParamsError) as exc_info:
+            proto_utils.validate_proto_required_fields(task)
+
+        err = exc_info.value
+        errors = err.data.get('errors', []) if err.data else []
+
+        fields = [e['field'] for e in errors]
+        assert 'status.state' in fields
