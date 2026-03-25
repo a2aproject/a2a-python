@@ -133,11 +133,16 @@ class ActiveTask:
     async def _run_producer(self, request: RequestContext) -> None:
         logger.debug('Producer[%s]: Started', self._task_id)
         try:
+            close_immediately = False
             try:
                 await self._agent_executor.execute(request, self._event_queue)
-                logger.debug('Producer[%s]: Execution finished', self._task_id)
+                logger.debug(
+                    'Producer[%s]: Execution finished successfully',
+                    self._task_id,
+                )
             except asyncio.CancelledError:
                 logger.debug('Producer[%s]: Cancelled', self._task_id)
+                close_immediately = True
                 raise
             except Exception as e:
                 logger.exception('Producer[%s]: Failed', self._task_id)
@@ -146,8 +151,12 @@ class ActiveTask:
                 async with self._state_changed:
                     self._state_changed.notify_all()
                 # Important: Non-immediate close to allow consumer to drain
-                logger.debug('Producer[%s]: Closing event queue', self._task_id)
-                await self._event_queue.close(immediate=False)
+                logger.debug(
+                    'Producer[%s]: Closing event queue immediately=%s',
+                    self._task_id,
+                    close_immediately,
+                )
+                await self._event_queue.close(immediate=close_immediately)
         finally:
             logger.debug('Producer[%s]: Completed', self._task_id)
 
