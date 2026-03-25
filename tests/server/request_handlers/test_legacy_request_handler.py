@@ -22,7 +22,8 @@ from a2a.server.agent_execution import (
     SimpleRequestContextBuilder,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
+from a2a.server.events import InMemoryQueueManager, QueueManager
+from a2a.server.events.legacy_event_queue import EventQueue
 from a2a.server.request_handlers.legacy_request_handler import (
     LegacyRequestHandler,
 )

@@ -237,7 +237,6 @@ class ActiveTask:
                 logger.debug(
                     'Consumer[%s]: Event queue shut down', self._task_id
                 )
-                pass
         except Exception as e:
             logger.exception('Consumer[%s]: Failed', self._task_id)
             self._exception = e

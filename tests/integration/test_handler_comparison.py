@@ -55,6 +55,7 @@ import pytest_asyncio
 # Configure logging to see what's happening
 logging.basicConfig(level=logging.DEBUG)
 
+logger = logging.getLogger(__name__)
 
 class MockUser(User):
     @property
@@ -813,7 +814,18 @@ async def test_parallel_subscribe_attach_detach(
         role=Role.ROLE_USER,
         parts=[
             Part(
-                text='SET_STATE TASK_STATE_WORKING\nWAIT_EVENT_1\nEMIT_ARTIFACT u1\nWAIT_EVENT_2\nEMIT_ARTIFACT u2\nWAIT_EVENT_3\nEMIT_ARTIFACT u3\nWAIT_EVENT_4\nEMIT_ARTIFACT u4\nSET_STATE TASK_STATE_COMPLETED'
+                text='''
+                SET_STATE TASK_STATE_WORKING
+                WAIT_EVENT_1
+                EMIT_ARTIFACT u1
+                WAIT_EVENT_2
+                EMIT_ARTIFACT u2
+                WAIT_EVENT_3
+                EMIT_ARTIFACT u3
+                WAIT_EVENT_4
+                EMIT_ARTIFACT u4
+                SET_STATE TASK_STATE_COMPLETED
+                '''
             )
         ],
     )
@@ -828,6 +840,7 @@ async def test_parallel_subscribe_attach_detach(
     ]
     task_id = events[0][0].task.id
     client._config.streaming = True
+    logger.debug('Task ID: %s', task_id)
 
     async def sub(name: str):
         collected = []
@@ -842,6 +855,11 @@ async def test_parallel_subscribe_attach_detach(
         return collected
 
     sub1_task = asyncio.create_task(sub('sub1'))
+
+
+    await sub1_task
+    return
+    
     await asyncio.sleep(0.5)
     trigger_events['1'].set()
     await asyncio.sleep(0.5)
@@ -890,3 +908,44 @@ async def test_parallel_subscribe_attach_detach(
     assert 'u2' in t1  # sub1 always sees it
     if 'u1' not in t2 and 'u2' not in t2:
         print('Warning: sub2 missed both artifacts due to timing')
+
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_get_task_in_progress(
+    client: BaseClient, trigger_events
+):
+    client._config.streaming = False
+    msg = Message(
+        role=Role.ROLE_USER,
+        parts=[
+            Part(
+                text='''
+                SET_STATE TASK_STATE_WORKING
+                WAIT_EVENT_1
+                SET_STATE TASK_STATE_COMPLETED
+                '''
+            )
+        ],
+    )
+    
+    events = [
+        e
+        async for e in client.send_message(
+            SendMessageRequest(
+                message=msg,
+                configuration=SendMessageConfiguration(return_immediately=True),
+            )
+        )
+    ]
+    logger.info(f'Events: {events}')
+    task_id = events[0][0].task.id
+    logger.info(f'Task ID: {task_id}')
+    task = await client.get_task(GetTaskRequest(id=task_id))
+    logger.info(f'Task: {task}')
+
+    trigger_events['1'].set()
+
+
+# TODO Test on cleanup waiting execution

@@ -1,11 +1,11 @@
 import asyncio
 
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import MagicMock
 
 import pytest
 
 from a2a.server.events import InMemoryQueueManager
-from a2a.server.events.event_queue import (
+from a2a.server.events.legacy_event_queue import (
     EventQueue,
 )
 from a2a.server.events.queue_manager import (
@@ -25,8 +25,8 @@ class TestInMemoryQueueManager:
         """Fixture to create a mock EventQueue."""
         queue = MagicMock(spec=EventQueue)
 
-        # Mock the tap method to return itself
-        queue.tap = AsyncMock(return_value=queue)
+        # Mock the tap method to return itself (synchronous in legacy)
+        queue.tap = MagicMock(return_value=queue)
         return queue
 
     @pytest.mark.asyncio

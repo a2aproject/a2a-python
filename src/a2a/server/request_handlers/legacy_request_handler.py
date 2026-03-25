@@ -14,10 +14,10 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import (
     Event,
     EventConsumer,
-    EventQueue,
     InMemoryQueueManager,
     QueueManager,
 )
+from a2a.server.events.legacy_event_queue import EventQueue
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.tasks import (
     PushNotificationConfigStore,

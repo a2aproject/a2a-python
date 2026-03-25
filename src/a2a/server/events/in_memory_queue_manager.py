@@ -1,6 +1,6 @@
 import asyncio
 
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.legacy_event_queue import EventQueue
 from a2a.server.events.queue_manager import (
     NoTaskQueue,
     QueueManager,
@@ -57,7 +57,7 @@ class InMemoryQueueManager(QueueManager):
         async with self._lock:
             if task_id not in self._task_queue:
                 return None
-            return await self._task_queue[task_id].tap()
+            return self._task_queue[task_id].tap()
 
     async def close(self, task_id: str) -> None:
         """Closes and removes the event queue for a task ID.
@@ -82,4 +82,4 @@ class InMemoryQueueManager(QueueManager):
                 queue = EventQueue()
                 self._task_queue[task_id] = queue
                 return queue
-            return await self._task_queue[task_id].tap()
+            return self._task_queue[task_id].tap()

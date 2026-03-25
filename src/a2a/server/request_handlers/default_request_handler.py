@@ -42,6 +42,7 @@ from a2a.utils.errors import (
     InvalidParamsError,
     TaskNotFoundError,
     UnsupportedOperationError,
+    TaskNotCancelableError,
 )
 from a2a.utils.task import (
     apply_history_length,
@@ -151,6 +152,9 @@ class DefaultRequestHandler(RequestHandler):
                 task.id,
                 task.status.state,
             )
+            # raise TaskNotCancelableError(
+            #     message=f'Task {task.id} is in terminal state: {task.status.state}'
+            # )
             return task
 
         active_task = await self._active_task_registry.get_or_create(task.id)
