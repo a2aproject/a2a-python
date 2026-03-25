@@ -56,6 +56,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await, validate, validate_version
+from a2a.utils.telemetry import SpanKind, trace_class
 
 
 INTERNAL_ERROR_CODE = -32603
@@ -166,6 +167,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         )
 
 
+@trace_class(kind=SpanKind.SERVER)
 class JsonRpcDispatcher:
     """Base class for A2A JSONRPC applications.
 
@@ -483,8 +485,117 @@ class JsonRpcDispatcher:
 
         return _wrap_stream(stream)
 
+    async def _handle_send_message(
+        self, request_obj: SendMessageRequest, context: ServerCallContext
+    ) -> dict[str, Any]:
+        task_or_message = await self.request_handler.on_message_send(
+            request_obj, context
+        )
+        if isinstance(task_or_message, Task):
+            return MessageToDict(SendMessageResponse(task=task_or_message))
+        return MessageToDict(SendMessageResponse(message=task_or_message))
+
+    async def _handle_cancel_task(
+        self, request_obj: CancelTaskRequest, context: ServerCallContext
+    ) -> dict[str, Any]:
+        task = await self.request_handler.on_cancel_task(request_obj, context)
+        if task:
+            return MessageToDict(task, preserving_proto_field_name=False)
+        raise TaskNotFoundError
+
+    async def _handle_get_task(
+        self, request_obj: GetTaskRequest, context: ServerCallContext
+    ) -> dict[str, Any]:
+        task = await self.request_handler.on_get_task(request_obj, context)
+        if task:
+            return MessageToDict(task, preserving_proto_field_name=False)
+        raise TaskNotFoundError
+
+    async def _handle_list_tasks(
+        self, request_obj: ListTasksRequest, context: ServerCallContext
+    ) -> dict[str, Any]:
+        tasks_response = await self.request_handler.on_list_tasks(
+            request_obj, context
+        )
+        return MessageToDict(
+            tasks_response,
+            preserving_proto_field_name=False,
+            always_print_fields_with_no_presence=True,
+        )
+
+    @validate(
+        lambda self: self.agent_card.capabilities.push_notifications,
+        'Push notifications are not supported by the agent',
+    )
+    async def _handle_create_task_push_notification_config(
+        self,
+        request_obj: TaskPushNotificationConfig,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        result_config = (
+            await self.request_handler.on_create_task_push_notification_config(
+                request_obj, context
+            )
+        )
+        return MessageToDict(result_config, preserving_proto_field_name=False)
+
+    async def _handle_get_task_push_notification_config(
+        self,
+        request_obj: GetTaskPushNotificationConfigRequest,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        config = (
+            await self.request_handler.on_get_task_push_notification_config(
+                request_obj, context
+            )
+        )
+        return MessageToDict(config, preserving_proto_field_name=False)
+
+    async def _handle_list_task_push_notification_configs(
+        self,
+        request_obj: ListTaskPushNotificationConfigsRequest,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        configs_response = (
+            await self.request_handler.on_list_task_push_notification_configs(
+                request_obj, context
+            )
+        )
+        return MessageToDict(
+            configs_response, preserving_proto_field_name=False
+        )
+
+    async def _handle_delete_task_push_notification_config(
+        self,
+        request_obj: DeleteTaskPushNotificationConfigRequest,
+        context: ServerCallContext,
+    ) -> None:
+        await self.request_handler.on_delete_task_push_notification_config(
+            request_obj, context
+        )
+
+    async def _handle_get_extended_agent_card(
+        self,
+        request_obj: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        if not self.agent_card.capabilities.extended_agent_card:
+            raise ExtendedAgentCardNotConfiguredError(
+                message='The agent does not have an extended agent card configured'
+            )
+        base_card = self.extended_agent_card or self.agent_card
+        card_to_serve = base_card
+        if self.extended_card_modifier and context:
+            card_to_serve = await maybe_await(
+                self.extended_card_modifier(base_card, context)
+            )
+        elif self.card_modifier:
+            card_to_serve = await maybe_await(self.card_modifier(base_card))
+
+        return MessageToDict(card_to_serve, preserving_proto_field_name=False)
+
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    async def _process_non_streaming_request(  # noqa: PLR0911, PLR0912
+    async def _process_non_streaming_request(  # noqa: PLR0911
         self,
         request_id: str | int | None,
         request_obj: A2ARequest,
@@ -502,86 +613,32 @@ class JsonRpcDispatcher:
         """
         match request_obj:
             case SendMessageRequest():
-                task_or_message = await self.request_handler.on_message_send(
-                    request_obj, context
-                )
-                if isinstance(task_or_message, Task):
-                    return MessageToDict(
-                        SendMessageResponse(task=task_or_message)
-                    )
-                return MessageToDict(
-                    SendMessageResponse(message=task_or_message)
-                )
+                return await self._handle_send_message(request_obj, context)
             case CancelTaskRequest():
-                task = await self.request_handler.on_cancel_task(
-                    request_obj, context
-                )
-                if task:
-                    return MessageToDict(
-                        task, preserving_proto_field_name=False
-                    )
-                raise TaskNotFoundError
+                return await self._handle_cancel_task(request_obj, context)
             case GetTaskRequest():
-                task = await self.request_handler.on_get_task(
-                    request_obj, context
-                )
-                if task:
-                    return MessageToDict(
-                        task, preserving_proto_field_name=False
-                    )
-                raise TaskNotFoundError
+                return await self._handle_get_task(request_obj, context)
             case ListTasksRequest():
-                tasks_response = await self.request_handler.on_list_tasks(
-                    request_obj, context
-                )
-                return MessageToDict(
-                    tasks_response,
-                    preserving_proto_field_name=False,
-                    always_print_fields_with_no_presence=True,
-                )
+                return await self._handle_list_tasks(request_obj, context)
             case TaskPushNotificationConfig():
-                await self._require_push_notifications()
-                result_config = await self.request_handler.on_create_task_push_notification_config(
+                return await self._handle_create_task_push_notification_config(
                     request_obj, context
-                )
-                return MessageToDict(
-                    result_config, preserving_proto_field_name=False
                 )
             case GetTaskPushNotificationConfigRequest():
-                config = await self.request_handler.on_get_task_push_notification_config(
+                return await self._handle_get_task_push_notification_config(
                     request_obj, context
                 )
-                return MessageToDict(config, preserving_proto_field_name=False)
             case ListTaskPushNotificationConfigsRequest():
-                configs_response = await self.request_handler.on_list_task_push_notification_configs(
+                return await self._handle_list_task_push_notification_configs(
                     request_obj, context
-                )
-                return MessageToDict(
-                    configs_response, preserving_proto_field_name=False
                 )
             case DeleteTaskPushNotificationConfigRequest():
-                await self.request_handler.on_delete_task_push_notification_config(
+                return await self._handle_delete_task_push_notification_config(
                     request_obj, context
                 )
-                return None
             case GetExtendedAgentCardRequest():
-                if not self.agent_card.capabilities.extended_agent_card:
-                    raise ExtendedAgentCardNotConfiguredError(
-                        message='The agent does not have an extended agent card configured'
-                    )
-                base_card = self.extended_agent_card or self.agent_card
-                card_to_serve = base_card
-                if self.extended_card_modifier and context:
-                    card_to_serve = await maybe_await(
-                        self.extended_card_modifier(base_card, context)
-                    )
-                elif self.card_modifier:
-                    card_to_serve = await maybe_await(
-                        self.card_modifier(base_card)
-                    )
-
-                return MessageToDict(
-                    card_to_serve, preserving_proto_field_name=False
+                return await self._handle_get_extended_agent_card(
+                    request_obj, context
                 )
             case _:
                 logger.error(
