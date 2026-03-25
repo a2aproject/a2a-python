@@ -8,8 +8,9 @@ import pytest
 from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
-
-from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.routes import create_agent_card_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -50,13 +51,15 @@ async def request_handler() -> RequestHandler:
 async def app(
     agent_card: AgentCard,
     request_handler: RequestHandler,
-) -> FastAPI:
-    """Builds the FastAPI application for testing."""
-    return A2ARESTFastAPIApplication(
-        agent_card,
-        request_handler,
-        enable_v0_3_compat=True,
-    ).build(agent_card_url='/well-known/agent.json', rpc_url='')
+) -> Starlette:
+    """Builds the Starlette application for testing."""
+    rest_routes = create_rest_routes(
+        agent_card, request_handler, enable_v0_3_compat=True
+    )
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/well-known/agent.json'
+    )
+    return Starlette(routes=rest_routes + agent_card_routes)
 
 
 @pytest.fixture
