@@ -207,9 +207,7 @@ class InMemoryTaskStore(TaskStore):
             CopyingTaskStoreAdapter(self._impl) if use_copying else self._impl
         )
 
-    async def save(
-        self, task: Task, context: ServerCallContext
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the store."""
         await self._store.save(task, context)
 
@@ -227,8 +225,6 @@ class InMemoryTaskStore(TaskStore):
         """Retrieves a list of tasks from the store."""
         return await self._store.list(params, context)
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the store by ID."""
         await self._store.delete(task_id, context)
