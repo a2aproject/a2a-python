@@ -62,7 +62,7 @@ Enable the v0.3 conversion utilities in your application entry point (e.g., `mai
 
 ```python
 from a2a.server.tasks import DatabaseTaskStore, DatabasePushNotificationConfigStore
-from a2a.compat.v0_3.conversions import (
+from a2a.compat.v0_3.model_conversions import (
     core_to_compat_task_model,
     core_to_compat_push_notification_config_model,
 )
@@ -126,7 +126,7 @@ This allows v1.0 instances to read *all* existing data regardless of when it was
 
 ## 🧩 Resources
 - **[a2a-db CLI](../../../../src/a2a/migrations/README.md)**: The primary tool for executing schema migrations.
-- **[Compatibility Conversions](../../../../src/a2a/compat/v0_3/conversions.py)**: Source for classes like `core_to_compat_task_model` used in Step 2.
+- **[Compatibility Conversions](../../../../src/a2a/compat/v0_3/model_conversions.py)**: Source for model conversion functions `core_to_compat_task_model` and `core_to_compat_push_notification_config_model` used in Step 2.
 - **[Task Store Implementation](../../../../src/a2a/server/tasks/database_task_store.py)**: The `DatabaseTaskStore` which handles the version-aware read/write logic.
 - **[Push Notification Store Implementation](../../../../src/a2a/server/tasks/database_push_notification_config_store.py)**: The `DatabasePushNotificationConfigStore` which handles the version-aware read/write logic.
 
