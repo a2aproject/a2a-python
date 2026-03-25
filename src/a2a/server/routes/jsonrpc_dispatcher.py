@@ -429,13 +429,6 @@ class JsonRpcDispatcher:
                 request_id, InternalError(message=str(e))
             )
 
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
-    async def _require_push_notifications(self) -> None:
-        """Helper to enforce push notifications capability."""
-
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     @validate(
         lambda self: self.agent_card.capabilities.streaming,
