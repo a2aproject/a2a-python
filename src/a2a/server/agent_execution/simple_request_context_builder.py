@@ -68,7 +68,9 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
         ):
             tasks = await asyncio.gather(
                 *[
-                    self._task_store.get(task_id)
+                    self._task_store.get(
+                        task_id, context or ServerCallContext()
+                    )
                     for task_id in params.message.reference_task_ids
                 ]
             )

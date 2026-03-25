@@ -31,7 +31,7 @@ class TaskManager:
         context_id: str | None,
         task_store: TaskStore,
         initial_message: Message | None,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ):
         """Initializes the TaskManager.
 
@@ -51,7 +51,7 @@ class TaskManager:
         self.task_store = task_store
         self._initial_message = initial_message
         self._current_task: Task | None = None
-        self._call_context: ServerCallContext | None = context
+        self._call_context: ServerCallContext = context
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
