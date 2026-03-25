@@ -42,15 +42,15 @@ OnRetryCallback = Callable[[int, Exception, float], Awaitable[None] | None]
 
 
 def default_retry_predicate(error: Exception) -> bool:  # noqa: PLR0911
-    """Determines if an error is retriable based on its type and cause.
+    """Determines if an error is retryable based on its type and cause.
 
-    Retriable conditions:
+    Retryable conditions:
     - A2AClientTimeoutError (always)
     - A2AClientError caused by httpx.RequestError (network errors)
     - A2AClientError caused by httpx.HTTPStatusError with status 429, 502, 503, 504
     - A2AClientError caused by grpc.aio.AioRpcError with UNAVAILABLE or RESOURCE_EXHAUSTED
 
-    Non-retriable:
+    Non-retryable:
     - Domain-specific errors (TaskNotFoundError, etc.) — inherit A2AError, not A2AClientError
     - A2AClientError caused by json.JSONDecodeError or SSEError
     - A2AClientError with no recognized __cause__

@@ -63,11 +63,11 @@ def retry_transport(mock_transport: AsyncMock) -> RetryTransport:
 
 
 class TestDefaultRetryPredicate:
-    def test_timeout_error_is_retriable(self) -> None:
+    def test_timeout_error_is_retryable(self) -> None:
         error = A2AClientTimeoutError('timeout')
         assert default_retry_predicate(error) is True
 
-    def test_network_error_is_retriable(self) -> None:
+    def test_network_error_is_retryable(self) -> None:
         cause = httpx.ConnectError('connection refused')
         error = A2AClientError(
             'Network communication error: connection refused'
@@ -76,7 +76,7 @@ class TestDefaultRetryPredicate:
         assert default_retry_predicate(error) is True
 
     @pytest.mark.parametrize('status_code', [429, 502, 503, 504])
-    def test_retriable_http_status_codes(self, status_code: int) -> None:
+    def test_retryable_http_status_codes(self, status_code: int) -> None:
         request = httpx.Request('POST', 'http://example.com')
         response = httpx.Response(status_code, request=request)
         cause = httpx.HTTPStatusError(
@@ -87,7 +87,7 @@ class TestDefaultRetryPredicate:
         assert default_retry_predicate(error) is True
 
     @pytest.mark.parametrize('status_code', [400, 401, 403, 404, 500])
-    def test_non_retriable_http_status_codes(self, status_code: int) -> None:
+    def test_non_retryable_http_status_codes(self, status_code: int) -> None:
         request = httpx.Request('POST', 'http://example.com')
         response = httpx.Response(status_code, request=request)
         cause = httpx.HTTPStatusError(
@@ -97,25 +97,25 @@ class TestDefaultRetryPredicate:
         error.__cause__ = cause
         assert default_retry_predicate(error) is False
 
-    def test_json_decode_error_is_not_retriable(self) -> None:
+    def test_json_decode_error_is_not_retryable(self) -> None:
         cause = json.JSONDecodeError('msg', 'doc', 0)
         error = A2AClientError('JSON Decode Error')
         error.__cause__ = cause
         assert default_retry_predicate(error) is False
 
-    def test_domain_error_is_not_retriable(self) -> None:
+    def test_domain_error_is_not_retryable(self) -> None:
         error = TaskNotFoundError()
         assert default_retry_predicate(error) is False
 
-    def test_internal_error_is_not_retriable(self) -> None:
+    def test_internal_error_is_not_retryable(self) -> None:
         error = InternalError()
         assert default_retry_predicate(error) is False
 
-    def test_client_error_without_cause_is_not_retriable(self) -> None:
+    def test_client_error_without_cause_is_not_retryable(self) -> None:
         error = A2AClientError('some error')
         assert default_retry_predicate(error) is False
 
-    def test_non_a2a_error_is_not_retriable(self) -> None:
+    def test_non_a2a_error_is_not_retryable(self) -> None:
         error = ValueError('not an A2A error')
         assert default_retry_predicate(error) is False
 
@@ -216,7 +216,7 @@ class TestRetryTransport:
         assert mock_transport.get_task.call_count == 1
 
     @pytest.mark.asyncio
-    async def test_no_retry_on_non_retriable_http_status(
+    async def test_no_retry_on_non_retryable_http_status(
         self,
         mock_transport: AsyncMock,
         retry_transport: RetryTransport,
@@ -419,7 +419,7 @@ class TestRetryTransport:
         assert mock_transport.get_task.call_count == 2
 
     @pytest.mark.asyncio
-    async def test_custom_predicate_rejects_normally_retriable(
+    async def test_custom_predicate_rejects_normally_retryable(
         self, mock_transport: AsyncMock
     ) -> None:
         transport = RetryTransport(
