@@ -4,7 +4,9 @@ import pytest
 from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
@@ -70,16 +72,24 @@ async def test_agent_card_integration(header_val: str | None) -> None:
     app = FastAPI()
 
     # Mount JSONRPC application
-    # In JSONRPCApplication, the default agent_card_url is AGENT_CARD_WELL_KNOWN_PATH
-    jsonrpc_app = A2AFastAPIApplication(
-        http_handler=handler, agent_card=agent_card
-    ).build()
+    jsonrpc_routes = [
+        *create_agent_card_routes(
+            agent_card=agent_card, card_url='/.well-known/agent-card.json'
+        ),
+        *create_jsonrpc_routes(
+            agent_card=agent_card, request_handler=handler, rpc_url='/'
+        ),
+    ]
+    jsonrpc_app = Starlette(routes=jsonrpc_routes)
     app.mount('/jsonrpc', jsonrpc_app)
 
-    # Mount REST application
-    rest_app = A2ARESTFastAPIApplication(
-        http_handler=handler, agent_card=agent_card
-    ).build()
+    rest_routes = [
+        *create_agent_card_routes(
+            agent_card=agent_card, card_url='/.well-known/agent-card.json'
+        ),
+        *create_rest_routes(agent_card=agent_card, request_handler=handler),
+    ]
+    rest_app = Starlette(routes=rest_routes)
     app.mount('/rest', rest_app)
 
     expected_content = {

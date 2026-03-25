@@ -3,9 +3,11 @@ import httpx
 from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2ARESTFastAPIApplication
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
+from starlette.applications import Starlette
+from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.routes import create_agent_card_routes
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
     BasePushNotificationSender,
@@ -136,20 +138,22 @@ class TestAgentExecutor(AgentExecutor):
 
 def create_agent_app(
     url: str, notification_client: httpx.AsyncClient
-) -> FastAPI:
-    """Creates a new HTTP+REST FastAPI application for the test agent."""
+) -> Starlette:
+    """Creates a new HTTP+REST Starlette application for the test agent."""
     push_config_store = InMemoryPushNotificationConfigStore()
-    app = A2ARESTFastAPIApplication(
-        agent_card=test_agent_card(url),
-        http_handler=DefaultRequestHandler(
-            agent_executor=TestAgentExecutor(),
-            task_store=InMemoryTaskStore(),
-            push_config_store=push_config_store,
-            push_sender=BasePushNotificationSender(
-                httpx_client=notification_client,
-                config_store=push_config_store,
-                context=ServerCallContext(),
-            ),
+    card = test_agent_card(url)
+    handler = DefaultRequestHandler(
+        agent_executor=TestAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        push_config_store=push_config_store,
+        push_sender=BasePushNotificationSender(
+            httpx_client=notification_client,
+            config_store=push_config_store,
+            context=ServerCallContext(),
         ),
     )
-    return app.build()
+    rest_routes = create_rest_routes(agent_card=card, request_handler=handler)
+    agent_card_routes = create_agent_card_routes(
+        agent_card=card, card_url='/.well-known/agent-card.json'
+    )
+    return Starlette(routes=[*rest_routes, *agent_card_routes])

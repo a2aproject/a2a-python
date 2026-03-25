@@ -16,15 +16,16 @@ import a2a.types.a2a_pb2_grpc as a2a_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps import (
-    A2ARESTFastAPIApplication,
-    A2AStarletteApplication,
-)
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import (
@@ -196,22 +197,29 @@ def serve(task_store: TaskStore) -> None:
         task_store=task_store,
     )
 
-    main_app = Starlette()
-
     # JSONRPC
-    jsonrpc_server = A2AStarletteApplication(
+    jsonrpc_routes = create_jsonrpc_routes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        rpc_url=JSONRPC_URL,
     )
-    jsonrpc_server.add_routes_to_app(main_app, rpc_url=JSONRPC_URL)
-
+    # Agent Card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card,
+    )
     # REST
-    rest_server = A2ARESTFastAPIApplication(
+    rest_routes = create_rest_routes(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
+        path_prefix=REST_URL,
     )
-    rest_app = rest_server.build(rpc_url=REST_URL)
-    main_app.mount('', rest_app)
+
+    routes = [
+        *jsonrpc_routes,
+        *agent_card_routes,
+        *rest_routes,
+    ]
+    main_app = Starlette(routes=routes)
 
     config = uvicorn.Config(
         main_app, host='127.0.0.1', port=http_port, log_level='info'
