@@ -133,119 +133,125 @@ class ActiveTask:
     async def _run_producer(self, request: RequestContext) -> None:
         logger.debug('Producer[%s]: Started', self._task_id)
         try:
-            await self._agent_executor.execute(request, self._event_queue)
-            logger.debug('Producer[%s]: Execution finished', self._task_id)
-        except asyncio.CancelledError:
-            logger.debug('Producer[%s]: Cancelled', self._task_id)
-            raise
-        except Exception as e:
-            logger.exception('Producer[%s]: Failed', self._task_id)
-            self._exception = e
+            try:
+                await self._agent_executor.execute(request, self._event_queue)
+                logger.debug('Producer[%s]: Execution finished', self._task_id)
+            except asyncio.CancelledError:
+                logger.debug('Producer[%s]: Cancelled', self._task_id)
+                raise
+            except Exception as e:
+                logger.exception('Producer[%s]: Failed', self._task_id)
+                self._exception = e
+            finally:
+                async with self._state_changed:
+                    self._state_changed.notify_all()
+                # Important: Non-immediate close to allow consumer to drain
+                logger.debug('Producer[%s]: Closing event queue', self._task_id)
+                await self._event_queue.close(immediate=False)
         finally:
-            async with self._state_changed:
-                self._state_changed.notify_all()
-            # Important: Non-immediate close to allow consumer to drain
-            logger.debug('Producer[%s]: Closing event queue', self._task_id)
-            await self._event_queue.close(immediate=False)
+            logger.debug('Producer[%s]: Completed', self._task_id)
 
     async def _run_consumer(self) -> None:
         logger.debug('Consumer[%s]: Started', self._task_id)
         try:
             try:
-                while True:
-                    # Dequeue event. This raises QueueShutDown when finished.
-                    event = await self._event_queue.dequeue_event()
+                try:
+                    while True:
+                        # Dequeue event. This raises QueueShutDown when finished.
+                        event = await self._event_queue.dequeue_event()
+                        logger.debug(
+                            'Consumer[%s]: Dequeued event %s',
+                            self._task_id,
+                            type(event).__name__,
+                        )
+
+                        try:
+                            if isinstance(event, Message):
+                                if not self._result_available:
+                                    logger.debug(
+                                        'Consumer[%s]: Setting first result as Message',
+                                        self._task_id,
+                                    )
+                                    self._first_result = event
+                                    self._result_available = True
+                                self._message = event
+                            else:
+                                await self._task_manager.process(event)
+
+                                # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
+                                res = await self._task_manager.get_task()
+                                is_interrupted = res and res.status.state in (
+                                    TaskState.TASK_STATE_AUTH_REQUIRED,
+                                    TaskState.TASK_STATE_INPUT_REQUIRED,
+                                )
+                                is_terminal = res and res.status.state in (
+                                    TaskState.TASK_STATE_COMPLETED,
+                                    TaskState.TASK_STATE_CANCELED,
+                                    TaskState.TASK_STATE_FAILED,
+                                    TaskState.TASK_STATE_REJECTED,
+                                )
+
+                                if (
+                                    not self._result_available
+                                    and (is_interrupted or is_terminal)
+                                    and res
+                                ):
+                                    logger.debug(
+                                        'Consumer[%s]: Setting first result as Task (state=%s)',
+                                        self._task_id,
+                                        res.status.state,
+                                    )
+                                    self._first_result = Task()
+                                    self._first_result.CopyFrom(res)
+                                    self._result_available = True
+
+                                if is_terminal:
+                                    logger.debug(
+                                        'Consumer[%s]: Reached terminal state %s',
+                                        self._task_id,
+                                        res.status.state if res else 'unknown',
+                                    )
+                                    self._is_finished.set()
+
+                                if is_interrupted:
+                                    logger.debug(
+                                        'Consumer[%s]: Interrupted with state %s',
+                                        self._task_id,
+                                        res.status.state if res else 'unknown',
+                                    )
+
+                                if (
+                                    self._push_sender
+                                    and self._task_id
+                                    and isinstance(event, PushNotificationEvent)
+                                ):
+                                    logger.debug(
+                                        'Consumer[%s]: Sending push notification',
+                                        self._task_id,
+                                    )
+                                    await self._push_sender.send_notification(
+                                        self._task_id, event
+                                    )
+
+                            async with self._state_changed:
+                                self._state_changed.notify_all()
+                        finally:
+                            self._event_queue.task_done()
+                except QueueShutDown:
                     logger.debug(
-                        'Consumer[%s]: Dequeued event %s',
-                        self._task_id,
-                        type(event).__name__,
+                        'Consumer[%s]: Event queue shut down', self._task_id
                     )
-
-                    try:
-                        if isinstance(event, Message):
-                            if not self._result_available:
-                                logger.debug(
-                                    'Consumer[%s]: Setting first result as Message',
-                                    self._task_id,
-                                )
-                                self._first_result = event
-                                self._result_available = True
-                            self._message = event
-                        else:
-                            await self._task_manager.process(event)
-
-                            # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
-                            res = await self._task_manager.get_task()
-                            is_interrupted = res and res.status.state in (
-                                TaskState.TASK_STATE_AUTH_REQUIRED,
-                                TaskState.TASK_STATE_INPUT_REQUIRED,
-                            )
-                            is_terminal = res and res.status.state in (
-                                TaskState.TASK_STATE_COMPLETED,
-                                TaskState.TASK_STATE_CANCELED,
-                                TaskState.TASK_STATE_FAILED,
-                                TaskState.TASK_STATE_REJECTED,
-                            )
-
-                            if (
-                                not self._result_available
-                                and (is_interrupted or is_terminal)
-                                and res
-                            ):
-                                logger.debug(
-                                    'Consumer[%s]: Setting first result as Task (state=%s)',
-                                    self._task_id,
-                                    res.status.state,
-                                )
-                                self._first_result = Task()
-                                self._first_result.CopyFrom(res)
-                                self._result_available = True
-
-                            if is_terminal:
-                                logger.debug(
-                                    'Consumer[%s]: Reached terminal state %s',
-                                    self._task_id,
-                                    res.status.state if res else 'unknown',
-                                )
-                                self._is_finished.set()
-
-                            if is_interrupted:
-                                logger.debug(
-                                    'Consumer[%s]: Interrupted with state %s',
-                                    self._task_id,
-                                    res.status.state if res else 'unknown',
-                                )
-
-                            if (
-                                self._push_sender
-                                and self._task_id
-                                and isinstance(event, PushNotificationEvent)
-                            ):
-                                logger.debug(
-                                    'Consumer[%s]: Sending push notification',
-                                    self._task_id,
-                                )
-                                await self._push_sender.send_notification(
-                                    self._task_id, event
-                                )
-
-                        async with self._state_changed:
-                            self._state_changed.notify_all()
-                    finally:
-                        self._event_queue.task_done()
-            except QueueShutDown:
-                logger.debug(
-                    'Consumer[%s]: Event queue shut down', self._task_id
-                )
-        except Exception as e:
-            logger.exception('Consumer[%s]: Failed', self._task_id)
-            self._exception = e
+            except Exception as e:
+                logger.exception('Consumer[%s]: Failed', self._task_id)
+                self._exception = e
+            finally:
+                self._is_finished.set()
+                async with self._state_changed:
+                    self._state_changed.notify_all()
+                logger.debug('Consumer[%s]: Finishing', self._task_id)
+                await self._maybe_cleanup()
         finally:
-            self._is_finished.set()
-            async with self._state_changed:
-                self._state_changed.notify_all()
-            logger.debug('Consumer[%s]: Finishing', self._task_id)
-            await self._maybe_cleanup()
+            logger.debug('Consumer[%s]: Completed', self._task_id)
 
     async def subscribe(self) -> AsyncGenerator[Event, None]:
         """Creates a queue tap and yields events as they are produced."""

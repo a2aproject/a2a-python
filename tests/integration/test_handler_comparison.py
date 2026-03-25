@@ -930,22 +930,28 @@ async def test_get_task_in_progress(
         ],
     )
     
-    events = [
-        e
-        async for e in client.send_message(
-            SendMessageRequest(
-                message=msg,
-                configuration=SendMessageConfiguration(return_immediately=True),
+    try:
+        events = [
+            e
+            async for e in client.send_message(
+                SendMessageRequest(
+                    message=msg,
+                    configuration=SendMessageConfiguration(return_immediately=True),
+                )
             )
-        )
-    ]
-    logger.info(f'Events: {events}')
-    task_id = events[0][0].task.id
-    logger.info(f'Task ID: {task_id}')
-    task = await client.get_task(GetTaskRequest(id=task_id))
-    logger.info(f'Task: {task}')
+        ]
+        logger.info(f'Events: {events}')
+        task_id = events[0][0].task.id
+        logger.info(f'Task ID: {task_id}')
+        task = await client.get_task(GetTaskRequest(id=task_id))
+        logger.info(f'Task: {task}')
 
-    trigger_events['1'].set()
+    finally:
+
+        trigger_events['1'].set()
+        logger.info('TEST COMPLETED')
+
+
 
 
 # TODO Test on cleanup waiting execution

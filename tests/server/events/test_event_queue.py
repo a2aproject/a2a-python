@@ -776,10 +776,16 @@ async def test_child_graceful_close_misses_inflight_event() -> None:
 @pytest.mark.asyncio
 async def test_dispatch_task_failed(event_queue: EventQueue) -> None:
     event_queue._dispatcher_task.cancel()
-    await asyncio.sleep(0.1)
+    await event_queue._dispatcher_task
+
     event = create_sample_message()
     await event_queue.enqueue_event(event)
-    await event_queue.close(immediate=False)
+
+    with pytest.raises(QueueShutDown):
+        await asyncio.wait_for(event_queue.dequeue_event(), timeout=0.1)
+
+    # Event was never dequeued, but close() should still work after dispatcher was force cancelled.
+    await asyncio.wait_for(event_queue.close(immediate=False), timeout=0.1)
 
 
 @pytest.mark.asyncio

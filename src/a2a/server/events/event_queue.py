@@ -51,7 +51,6 @@ class EventQueue:
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
         """Redirects instantiation to EventQueueSource for backwards compatibility."""
-        print(f'EventQueue.__new__ called: {cls}')
         if cls is EventQueue:
             return cast('Self', EventQueueSource.__new__(EventQueueSource, *args, **kwargs))
         return super().__new__(cls)
@@ -115,7 +114,7 @@ class EventQueueSource(EventQueue):
     """The Parent EventQueue.
 
     Acts as the single entry point for producers. Events pushed here are buffered
-    in `_incoming_queue` and distributed to all child Sinks by a background dispatcher task.
+    in `_incoming_queue` and distributed to all child Sinks by a background dispatcher taxsk.
     """
 
     def __init__(self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE) -> None:
@@ -138,7 +137,6 @@ class EventQueueSource(EventQueue):
         self._dispatcher_task = asyncio.create_task(self._dispatch_loop())
 
         logger.debug('EventQueueSource initialized.')
-        print(f'EventQueueSource initialized: {self}')
 
     @property
     def queue(self) -> AsyncQueue[Event]:
@@ -165,6 +163,17 @@ class EventQueueSource(EventQueue):
                 self._incoming_queue.task_done()
         except asyncio.CancelledError:
             logger.debug('EventQueueSource._dispatch_loop() cancelled %s', self)
+            if not self._is_closed:
+                # TODO: Figure out what to do on cancelation outside of close()
+                # (e.g. test cleanup, server forced shutdown, etc)
+                async with self._lock:
+                    self._is_closed = True
+                    sinks_to_close = list(self._sinks)
+
+                self._incoming_queue.shutdown(immediate=True)
+                await asyncio.gather(
+                    *(sink.close(immediate=True) for sink in sinks_to_close)
+                )
         except QueueShutDown:
             logger.debug('EventQueueSource._dispatch_loop() shutdown %s', self)
         except Exception:
@@ -173,7 +182,7 @@ class EventQueueSource(EventQueue):
             )
             raise
         finally:
-            logger.debug('EventQueueSource._dispatch_loop() finished %s', self)
+            logger.debug('EventQueueSource._dispatch_loop() Completed %s', self)
 
     async def _join_incoming_queue(self) -> None:
         """Helper to wait for join() while monitoring the dispatcher task."""
