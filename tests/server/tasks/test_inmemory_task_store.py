@@ -330,3 +330,38 @@ async def test_owner_resource_scoping() -> None:
     # Cleanup remaining tasks
     await store.delete('u1-task2', context_user1)
     await store.delete('u2-task1', context_user2)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_copying', [True, False])
+async def test_inmemory_task_store_copying_behavior(use_copying: bool):
+    """Verify that tasks are copied (or not) based on use_copying parameter."""
+    store = InMemoryTaskStore(use_copying=use_copying)
+
+    original_task = Task(
+        id='test_task', status=TaskStatus(state=TaskState.TASK_STATE_WORKING)
+    )
+    await store.save(original_task)
+
+    # Retrieve it
+    retrieved_task = await store.get('test_task')
+    assert retrieved_task is not None
+
+    if use_copying:
+        assert retrieved_task is not original_task
+    else:
+        assert retrieved_task is original_task
+
+    # Modify retrieved task
+    retrieved_task.status.state = TaskState.TASK_STATE_COMPLETED
+
+    # Retrieve it again, it should NOT be modified in the store if use_copying=True
+    retrieved_task_2 = await store.get('test_task')
+    assert retrieved_task_2 is not None
+
+    if use_copying:
+        assert retrieved_task_2.status.state == TaskState.TASK_STATE_WORKING
+        assert retrieved_task_2 is not retrieved_task
+    else:
+        assert retrieved_task_2.status.state == TaskState.TASK_STATE_COMPLETED
+        assert retrieved_task_2 is retrieved_task

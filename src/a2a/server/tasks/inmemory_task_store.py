@@ -3,6 +3,7 @@ import logging
 
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
+from a2a.server.tasks.copying_task_store import CopyingTaskStoreAdapter
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
@@ -14,8 +15,8 @@ from a2a.utils.task import decode_page_token, encode_page_token
 logger = logging.getLogger(__name__)
 
 
-class InMemoryTaskStore(TaskStore):
-    """In-memory implementation of TaskStore.
+class _InMemoryTaskStoreImpl(TaskStore):
+    """Internal In-memory implementation of TaskStore.
 
     Stores task objects in a nested dictionary in memory, keyed by owner then task_id.
     Task data is lost when the server process stops.
@@ -25,8 +26,8 @@ class InMemoryTaskStore(TaskStore):
         self,
         owner_resolver: OwnerResolver = resolve_user_scope,
     ) -> None:
-        """Initializes the InMemoryTaskStore."""
-        logger.debug('Initializing InMemoryTaskStore')
+        """Initializes the internal _InMemoryTaskStoreImpl."""
+        logger.debug('Initializing _InMemoryTaskStoreImpl')
         self.tasks: dict[str, dict[str, Task]] = {}
         self.lock = asyncio.Lock()
         self.owner_resolver = owner_resolver
@@ -183,3 +184,55 @@ class InMemoryTaskStore(TaskStore):
             if not owner_tasks:
                 del self.tasks[owner]
                 logger.debug('Removed empty owner %s from store.', owner)
+
+
+class InMemoryTaskStore(TaskStore):
+    """In-memory implementation of TaskStore.
+
+    Can optionally use CopyingTaskStoreAdapter to wrap the internal dictionary-based
+    implementation, preventing shared mutable state issues by always returning and
+    storing deep copies.
+    """
+
+    def __init__(
+        self,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+        use_copying: bool = True,
+    ) -> None:
+        """Initializes the InMemoryTaskStore.
+
+        Args:
+            owner_resolver: Resolver for task owners.
+            use_copying: If True, the store will return and save deep copies of tasks.
+              Copying behavior is consistent with database task stores.
+        """
+        self._impl = _InMemoryTaskStoreImpl(owner_resolver=owner_resolver)
+        self._store: TaskStore = (
+            CopyingTaskStoreAdapter(self._impl) if use_copying else self._impl
+        )
+
+    async def save(
+        self, task: Task, context: ServerCallContext | None = None
+    ) -> None:
+        """Saves or updates a task in the store."""
+        await self._store.save(task, context)
+
+    async def get(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> Task | None:
+        """Retrieves a task from the store by ID."""
+        return await self._store.get(task_id, context)
+
+    async def list(
+        self,
+        params: a2a_pb2.ListTasksRequest,
+        context: ServerCallContext | None = None,
+    ) -> a2a_pb2.ListTasksResponse:
+        """Retrieves a list of tasks from the store."""
+        return await self._store.list(params, context)
+
+    async def delete(
+        self, task_id: str, context: ServerCallContext | None = None
+    ) -> None:
+        """Deletes a task from the store by ID."""
+        await self._store.delete(task_id, context)

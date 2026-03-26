@@ -19,7 +19,8 @@ from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.client import ClientConfig, ClientFactory
 from a2a.utils.constants import TransportProtocol
 
-from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from starlette.applications import Starlette
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.context import ServerCallContext
 
@@ -197,10 +198,16 @@ class TestJSONRPCTenantIntegration:
 
     @pytest.fixture
     def server_app(self, jsonrpc_agent_card, mock_handler):
-        app = A2AStarletteApplication(
+        agent_card_routes = create_agent_card_routes(
+            agent_card=jsonrpc_agent_card, card_url='/'
+        )
+        jsonrpc_routes = create_jsonrpc_routes(
             agent_card=jsonrpc_agent_card,
-            http_handler=mock_handler,
-        ).build(rpc_url='/jsonrpc')
+            request_handler=mock_handler,
+            extended_agent_card=jsonrpc_agent_card,
+            rpc_url='/jsonrpc',
+        )
+        app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
         return app
 
     @pytest.mark.asyncio

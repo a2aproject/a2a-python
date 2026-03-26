@@ -1,5 +1,4 @@
 import asyncio
-
 from collections.abc import AsyncGenerator
 from typing import Any, NamedTuple
 from unittest.mock import ANY, AsyncMock, patch
@@ -8,7 +7,6 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
-
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -16,14 +14,23 @@ from google.protobuf.timestamp_pb2 import Timestamp
 from a2a.client import Client, ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
-from a2a.client.client_factory import ClientFactory
 from a2a.client.client import ClientCallContext
+from a2a.client.client_factory import ClientFactory
 from a2a.client.service_parameters import (
     ServiceParametersFactory,
     with_a2a_extensions,
 )
 from a2a.client.transports import JsonRpcTransport, RestTransport
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from starlette.applications import Starlette
+
+# Compat v0.3 imports for dedicated tests
+from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
@@ -50,12 +57,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.constants import (
-    TransportProtocol,
-)
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
     InternalError,
     InvalidAgentResponseError,
@@ -72,11 +77,6 @@ from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
 )
-
-# Compat v0.3 imports for dedicated tests
-from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
-from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
-
 
 # --- Test Constants ---
 
@@ -224,10 +224,16 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
 def jsonrpc_setup(http_base_setup) -> TransportSetup:
     """Sets up the JsonRpcTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    app_builder = A2AFastAPIApplication(
-        agent_card, mock_request_handler, extended_agent_card=agent_card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     factory = ClientFactory(
         config=ClientConfig(
@@ -243,10 +249,13 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
 def rest_setup(http_base_setup) -> TransportSetup:
     """Sets up the RestTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    app_builder = A2ARESTFastAPIApplication(
+    rest_routes = create_rest_routes(
         agent_card, mock_request_handler, extended_agent_card=agent_card
     )
-    app = app_builder.build()
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
+    app = Starlette(routes=[*rest_routes, *agent_card_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     factory = ClientFactory(
         config=ClientConfig(
@@ -360,9 +369,9 @@ def grpc_03_setup(
 ) -> TransportSetup:
     """Sets up the CompatGrpcTransport and in-process 0.3 server."""
     server_address, handler = grpc_03_server_and_handler
-    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
     from a2a.client.base_client import BaseClient
     from a2a.client.client import ClientConfig
+    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
 
     channel = grpc.aio.insecure_channel(server_address)
     transport = CompatGrpcTransport(channel=channel, agent_card=agent_card)
@@ -686,12 +695,16 @@ async def test_json_transport_get_signed_base_card(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        card_modifier=signer,  # Sign the base card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     agent_url = agent_card.supported_interfaces[0].url
@@ -706,7 +719,8 @@ async def test_json_transport_get_signed_base_card(
 
     # Verification happens here
     result = await resolver.get_agent_card(
-        signature_verifier=signature_verifier
+        relative_card_path='/',
+        signature_verifier=signature_verifier,
     )
 
     # Create transport with the verified card
@@ -751,15 +765,17 @@ async def test_client_get_signed_extended_card(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        extended_card_modifier=lambda card, ctx: signer(
-            card
-        ),  # Sign the extended card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(card),
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     transport = JsonRpcTransport(
@@ -820,16 +836,17 @@ async def test_client_get_signed_base_and_extended_cards(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        card_modifier=signer,  # Sign the base card
-        extended_card_modifier=lambda card, ctx: signer(
-            card
-        ),  # Sign the extended card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(card),
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
 
     agent_url = agent_card.supported_interfaces[0].url
@@ -844,7 +861,8 @@ async def test_client_get_signed_base_and_extended_cards(
 
     # 1. Fetch base card
     base_card = await resolver.get_agent_card(
-        signature_verifier=signature_verifier
+        relative_card_path='/',
+        signature_verifier=signature_verifier,
     )
 
     # 2. Create transport with base card
@@ -905,6 +923,73 @@ async def test_client_handles_a2a_errors(transport_setups, error_cls) -> None:
 
     # Reset side_effect for other tests
     handler.on_get_task.side_effect = None
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error_cls',
+    [
+        TaskNotFoundError,
+        TaskNotCancelableError,
+        PushNotificationNotSupportedError,
+        UnsupportedOperationError,
+        ContentTypeNotSupportedError,
+        InvalidAgentResponseError,
+        ExtendedAgentCardNotConfiguredError,
+        ExtensionSupportRequiredError,
+        VersionNotSupportedError,
+    ],
+)
+@pytest.mark.parametrize(
+    'handler_attr, client_method, request_params',
+    [
+        pytest.param(
+            'on_message_send_stream',
+            'send_message',
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-integration-test',
+                    parts=[Part(text='Hello, integration test!')],
+                )
+            ),
+            id='stream',
+        ),
+        pytest.param(
+            'on_subscribe_to_task',
+            'subscribe',
+            SubscribeToTaskRequest(id='some-id'),
+            id='subscribe',
+        ),
+    ],
+)
+async def test_client_handles_a2a_errors_streaming(
+    transport_setups, error_cls, handler_attr, client_method, request_params
+) -> None:
+    """Integration test to verify error propagation from streaming handlers to client.
+
+    The handler raises an A2AError before yielding any events. All transports
+    must propagate this as the exact error_cls, not wrapped in an ExceptionGroup
+    or converted to a generic client error.
+    """
+    client = transport_setups.client
+    handler = transport_setups.handler
+
+    async def mock_generator(*args, **kwargs):
+        raise error_cls('Test error message')
+        yield
+
+    getattr(handler, handler_attr).side_effect = mock_generator
+
+    with pytest.raises(error_cls) as exc_info:
+        async for _ in getattr(client, client_method)(request=request_params):
+            pass
+
+    assert 'Test error message' in str(exc_info.value)
+
+    getattr(handler, handler_attr).side_effect = None
 
     await client.close()
 
