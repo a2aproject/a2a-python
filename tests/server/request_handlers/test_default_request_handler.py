@@ -1308,6 +1308,7 @@ async def test_on_message_send_task_id_mismatch():
     mismatched_task = create_sample_task(task_id=result_task_id)
     mock_active_task.wait = AsyncMock(return_value=mismatched_task)
     mock_active_task.start = AsyncMock()
+    mock_active_task.enqueue_request = AsyncMock()
 
     with (
         patch.object(
@@ -1357,6 +1358,7 @@ async def test_on_message_send_stream_task_id_mismatch():
     mock_active_task = MagicMock()
     mock_active_task.subscribe.side_effect = mock_subscribe
     mock_active_task.start = AsyncMock()
+    mock_active_task.enqueue_request = AsyncMock()
 
     with (
         patch.object(

@@ -85,7 +85,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Wait for the task to finish
         result = await active_task.wait()
@@ -99,9 +100,11 @@ class TestActiveTask:
         self, active_task: ActiveTask, request_context: Mock
     ) -> None:
         """Test starting a task that is already started."""
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         with pytest.raises(TaskAlreadyStartedError):
-            await active_task.start(request_context)
+            await active_task.enqueue_request(request_context)
+            await active_task.start()
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe(
@@ -118,7 +121,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         events = []
         async for event in active_task.subscribe():
@@ -151,7 +155,8 @@ class TestActiveTask:
             status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
         )
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Give it a moment to start
         await asyncio.sleep(0.1)
@@ -186,7 +191,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         result = await active_task.wait()
         assert result.id == 'test-task-id'
@@ -219,7 +225,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         result = await active_task.wait()
         assert result.id == 'test-task-id'
@@ -237,7 +244,8 @@ class TestActiveTask:
             side_effect=ValueError('Producer crashed')
         )
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # We need to wait a bit for the producer to fail and set the exception
         for _ in range(10):
@@ -267,7 +275,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         await active_task.wait()
 
         push_sender.send_notification.assert_called()
@@ -297,7 +306,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         await active_task.wait()
 
         # Wait for consumer thread to finish and call cleanup
@@ -325,7 +335,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Wait for task to finish
         for _ in range(10):
@@ -351,7 +362,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = None
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Wait for task to finish
         for _ in range(10):
@@ -378,7 +390,8 @@ class TestActiveTask:
             side_effect=RuntimeError('Consumer crash')
         )
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # We need to wait for the consumer to fail
         for _ in range(10):
@@ -403,7 +416,8 @@ class TestActiveTask:
             side_effect=ValueError('Producer failure')
         )
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Give it a moment to fail
         for _ in range(10):
@@ -447,7 +461,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         await active_task.wait()
 
         # Now it is finished
@@ -470,7 +485,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         it = active_task.subscribe()
         it_obj = it.__aiter__()
@@ -502,7 +518,8 @@ class TestActiveTask:
             await asyncio.sleep(10)
 
         agent_executor.execute = AsyncMock(side_effect=long_execute)
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         tapped = await event_queue.tap()
 
@@ -537,7 +554,8 @@ class TestActiveTask:
             active_task._request_queue.shutdown(immediate=True)
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         events = [event async for event in active_task.subscribe()]
         assert len(events) == 1
@@ -564,7 +582,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         result = await active_task.wait()
         assert result == task_obj
 
@@ -584,7 +603,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         # Force finish without setting _first_result
         active_task._is_finished.set()
         async with active_task._state_changed:
@@ -609,7 +629,8 @@ class TestActiveTask:
             await asyncio.sleep(10)
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         it = active_task.subscribe()
         async for event in it:
@@ -647,7 +668,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = Task(id='test')
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Forced queue close.
         await active_task._event_queue.close()
@@ -674,7 +696,8 @@ class TestActiveTask:
             await asyncio.sleep(10)
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         mock_tapped_queue = Mock(spec=EventQueue)
         mock_tapped_queue.dequeue_event = AsyncMock(
@@ -724,7 +747,8 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         result = await active_task.wait()
         assert result.status.state == TaskState.TASK_STATE_AUTH_REQUIRED
@@ -742,7 +766,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Wait for it to finish
         await active_task._is_finished.wait()
@@ -762,7 +787,8 @@ class TestActiveTask:
             side_effect=ValueError('Quick failure')
         )
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         # Consumer should also finish
         with pytest.raises(ValueError, match='Quick failure'):
@@ -784,7 +810,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
 
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         async def consume():
             async for _ in active_task.subscribe():
@@ -855,7 +882,8 @@ class TestActiveTask:
         msg_task = asyncio.create_task(gen.__anext__())
 
         # 2. Start the task and wait for it to finish
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
         await active_task.wait()
 
         # Give the consumer loop a moment to set _is_finished
@@ -917,7 +945,8 @@ class TestActiveTask:
             await asyncio.sleep(10)
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
-        await active_task.start(request_context)
+        await active_task.enqueue_request(request_context)
+        await active_task.start()
 
         mock_tapped_queue = Mock(spec=EventQueue)
         # dequeue_event returns a task that fails

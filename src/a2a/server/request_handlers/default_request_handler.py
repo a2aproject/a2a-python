@@ -261,7 +261,8 @@ class DefaultRequestHandler(RequestHandler):
 
             request_context.current_task = task
 
-        await active_task.start(request_context, setup_callback=setup_db)
+        await active_task.enqueue_request(request_context)
+        await active_task.start(setup_callback=setup_db)
         return active_task, request_context
 
     async def on_message_send(  # noqa: D102

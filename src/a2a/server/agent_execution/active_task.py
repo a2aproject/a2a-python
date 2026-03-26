@@ -125,9 +125,12 @@ class ActiveTask:
         """The ID of the task."""
         return self._task_id
 
+    async def enqueue_request(self, request: RequestContext) -> None:
+        """Enqueues a request for the active task to process."""
+        await self._request_queue.put(request)
+
     async def start(
         self,
-        request: RequestContext,
         setup_callback: Callable[[], Awaitable[None]] | None = None,
     ) -> None:
         """Starts the active task background processes.
@@ -137,7 +140,6 @@ class ActiveTask:
         singleton instances for the lifetime of this ActiveTask.
 
         Args:
-            request: The request context to execute.
             setup_callback: Optional async callback executed before starting the producer, while the lock is held.
 
         Raises:
@@ -172,7 +174,6 @@ class ActiveTask:
 
             # Spawn the background tasks that drive the lifecycle.
             self._reference_count += 1
-            await self._request_queue.put(request)
             self._producer_task = asyncio.create_task(
                 self._run_producer(), name=f'producer:{self._task_id}'
             )
