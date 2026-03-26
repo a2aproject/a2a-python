@@ -109,8 +109,6 @@ class ActiveTask:
         self._exception: Exception | None = None
 
         # --- Result State ---
-        # Indicates if a terminal Task state or a final Message has been captured.
-        self._result_available = False
         # Caches the terminal Task or final Message to avoid redundant DB reads.
         self._first_result: Task | Message | None = None
         # Caches the final Message, if one was yielded by the agent.
@@ -246,13 +244,12 @@ class ActiveTask:
 
                         try:
                             if isinstance(event, Message):
-                                if not self._result_available:
+                                if self._first_result is None:
                                     logger.debug(
                                         'Consumer[%s]: Setting first result as Message',
                                         self._task_id,
                                     )
                                     self._first_result = event
-                                    self._result_available = True
                                 self._message = event
                             else:
                                 # Save structural events (like TaskStatusUpdate) to DB.
@@ -273,7 +270,7 @@ class ActiveTask:
 
                                 # If we hit a breakpoint or terminal state, lock in the result.
                                 if (
-                                    not self._result_available
+                                    self._first_result is None
                                     and (is_interrupted or is_terminal)
                                     and res
                                 ):
@@ -284,7 +281,6 @@ class ActiveTask:
                                     )
                                     self._first_result = Task()
                                     self._first_result.CopyFrom(res)
-                                    self._result_available = True
 
                                 if is_terminal:
                                     logger.debug(
@@ -425,7 +421,7 @@ class ActiveTask:
         """
         logger.debug('Wait[%s]: Waiting for result', self._task_id)
         # Block until the consumer explicitly flags a result, or the task forcefully exits.
-        while not self._result_available and not self._is_finished.is_set():
+        while (self._first_result is None) and not self._is_finished.is_set():
             if self._exception:
                 logger.debug(
                     'Wait[%s]: Failed, exception set', self._task_id
@@ -454,7 +450,6 @@ class ActiveTask:
             logger.debug('Wait[%s]: Returning Task from manager', self._task_id)
             # Update result_available so subsequent wait() calls are fast
             self._first_result = res
-            self._result_available = True
             return res
 
         if self._message:
