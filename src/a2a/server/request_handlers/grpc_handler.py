@@ -1,5 +1,4 @@
 # ruff: noqa: N802
-import contextlib
 import logging
 
 from abc import ABC, abstractmethod
@@ -74,9 +73,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds the ServerCallContext."""
         user = UnauthenticatedUser()
-        state = {}
-        with contextlib.suppress(Exception):
-            state['grpc_context'] = context
+        state = {'grpc_context': context}
         return ServerCallContext(
             user=user,
             state=state,
