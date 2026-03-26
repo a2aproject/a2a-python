@@ -300,10 +300,15 @@ async def test_cancellation_during_wait(client: BaseClient, trigger_events):
     ]
     msg = Message(role=Role.ROLE_USER, parts=[Part(text='\n'.join(commands))])
 
-    # Client 1: Start and wait
+    # Client 1: Start and wait. Collect all events.
+
+    async def print_event(e):
+        logging.info(f'Event: {e}')
+        return e
+
     wait_task = asyncio.create_task(
-        anext(
-            client.send_message(
+       [
+                print_event(e) async for e in client.send_message(
                 SendMessageRequest(
                     message=msg,
                     configuration=SendMessageConfiguration(
@@ -311,12 +316,13 @@ async def test_cancellation_during_wait(client: BaseClient, trigger_events):
                     ),
                 )
             )
-        )
+        ]
     )
 
     await asyncio.sleep(0.5)
     task_list = await client.list_tasks(ListTasksRequest())
-    task_id = task_list.tasks[0].id
+    task, = task_list.tasks
+    task_id = task.id
 
     # Client 2: Cancel
     cancel_res = await client.cancel_task(CancelTaskRequest(id=task_id))

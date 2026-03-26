@@ -35,14 +35,12 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
     TaskState,
-    TaskStatus,
 )
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
     TaskNotFoundError,
     UnsupportedOperationError,
-    TaskNotCancelableError,
 )
 from a2a.utils.task import (
     apply_history_length,
@@ -250,6 +248,13 @@ class DefaultRequestHandler(RequestHandler):
                 raise TaskNotFoundError(
                     message=f'Task {original_task_id} was specified but does not exist'
                 )
+            else:
+                # NEW task. Create and save it so it's not "missing" if queried immediately
+                # (especially important for return_immediately=True)
+                task = temp_task_manager._init_task_obj(
+                    task_id, cast('str', request_context.context_id)
+                )
+                await temp_task_manager.save_task_event(task)
 
             request_context.current_task = task
 
@@ -266,15 +271,7 @@ class DefaultRequestHandler(RequestHandler):
         )
 
         if params.configuration and params.configuration.return_immediately:
-            task = request_context.current_task
-            if not task:
-                task = Task(
-                    id=cast('str', request_context.task_id),
-                    context_id=cast('str', request_context.context_id),
-                    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
-                )
-                task.history.append(params.message)
-
+            task = cast('Task', request_context.current_task)
             if params.configuration:
                 task = apply_history_length(task, params.configuration)
             return task
