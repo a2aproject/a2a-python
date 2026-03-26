@@ -176,7 +176,7 @@ def create_rest_routes(  # noqa: PLR0913
         return EventSourceResponse(event_generator())
 
     async def _handle_authenticated_agent_card(
-        request: 'Request', call_context: ServerCallContext
+        request: 'Request', call_context: ServerCallContext | None = None
     ) -> dict[str, Any]:
         if not agent_card.capabilities.extended_agent_card:
             raise ExtendedAgentCardNotConfiguredError(
@@ -185,8 +185,10 @@ def create_rest_routes(  # noqa: PLR0913
         card_to_serve = extended_agent_card or agent_card
 
         if extended_card_modifier:
+            # Re-generate context if none passed to replicate RESTAdapter exact logic
+            context = call_context or _build_call_context(request)
             card_to_serve = await maybe_await(
-                extended_card_modifier(card_to_serve, call_context)
+                extended_card_modifier(card_to_serve, context)
             )
         elif card_modifier:
             card_to_serve = await maybe_await(card_modifier(card_to_serve))
