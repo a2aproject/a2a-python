@@ -109,7 +109,7 @@ class REST03Adapter:
         )
 
     async def handle_get_agent_card(
-        self, request: Request, call_context: ServerCallContext | None = None
+        self, request: Request, call_context: ServerCallContext
     ) -> dict[str, Any]:
         """Handles GET requests for the agent card endpoint."""
         card_to_serve = self.agent_card
@@ -119,7 +119,7 @@ class REST03Adapter:
         return v03_card.model_dump(mode='json', exclude_none=True)
 
     async def handle_authenticated_agent_card(
-        self, request: Request, call_context: ServerCallContext | None = None
+        self, request: Request, call_context: ServerCallContext
     ) -> dict[str, Any]:
         """Hook for per credential agent card response."""
         if not self.agent_card.capabilities.extended_agent_card:
