@@ -135,6 +135,7 @@ def build_error_response(
         jsonrpc_error = model_class(
             code=code,
             message=str(error),
+            data=error.data,
         )
     else:
         jsonrpc_error = JSONRPCInternalError(message=str(error))

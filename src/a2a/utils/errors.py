@@ -21,9 +21,10 @@ class A2AError(Exception):
     message: str = 'A2A Error'
     data: dict | None = None
 
-    def __init__(self, message: str | None = None):
+    def __init__(self, message: str | None = None, data: dict | None = None):
         if message:
             self.message = message
+        self.data = data
         super().__init__(self.message)
 
 

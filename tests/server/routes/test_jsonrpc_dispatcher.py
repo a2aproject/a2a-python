@@ -126,7 +126,7 @@ class TestJsonRpcDispatcherOptionalDependencies:
         mock_handler = MagicMock(spec=RequestHandler)
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://example.com'
-        return {'agent_card': mock_agent_card, 'http_handler': mock_handler}
+        return {'agent_card': mock_agent_card, 'request_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_starlette_not_installed(self):

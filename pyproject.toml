@@ -16,6 +16,7 @@ dependencies = [
   "json-rpc>=1.15.0",
   "googleapis-common-protos>=1.70.0",
   "culsans>=0.11.0 ; python_full_version < '3.13'",
+  "packaging>=24.0",
 ]
 
 classifiers = [

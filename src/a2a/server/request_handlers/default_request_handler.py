@@ -18,7 +18,10 @@ from a2a.server.events import (
     InMemoryQueueManager,
     QueueManager,
 )
-from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.request_handler import (
+    RequestHandler,
+    validate_request_params,
+)
 from a2a.server.tasks import (
     PushNotificationConfigStore,
     PushNotificationEvent,
@@ -118,6 +121,7 @@ class DefaultRequestHandler(RequestHandler):
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
 
+    @validate_request_params
     async def on_get_task(
         self,
         params: GetTaskRequest,
@@ -133,6 +137,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return apply_history_length(task, params)
 
+    @validate_request_params
     async def on_list_tasks(
         self,
         params: ListTasksRequest,
@@ -154,6 +159,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return page
 
+    @validate_request_params
     async def on_cancel_task(
         self,
         params: CancelTaskRequest,
@@ -317,6 +323,7 @@ class DefaultRequestHandler(RequestHandler):
         ):
             await self._push_sender.send_notification(task_id, event)
 
+    @validate_request_params
     async def on_message_send(
         self,
         params: SendMessageRequest,
@@ -386,6 +393,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return result
 
+    @validate_request_params
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
@@ -474,6 +482,7 @@ class DefaultRequestHandler(RequestHandler):
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
+    @validate_request_params
     async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
@@ -499,6 +508,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return params
 
+    @validate_request_params
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -530,6 +540,7 @@ class DefaultRequestHandler(RequestHandler):
 
         raise InternalError(message='Push notification config not found')
 
+    @validate_request_params
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
@@ -572,6 +583,7 @@ class DefaultRequestHandler(RequestHandler):
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
+    @validate_request_params
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -597,6 +609,7 @@ class DefaultRequestHandler(RequestHandler):
             configs=push_notification_config_list
         )
 
+    @validate_request_params
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
