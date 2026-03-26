@@ -1,5 +1,4 @@
 # ruff: noqa: N802
-import contextlib
 import logging
 
 from abc import ABC, abstractmethod
@@ -35,12 +34,9 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
-from a2a.utils.errors import (
-    A2A_ERROR_REASONS,
-    A2AError,
-    TaskNotFoundError,
-)
+from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.helpers import maybe_await, validate
+from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 
 logger = logging.getLogger(__name__)
@@ -77,9 +73,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds the ServerCallContext."""
         user = UnauthenticatedUser()
-        state = {}
-        with contextlib.suppress(Exception):
-            state['grpc_context'] = context
+        state = {'grpc_context': context}
         return ServerCallContext(
             user=user,
             state=state,
@@ -396,18 +390,28 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 domain='a2a-protocol.org',
             )
 
-            status_code = (
-                code.value[0] if code else grpc.StatusCode.UNKNOWN.value[0]
-            )
+            status_code = code.value[0]
             error_msg = (
                 error.message if hasattr(error, 'message') else str(error)
             )
 
-            # Create standard Status and pack the ErrorInfo
+            # Create standard Status with ErrorInfo for all A2A errors
             status = status_pb2.Status(code=status_code, message=error_msg)
-            detail = any_pb2.Any()
-            detail.Pack(error_info)
-            status.details.append(detail)
+            error_info_detail = any_pb2.Any()
+            error_info_detail.Pack(error_info)
+            status.details.append(error_info_detail)
+
+            # Append structured field violations for validation errors
+            if (
+                isinstance(error, types.InvalidParamsError)
+                and error.data
+                and error.data.get('errors')
+            ):
+                bad_request_detail = any_pb2.Any()
+                bad_request_detail.Pack(
+                    validation_errors_to_bad_request(error.data['errors'])
+                )
+                status.details.append(bad_request_detail)
 
             # Use grpc_status to safely generate standard trailing metadata
             rich_status = rpc_status.to_status(status)

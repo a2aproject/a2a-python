@@ -12,3 +12,8 @@ coverage.xml
 spec.json
 docker-compose.yaml
 .geminiignore
+
+# ITK Integration Test Artifacts
+itk/a2a-samples/
+itk/pyproto/
+itk/instruction.proto

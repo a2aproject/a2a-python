@@ -242,9 +242,6 @@ bearer_test_case = AuthTestCase(
 
 @pytest.mark.skip(reason='Interceptors disabled by user request')
 @pytest.mark.asyncio
-@pytest.mark.skip(
-    reason='Interceptors not explicitly being tested as per use request'
-)
 @pytest.mark.parametrize(
     'test_case',
     [api_key_test_case, oauth2_test_case, oidc_test_case, bearer_test_case],

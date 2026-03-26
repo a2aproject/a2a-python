@@ -73,7 +73,7 @@ def create_jsonrpc_routes(  # noqa: PLR0913
 
     dispatcher = JsonRpcDispatcher(
         agent_card=agent_card,
-        http_handler=request_handler,
+        request_handler=request_handler,
         extended_agent_card=extended_agent_card,
         context_builder=context_builder or DefaultCallContextBuilder(),
         card_modifier=card_modifier,

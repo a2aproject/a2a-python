@@ -18,7 +18,10 @@ from a2a.server.events import (
     InMemoryQueueManager,
     QueueManager,
 )
-from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.request_handler import (
+    RequestHandler,
+    validate_request_params,
+)
 from a2a.server.tasks import (
     PushNotificationConfigStore,
     PushNotificationEvent,
@@ -46,6 +49,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -118,6 +122,7 @@ class DefaultRequestHandler(RequestHandler):
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
 
+    @validate_request_params
     async def on_get_task(
         self,
         params: GetTaskRequest,
@@ -133,6 +138,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return apply_history_length(task, params)
 
+    @validate_request_params
     async def on_list_tasks(
         self,
         params: ListTasksRequest,
@@ -154,6 +160,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return page
 
+    @validate_request_params
     async def on_cancel_task(
         self,
         params: CancelTaskRequest,
@@ -189,7 +196,8 @@ class DefaultRequestHandler(RequestHandler):
 
         await self.agent_executor.cancel(
             RequestContext(
-                None,
+                call_context=context,
+                request=None,
                 task_id=task.id,
                 context_id=task.context_id,
                 task=task,
@@ -283,7 +291,7 @@ class DefaultRequestHandler(RequestHandler):
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
-                context or ServerCallContext(),
+                context,
             )
 
         queue = await self._queue_manager.create_or_tap(task_id)
@@ -317,6 +325,7 @@ class DefaultRequestHandler(RequestHandler):
         ):
             await self._push_sender.send_notification(task_id, event)
 
+    @validate_request_params
     async def on_message_send(
         self,
         params: SendMessageRequest,
@@ -386,6 +395,7 @@ class DefaultRequestHandler(RequestHandler):
 
         return result
 
+    @validate_request_params
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
@@ -474,6 +484,7 @@ class DefaultRequestHandler(RequestHandler):
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
+    @validate_request_params
     async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
@@ -484,7 +495,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushNotifier` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -494,11 +505,12 @@ class DefaultRequestHandler(RequestHandler):
         await self._push_config_store.set_info(
             task_id,
             params,
-            context or ServerCallContext(),
+            context,
         )
 
         return params
 
+    @validate_request_params
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -509,7 +521,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
@@ -518,10 +530,7 @@ class DefaultRequestHandler(RequestHandler):
             raise TaskNotFoundError
 
         push_notification_configs: list[TaskPushNotificationConfig] = (
-            await self._push_config_store.get_info(
-                task_id, context or ServerCallContext()
-            )
-            or []
+            await self._push_config_store.get_info(task_id, context) or []
         )
 
         for config in push_notification_configs:
@@ -530,6 +539,7 @@ class DefaultRequestHandler(RequestHandler):
 
         raise InternalError(message='Push notification config not found')
 
+    @validate_request_params
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
@@ -572,6 +582,7 @@ class DefaultRequestHandler(RequestHandler):
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
+    @validate_request_params
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -582,7 +593,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -590,13 +601,14 @@ class DefaultRequestHandler(RequestHandler):
             raise TaskNotFoundError
 
         push_notification_config_list = await self._push_config_store.get_info(
-            task_id, context or ServerCallContext()
+            task_id, context
         )
 
         return ListTaskPushNotificationConfigsResponse(
             configs=push_notification_config_list
         )
 
+    @validate_request_params
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
@@ -607,7 +619,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
@@ -615,6 +627,4 @@ class DefaultRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
-        await self._push_config_store.delete_info(
-            task_id, context or ServerCallContext(), config_id
-        )
+        await self._push_config_store.delete_info(task_id, context, config_id)

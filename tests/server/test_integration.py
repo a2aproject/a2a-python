@@ -1,10 +1,7 @@
 import asyncio
-
-from typing import Any
 from unittest import mock
 
 import pytest
-
 from starlette.authentication import (
     AuthCredentials,
     AuthenticationBackend,
@@ -18,9 +15,6 @@ from starlette.responses import JSONResponse
 from starlette.routing import Route
 from starlette.testclient import TestClient
 
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-
-from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
@@ -28,6 +22,7 @@ from a2a.server.jsonrpc_models import (
     JSONParseError,
     MethodNotFoundError,
 )
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.types import (
     UnsupportedOperationError,
 )
@@ -39,9 +34,7 @@ from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
     Part,
-    TaskPushNotificationConfig,
     Role,
-    SendMessageResponse,
     Task,
     TaskArtifactUpdateEvent,
     TaskPushNotificationConfig,

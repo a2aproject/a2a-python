@@ -72,7 +72,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
     """
     new_artifact_data: Artifact = event.artifact
     artifact_id: str = new_artifact_data.artifact_id
-    append_parts: bool = event.append or False
+    append_parts: bool = event.append
 
     existing_artifact: Artifact | None = None
     existing_artifact_list_index: int | None = None
