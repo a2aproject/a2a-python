@@ -19,8 +19,8 @@ class SampleUser(User):
         return self._user_name
 
 
-def test_resolve_user():
-    """Test resolve_user_scope."""
+def test_resolve_user_scope_with_authenticated_user():
+    """Test resolve_user_scope with an authenticated user in the context."""
     user = SampleUser(user_name='SampleUser')
     context = ServerCallContext(user=user)
     assert resolve_user_scope(context) == 'SampleUser'
