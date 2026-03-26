@@ -49,6 +49,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     InternalError,
     InvalidParamsError,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -493,7 +494,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushNotifier` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -519,7 +520,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
@@ -594,7 +595,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -620,7 +621,7 @@ class DefaultRequestHandler(RequestHandler):
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
