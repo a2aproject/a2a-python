@@ -171,7 +171,7 @@ class ActiveTask:
             self._consumer_task = asyncio.create_task(
                 self._run_consumer(), name=f'consumer:{self._task_id}'
             )
-            self._reference_count += 1
+            # self._reference_count += 1
             logger.debug('ActiveTask[%s]: Background tasks created', self._task_id)
 
     async def _run_producer(self, request: RequestContext) -> None:
@@ -292,9 +292,9 @@ class ActiveTask:
                                         self._task_id,
                                         res.status.state if res else 'unknown',
                                     )
-                                    if not self._is_finished.is_set():
-                                        async with self._lock:
-                                            self._reference_count -= 1
+                                    # if not self._is_finished.is_set():
+                                    #     async with self._lock:
+                                    #         self._reference_count -= 1
                                     # Terminate the ActiveTask globally.
                                     self._is_finished.set()
 
