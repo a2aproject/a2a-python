@@ -173,7 +173,7 @@ def rest_stream_error_handler(
                     try:
                         async for item in original_iterator:
                             yield item
-                    except Exception as stream_error:  # noqa: BLE001
+                    except Exception as stream_error:
                         _log_error(stream_error)
                         raise stream_error
 
