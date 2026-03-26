@@ -26,7 +26,7 @@ except ImportError as e:
 
 from collections.abc import Callable
 
-from a2a.compat.v0_3.conversions import (
+from a2a.compat.v0_3.model_conversions import (
     compat_push_notification_config_model_to_core,
 )
 from a2a.server.context import ServerCallContext
