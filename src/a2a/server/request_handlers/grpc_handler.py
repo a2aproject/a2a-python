@@ -393,9 +393,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 domain='a2a-protocol.org',
             )
 
-            status_code = (
-                code.value[0] if code else grpc.StatusCode.UNKNOWN.value[0]
-            )
+            status_code = code.value[0]
             error_msg = (
                 error.message if hasattr(error, 'message') else str(error)
             )
