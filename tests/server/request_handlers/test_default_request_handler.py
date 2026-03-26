@@ -1242,14 +1242,11 @@ async def test_on_message_send_stream_with_push_notification():
     )
 
     # Mock current_result as an async property returning events sequentially.
-    async def get_current_result_coro1():
-        return event1_task_update
-
-    async def get_current_result_coro2():
-        return event2_final_task
+    async def to_coro(val):
+        return val
 
     type(mock_result_aggregator_instance).current_result = PropertyMock(
-        side_effect=[get_current_result_coro1(), get_current_result_coro2()]
+        side_effect=[to_coro(event1_task_update), to_coro(event2_final_task)]
     )
 
     context = create_server_call_context()
