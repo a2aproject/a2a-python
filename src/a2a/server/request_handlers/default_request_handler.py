@@ -195,7 +195,8 @@ class DefaultRequestHandler(RequestHandler):
 
         await self.agent_executor.cancel(
             RequestContext(
-                None,
+                call_context=context,
+                request=None,
                 task_id=task.id,
                 context_id=task.context_id,
                 task=task,

@@ -35,7 +35,7 @@ class TestRequestContext:
 
     def test_init_without_params(self) -> None:
         """Test initialization without parameters."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert context.message is None
         assert context.task_id is None
         assert context.context_id is None
@@ -51,7 +51,7 @@ class TestRequestContext:
                 uuid.UUID('00000000-0000-0000-0000-000000000002'),
             ],
         ):
-            context = RequestContext(request=mock_params)
+            context = RequestContext(ServerCallContext(), request=mock_params)
 
         assert context.message == mock_params.message
         assert context.task_id == '00000000-0000-0000-0000-000000000001'
@@ -68,7 +68,9 @@ class TestRequestContext:
     def test_init_with_task_id(self, mock_params: Mock) -> None:
         """Test initialization with task ID provided."""
         task_id = 'task-123'
-        context = RequestContext(request=mock_params, task_id=task_id)
+        context = RequestContext(
+            ServerCallContext(), request=mock_params, task_id=task_id
+        )
 
         assert context.task_id == task_id
         assert mock_params.message.task_id == task_id
@@ -76,7 +78,9 @@ class TestRequestContext:
     def test_init_with_context_id(self, mock_params: Mock) -> None:
         """Test initialization with context ID provided."""
         context_id = 'context-456'
-        context = RequestContext(request=mock_params, context_id=context_id)
+        context = RequestContext(
+            ServerCallContext(), request=mock_params, context_id=context_id
+        )
 
         assert context.context_id == context_id
         assert mock_params.message.context_id == context_id
@@ -86,7 +90,10 @@ class TestRequestContext:
         task_id = 'task-123'
         context_id = 'context-456'
         context = RequestContext(
-            request=mock_params, task_id=task_id, context_id=context_id
+            ServerCallContext(),
+            request=mock_params,
+            task_id=task_id,
+            context_id=context_id,
         )
 
         assert context.task_id == task_id
@@ -96,18 +103,20 @@ class TestRequestContext:
 
     def test_init_with_task(self, mock_params: Mock, mock_task: Mock) -> None:
         """Test initialization with a task object."""
-        context = RequestContext(request=mock_params, task=mock_task)
+        context = RequestContext(
+            ServerCallContext(), request=mock_params, task=mock_task
+        )
 
         assert context.current_task == mock_task
 
     def test_get_user_input_no_params(self) -> None:
         """Test get_user_input with no params returns empty string."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert context.get_user_input() == ''
 
     def test_attach_related_task(self, mock_task: Mock) -> None:
         """Test attach_related_task adds a task to related_tasks."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert len(context.related_tasks) == 0
 
         context.attach_related_task(mock_task)
@@ -122,7 +131,7 @@ class TestRequestContext:
 
     def test_current_task_property(self, mock_task: Mock) -> None:
         """Test current_task getter and setter."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert context.current_task is None
 
         context.current_task = mock_task
@@ -135,7 +144,7 @@ class TestRequestContext:
 
     def test_check_or_generate_task_id_no_params(self) -> None:
         """Test _check_or_generate_task_id with no params does nothing."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         context._check_or_generate_task_id()
         assert context.task_id is None
 
@@ -146,7 +155,7 @@ class TestRequestContext:
         existing_id = 'existing-task-id'
         mock_params.message.task_id = existing_id
 
-        context = RequestContext(request=mock_params)
+        context = RequestContext(ServerCallContext(), request=mock_params)
         # The method is called during initialization
 
         assert context.task_id == existing_id
@@ -160,7 +169,9 @@ class TestRequestContext:
         id_generator.generate.return_value = 'custom-task-id'
 
         context = RequestContext(
-            request=mock_params, task_id_generator=id_generator
+            ServerCallContext(),
+            request=mock_params,
+            task_id_generator=id_generator,
         )
         # The method is called during initialization
 
@@ -168,7 +179,7 @@ class TestRequestContext:
 
     def test_check_or_generate_context_id_no_params(self) -> None:
         """Test _check_or_generate_context_id with no params does nothing."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         context._check_or_generate_context_id()
         assert context.context_id is None
 
@@ -179,7 +190,7 @@ class TestRequestContext:
         existing_id = 'existing-context-id'
         mock_params.message.context_id = existing_id
 
-        context = RequestContext(request=mock_params)
+        context = RequestContext(ServerCallContext(), request=mock_params)
         # The method is called during initialization
 
         assert context.context_id == existing_id
@@ -193,7 +204,9 @@ class TestRequestContext:
         id_generator.generate.return_value = 'custom-context-id'
 
         context = RequestContext(
-            request=mock_params, context_id_generator=id_generator
+            ServerCallContext(),
+            request=mock_params,
+            context_id_generator=id_generator,
         )
         # The method is called during initialization
 
@@ -205,7 +218,10 @@ class TestRequestContext:
         """Test that an error is raised if provided task_id mismatches task.id."""
         with pytest.raises(InvalidParamsError) as exc_info:
             RequestContext(
-                request=mock_params, task_id='wrong-task-id', task=mock_task
+                ServerCallContext(),
+                request=mock_params,
+                task_id='wrong-task-id',
+                task=mock_task,
             )
         assert 'bad task id' in exc_info.value.message
 
@@ -218,6 +234,7 @@ class TestRequestContext:
 
         with pytest.raises(InvalidParamsError) as exc_info:
             RequestContext(
+                ServerCallContext(),
                 request=mock_params,
                 task_id=mock_task.id,
                 context_id='wrong-context-id',
@@ -229,30 +246,32 @@ class TestRequestContext:
     def test_with_related_tasks_provided(self, mock_task: Mock) -> None:
         """Test initialization with related tasks provided."""
         related_tasks = [mock_task, Mock(spec=Task)]
-        context = RequestContext(related_tasks=related_tasks)  # type: ignore[arg-type]
+        context = RequestContext(
+            ServerCallContext(), related_tasks=related_tasks
+        )  # type: ignore[arg-type]
 
         assert context.related_tasks == related_tasks
         assert len(context.related_tasks) == 2
 
     def test_message_property_without_params(self) -> None:
         """Test message property returns None when no params are provided."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert context.message is None
 
     def test_message_property_with_params(self, mock_params: Mock) -> None:
         """Test message property returns the message from params."""
-        context = RequestContext(request=mock_params)
+        context = RequestContext(ServerCallContext(), request=mock_params)
         assert context.message == mock_params.message
 
     def test_metadata_property_without_content(self) -> None:
         """Test metadata property returns empty dict when no content are provided."""
-        context = RequestContext()
+        context = RequestContext(ServerCallContext())
         assert context.metadata == {}
 
     def test_metadata_property_with_content(self, mock_params: Mock) -> None:
         """Test metadata property returns the metadata from params."""
         mock_params.metadata = {'key': 'value'}
-        context = RequestContext(request=mock_params)
+        context = RequestContext(ServerCallContext(), request=mock_params)
         assert context.metadata == {'key': 'value'}
 
     def test_init_with_existing_ids_in_message(
@@ -262,7 +281,7 @@ class TestRequestContext:
         mock_message.task_id = 'existing-task-id'
         mock_message.context_id = 'existing-context-id'
 
-        context = RequestContext(request=mock_params)
+        context = RequestContext(ServerCallContext(), request=mock_params)
 
         assert context.task_id == 'existing-task-id'
         assert context.context_id == 'existing-context-id'
@@ -275,7 +294,10 @@ class TestRequestContext:
         mock_params.message.task_id = mock_task.id
 
         context = RequestContext(
-            request=mock_params, task_id=mock_task.id, task=mock_task
+            ServerCallContext(),
+            request=mock_params,
+            task_id=mock_task.id,
+            task=mock_task,
         )
 
         assert context.task_id == mock_task.id
@@ -289,6 +311,7 @@ class TestRequestContext:
         mock_params.message.context_id = mock_task.context_id
 
         context = RequestContext(
+            ServerCallContext(),
             request=mock_params,
             task_id=mock_task.id,
             context_id=mock_task.context_id,
