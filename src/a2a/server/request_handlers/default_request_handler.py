@@ -35,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
     TaskState,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
     InternalError,
@@ -261,7 +262,6 @@ class DefaultRequestHandler(RequestHandler):
 
             request_context.current_task = task
 
-        await active_task.enqueue_request(request_context)
         await active_task.start(setup_callback=setup_db)
         return active_task, request_context
 
@@ -275,13 +275,38 @@ class DefaultRequestHandler(RequestHandler):
         )
 
         if params.configuration and params.configuration.return_immediately:
+            await active_task.enqueue_request(request_context)
+
             task = cast('Task', request_context.current_task)
             if params.configuration:
                 task = apply_history_length(task, params.configuration)
             return task
 
         try:
-            result = await active_task.wait()
+            RESULT_STATES = {
+                TaskState.TASK_STATE_COMPLETED,
+                TaskState.TASK_STATE_FAILED,
+                TaskState.TASK_STATE_CANCELED,
+                TaskState.TASK_STATE_REJECTED,
+                TaskState.TASK_STATE_INPUT_REQUIRED,
+                TaskState.TASK_STATE_AUTH_REQUIRED,
+            }
+
+            result = None
+            async for event in active_task.subscribe(request=request_context):
+                logger.info('Processing[%s] event [%s] %s', request_context.task_id, type(event).__name__, event)
+                if isinstance(event, Message):
+                    result = event
+                    break
+                elif isinstance(event, Task) and event.status.state in RESULT_STATES:
+                    result = event
+                    break
+                elif isinstance(event, TaskStatusUpdateEvent) and event.status.state in RESULT_STATES:
+                    result = await self.task_store.get(event.task_id, context)
+                    break
+            
+            logger.info('Processing[%s] result: %s', request_context.task_id, result)
+
         except Exception:
             logger.exception('Agent execution failed')
             raise
@@ -306,7 +331,7 @@ class DefaultRequestHandler(RequestHandler):
 
         task_id = cast('str', request_context.task_id)
 
-        async for event in active_task.subscribe():
+        async for event in active_task.subscribe(request=request_context):
             if isinstance(event, Task):
                 self._validate_task_id_match(task_id, event.id)
             yield event

@@ -358,7 +358,7 @@ class ActiveTask:
         finally:
             logger.debug('Consumer[%s]: Completed', self._task_id)
 
-    async def subscribe(self) -> AsyncGenerator[Event, None]:
+    async def subscribe(self, *, request: RequestContext|None = None) -> AsyncGenerator[Event, None]:
         """Creates a queue tap and yields events as they are produced.
 
         Concurrency Guarantee:
@@ -388,6 +388,9 @@ class ActiveTask:
             )
 
         tapped_queue = await self._event_queue.tap()
+        if request:
+            await self.enqueue_request(request)
+            
         try:
             while True:
                 try:
