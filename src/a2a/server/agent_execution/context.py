@@ -140,7 +140,7 @@ class RequestContext:
         return self._params.configuration if self._params else None
 
     @property
-    def call_context(self) -> ServerCallContext | None:
+    def call_context(self) -> ServerCallContext:
         """The server call context associated with this request."""
         return self._call_context
 
@@ -157,22 +157,17 @@ class RequestContext:
         This causes the extension to be indicated back to the client in the
         response.
         """
-        if self._call_context:
-            self._call_context.activated_extensions.add(uri)
+        self._call_context.activated_extensions.add(uri)
 
     @property
     def tenant(self) -> str:
         """The tenant associated with this request."""
-        return self._call_context.tenant if self._call_context else ''
+        return self._call_context.tenant
 
     @property
     def requested_extensions(self) -> set[str]:
         """Extensions that the client requested to activate."""
-        return (
-            self._call_context.requested_extensions
-            if self._call_context
-            else set()
-        )
+        return self._call_context.requested_extensions
 
     def _check_or_generate_task_id(self) -> None:
         """Ensures a task ID is present, generating one if necessary."""
