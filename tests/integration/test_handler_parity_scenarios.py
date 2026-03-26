@@ -185,7 +185,7 @@ class ErrorCancelAgent(AgentExecutor):
             )
         )
         try:
-            await asyncio.sleep(2.0)
+            await asyncio.sleep(0.2)
         except asyncio.CancelledError:
             pass
         await event_queue.close()
@@ -600,7 +600,7 @@ async def test_scenario_14_error_in_cancel(use_legacy, agent_card):
     try:
         with pytest.raises((BaseException,)) as excinfo:
             await asyncio.wait_for(
-                client.cancel_task(CancelTaskRequest(id=task_id)), timeout=2.0
+                client.cancel_task(CancelTaskRequest(id=task_id)), timeout=0.5
             )
         assert excinfo.value is not None
     finally:

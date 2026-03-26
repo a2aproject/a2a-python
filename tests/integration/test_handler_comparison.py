@@ -636,7 +636,10 @@ async def test_workflow_input_required(client: BaseClient):
         role=Role.ROLE_USER,
         parts=[
             Part(
-                text='SET_STATE TASK_STATE_WORKING\nSET_STATE TASK_STATE_INPUT_REQUIRED'
+                text = '''
+                SET_STATE TASK_STATE_WORKING
+                SET_STATE TASK_STATE_INPUT_REQUIRED
+                '''
             )
         ],
     )
@@ -659,7 +662,10 @@ async def test_workflow_input_required(client: BaseClient):
         role=Role.ROLE_USER,
         parts=[
             Part(
-                text='SET_STATE TASK_STATE_WORKING\nSET_STATE TASK_STATE_COMPLETED'
+                text = '''
+                SET_STATE TASK_STATE_WORKING
+                SET_STATE TASK_STATE_COMPLETED
+                '''
             )
         ],
     )
@@ -805,7 +811,7 @@ async def test_parallel_subscribe_second_attaches_later(
 
 
 @pytest.mark.asyncio
-@pytest.mark.timeout(30)
+@pytest.mark.timeout(5)
 async def test_parallel_subscribe_attach_detach(
     client: BaseClient, trigger_events
 ):
@@ -855,28 +861,24 @@ async def test_parallel_subscribe_attach_detach(
         return collected
 
     sub1_task = asyncio.create_task(sub('sub1'))
-
-
-    await sub1_task
-    return
     
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     trigger_events['1'].set()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     sub2_task = asyncio.create_task(sub('sub2'))
     sub3_task = asyncio.create_task(sub('sub3'))
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     trigger_events['2'].set()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     sub2_task.cancel()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     trigger_events['3'].set()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     sub3_task.cancel()
     sub4_task = asyncio.create_task(sub('sub4'))
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     trigger_events['4'].set()
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
     events1 = await sub1_task
     events2 = await sub2_task
     events3 = await sub3_task

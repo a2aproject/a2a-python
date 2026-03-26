@@ -41,6 +41,7 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 import pytest_asyncio
+from tests import helpers
 
 # Configure logging
 logging.basicConfig(level=logging.DEBUG)
@@ -300,29 +301,26 @@ async def test_cancellation_during_wait(client: BaseClient, trigger_events):
     ]
     msg = Message(role=Role.ROLE_USER, parts=[Part(text='\n'.join(commands))])
 
-    # Client 1: Start and wait. Collect all events.
-
-    async def print_event(e):
-        logging.info(f'Event: {e}')
-        return e
-
+    # Client 1: Start and wait
     wait_task = asyncio.create_task(
-       [
-                print_event(e) async for e in client.send_message(
+        anext(
+            helpers.actively_print_and_yield_async_gen(
+            client.send_message(
                 SendMessageRequest(
                     message=msg,
                     configuration=SendMessageConfiguration(
                         return_immediately=False
                     ),
                 )
+            ),
+            name='client'
             )
-        ]
+        )
     )
 
     await asyncio.sleep(0.5)
     task_list = await client.list_tasks(ListTasksRequest())
-    task, = task_list.tasks
-    task_id = task.id
+    task_id = task_list.tasks[0].id
 
     # Client 2: Cancel
     cancel_res = await client.cancel_task(CancelTaskRequest(id=task_id))

@@ -143,20 +143,23 @@ class ActiveTask:
             except asyncio.CancelledError:
                 logger.debug('Producer[%s]: Cancelled', self._task_id)
                 # close_immediately = True
+                close_immediately = False
                 raise
             except Exception as e:
                 logger.exception('Producer[%s]: Failed', self._task_id)
                 self._exception = e
+                close_immediately = False
             finally:
                 async with self._state_changed:
                     self._state_changed.notify_all()
-                # Important: Non-immediate close to allow consumer to drain
-                logger.debug(
-                    'Producer[%s]: Closing event queue immediately=%s',
-                    self._task_id,
-                    close_immediately,
-                )
-                await self._event_queue.close(immediate=close_immediately)
+
+                if close_immediately is not None:
+                    logger.debug(
+                        'Producer[%s]: Closing event queue immediately=%s',
+                        self._task_id,
+                        close_immediately,
+                    )
+                    await self._event_queue.close(immediate=close_immediately)
         finally:
             logger.debug('Producer[%s]: Completed', self._task_id)
 

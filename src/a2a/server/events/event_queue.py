@@ -335,13 +335,13 @@ class EventQueueSink(EventQueue):
             logger.debug('Attempting to dequeue event (no_wait=True).')
             event = self._queue.get_nowait()
             logger.debug(
-                'Dequeued event (no_wait=True) of type: %s', type(event)
+                'Dequeued event (no_wait=True): %s', event
             )
             return event
 
         logger.debug('Attempting to dequeue event (waiting).')
         event = await self._queue.get()
-        logger.debug('Dequeued event (waited) of type: %s', type(event))
+        logger.debug('Dequeued event (waited): %s', event)
         return event
 
     def task_done(self) -> None:
