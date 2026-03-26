@@ -199,6 +199,8 @@ indent-width = 4 # Google Style Guide §3.4: 4 spaces
 target-version = "py310" # Minimum Python version
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 ignore = [
     "COM812", # Trailing comma missing.
     "FBT001", # Boolean positional arg in function definition
