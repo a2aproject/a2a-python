@@ -63,7 +63,10 @@ initdb
 inmemory
 INR
 isready
+itk
+ITK
 jcs
+jit
 jku
 JOSE
 JPY
@@ -107,11 +110,13 @@ protoc
 pydantic
 pyi
 pypistats
+pyproto
 pyupgrade
 pyversions
 redef
 respx
 resub
+rmi
 RS256
 RUF
 SECP256R1
