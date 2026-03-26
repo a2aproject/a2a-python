@@ -136,6 +136,8 @@ class EventQueueSource(EventQueue):
         self._sinks.add(self._default_sink)
         self._dispatcher_task = asyncio.create_task(self._dispatch_loop())
 
+        self._dispatcher_task_expected_to_cancel = False
+
         logger.debug('EventQueueSource initialized.')
 
     @property
@@ -162,9 +164,13 @@ class EventQueueSource(EventQueue):
 
                 self._incoming_queue.task_done()
         except asyncio.CancelledError:
-            logger.debug('EventQueueSource._dispatch_loop() cancelled %s', self)
-            if not self._is_closed:
-                # TODO: Figure out what to do on cancelation outside of close()
+            logger.debug(
+                'EventQueueSource._dispatch_loop() cancelled %s _dispatcher_task_expected_to_cancel=%s',
+                self,
+                self._dispatcher_task_expected_to_cancel,
+            )
+            if not self._dispatcher_task_expected_to_cancel:
+                # TODO: Figure out clean cancelation outside of close()
                 # (e.g. test cleanup, server forced shutdown, etc)
                 async with self._lock:
                     self._is_closed = True
@@ -273,6 +279,7 @@ class EventQueueSource(EventQueue):
         else:
             # Wait for all already-enqueued events to be dispatched
             await self._join_incoming_queue()
+            self._dispatcher_task_expected_to_cancel = True
             self._dispatcher_task.cancel()
             await asyncio.gather(
                 *(sink.close(immediate=False) for sink in sinks_to_close)

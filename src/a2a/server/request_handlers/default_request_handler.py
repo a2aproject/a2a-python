@@ -251,10 +251,13 @@ class DefaultRequestHandler(RequestHandler):
             else:
                 # NEW task. Create and save it so it's not "missing" if queried immediately
                 # (especially important for return_immediately=True)
+                # TODO integrate as part of ActiveTask
                 task = temp_task_manager._init_task_obj(
                     task_id, cast('str', request_context.context_id)
                 )
                 await temp_task_manager.save_task_event(task)
+                if self._push_sender:
+                    await self._push_sender.send_notification(task_id, task)
 
             request_context.current_task = task
 
