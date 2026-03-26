@@ -23,7 +23,7 @@ except ImportError as e:
     ) from e
 from google.protobuf.json_format import MessageToDict, ParseDict
 
-from a2a.compat.v0_3.conversions import (
+from a2a.compat.v0_3.model_conversions import (
     compat_task_model_to_core,
 )
 from a2a.server.context import ServerCallContext
