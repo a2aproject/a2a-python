@@ -24,16 +24,14 @@ class CopyingTaskStoreAdapter(TaskStore):
     def __init__(self, underlying_store: TaskStore):
         self._store = underlying_store
 
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves a copy of the task to the underlying store."""
         task_copy = Task()
         task_copy.CopyFrom(task)
         await self._store.save(task_copy, context)
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the underlying store and returns a copy."""
         task = await self._store.get(task_id, context)
@@ -46,7 +44,7 @@ class CopyingTaskStoreAdapter(TaskStore):
     async def list(
         self,
         params: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTasksResponse:
         """Retrieves a list of tasks from the underlying store and returns a copy."""
         response = await self._store.list(params, context)
@@ -54,8 +52,6 @@ class CopyingTaskStoreAdapter(TaskStore):
         response_copy.CopyFrom(response)
         return response_copy
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the underlying store."""
         await self._store.delete(task_id, context)

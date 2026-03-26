@@ -44,9 +44,7 @@ class VertexTaskStore(TaskStore):
         self._client = client
         self._agent_engine_resource_id = agent_engine_resource_id
 
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the store."""
         compat_task = to_compat_task(task)
         previous_task = await self._get_stored_task(compat_task.id)
@@ -206,7 +204,7 @@ class VertexTaskStore(TaskStore):
         return a2a_task
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the database by ID."""
         a2a_task = await self._get_stored_task(task_id)
@@ -217,13 +215,11 @@ class VertexTaskStore(TaskStore):
     async def list(
         self,
         params: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTasksResponse:
         """Retrieves a list of tasks from the store."""
         raise NotImplementedError
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """The backend doesn't support deleting tasks, so this is not implemented."""
         raise NotImplementedError
