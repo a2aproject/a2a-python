@@ -103,7 +103,7 @@ class ActiveTask:
 
         # Tracks how many active SSE/gRPC streams are currently tailing this task.
         # Protected by `_lock`.
-        self._subscribers_count = 0
+        self._reference_count = 0
 
         # Holds any fatal exception that crashed the producer or consumer.
         self._exception: Exception | None = None
@@ -160,7 +160,7 @@ class ActiveTask:
                         self._task_id,
                     )
                     self._is_finished.set()
-                    if self._subscribers_count == 0 and self._on_cleanup:
+                    if self._reference_count == 0 and self._on_cleanup:
                         self._on_cleanup(self)
                     raise
 
@@ -171,6 +171,7 @@ class ActiveTask:
             self._consumer_task = asyncio.create_task(
                 self._run_consumer(), name=f'consumer:{self._task_id}'
             )
+            self._reference_count += 1
             logger.debug('ActiveTask[%s]: Background tasks created', self._task_id)
 
     async def _run_producer(self, request: RequestContext) -> None:
@@ -291,6 +292,9 @@ class ActiveTask:
                                         self._task_id,
                                         res.status.state if res else 'unknown',
                                     )
+                                    if not self._is_finished.is_set():
+                                        async with self._lock:
+                                            self._reference_count -= 1
                                     # Terminate the ActiveTask globally.
                                     self._is_finished.set()
 
@@ -340,7 +344,7 @@ class ActiveTask:
         """Creates a queue tap and yields events as they are produced.
 
         Concurrency Guarantee:
-        Uses `_lock` to safely increment and decrement `_subscribers_count`.
+        Uses `_lock` to safely increment and decrement `_reference_count`.
         Safely detaches its queue tap when the client disconnects or the task finishes,
         triggering `_maybe_cleanup()` to potentially garbage collect the ActiveTask.
         """
@@ -358,11 +362,11 @@ class ActiveTask:
                     self._task_id,
                 )
                 return
-            self._subscribers_count += 1
+            self._reference_count += 1
             logger.debug(
                 'Subscribe[%s]: Subscribers count: %d',
                 self._task_id,
-                self._subscribers_count,
+                self._reference_count,
             )
 
         tapped_queue = await self._event_queue.tap()
@@ -396,11 +400,11 @@ class ActiveTask:
             logger.debug('Subscribe[%s]: Unsubscribing', self._task_id)
             await tapped_queue.close(immediate=True)
             async with self._lock:
-                self._subscribers_count -= 1
+                self._reference_count -= 1
                 logger.debug(
                     'Subscribe[%s]: Subscribers count: %d',
                     self._task_id,
-                    self._subscribers_count,
+                    self._reference_count,
                 )
             # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
@@ -515,7 +519,7 @@ class ActiveTask:
         async with self._lock:
             if (
                 self._is_finished.is_set()
-                and self._subscribers_count == 0
+                and self._reference_count == 0
                 and self._on_cleanup
             ):
                 logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
