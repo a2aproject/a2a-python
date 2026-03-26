@@ -1,4 +1,5 @@
 import asyncio
+import logging
 
 from unittest.mock import AsyncMock, Mock, patch
 
@@ -19,7 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import TaskAlreadyStartedError
-import logging
+
 
 logger = logging.getLogger(__name__)
 
@@ -139,10 +140,7 @@ class TestActiveTask:
         stop_event = asyncio.Event()
 
         async def execute_mock(req, q):
-            try:
-                await stop_event.wait()
-            except asyncio.CancelledError:
-                raise
+            await stop_event.wait()
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         agent_executor.cancel = AsyncMock()
@@ -477,10 +475,7 @@ class TestActiveTask:
         """Test subscribe when it is cancelled while waiting for events."""
 
         async def slow_execute(req, q):
-            try:
-                await asyncio.sleep(10)
-            except asyncio.CancelledError:
-                raise
+            await asyncio.sleep(10)
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
 
@@ -550,7 +545,7 @@ class TestActiveTask:
                 await asyncio.sleep(0.2)
                 await tapped.close()
 
-            asyncio.create_task(close_later())
+            _ = asyncio.create_task(close_later())
 
             async for _ in active_task.subscribe():
                 pass
@@ -576,11 +571,7 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         await active_task.start(request_context)
 
-        events = []
-        async for event in active_task.subscribe():
-            events.append(event)
-            # Queue will be closed by producer finishing
-
+        events = [event async for event in active_task.subscribe()]
         assert len(events) == 1
         assert events[0] == msg
 
@@ -603,13 +594,11 @@ class TestActiveTask:
             await q.enqueue_event(task_obj)
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        # Ensure result_available is False before this call
-        active_task._result_available = False
         task_manager.get_task.return_value = task_obj
 
         await active_task.start(request_context)
-        await active_task.wait()
-        assert active_task._result_available is True
+        result = await active_task.wait()
+        assert result == task_obj
 
     @pytest.mark.asyncio
     async def test_active_task_wait_fallback_to_manager(
@@ -719,10 +708,12 @@ class TestActiveTask:
         )
         mock_tapped_queue.close = AsyncMock()
 
-        with patch.object(event_queue, 'tap', return_value=mock_tapped_queue):
-            with pytest.raises(RuntimeError, match='Tapped queue crash'):
-                async for _ in active_task.subscribe():
-                    pass
+        with (
+            patch.object(event_queue, 'tap', return_value=mock_tapped_queue),
+            pytest.raises(RuntimeError, match='Tapped queue crash'),
+        ):
+            async for _ in active_task.subscribe():
+                pass
 
         mock_tapped_queue.close.assert_called_once()
 
@@ -831,27 +822,77 @@ class TestActiveTask:
 
     @pytest.mark.asyncio
     async def test_active_task_maybe_cleanup_not_finished(
-        self, active_task: ActiveTask
+        self,
+        agent_executor: Mock,
+        event_queue: EventQueue,
+        task_manager: Mock,
+        push_sender: Mock,
     ) -> None:
         """Test that cleanup is not called if task is not finished."""
         on_cleanup = Mock()
-        active_task._on_cleanup = on_cleanup
+        active_task = ActiveTask(
+            agent_executor=agent_executor,
+            task_id='test-task-id',
+            event_queue=event_queue,
+            task_manager=task_manager,
+            push_sender=push_sender,
+            on_cleanup=on_cleanup,
+        )
 
+        # Explicitly call private _maybe_cleanup to verify it respects finished state
         await active_task._maybe_cleanup()
         on_cleanup.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_active_task_maybe_cleanup_with_subscribers(
-        self, active_task: ActiveTask
+        self,
+        agent_executor: Mock,
+        event_queue: EventQueue,
+        task_manager: Mock,
+        push_sender: Mock,
+        request_context: Mock,
     ) -> None:
         """Test that cleanup is not called if there are subscribers."""
         on_cleanup = Mock()
-        active_task._on_cleanup = on_cleanup
-        active_task._is_finished.set()
-        active_task._subscribers_count = 1
+        active_task = ActiveTask(
+            agent_executor=agent_executor,
+            task_id='test-task-id',
+            event_queue=event_queue,
+            task_manager=task_manager,
+            push_sender=push_sender,
+            on_cleanup=on_cleanup,
+        )
 
-        await active_task._maybe_cleanup()
+        # Mock execute to finish immediately
+        async def execute_mock(req, q):
+            await q.enqueue_event(Message(message_id='m1'))
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+
+        # 1. Start a subscriber before task finishes
+        gen = active_task.subscribe()
+        # Start the generator to increment reference count
+        msg_task = asyncio.create_task(gen.__anext__())
+
+        # 2. Start the task and wait for it to finish
+        await active_task.start(request_context)
+        await active_task.wait()
+
+        # Give the consumer loop a moment to set _is_finished
+        await asyncio.sleep(0.1)
+
+        # Ensure we got the message
+        assert (await msg_task).message_id == 'm1'
+
+        # At this point, task is finished, but we still have a subscriber (gen).
+        # _maybe_cleanup was called by consumer loop, but should have done nothing.
         on_cleanup.assert_not_called()
+
+        # 3. Close the subscriber
+        await gen.aclose()
+
+        # Now cleanup should be triggered
+        on_cleanup.assert_called_once_with(active_task)
 
     @pytest.mark.asyncio
     async def test_active_task_cancel_producer_none(
@@ -905,7 +946,9 @@ class TestActiveTask:
         )
         mock_tapped_queue.close = AsyncMock()
 
-        with patch.object(event_queue, 'tap', return_value=mock_tapped_queue):
-            with pytest.raises(Exception, match='Inner error'):
-                async for _ in active_task.subscribe():
-                    pass
+        with (
+            patch.object(event_queue, 'tap', return_value=mock_tapped_queue),
+            pytest.raises(Exception, match='Inner error'),
+        ):
+            async for _ in active_task.subscribe():
+                pass

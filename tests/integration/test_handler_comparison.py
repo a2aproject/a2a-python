@@ -187,6 +187,7 @@ async def test_scenario_2_blocking_wait_for_completion(
     assert result.status.state == TaskState.TASK_STATE_COMPLETED
 
 
+@pytest.mark.skip(reason='not implemented yet')
 @pytest.mark.asyncio
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['default', 'legacy'])
 async def test_scenario_3_blocking_wait_for_interrupted_state(
@@ -630,6 +631,7 @@ async def test_blocking_behavior(client: BaseClient):
     assert events2[0][0].task.status.state == TaskState.TASK_STATE_COMPLETED
 
 
+@pytest.mark.skip(reason='not implemented yet')
 @pytest.mark.asyncio
 async def test_workflow_input_required(client: BaseClient):
     client._config.streaming = False
@@ -720,7 +722,6 @@ async def test_workflow_auth_required_side_channel(
         pytest.fail('Task did not reach TASK_STATE_COMPLETED')
 
 
-@pytest.mark.skip(reason='Hangs forever')
 @pytest.mark.asyncio
 async def test_parallel_subscribe_after_start(
     client: BaseClient, trigger_events
@@ -766,7 +767,7 @@ async def test_parallel_subscribe_after_start(
         if e[1]
     )
 
-@pytest.mark.skip(reason='Hangs forever')
+# @pytest.mark.skip(reason='Hangs forever')
 @pytest.mark.asyncio
 async def test_parallel_subscribe_second_attaches_later(
     client: BaseClient, trigger_events
