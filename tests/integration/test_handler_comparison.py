@@ -51,6 +51,7 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 import pytest_asyncio
+from tests import helpers
 
 # Configure logging to see what's happening
 logging.basicConfig(level=logging.DEBUG)
@@ -950,6 +951,7 @@ async def test_get_task_in_progress(
 
     finally:
 
+        logger.info('SETTING EVENT 1')
         trigger_events['1'].set()
         logger.info('TEST COMPLETED')
 

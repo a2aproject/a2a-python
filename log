@@ -1,0 +1,475 @@
+============================= test session starts ==============================
+platform linux -- Python 3.10.19, pytest-9.0.2, pluggy-1.6.0
+rootdir: /usr/local/google/home/bartekw/agent/a2a-python
+configfile: pyproject.toml
+plugins: timeout-2.4.0, respx-0.22.0, cov-7.0.0, asyncio-1.3.0, xdist-3.8.0, anyio-4.12.1, mock-3.15.1
+asyncio: mode=strict, debug=False, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+
+----------------------------- live log collection ------------------------------
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.utils.helpers.create_task_obj, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.utils.helpers.append_artifact_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource._dispatch_loop, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource._join_incoming_queue, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.dequeue_event, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.enqueue_event, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.is_closed, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.remove_sink, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.tap, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.task_done, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_queue.EventQueueSource.test_only_join_incoming_queue, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_consumer.EventConsumer.agent_task_callback, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_consumer.EventConsumer.consume_all, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.event_consumer.EventConsumer.consume_one, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.clear_events, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.dequeue_event, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.enqueue_event, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.is_closed, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.tap, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.legacy_event_queue.EventQueue.task_done, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.in_memory_queue_manager.InMemoryQueueManager.add, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.in_memory_queue_manager.InMemoryQueueManager.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.in_memory_queue_manager.InMemoryQueueManager.create_or_tap, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.in_memory_queue_manager.InMemoryQueueManager.get, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.events.in_memory_queue_manager.InMemoryQueueManager.tap, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler._setup_active_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler._validate_task_id_match, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_message_send, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_message_send_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.default_request_handler.DefaultRequestHandler.on_subscribe_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler._get_request_id, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.delete_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.get_authenticated_extended_card, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.get_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.list_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.on_cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.on_get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.on_message_send, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.on_message_send_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.on_subscribe_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.jsonrpc_handler.JSONRPCHandler.set_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.delete_push_notification, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.get_push_notification, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.list_push_notifications, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.on_cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.on_get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.on_message_send, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.on_message_send_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.on_subscribe_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.rest_handler.RESTHandler.set_push_notification, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._cleanup_producer, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._register_producer, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._run_event_stream, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._send_push_notification_if_needed, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._setup_message_execution, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._track_background_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler._validate_task_id_match, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_message_send, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_message_send_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.server.request_handlers.legacy_request_handler.LegacyRequestHandler.on_subscribe_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.get_push_notification, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.list_push_notifications, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.on_cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.on_get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.on_message_send, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.on_message_send_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.on_subscribe_to_task, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.rest_handler.REST03Handler.set_push_notification, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport._create_jsonrpc_error, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport._send_request, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport._send_stream_request, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.get_extended_agent_card, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.send_message, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.send_message_streaming, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.jsonrpc.JsonRpcTransport.subscribe, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport._execute_request, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport._get_path, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport._handle_http_error, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport._send_request, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport._send_stream_request, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.get_extended_agent_card, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.send_message, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.send_message_streaming, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.rest.RestTransport.subscribe, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport._call_grpc, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport._call_grpc_stream, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport._get_grpc_metadata, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport._get_grpc_timeout, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.get_extended_agent_card, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.send_message, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.send_message_streaming, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.client.transports.grpc.GrpcTransport.subscribe, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:352 Trace all class None, None
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport._get_grpc_metadata, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.cancel_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.close, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.create_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.delete_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.get_extended_agent_card, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.get_task, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.get_task_push_notification_config, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.list_task_push_notification_configs, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.list_tasks, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.send_message, is_async_func True
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.send_message_streaming, is_async_func False
+DEBUG    a2a.utils.telemetry:telemetry.py:211 Start tracing for a2a.compat.v0_3.grpc_transport.CompatGrpcTransport.subscribe, is_async_func False
+collected 1 item
+
+tests/integration/test_handler_comparison.py::test_get_task_in_progress[default_handler] 
+-------------------------------- live log setup --------------------------------
+DEBUG    asyncio:selector_events.py:54 Using selector: EpollSelector
+DEBUG    asyncio:selector_events.py:54 Using selector: EpollSelector
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:30 Initializing _InMemoryTaskStoreImpl
+-------------------------------- live log call ---------------------------------
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.tasks.inmemory_push_notification_config_store:inmemory_push_notification_config_store.py:63 Push notification config for task 87d7f896-33de-45d2-9799-feb6d66f151e with config id 87d7f896-33de-45d2-9799-feb6d66f151e for owner  saved/updated.
+DEBUG    a2a.server.events.event_queue:event_queue.py:312 EventQueueSink initialized.
+DEBUG    a2a.server.events.event_queue:event_queue.py:139 EventQueueSource initialized.
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:55 TaskManager initialized with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: None
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:100 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Starting
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:112 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Executing setup callback
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:55 TaskManager initialized with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: None
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:77 Attempting to get task from store with id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:58 Attempting to get task with id: 87d7f896-33de-45d2-9799-feb6d66f151e for owner: 
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:72 Task 87d7f896-33de-45d2-9799-feb6d66f151e not found in store for owner .
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:86 Task 87d7f896-33de-45d2-9799-feb6d66f151e not found.
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:210 Initializing new Task object with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: 720c92e9-9cc0-4200-b1d1-6f101dd74469
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:123 Processing save of task event of type Task for task_id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:229 Saving task with id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:48 Task 87d7f896-33de-45d2-9799-feb6d66f151e for owner  saved successfully.
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:131 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Background tasks created
+INFO     httpx:_client.py:1740 HTTP Request: POST http://testserver/message:send "HTTP/1.1 200 OK"
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:946 Events: [(task {
+  id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  status {
+    state: TASK_STATE_SUBMITTED
+  }
+  history {
+    context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+    task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+    role: ROLE_USER
+    parts {
+      text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+    }
+  }
+}
+, id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+status {
+  state: TASK_STATE_SUBMITTED
+}
+history {
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  role: ROLE_USER
+  parts {
+    text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+  }
+}
+)]
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:948 Task ID: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:58 Attempting to get task with id: 87d7f896-33de-45d2-9799-feb6d66f151e for owner: 
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:66 Task 87d7f896-33de-45d2-9799-feb6d66f151e retrieved successfully for owner .
+INFO     httpx:_client.py:1740 HTTP Request: GET http://testserver/tasks/87d7f896-33de-45d2-9799-feb6d66f151e "HTTP/1.1 200 OK"
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:950 Task: id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+status {
+  state: TASK_STATE_SUBMITTED
+}
+history {
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  role: ROLE_USER
+  parts {
+    text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+  }
+}
+
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:954 SETTING EVENT 1
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:956 TEST COMPLETED
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:134 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Started
+MagicalAgentExecutor executing command: SET_STATE TASK_STATE_WORKING
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:242 Enqueuing event of type: <class 'a2a_pb2.TaskStatusUpdateEvent'>
+MagicalAgentExecutor executing command: WAIT_EVENT_1
+MagicalAgentExecutor executing command: SET_STATE TASK_STATE_COMPLETED
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:242 Enqueuing event of type: <class 'a2a_pb2.TaskStatusUpdateEvent'>
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:261 Closing EventQueueSource: immediate=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:167 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Started
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:342 Attempting to dequeue event (waiting).
+PASSED
+------------------------------ live log teardown -------------------------------
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource.dequeue_event
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:263 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Finishing
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:424 Cleanup[87d7f896-33de-45d2-9799-feb6d66f151e]: Triggering cleanup
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:266 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Completed
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource._join_incoming_queue
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource.close
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:144 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Cancelled
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:157 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Closing event queue immediately=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:261 Closing EventQueueSource: immediate=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task_registry:active_task_registry.py:80 Removed active task for 87d7f896-33de-45d2-9799-feb6d66f151e from registry
+DEBUG    a2a.server.events.event_queue:event_queue.py:165 EventQueueSource._dispatch_loop() cancelled <a2a.server.events.event_queue.EventQueueSource object at 0x7ff22ef97a60>
+DEBUG    a2a.server.events.event_queue:event_queue.py:185 EventQueueSource._dispatch_loop() Completed <a2a.server.events.event_queue.EventQueueSource object at 0x7ff22ef97a60>
+WARNING  a2a.server.events.event_queue:event_queue.py:216 Dispatcher task finished unexpectedly. Events may be lost.
+DEBUG    a2a.server.events.event_queue:event_queue.py:361 Closing EventQueueSink.
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+
+tests/integration/test_handler_comparison.py::test_get_task_in_progress[default_handler] ERROR
+
+==================================== ERRORS ====================================
+_______ ERROR at teardown of test_get_task_in_progress[default_handler] ________
+
+event_loop_policy = <asyncio.unix_events._UnixDefaultEventLoopPolicy object at 0x7ff22ef95e10>
+request = <SubRequest '_function_scoped_runner' for <Coroutine test_get_task_in_progress[default_handler]>>
+
+    @pytest.fixture(
+        scope=scope,
+        name=f"_{scope}_scoped_runner",
+    )
+    def _scoped_runner(
+        event_loop_policy,
+        request: FixtureRequest,
+    ) -> Iterator[Runner]:
+        new_loop_policy = event_loop_policy
+        debug_mode = _get_asyncio_debug(request.config)
+        with _temporary_event_loop_policy(new_loop_policy):
+            runner = Runner(debug=debug_mode).__enter__()
+            try:
+                yield runner
+            except Exception as e:
+                runner.__exit__(type(e), e, e.__traceback__)
+            else:
+                with warnings.catch_warnings():
+                    warnings.filterwarnings(
+                        "ignore", ".*BaseEventLoop.shutdown_asyncgens.*", RuntimeWarning
+                    )
+                    try:
+>                       runner.__exit__(None, None, None)
+
+.venv/lib/python3.10/site-packages/pytest_asyncio/plugin.py:817: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+.venv/lib/python3.10/site-packages/backports/asyncio/runner/runner.py:98: in __exit__
+    self.close()
+.venv/lib/python3.10/site-packages/backports/asyncio/runner/runner.py:107: in close
+    _cancel_all_tasks(loop)
+.venv/lib/python3.10/site-packages/backports/asyncio/runner/runner.py:234: in _cancel_all_tasks
+    loop.run_until_complete(tasks.gather(*to_cancel, return_exceptions=True))
+../../.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/asyncio/base_events.py:636: in run_until_complete
+    self.run_forever()
+../../.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/asyncio/base_events.py:603: in run_forever
+    self._run_once()
+../../.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/asyncio/base_events.py:1871: in _run_once
+    event_list = self._selector.select(timeout)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <selectors.EpollSelector object at 0x7ff22ef65b70>, timeout = -1
+
+    def select(self, timeout=None):
+        if timeout is None:
+            timeout = -1
+        elif timeout <= 0:
+            timeout = 0
+        else:
+            # epoll_wait() has a resolution of 1 millisecond, round away
+            # from zero to wait *at least* timeout seconds.
+            timeout = math.ceil(timeout * 1e3) * 1e-3
+    
+        # epoll_wait() expects `maxevents` to be greater than zero;
+        # we want to make sure that `select()` can be called when no
+        # FD is registered.
+        max_ev = max(len(self._fd_to_key), 1)
+    
+        ready = []
+        try:
+>           fd_event_list = self._selector.poll(timeout, max_ev)
+E           Failed: Timeout (>1.0s) from pytest-timeout.
+
+../../.local/share/uv/python/cpython-3.10-linux-x86_64-gnu/lib/python3.10/selectors.py:469: Failed
+------------------------------ Captured log setup ------------------------------
+DEBUG    asyncio:selector_events.py:54 Using selector: EpollSelector
+DEBUG    asyncio:selector_events.py:54 Using selector: EpollSelector
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:30 Initializing _InMemoryTaskStoreImpl
+------------------------------ Captured log call -------------------------------
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.tasks.inmemory_push_notification_config_store:inmemory_push_notification_config_store.py:63 Push notification config for task 87d7f896-33de-45d2-9799-feb6d66f151e with config id 87d7f896-33de-45d2-9799-feb6d66f151e for owner  saved/updated.
+DEBUG    a2a.server.events.event_queue:event_queue.py:312 EventQueueSink initialized.
+DEBUG    a2a.server.events.event_queue:event_queue.py:139 EventQueueSource initialized.
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:55 TaskManager initialized with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: None
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:100 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Starting
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:112 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Executing setup callback
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:55 TaskManager initialized with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: None
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:77 Attempting to get task from store with id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:58 Attempting to get task with id: 87d7f896-33de-45d2-9799-feb6d66f151e for owner: 
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:72 Task 87d7f896-33de-45d2-9799-feb6d66f151e not found in store for owner .
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:86 Task 87d7f896-33de-45d2-9799-feb6d66f151e not found.
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:210 Initializing new Task object with task_id: 87d7f896-33de-45d2-9799-feb6d66f151e, context_id: 720c92e9-9cc0-4200-b1d1-6f101dd74469
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:123 Processing save of task event of type Task for task_id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.task_manager:task_manager.py:229 Saving task with id: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:48 Task 87d7f896-33de-45d2-9799-feb6d66f151e for owner  saved successfully.
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:131 ActiveTask[87d7f896-33de-45d2-9799-feb6d66f151e]: Background tasks created
+INFO     httpx:_client.py:1740 HTTP Request: POST http://testserver/message:send "HTTP/1.1 200 OK"
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:946 Events: [(task {
+  id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  status {
+    state: TASK_STATE_SUBMITTED
+  }
+  history {
+    context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+    task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+    role: ROLE_USER
+    parts {
+      text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+    }
+  }
+}
+, id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+status {
+  state: TASK_STATE_SUBMITTED
+}
+history {
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  role: ROLE_USER
+  parts {
+    text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+  }
+}
+)]
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:948 Task ID: 87d7f896-33de-45d2-9799-feb6d66f151e
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:58 Attempting to get task with id: 87d7f896-33de-45d2-9799-feb6d66f151e for owner: 
+DEBUG    a2a.server.tasks.inmemory_task_store:inmemory_task_store.py:66 Task 87d7f896-33de-45d2-9799-feb6d66f151e retrieved successfully for owner .
+INFO     httpx:_client.py:1740 HTTP Request: GET http://testserver/tasks/87d7f896-33de-45d2-9799-feb6d66f151e "HTTP/1.1 200 OK"
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:950 Task: id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+status {
+  state: TASK_STATE_SUBMITTED
+}
+history {
+  context_id: "720c92e9-9cc0-4200-b1d1-6f101dd74469"
+  task_id: "87d7f896-33de-45d2-9799-feb6d66f151e"
+  role: ROLE_USER
+  parts {
+    text: "\n                SET_STATE TASK_STATE_WORKING\n                WAIT_EVENT_1\n                SET_STATE TASK_STATE_COMPLETED\n                "
+  }
+}
+
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:954 SETTING EVENT 1
+INFO     tests.integration.test_handler_comparison:test_handler_comparison.py:956 TEST COMPLETED
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:134 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Started
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:242 Enqueuing event of type: <class 'a2a_pb2.TaskStatusUpdateEvent'>
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:242 Enqueuing event of type: <class 'a2a_pb2.TaskStatusUpdateEvent'>
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:261 Closing EventQueueSource: immediate=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:167 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Started
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:342 Attempting to dequeue event (waiting).
+---------------------------- Captured log teardown -----------------------------
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource.dequeue_event
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:263 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Finishing
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:424 Cleanup[87d7f896-33de-45d2-9799-feb6d66f151e]: Triggering cleanup
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:266 Consumer[87d7f896-33de-45d2-9799-feb6d66f151e]: Completed
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource._join_incoming_queue
+DEBUG    a2a.utils.telemetry:telemetry.py:239 CancelledError in span a2a.server.events.event_queue.EventQueueSource.close
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:144 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Cancelled
+DEBUG    a2a.server.agent_execution.active_task:active_task.py:157 Producer[87d7f896-33de-45d2-9799-feb6d66f151e]: Closing event queue immediately=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.events.event_queue:event_queue.py:261 Closing EventQueueSource: immediate=False
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+DEBUG    a2a.server.agent_execution.active_task_registry:active_task_registry.py:80 Removed active task for 87d7f896-33de-45d2-9799-feb6d66f151e from registry
+DEBUG    a2a.server.events.event_queue:event_queue.py:165 EventQueueSource._dispatch_loop() cancelled <a2a.server.events.event_queue.EventQueueSource object at 0x7ff22ef97a60>
+DEBUG    a2a.server.events.event_queue:event_queue.py:185 EventQueueSource._dispatch_loop() Completed <a2a.server.events.event_queue.EventQueueSource object at 0x7ff22ef97a60>
+WARNING  a2a.server.events.event_queue:event_queue.py:216 Dispatcher task finished unexpectedly. Events may be lost.
+DEBUG    a2a.server.events.event_queue:event_queue.py:361 Closing EventQueueSink.
+DEBUG    a2a.utils.telemetry:telemetry.py:220 Start async tracer
+=========================== short test summary info ============================
+ERROR tests/integration/test_handler_comparison.py::test_get_task_in_progress[default_handler]
+========================== 1 passed, 1 error in 1.81s ==========================
