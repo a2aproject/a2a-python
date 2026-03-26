@@ -142,7 +142,7 @@ class ActiveTask:
                 )
             except asyncio.CancelledError:
                 logger.debug('Producer[%s]: Cancelled', self._task_id)
-                close_immediately = True
+                # close_immediately = True
                 raise
             except Exception as e:
                 logger.exception('Producer[%s]: Failed', self._task_id)
