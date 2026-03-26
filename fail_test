@@ -1,4 +1,11 @@
-FAILED tests/e2e/push_notifications/test_default_push_notification_support.py::test_notification_triggering_with_in_message_config_e2e - Failed: Timeout (>3.0s) from pytest-timeout.
-FAILED tests/integration/test_handler_comparison.py::test_workflow_input_required[default_handler] - a2a.utils.errors.TaskAlreadyStartedError: Task aaa31979-bde1-4734-9692-e660906ccc62 already started
+FAILED tests/e2e/push_notifications/test_default_push_notification_support.py::test_notification_triggering_after_config_change_e2e - a2a.utils.errors.TaskAlreadyStartedError: Task 0f21fdbd-c47b-4fb8-aed4-0bc1e78d818f already started
+FAILED tests/integration/test_active_task_concurrency.py::test_cancellation_during_wait - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_copying_observability.py::test_mutation_observability[True] - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_copying_observability.py::test_mutation_observability[False] - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_end_to_end.py::test_end_to_end_input_required[REST] - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_end_to_end.py::test_end_to_end_input_required[JSON-RPC] - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_end_to_end.py::test_end_to_end_input_required[gRPC] - Failed: Timeout (>5.0s) from pytest-timeout.
+FAILED tests/integration/test_handler_comparison.py::test_scenario_6_cancellation_calls_agent[default] - asyncio.exceptions.TimeoutError
+FAILED tests/integration/test_handler_parity_scenarios.py::test_scenario_14_error_in_cancel[default] - Failed: DID NOT RAISE <class 'BaseException'>
 
 

@@ -116,7 +116,6 @@ class ActiveTask:
         # Caches the terminal Task or final Message to avoid redundant DB reads.
         self._first_result: Task | Message | None = None
         # Caches the final Message, if one was yielded by the agent.
-        self._message: Message | None = None
 
         # Queue for incoming requests
         self._request_queue: AsyncQueue[RequestContext] = _create_async_queue()
@@ -276,7 +275,6 @@ class ActiveTask:
                                         self._task_id,
                                     )
                                     self._first_result = event
-                                self._message = event
                             else:
                                 # Save structural events (like TaskStatusUpdate) to DB.
                                 await self._task_manager.process(event)
@@ -286,7 +284,7 @@ class ActiveTask:
                                 is_interrupted = res and res.status.state in (
                                     TaskState.TASK_STATE_AUTH_REQUIRED,
                                     TaskState.TASK_STATE_INPUT_REQUIRED,
-                                )
+                                ) 
                                 is_terminal = res and res.status.state in (
                                     TaskState.TASK_STATE_COMPLETED,
                                     TaskState.TASK_STATE_CANCELED,
@@ -475,10 +473,6 @@ class ActiveTask:
             # Update result_available so subsequent wait() calls are fast
             self._first_result = res
             return res
-
-        if self._message:
-            logger.debug('Wait[%s]: Returning Message', self._task_id)
-            return self._message
 
         if self._is_finished.is_set():
             logger.debug(

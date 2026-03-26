@@ -337,30 +337,6 @@ class TestActiveTask:
         assert result == task_obj
 
     @pytest.mark.asyncio
-    async def test_active_task_wait_message_fallback(
-        self,
-        active_task: ActiveTask,
-        agent_executor: Mock,
-        request_context: Mock,
-        task_manager: Mock,
-    ) -> None:
-        """Test wait fallback to message when no task object is available."""
-        msg = Message(message_id='m1')
-
-        async def execute_mock(req, q):
-            active_task._request_queue.shutdown(immediate=True)
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        task_manager.get_task.return_value = None
-
-        # Manually set internal state for testing fallback
-        active_task._message = msg
-        active_task._is_finished.set()
-
-        result = await active_task.wait()
-        assert result == msg
-
-    @pytest.mark.asyncio
     async def test_active_task_wait_fails_no_result_at_all(
         self,
         active_task: ActiveTask,
@@ -511,33 +487,6 @@ class TestActiveTask:
             await task
 
         await it.aclose()
-
-    @pytest.mark.asyncio
-    async def test_active_task_wait_message_fallback_explicit(
-        self,
-        active_task: ActiveTask,
-        agent_executor: Mock,
-        request_context: Mock,
-        task_manager: Mock,
-    ) -> None:
-        """Explicitly test wait fallback to message when task is finished."""
-        msg = Message(message_id='m1')
-        async def execute_mock(req, q):
-            active_task._request_queue.shutdown(immediate=True)
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        task_manager.get_task.return_value = None
-
-        await active_task.start(request_context)
-
-        # Manually set message and finish
-        active_task._message = msg
-        active_task._is_finished.set()
-        async with active_task._state_changed:
-            active_task._state_changed.notify_all()
-
-        result = await active_task.wait()
-        assert result == msg
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe_queue_shutdown(
