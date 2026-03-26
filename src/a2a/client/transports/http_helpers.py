@@ -73,7 +73,8 @@ async def send_http_stream_request(
     httpx_client: httpx.AsyncClient,
     method: str,
     url: str,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn],
+    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
+    | None = None,
     sse_error_handler: Callable[[str], NoReturn] = _default_sse_error_handler,
     **kwargs: Any,
 ) -> AsyncGenerator[str]:
