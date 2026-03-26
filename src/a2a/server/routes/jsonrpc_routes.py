@@ -21,6 +21,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.jsonrpc_dispatcher import (
     CallContextBuilder,
+    DefaultCallContextBuilder,
     JsonRpcDispatcher,
 )
 from a2a.types.a2a_pb2 import AgentCard
@@ -54,8 +55,8 @@ def create_jsonrpc_routes(  # noqa: PLR0913
         extended_agent_card: An optional, distinct AgentCard to be served
           at the authenticated extended card endpoint.
         context_builder: The CallContextBuilder used to construct the
-          ServerCallContext passed to the request_handler. If None, no
-          ServerCallContext is passed.
+          ServerCallContext passed to the request_handler. If None the
+          DefaultCallContextBuilder is used.
         card_modifier: An optional callback to dynamically modify the public
           agent card before it is served.
         extended_card_modifier: An optional callback to dynamically modify
@@ -74,7 +75,7 @@ def create_jsonrpc_routes(  # noqa: PLR0913
         agent_card=agent_card,
         http_handler=request_handler,
         extended_agent_card=extended_agent_card,
-        context_builder=context_builder,
+        context_builder=context_builder or DefaultCallContextBuilder(),
         card_modifier=card_modifier,
         extended_card_modifier=extended_card_modifier,
         enable_v0_3_compat=enable_v0_3_compat,
