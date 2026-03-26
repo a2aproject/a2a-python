@@ -38,6 +38,7 @@ from a2a.server.tasks import (
 from a2a.types import (
     InternalError,
     InvalidParamsError,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -1991,7 +1992,7 @@ async def test_set_task_push_notification_config_no_notifier():
         url='http://example.com',
     )
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_create_task_push_notification_config(
             params, create_server_call_context()
         )
@@ -2038,7 +2039,7 @@ async def test_get_task_push_notification_config_no_store():
         id='task_push_notification_config',
     )
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_get_task_push_notification_config(
             params, create_server_call_context()
         )
@@ -2269,7 +2270,7 @@ async def test_list_task_push_notification_config_no_store():
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task1')
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_list_task_push_notification_configs(
             params, create_server_call_context()
         )
@@ -2414,11 +2415,10 @@ async def test_delete_task_push_notification_config_no_store():
         task_id='task1', id='config1'
     )
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_delete_task_push_notification_config(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
