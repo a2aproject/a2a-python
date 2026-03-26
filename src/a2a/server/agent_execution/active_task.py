@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
-    from a2a.server.agent_execution.context import RequestContext
+    from a2a.server.context import RequestContext
     from a2a.server.events.event_queue import Event, EventQueue
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
@@ -38,6 +38,19 @@ class ActiveTask:
     It coordinates between the agent's execution (the producer), the
     persistence and state management (the TaskManager), and the event
     distribution to subscribers (the consumer).
+
+    Concurrency Guarantees:
+    - This class is designed to be highly concurrent. It manages an internal
+      producer-consumer model using `asyncio.Task`s.
+    - `self._lock` (asyncio.Lock) ensures mutually exclusive access for critical
+      lifecycle state changes, such as starting the task, subscribing, and
+      determining if cleanup is safe to trigger.
+    - `self._state_changed` (asyncio.Condition) acts as a broadcast channel. Any
+      mutation to the observable result state (like `_first_result`, `_exception`,
+      or `_is_finished`) notifies waiting coroutines (like `wait()`).
+    - `self._is_finished` (asyncio.Event) provides a thread-safe, non-blocking way
+      for external observers and internal loops to check if the ActiveTask has
+      permanently ceased execution and closed its queues.
     """
 
     def __init__(  # noqa: PLR0913
@@ -52,13 +65,17 @@ class ActiveTask:
         """Initializes the ActiveTask.
 
         Args:
-            agent_executor: The executor to run the agent logic.
-            task_id: The ID of the task.
-            event_queue: The queue for events produced by the agent.
-            task_manager: The manager for task state and persistence.
-            push_sender: Optional sender for push notifications.
-            on_cleanup: Optional callback when the task is finished and has no subscribers.
+            agent_executor: The executor to run the agent logic (producer).
+            task_id: The unique identifier of the task being managed.
+            event_queue: The queue for events produced by the agent. Acts as the pipe
+                         between the producer and consumer tasks.
+            task_manager: The manager for task state and database persistence.
+            push_sender: Optional sender for out-of-band push notifications.
+            on_cleanup: Optional callback triggered when the task is fully finished
+                        and the last subscriber has disconnected. Used to prune
+                        the task from the ActiveTaskRegistry.
         """
+        # --- Core Dependencies ---
         self._agent_executor = agent_executor
         self._task_id = task_id
         self._event_queue = event_queue
@@ -66,16 +83,37 @@ class ActiveTask:
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
 
+        # --- Synchronization Primitives ---
+        # `_lock` protects structural lifecycle changes: start(), subscribe() counting,
+        # and _maybe_cleanup() race conditions.
         self._lock = asyncio.Lock()
-        self._producer_task: asyncio.Task[None] | None = None
-        self._consumer_task: asyncio.Task[None] | None = None
-        self._is_finished = asyncio.Event()
+
+        # `_state_changed` notifies waiters (like wait()) when observable outputs change.
         self._state_changed = asyncio.Condition()
+
+        # `_is_finished` is set EXACTLY ONCE when the consumer loop exits, signifying
+        # the absolute end of the task's active lifecycle.
+        self._is_finished = asyncio.Event()
+
+        # --- Lifecycle State ---
+        # The background task executing the agent logic.
+        self._producer_task: asyncio.Task[None] | None = None
+        # The background task reading from _event_queue and updating the DB.
+        self._consumer_task: asyncio.Task[None] | None = None
+
+        # Tracks how many active SSE/gRPC streams are currently tailing this task.
+        # Protected by `_lock`.
         self._subscribers_count = 0
+
+        # Holds any fatal exception that crashed the producer or consumer.
         self._exception: Exception | None = None
 
+        # --- Result State ---
+        # Indicates if a terminal Task state or a final Message has been captured.
         self._result_available = False
+        # Caches the terminal Task or final Message to avoid redundant DB reads.
         self._first_result: Task | Message | None = None
+        # Caches the final Message, if one was yielded by the agent.
         self._message: Message | None = None
 
     @property
@@ -90,12 +128,16 @@ class ActiveTask:
     ) -> None:
         """Starts the active task background processes.
 
+        Concurrency Guarantee:
+        Uses `self._lock` to ensure the producer and consumer tasks are strictly
+        singleton instances for the lifetime of this ActiveTask.
+
         Args:
             request: The request context to execute.
             setup_callback: Optional async callback executed before starting the producer, while the lock is held.
 
         Raises:
-            TaskAlreadyStartedError: If the task is already running.
+            TaskAlreadyStartedError: If the background tasks have already been spun up.
         """
         logger.debug('ActiveTask[%s]: Starting', self._task_id)
         async with self._lock:
@@ -122,6 +164,7 @@ class ActiveTask:
                         self._on_cleanup(self)
                     raise
 
+            # Spawn the background tasks that drive the lifecycle.
             self._producer_task = asyncio.create_task(
                 self._run_producer(request), name=f'producer:{self._task_id}'
             )
@@ -131,6 +174,17 @@ class ActiveTask:
             logger.debug('ActiveTask[%s]: Background tasks created', self._task_id)
 
     async def _run_producer(self, request: RequestContext) -> None:
+        """Executes the agent logic.
+
+        This method encapsulates the external `AgentExecutor.execute` call. It ensures
+        that regardless of how the agent finishes (success, unhandled exception, or
+        cancellation), the underlying `_event_queue` is safely closed, which signals
+        the consumer to wind down.
+
+        Concurrency Guarantee:
+        Runs as a detached asyncio.Task. Safe to cancel. Broadcasts state changes
+        to `_state_changed` upon exit.
+        """
         logger.debug('Producer[%s]: Started', self._task_id)
         try:
             close_immediately = False
@@ -142,7 +196,6 @@ class ActiveTask:
                 )
             except asyncio.CancelledError:
                 logger.debug('Producer[%s]: Cancelled', self._task_id)
-                # close_immediately = True
                 close_immediately = False
                 raise
             except Exception as e:
@@ -150,6 +203,7 @@ class ActiveTask:
                 self._exception = e
                 close_immediately = False
             finally:
+                # Notify waiters that an exception might be set or execution stopped.
                 async with self._state_changed:
                     self._state_changed.notify_all()
 
@@ -159,11 +213,23 @@ class ActiveTask:
                         self._task_id,
                         close_immediately,
                     )
+                    # Closing the queue is the formal trigger that begins winding down the consumer.
                     await self._event_queue.close(immediate=close_immediately)
         finally:
             logger.debug('Producer[%s]: Completed', self._task_id)
 
     async def _run_consumer(self) -> None:
+        """Consumes events from the agent and updates system state.
+
+        This continuous loop dequeues events emitted by the producer, updates the
+        database via `TaskManager`, and intercepts critical task states (e.g.,
+        INPUT_REQUIRED, COMPLETED, FAILED) to cache the final result.
+
+        Concurrency Guarantee:
+        Runs as a detached asyncio.Task. The loop ends gracefully when the producer
+        closes the queue (raising `QueueShutDown`). Upon termination, it formally sets
+        `_is_finished`, unblocking all global subscribers and wait() calls.
+        """
         logger.debug('Consumer[%s]: Started', self._task_id)
         try:
             try:
@@ -188,6 +254,7 @@ class ActiveTask:
                                     self._result_available = True
                                 self._message = event
                             else:
+                                # Save structural events (like TaskStatusUpdate) to DB.
                                 await self._task_manager.process(event)
 
                                 # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
@@ -203,6 +270,7 @@ class ActiveTask:
                                     TaskState.TASK_STATE_REJECTED,
                                 )
 
+                                # If we hit a breakpoint or terminal state, lock in the result.
                                 if (
                                     not self._result_available
                                     and (is_interrupted or is_terminal)
@@ -223,6 +291,7 @@ class ActiveTask:
                                         self._task_id,
                                         res.status.state if res else 'unknown',
                                     )
+                                    # Terminate the ActiveTask globally.
                                     self._is_finished.set()
 
                                 if is_interrupted:
@@ -245,6 +314,7 @@ class ActiveTask:
                                         self._task_id, event
                                     )
 
+                            # Notify waiters (like wait()) that the result cache may have updated.
                             async with self._state_changed:
                                 self._state_changed.notify_all()
                         finally:
@@ -257,6 +327,7 @@ class ActiveTask:
                 logger.exception('Consumer[%s]: Failed', self._task_id)
                 self._exception = e
             finally:
+                # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
                 async with self._state_changed:
                     self._state_changed.notify_all()
@@ -266,7 +337,13 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Completed', self._task_id)
 
     async def subscribe(self) -> AsyncGenerator[Event, None]:
-        """Creates a queue tap and yields events as they are produced."""
+        """Creates a queue tap and yields events as they are produced.
+
+        Concurrency Guarantee:
+        Uses `_lock` to safely increment and decrement `_subscribers_count`.
+        Safely detaches its queue tap when the client disconnects or the task finishes,
+        triggering `_maybe_cleanup()` to potentially garbage collect the ActiveTask.
+        """
         logger.debug('Subscribe[%s]: New subscriber', self._task_id)
         async with self._lock:
             if self._exception:
@@ -325,10 +402,16 @@ class ActiveTask:
                     self._task_id,
                     self._subscribers_count,
                 )
+            # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
 
     async def wait(self) -> Task | Message:
         """Waits until a result (terminal task or message) is available.
+
+        Concurrency Guarantee:
+        Uses the `_state_changed` condition to sleep efficiently without spin-locking.
+        It is safe for multiple coroutines to await `wait()` concurrently; all will
+        wake up and receive the cached `_first_result` when it resolves.
 
         Returns:
             The final `Task` or `Message` result.
@@ -337,6 +420,7 @@ class ActiveTask:
             Exception: If the agent execution failed.
         """
         logger.debug('Wait[%s]: Waiting for result', self._task_id)
+        # Block until the consumer explicitly flags a result, or the task forcefully exits.
         while not self._result_available and not self._is_finished.is_set():
             if self._exception:
                 logger.debug(
@@ -383,7 +467,14 @@ class ActiveTask:
         raise RuntimeError('Wait exited without result')
 
     async def cancel(self, request: RequestContext) -> Task | Message:
-        """Cancels the running active task."""
+        """Cancels the running active task.
+
+        Concurrency Guarantee:
+        Uses `_lock` to ensure we don't attempt to cancel a producer that is
+        already winding down or hasn't started. It fires the cancellation signal
+        and delegates to `wait()` to safely block until the consumer processes the
+        cancellation events and updates `_first_result`.
+        """
         logger.debug('Cancel[%s]: Cancelling task', self._task_id)
         async with self._lock:
             # if self._producer_task and not self._producer_task.done():
@@ -411,10 +502,16 @@ class ActiveTask:
                     self._task_id,
                 )
 
+        # Await the formal result state change triggered by the cancellation.
         return await self.wait()
 
     async def _maybe_cleanup(self) -> None:
-        """Triggers cleanup if task is finished and has no subscribers."""
+        """Triggers cleanup if task is finished and has no subscribers.
+
+        Concurrency Guarantee:
+        Protected by `_lock` to prevent race conditions where a new subscriber
+        attaches at the exact moment the task decides to garbage collect itself.
+        """
         async with self._lock:
             if (
                 self._is_finished.is_set()
