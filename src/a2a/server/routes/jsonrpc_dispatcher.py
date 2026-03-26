@@ -1,6 +1,5 @@
 """JSON-RPC application for A2A server."""
 
-import contextlib
 import json
 import logging
 import traceback
@@ -154,7 +153,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         """
         user: A2AUser = UnauthenticatedUser()
         state = {}
-        with contextlib.suppress(Exception):
+        if 'user' in request.scope:
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)

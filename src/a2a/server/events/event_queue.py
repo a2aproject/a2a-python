@@ -243,5 +243,4 @@ class EventQueue:
                 for child in self._children
             ]
 
-            if child_tasks:
-                await asyncio.gather(*child_tasks, return_exceptions=True)
+            await asyncio.gather(*child_tasks, return_exceptions=True)
