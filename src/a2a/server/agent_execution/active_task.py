@@ -50,7 +50,7 @@ class ActiveTask:
       lifecycle state changes, such as starting the task, subscribing, and
       determining if cleanup is safe to trigger.
     - `self._state_changed` (asyncio.Condition) acts as a broadcast channel. Any
-      mutation to the observable result state (like `_first_result`, `_exception`,
+      mutation to the observable result state (like `_result`, `_exception`,
       or `_is_finished`) notifies waiting coroutines (like `wait()`).
     - `self._is_finished` (asyncio.Event) provides a thread-safe, non-blocking way
       for external observers and internal loops to check if the ActiveTask has
@@ -113,9 +113,9 @@ class ActiveTask:
         self._exception: Exception | None = None
 
         # --- Result State ---
-        # Caches the terminal Task or final Message to avoid redundant DB reads.
-        self._first_result: Task | Message | None = None
-        # Caches the final Message, if one was yielded by the agent.
+        # Result of the execution
+        # TODO: avoid overwriting between requests.
+        self._result: Task | Message | None = None
 
         # Queue for incoming requests
         self._request_queue: AsyncQueue[RequestContext] = _create_async_queue()
@@ -269,12 +269,12 @@ class ActiveTask:
 
                         try:
                             if isinstance(event, Message):
-                                if self._first_result is None:
-                                    logger.debug(
-                                        'Consumer[%s]: Setting first result as Message',
-                                        self._task_id,
-                                    )
-                                    self._first_result = event
+                                logger.debug(
+                                    'Consumer[%s]: Setting result to Message: %s',
+                                    self._task_id,
+                                    event,
+                                )
+                                self._result = event
                             else:
                                 # Save structural events (like TaskStatusUpdate) to DB.
                                 await self._task_manager.process(event)
@@ -293,18 +293,13 @@ class ActiveTask:
                                 )
 
                                 # If we hit a breakpoint or terminal state, lock in the result.
-                                if (
-                                    self._first_result is None
-                                    and (is_interrupted or is_terminal)
-                                    and res
-                                ):
+                                if (is_interrupted or is_terminal) and res:
                                     logger.debug(
                                         'Consumer[%s]: Setting first result as Task (state=%s)',
                                         self._task_id,
                                         res.status.state,
                                     )
-                                    self._first_result = Task()
-                                    self._first_result.CopyFrom(res)
+                                    self._result = res
 
                                 if is_terminal:
                                     logger.debug(
@@ -437,7 +432,7 @@ class ActiveTask:
         Concurrency Guarantee:
         Uses the `_state_changed` condition to sleep efficiently without spin-locking.
         It is safe for multiple coroutines to await `wait()` concurrently; all will
-        wake up and receive the cached `_first_result` when it resolves.
+        wake up and receive the cached `_result` when it resolves.
 
         Returns:
             The final `Task` or `Message` result.
@@ -447,7 +442,7 @@ class ActiveTask:
         """
         logger.debug('Wait[%s]: Waiting for result', self._task_id)
         # Block until the consumer explicitly flags a result, or the task forcefully exits.
-        while (self._first_result is None) and not self._is_finished.is_set():
+        while (self._result is None) and not self._is_finished.is_set():
             if self._exception:
                 logger.debug('Wait[%s]: Failed, exception set', self._task_id)
                 raise self._exception
@@ -461,17 +456,15 @@ class ActiveTask:
             logger.debug('Wait[%s]: Failed, exception set', self._task_id)
             raise self._exception
 
-        if self._first_result:
+        if self._result:
             logger.debug('Wait[%s]: Returning first result', self._task_id)
-            return self._first_result
+            return self._result
 
         # Fallback to current task from manager if finished
         logger.debug('Wait[%s]: Falling back to TaskManager', self._task_id)
         res = await self._task_manager.get_task()
         if res:
             logger.debug('Wait[%s]: Returning Task from manager', self._task_id)
-            # Update result_available so subsequent wait() calls are fast
-            self._first_result = res
             return res
 
         if self._is_finished.is_set():
@@ -491,7 +484,7 @@ class ActiveTask:
         Uses `_lock` to ensure we don't attempt to cancel a producer that is
         already winding down or hasn't started. It fires the cancellation signal
         and delegates to `wait()` to safely block until the consumer processes the
-        cancellation events and updates `_first_result`.
+        cancellation events and updates `_result`.
         """
         logger.debug('Cancel[%s]: Cancelling task', self._task_id)
         async with self._lock:
