@@ -11,7 +11,7 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
-    from a2a.server.context import RequestContext
+    from a2a.server.agent_execution.context import RequestContext
     from a2a.server.events.event_queue import Event, EventQueue
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
@@ -19,7 +19,11 @@ if TYPE_CHECKING:
     from a2a.server.tasks.task_manager import TaskManager
 
 
-from a2a.server.events.event_queue import QueueShutDown
+from a2a.server.events.event_queue import (
+    AsyncQueue,
+    QueueShutDown,
+    _create_async_queue,
+)
 from a2a.server.tasks import PushNotificationEvent
 from a2a.types.a2a_pb2 import (
     Message,
@@ -114,6 +118,9 @@ class ActiveTask:
         # Caches the final Message, if one was yielded by the agent.
         self._message: Message | None = None
 
+        # Queue for incoming requests
+        self._request_queue: AsyncQueue[RequestContext] = _create_async_queue()
+
     @property
     def task_id(self) -> str:
         """The ID of the task."""
@@ -149,7 +156,9 @@ class ActiveTask:
                 )
 
             if setup_callback:
-                logger.debug('ActiveTask[%s]: Executing setup callback', self._task_id)
+                logger.debug(
+                    'ActiveTask[%s]: Executing setup callback', self._task_id
+                )
                 try:
                     await setup_callback()
                 except Exception:
@@ -163,16 +172,19 @@ class ActiveTask:
                     raise
 
             # Spawn the background tasks that drive the lifecycle.
+            self._reference_count += 1
+            await self._request_queue.put(request)
             self._producer_task = asyncio.create_task(
-                self._run_producer(request), name=f'producer:{self._task_id}'
+                self._run_producer(), name=f'producer:{self._task_id}'
             )
             self._consumer_task = asyncio.create_task(
                 self._run_consumer(), name=f'consumer:{self._task_id}'
             )
-            # self._reference_count += 1
-            logger.debug('ActiveTask[%s]: Background tasks created', self._task_id)
+            logger.debug(
+                'ActiveTask[%s]: Background tasks created', self._task_id
+            )
 
-    async def _run_producer(self, request: RequestContext) -> None:
+    async def _run_producer(self) -> None:
         """Executes the agent logic.
 
         This method encapsulates the external `AgentExecutor.execute` call. It ensures
@@ -188,11 +200,23 @@ class ActiveTask:
         try:
             close_immediately = False
             try:
-                await self._agent_executor.execute(request, self._event_queue)
-                logger.debug(
-                    'Producer[%s]: Execution finished successfully',
-                    self._task_id,
-                )
+                try:
+                    while True:
+                        request = await self._request_queue.get()
+                        try:
+                            await self._agent_executor.execute(
+                                request, self._event_queue
+                            )
+                            logger.debug(
+                                'Producer[%s]: Execution finished successfully',
+                                self._task_id,
+                            )
+                        finally:
+                            self._request_queue.task_done()
+                except QueueShutDown:
+                    logger.debug(
+                        'Producer[%s]: Request queue shut down', self._task_id
+                    )
             except asyncio.CancelledError:
                 logger.debug('Producer[%s]: Cancelled', self._task_id)
                 close_immediately = False
@@ -202,6 +226,8 @@ class ActiveTask:
                 self._exception = e
                 close_immediately = False
             finally:
+                self._request_queue.shutdown(immediate=True)
+
                 # Notify waiters that an exception might be set or execution stopped.
                 async with self._state_changed:
                     self._state_changed.notify_all()
@@ -217,7 +243,7 @@ class ActiveTask:
         finally:
             logger.debug('Producer[%s]: Completed', self._task_id)
 
-    async def _run_consumer(self) -> None:
+    async def _run_consumer(self) -> None:  # noqa: PLR0915, PLR0912
         """Consumes events from the agent and updates system state.
 
         This continuous loop dequeues events emitted by the producer, updates the
@@ -288,11 +314,12 @@ class ActiveTask:
                                         self._task_id,
                                         res.status.state if res else 'unknown',
                                     )
-                                    # if not self._is_finished.is_set():
-                                    #     async with self._lock:
-                                    #         self._reference_count -= 1
+                                    if not self._is_finished.is_set():
+                                        async with self._lock:
+                                            self._reference_count -= 1
                                     # Terminate the ActiveTask globally.
                                     self._is_finished.set()
+                                    self._request_queue.shutdown(immediate=True)
 
                                 if is_interrupted:
                                     logger.debug(
@@ -329,6 +356,7 @@ class ActiveTask:
             finally:
                 # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
+                self._request_queue.shutdown(immediate=True)
                 async with self._state_changed:
                     self._state_changed.notify_all()
                 logger.debug('Consumer[%s]: Finishing', self._task_id)
@@ -423,9 +451,7 @@ class ActiveTask:
         # Block until the consumer explicitly flags a result, or the task forcefully exits.
         while (self._first_result is None) and not self._is_finished.is_set():
             if self._exception:
-                logger.debug(
-                    'Wait[%s]: Failed, exception set', self._task_id
-                )
+                logger.debug('Wait[%s]: Failed, exception set', self._task_id)
                 raise self._exception
             async with self._state_changed:
                 with contextlib.suppress(asyncio.TimeoutError):
@@ -442,9 +468,7 @@ class ActiveTask:
             return self._first_result
 
         # Fallback to current task from manager if finished
-        logger.debug(
-            'Wait[%s]: Falling back to TaskManager', self._task_id
-        )
+        logger.debug('Wait[%s]: Falling back to TaskManager', self._task_id)
         res = await self._task_manager.get_task()
         if res:
             logger.debug('Wait[%s]: Returning Task from manager', self._task_id)
@@ -458,7 +482,8 @@ class ActiveTask:
 
         if self._is_finished.is_set():
             logger.debug(
-                'Wait[%s]: Task finished without result or message', self._task_id
+                'Wait[%s]: Task finished without result or message',
+                self._task_id,
             )
             raise RuntimeError('Task finished without result or message')
 
@@ -478,7 +503,9 @@ class ActiveTask:
         async with self._lock:
             # if self._producer_task and not self._producer_task.done():
             if not self._is_finished.is_set() and self._producer_task:
-                logger.debug('Cancel[%s]: Cancelling producer task', self._task_id)
+                logger.debug(
+                    'Cancel[%s]: Cancelling producer task', self._task_id
+                )
                 # We do NOT await self._agent_executor.cancel here
                 # because it might take a while and we want to await wait()
                 self._producer_task.cancel()

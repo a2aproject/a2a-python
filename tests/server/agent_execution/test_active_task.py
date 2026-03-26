@@ -74,14 +74,16 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
+        task_manager: Mock,
     ) -> None:
         """Test the basic lifecycle of an ActiveTask."""
 
         async def execute_mock(req, q):
             await q.enqueue_event(Message(message_id='m1'))
-            await q.enqueue_event(Task(id='test-task-id'))
+            await q.enqueue_event(Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED)))
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task.return_value = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
         await active_task.start(request_context)
 
@@ -257,7 +259,7 @@ class TestActiveTask:
         task_manager: Mock,
     ) -> None:
         """Test push notification sending."""
-        task_obj = Task(id='test-task-id')
+        task_obj = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
         async def execute_mock(req, q):
             await q.enqueue_event(task_obj)
@@ -290,8 +292,10 @@ class TestActiveTask:
 
         async def execute_mock(req, q):
             await q.enqueue_event(Message(message_id='m1'))
+            await q.enqueue_event(Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED)))
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task.return_value = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
         await active_task.start(request_context)
         await active_task.wait()
@@ -313,11 +317,13 @@ class TestActiveTask:
         task_manager: Mock,
     ) -> None:
         """Test wait fallback when no first_result is set but task finishes."""
-        agent_executor.execute = AsyncMock(return_value=None)
-
-        # No events enqueued
-        task_obj = Task(id='test-task-id')
+        task_obj = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
         task_manager.get_task.return_value = task_obj
+
+        async def execute_mock(req, q):
+            await q.enqueue_event(task_obj)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
         await active_task.start(request_context)
 
@@ -341,7 +347,10 @@ class TestActiveTask:
         """Test wait fallback to message when no task object is available."""
         msg = Message(message_id='m1')
 
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = None
 
         # Manually set internal state for testing fallback
@@ -360,7 +369,10 @@ class TestActiveTask:
         task_manager: Mock,
     ) -> None:
         """Test wait raising error when no result/message available after finish."""
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = None
 
         await active_task.start(request_context)
@@ -452,8 +464,11 @@ class TestActiveTask:
         task_manager: Mock,
     ) -> None:
         """Test canceling a task that is already finished."""
-        task_obj = Task(id='test-task-id')
-        agent_executor.execute = AsyncMock(return_value=None)
+        task_obj = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
         await active_task.start(request_context)
@@ -507,7 +522,10 @@ class TestActiveTask:
     ) -> None:
         """Explicitly test wait fallback to message when task is finished."""
         msg = Message(message_id='m1')
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = None
 
         await active_task.start(request_context)
@@ -567,6 +585,7 @@ class TestActiveTask:
             await q.enqueue_event(msg)
             await asyncio.sleep(0.5)
             # Finish producer
+            active_task._request_queue.shutdown(immediate=True)
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         await active_task.start(request_context)
@@ -610,7 +629,10 @@ class TestActiveTask:
     ) -> None:
         """Test wait falling back to manager.get_task() when finished."""
         task_obj = Task(id='test')
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = task_obj
 
         await active_task.start(request_context)
@@ -671,7 +693,10 @@ class TestActiveTask:
         task_manager: Mock,
     ) -> None:
         """Test cancel when the event queue is already closed."""
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.return_value = Task(id='test')
         await active_task.start(request_context)
 
@@ -763,7 +788,10 @@ class TestActiveTask:
         request_context: Mock,
     ) -> None:
         """Test subscribe when the task finishes immediately."""
-        agent_executor.execute = AsyncMock(return_value=None)
+        async def execute_mock(req, q):
+            active_task._request_queue.shutdown(immediate=True)
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
         await active_task.start(request_context)
 
@@ -803,6 +831,7 @@ class TestActiveTask:
         async def slow_execute(req, q):
             # Do nothing and just finish
             await asyncio.sleep(0.5)
+            active_task._request_queue.shutdown(immediate=True)
 
         agent_executor.execute = AsyncMock(side_effect=slow_execute)
 
@@ -866,8 +895,10 @@ class TestActiveTask:
         # Mock execute to finish immediately
         async def execute_mock(req, q):
             await q.enqueue_event(Message(message_id='m1'))
+            await q.enqueue_event(Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED)))
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task.return_value = Task(id='test-task-id', status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED))
 
         # 1. Start a subscriber before task finishes
         gen = active_task.subscribe()
