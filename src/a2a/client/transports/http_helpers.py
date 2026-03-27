@@ -6,7 +6,7 @@ from typing import Any, NoReturn
 
 import httpx
 
-from httpx_sse import EventSource, SSEError, aconnect_sse
+from httpx_sse import EventSource, SSEError
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
@@ -75,7 +75,7 @@ async def send_http_stream_request(
 ) -> AsyncGenerator[str]:
     """Sends a streaming HTTP request, yielding SSE data strings and handling exceptions."""
     with handle_http_exceptions(status_error_handler):
-        async with aconnect_sse(
+        async with _SSEEventSource(
             httpx_client, method, url, **kwargs
         ) as event_source:
             try:
