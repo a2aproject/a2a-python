@@ -123,8 +123,11 @@ def setup_client(agent_card: AgentCard, use_copying: bool) -> ClientSetup:
     )
 
 
+# TODO: remove use_copying parameter from the system. New handler implementation
+# assumes that task is copied.
+
 @pytest.mark.asyncio
-@pytest.mark.parametrize('use_copying', [True, False])
+@pytest.mark.parametrize('use_copying', [True])
 async def test_mutation_observability(agent_card: AgentCard, use_copying: bool):
     """Tests that task mutations are observable when copying is disabled.
 

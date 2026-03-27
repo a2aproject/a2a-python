@@ -88,6 +88,7 @@ def _build_error_response(
     request_id: str | int | None, error: Exception
 ) -> dict[str, Any]:
     """Build a JSON-RPC error response dict."""
+    logger.debug('JSONRPCHandler: Building error response for exception: %s', error)
     jsonrpc_error: JSONRPCError
     if isinstance(error, A2AError):
         error_type = type(error)

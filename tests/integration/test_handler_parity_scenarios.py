@@ -256,7 +256,7 @@ async def test_scenario_2_cancel_results_in_completed(use_legacy, agent_card):
     except StopAsyncIteration:
         pass
 
-    await asyncio.sleep(0.5)
+    await asyncio.sleep(0.1)
 
     # Run cancel task with a small timeout so test doesn't hang if agent doesn't close fast
     # but we can't use wait_for(..., 2.0) on the actual background task if the test framework itself blocks on teardown.
@@ -269,11 +269,11 @@ async def test_scenario_2_cancel_results_in_completed(use_legacy, agent_card):
             with pytest.raises(Exception):
                 await asyncio.wait_for(
                     client.cancel_task(CancelTaskRequest(id=task_id)),
-                    timeout=2.0,
+                    timeout=0.5,
                 )
         else:
             result = await asyncio.wait_for(
-                client.cancel_task(CancelTaskRequest(id=task_id)), timeout=2.0
+                client.cancel_task(CancelTaskRequest(id=task_id)), timeout=0.5
             )
             assert result.status.state in (TaskState.TASK_STATE_COMPLETED, 3)
     finally:

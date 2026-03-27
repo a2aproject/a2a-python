@@ -67,6 +67,7 @@ TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_REJECTED,
 }
 
+#TODO cleanup context_id management
 
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandler(RequestHandler):
@@ -233,7 +234,8 @@ class DefaultRequestHandler(RequestHandler):
                 task_id=task_id,
                 context_id=original_context_id,
                 task_store=self.task_store,
-                initial_message=params.message,
+                # Do not store initial message during task creation. It will be done before AgentExecutor.execute().
+                initial_message=None,
                 context=context,
             )
             task: Task | None = await temp_task_manager.get_task()
@@ -260,7 +262,7 @@ class DefaultRequestHandler(RequestHandler):
                 if self._push_sender:
                     await self._push_sender.send_notification(task_id, task)
 
-            request_context.current_task = task
+            # request_context.current_task = task
 
         await active_task.start(setup_callback=setup_db)
         return active_task, request_context
@@ -277,7 +279,7 @@ class DefaultRequestHandler(RequestHandler):
         if params.configuration and params.configuration.return_immediately:
             await active_task.enqueue_request(request_context)
 
-            task = cast('Task', request_context.current_task)
+            task = await active_task.get_task()
             if params.configuration:
                 task = apply_history_length(task, params.configuration)
             return task
@@ -394,6 +396,7 @@ class DefaultRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
+        # TODO: Move to  ActiveTask
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
                 message=f'Task {task.id} is in terminal state: {task.status.state}'
