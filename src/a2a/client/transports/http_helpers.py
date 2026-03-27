@@ -118,9 +118,9 @@ class _SSEEventSource:
         url: str,
         **kwargs: Any,
     ) -> None:
-        headers = kwargs.pop('headers', {})
-        headers['Accept'] = 'text/event-stream'
-        headers['Cache-Control'] = 'no-store'
+        headers = httpx.Headers(kwargs.pop('headers', None))
+        headers.setdefault('Accept', 'text/event-stream')
+        headers.setdefault('Cache-Control', 'no-store')
         self._request = client.build_request(
             method, url, headers=headers, **kwargs
         )
