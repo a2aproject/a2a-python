@@ -13,6 +13,7 @@ from a2a.auth.user import UnauthenticatedUser
 from a2a.auth.user import User as A2AUser
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
+    HTTP_EXTENSION_HEADER_DEPRECATED,
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
@@ -151,12 +152,13 @@ class DefaultCallContextBuilder(CallContextBuilder):
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
+        extension_values = request.headers.getlist(
+            HTTP_EXTENSION_HEADER
+        ) or request.headers.getlist(HTTP_EXTENSION_HEADER_DEPRECATED)
         return ServerCallContext(
             user=user,
             state=state,
-            requested_extensions=get_requested_extensions(
-                request.headers.getlist(HTTP_EXTENSION_HEADER)
-            ),
+            requested_extensions=get_requested_extensions(extension_values),
         )
 
 
