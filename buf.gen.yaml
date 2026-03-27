@@ -29,3 +29,10 @@ plugins:
   # Generates *_pb2.pyi files.
   - remote: buf.build/protocolbuffers/pyi
     out: src/a2a/types
+  # Generate Pydantic models with ProtoJSON compatibility
+  - local: protoc-gen-proto2pydantic
+    out: src/a2a/types
+    opt:
+      - preset=a2a
+      - base_class=a2a._base.A2ABaseModel
+      - output_file=a2a_pydantic.py
