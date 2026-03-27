@@ -35,6 +35,7 @@ from a2a.types import (
     TextPart,
 )
 
+
 def test_to_sdk_task_state() -> None:
     assert (
         to_sdk_task_state(vertexai_types.A2aTaskState.STATE_UNSPECIFIED)
@@ -318,7 +319,9 @@ def test_sdk_part_text_conversion_round_trip() -> None:
 def test_sdk_part_data_conversion_round_trip() -> None:
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
-    round_trip_sdk_part = to_sdk_part(stored_part, part_metadata=None, part_type='data')
+    round_trip_sdk_part = to_sdk_part(
+        stored_part, part_metadata=None, part_type='data'
+    )
 
     assert round_trip_sdk_part == sdk_part
 
