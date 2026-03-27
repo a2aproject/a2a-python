@@ -132,9 +132,8 @@ class REST03Adapter:
             card_to_serve = self.agent_card
 
         if self.extended_card_modifier:
-            context = self._context_builder.build(request)
             card_to_serve = await maybe_await(
-                self.extended_card_modifier(card_to_serve, context)
+                self.extended_card_modifier(card_to_serve, call_context)
             )
         elif self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))

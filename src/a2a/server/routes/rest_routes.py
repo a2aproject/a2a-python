@@ -185,7 +185,6 @@ def create_rest_routes(  # noqa: PLR0913
         card_to_serve = extended_agent_card or agent_card
 
         if extended_card_modifier:
-            # Re-generate context if none passed to replicate RESTAdapter exact logic
             card_to_serve = await maybe_await(
                 extended_card_modifier(card_to_serve, call_context)
             )
