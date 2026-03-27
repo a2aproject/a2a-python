@@ -128,7 +128,7 @@ class TaskStatus(A2ABaseModel):
         """Serialize datetime to RFC 3339 with UTC 'Z' suffix for ProtoJSON."""
         if v is None:
             return None
-        return v.strftime('%Y-%m-%dT%H:%M:%S.') + f'{v.microsecond:06d}'[:3] + 'Z'
+        return v.strftime('%Y-%m-%dT%H:%M:%S.') + f'{v.microsecond // 1000:03d}' + 'Z'
 
 
 
@@ -528,7 +528,7 @@ class ListTasksRequest(A2ABaseModel):
         """Serialize datetime to RFC 3339 with UTC 'Z' suffix for ProtoJSON."""
         if v is None:
             return None
-        return v.strftime('%Y-%m-%dT%H:%M:%S.') + f'{v.microsecond:06d}'[:3] + 'Z'
+        return v.strftime('%Y-%m-%dT%H:%M:%S.') + f'{v.microsecond // 1000:03d}' + 'Z'
 
 
 
