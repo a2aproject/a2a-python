@@ -56,7 +56,7 @@ class TaskPushNotificationConfig(A2ABaseModel):
     task_id: str = Field(default='', description='The ID of the task this configuration is associated with.')
     url: str = Field(..., description='The URL where the notification should be sent.')
     token: str = Field(default='', description='A token unique for this task or session.')
-    authentication: AuthenticationInfo = Field(default=None, description='Authentication information required to send the notification.')
+    authentication: AuthenticationInfo | None = Field(default=None, description='Authentication information required to send the notification.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -68,7 +68,7 @@ class SendMessageConfiguration(A2ABaseModel):
     """Configuration of a send message request."""
 
     accepted_output_modes: list[str] | None = Field(default=None, description='A list of media types the client is prepared to accept for response parts. Agents SHOULD use this to tailor their output.')
-    task_push_notification_config: TaskPushNotificationConfig = Field(default=None, description='Configuration for the agent to send push notifications for task updates. Task id should be empty when sending this configuration in a `SendMessage` request.')
+    task_push_notification_config: TaskPushNotificationConfig | None = Field(default=None, description='Configuration for the agent to send push notifications for task updates. Task id should be empty when sending this configuration in a `SendMessage` request.')
     history_length: int | None = Field(default=None, description="The maximum number of most recent messages from the task's history to retrieve in the response. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit.")
     return_immediately: bool = Field(default=False, description='If `true`, the operation returns immediately after creating the task, even if processing is still in progress. If `false` (default), the operation MUST wait until the task reaches a terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.')
 
@@ -81,7 +81,7 @@ class SendMessageConfiguration(A2ABaseModel):
 class Part(A2ABaseModel):
     """`Part` represents a container for a section of communication content. Parts can be purely textual, some sort of file (image, video, etc) or a structured data blob (i.e. JSON)."""
 
-    metadata: dict[str, Any] = Field(default=None, description='Optional. metadata associated with this part.')
+    metadata: dict[str, Any] | None = Field(default=None, description='Optional. metadata associated with this part.')
     filename: str = Field(default='', description='An optional `filename` for the file (e.g., "document.pdf").')
     media_type: str = Field(default='', description='The `media_type` (MIME type) of the part content (e.g., "text/plain", "application/json", "image/png"). This field is available for all part types.')
     content: str | bytes | Any | None = None
@@ -101,7 +101,7 @@ class Message(A2ABaseModel):
     task_id: str = Field(default='', description='Optional. The task id of the message. If set, the message will be associated with the given task.')
     role: Role = Field(..., description='Identifies the sender of the message.')
     parts: list[Part] = Field(..., description='Parts is the container of the message content.')
-    metadata: dict[str, Any] = Field(default=None, description='Optional. Any metadata to provide along with the message.')
+    metadata: dict[str, Any] | None = Field(default=None, description='Optional. Any metadata to provide along with the message.')
     extensions: list[str] | None = Field(default=None, description='The URIs of extensions that are present or contributed to this Message.')
     reference_task_ids: list[str] | None = Field(default=None, description='A list of task IDs that this message references for additional context.')
 
@@ -115,8 +115,8 @@ class TaskStatus(A2ABaseModel):
     """A container for the status of a task."""
 
     state: TaskState = Field(..., description='The current state of this task.')
-    message: Message = Field(default=None, description='A message associated with the status.')
-    timestamp: datetime = Field(default=None, description='ISO 8601 Timestamp when the status was recorded. Example: "2023-10-27T10:00:00Z"')
+    message: Message | None = Field(default=None, description='A message associated with the status.')
+    timestamp: datetime | None = Field(default=None, description='ISO 8601 Timestamp when the status was recorded. Example: "2023-10-27T10:00:00Z"')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -140,7 +140,7 @@ class Task(A2ABaseModel):
     status: TaskStatus = Field(..., description='The current status of a `Task`, including `state` and a `message`.')
     artifacts: list[Artifact] | None = Field(default=None, description='A set of output artifacts for a `Task`.')
     history: list[Message] | None = Field(default=None, description='protolint:disable REPEATED_FIELD_NAMES_PLURALIZED The history of interactions from a `Task`.')
-    metadata: dict[str, Any] = Field(default=None, description='protolint:enable REPEATED_FIELD_NAMES_PLURALIZED A key/value object to store custom metadata about a task.')
+    metadata: dict[str, Any] | None = Field(default=None, description='protolint:enable REPEATED_FIELD_NAMES_PLURALIZED A key/value object to store custom metadata about a task.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -155,7 +155,7 @@ class Artifact(A2ABaseModel):
     name: str = Field(default='', description='A human readable name for the artifact.')
     description: str = Field(default='', description='Optional. A human readable description of the artifact.')
     parts: list[Part] = Field(..., description='The content of the artifact. Must contain at least one part.')
-    metadata: dict[str, Any] = Field(default=None, description='Optional. Metadata included with the artifact.')
+    metadata: dict[str, Any] | None = Field(default=None, description='Optional. Metadata included with the artifact.')
     extensions: list[str] | None = Field(default=None, description='The URIs of extensions that are present or contributed to this Artifact.')
 
     def to_proto_json(self) -> dict:
@@ -170,7 +170,7 @@ class TaskStatusUpdateEvent(A2ABaseModel):
     task_id: str = Field(..., description='The ID of the task that has changed.')
     context_id: str = Field(..., description='The ID of the context that the task belongs to.')
     status: TaskStatus = Field(..., description='The new status of the task.')
-    metadata: dict[str, Any] = Field(default=None, description='Optional. Metadata associated with the task update.')
+    metadata: dict[str, Any] | None = Field(default=None, description='Optional. Metadata associated with the task update.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -186,7 +186,7 @@ class TaskArtifactUpdateEvent(A2ABaseModel):
     artifact: Artifact = Field(..., description='The artifact that was generated or updated.')
     append: bool = Field(default=False, description='If true, the content of this artifact should be appended to a previously sent artifact with the same ID.')
     last_chunk: bool = Field(default=False, description='If true, this is the final chunk of the artifact.')
-    metadata: dict[str, Any] = Field(default=None, description='Optional. Metadata associated with the artifact update.')
+    metadata: dict[str, Any] | None = Field(default=None, description='Optional. Metadata associated with the artifact update.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -258,7 +258,7 @@ class AgentCard(A2ABaseModel):
     name: str = Field(..., description='A human readable name for the agent. Example: "Recipe Agent"')
     description: str = Field(..., description='A human-readable description of the agent, assisting users and other agents in understanding its purpose. Example: "Agent that helps users with recipes and cooking."')
     supported_interfaces: list[AgentInterface] = Field(..., description='Ordered list of supported interfaces. The first entry is preferred.')
-    provider: AgentProvider = Field(default=None, description='The service provider of the agent.')
+    provider: AgentProvider | None = Field(default=None, description='The service provider of the agent.')
     version: str = Field(..., description='The version of the agent. Example: "1.0.0"')
     documentation_url: str | None = Field(default=None, description='A URL providing additional documentation about the agent.')
     capabilities: AgentCapabilities = Field(..., description='A2A Capability set supported by the agent.')
@@ -282,7 +282,7 @@ class AgentExtension(A2ABaseModel):
     uri: str = Field(default='', description='The unique URI identifying the extension.')
     description: str = Field(default='', description='A human-readable description of how this agent uses the extension.')
     required: bool = Field(default=False, description="If true, the client must understand and comply with the extension's requirements.")
-    params: dict[str, Any] = Field(default=None, description='Optional. Extension-specific configuration parameters.')
+    params: dict[str, Any] | None = Field(default=None, description='Optional. Extension-specific configuration parameters.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -295,7 +295,7 @@ class AgentCardSignature(A2ABaseModel):
 
     protected: str = Field(..., description='(-- api-linter: core::0140::reserved-words=disabled     aip.dev/not-precedent: Backwards compatibility --) Required. The protected JWS header for the signature. This is always a base64url-encoded JSON object.')
     signature: str = Field(..., description='Required. The computed signature, base64url-encoded.')
-    header: dict[str, Any] = Field(default=None, description='The unprotected JWS header values.')
+    header: dict[str, Any] | None = Field(default=None, description='The unprotected JWS header values.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -484,8 +484,8 @@ class SendMessageRequest(A2ABaseModel):
 
     tenant: str = Field(default='', description='Optional. Tenant ID, provided as a path parameter.')
     message: Message = Field(..., description='The message to send to the agent.')
-    configuration: SendMessageConfiguration = Field(default=None, description='Configuration for the send request.')
-    metadata: dict[str, Any] = Field(default=None, description='A flexible key-value map for passing additional context or parameters.')
+    configuration: SendMessageConfiguration | None = Field(default=None, description='Configuration for the send request.')
+    metadata: dict[str, Any] | None = Field(default=None, description='A flexible key-value map for passing additional context or parameters.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -511,11 +511,11 @@ class ListTasksRequest(A2ABaseModel):
 
     tenant: str = Field(default='', description='Tenant ID, provided as a path parameter.')
     context_id: str = Field(default='', description='Filter tasks by context ID to get tasks from a specific conversation or session.')
-    status: TaskState = Field(default=None, description='Filter tasks by their current status state.')
+    status: TaskState = Field(default=TaskState.TASK_STATE_UNSPECIFIED, description='Filter tasks by their current status state.')
     page_size: int | None = Field(default=None, description='The maximum number of tasks to return. The service may return fewer than this value. If unspecified, at most 50 tasks will be returned. The minimum value is 1. The maximum value is 100.')
     page_token: str = Field(default='', description='A page token, received from a previous `ListTasks` call. `ListTasksResponse.next_page_token`. Provide this to retrieve the subsequent page.')
     history_length: int | None = Field(default=None, description="The maximum number of messages to include in each task's history.")
-    status_timestamp_after: datetime = Field(default=None, description='Filter tasks which have a status updated after the provided timestamp in ISO 8601 format (e.g., "2023-10-27T10:00:00Z"). Only tasks with a status timestamp time greater than or equal to this value will be returned.')
+    status_timestamp_after: datetime | None = Field(default=None, description='Filter tasks which have a status updated after the provided timestamp in ISO 8601 format (e.g., "2023-10-27T10:00:00Z"). Only tasks with a status timestamp time greater than or equal to this value will be returned.')
     include_artifacts: bool | None = Field(default=None, description='Whether to include artifacts in the returned tasks. Defaults to false to reduce payload size.')
 
     def to_proto_json(self) -> dict:
@@ -551,7 +551,7 @@ class CancelTaskRequest(A2ABaseModel):
 
     tenant: str = Field(default='', description='Optional. Tenant ID, provided as a path parameter.')
     id: str = Field(..., description='The resource ID of the task to cancel.')
-    metadata: dict[str, Any] = Field(default=None, description='A flexible key-value map for passing additional context or parameters.')
+    metadata: dict[str, Any] | None = Field(default=None, description='A flexible key-value map for passing additional context or parameters.')
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""

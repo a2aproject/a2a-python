@@ -2,8 +2,8 @@
 set -e
 
 # Install proto2pydantic plugin for Pydantic model generation
-echo "Installing protoc-gen-proto2pydantic@v0.5.1..."
-go install github.com/protocgen/proto2pydantic@v0.5.1
+echo "Installing protoc-gen-proto2pydantic@v0.5.2..."
+go install github.com/protocgen/proto2pydantic@v0.5.2
 
 # Run buf generate to regenerate protobuf code and OpenAPI spec
 npx --yes @bufbuild/buf generate
