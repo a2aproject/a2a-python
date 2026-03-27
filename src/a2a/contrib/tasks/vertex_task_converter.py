@@ -11,6 +11,7 @@ except ImportError as e:
 import base64
 import json
 
+from dataclasses import dataclass
 from typing import Any
 
 from a2a.types import (
@@ -92,22 +93,33 @@ def to_stored_metadata(
     return metadata
 
 
-def to_sdk_metadata(stored_metadata: dict[str, Any] | None) -> dict[str, Any]:
+@dataclass
+class _UnpackedMetadata:
+    original_metadata: dict[str, Any] | None = None
+    extensions: list[str] | None = None
+    reference_task_ids: list[str] | None = None
+    part_metadata: list[dict[str, Any] | None] | None = None
+    part_types: list[str] | None = None
+
+
+def to_sdk_metadata(
+    stored_metadata: dict[str, Any] | None,
+) -> _UnpackedMetadata:
     """Unpacks metadata, extensions, and part types/metadata from a storage dictionary."""
     if not stored_metadata:
-        return {}
+        return _UnpackedMetadata()
 
     version = stored_metadata.get(_METADATA_VERSION_KEY)
     if version is None:
-        return {'original_metadata': stored_metadata}
+        return _UnpackedMetadata(original_metadata=stored_metadata)
 
-    return {
-        'original_metadata': stored_metadata.get(_ORIGINAL_METADATA_KEY),
-        'extensions': stored_metadata.get(_EXTENSIONS_KEY),
-        'reference_tasks': stored_metadata.get(_REFERENCE_TASK_IDS_KEY),
-        'part_metadata': stored_metadata.get(_PART_METADATA_KEY),
-        'part_types': stored_metadata.get(_PART_TYPES_KEY),
-    }
+    return _UnpackedMetadata(
+        original_metadata=stored_metadata.get(_ORIGINAL_METADATA_KEY),
+        extensions=stored_metadata.get(_EXTENSIONS_KEY),
+        reference_task_ids=stored_metadata.get(_REFERENCE_TASK_IDS_KEY),
+        part_metadata=stored_metadata.get(_PART_METADATA_KEY),
+        part_types=stored_metadata.get(_PART_TYPES_KEY),
+    )
 
 
 def to_stored_part(part: Part) -> genai_types.Part:
@@ -173,7 +185,7 @@ def to_sdk_part(
             root=FilePart(
                 file=FileWithUri(
                     mime_type=stored_part.file_data.mime_type,
-                    uri=stored_part.file_data.file_uri,
+                    uri=stored_part.file_data.file_uri or '',
                 ),
                 metadata=part_metadata,
             )
@@ -201,14 +213,14 @@ def to_stored_artifact(artifact: Artifact) -> vertexai_types.TaskArtifact:
 def to_sdk_artifact(stored_artifact: vertexai_types.TaskArtifact) -> Artifact:
     """Converts a proto TaskArtifact to a SDK Artifact."""
     unpacked_meta = to_sdk_metadata(stored_artifact.metadata)
-    part_metadatas = unpacked_meta.get('part_metadata') or []
-    part_types = unpacked_meta.get('part_types') or []
+    part_metadata_list = unpacked_meta.part_metadata or []
+    part_types = unpacked_meta.part_types or []
 
     parts = []
     for i, part in enumerate(stored_artifact.parts or []):
         meta: dict[str, Any] | None = None
-        if i < len(part_metadatas):
-            meta = part_metadatas[i]
+        if i < len(part_metadata_list):
+            meta = part_metadata_list[i]
         ptype = ''
         if i < len(part_types):
             ptype = part_types[i]
@@ -218,8 +230,8 @@ def to_sdk_artifact(stored_artifact: vertexai_types.TaskArtifact) -> Artifact:
         artifact_id=stored_artifact.artifact_id,
         name=stored_artifact.display_name,
         description=stored_artifact.description,
-        extensions=unpacked_meta.get('extensions'),
-        metadata=unpacked_meta.get('original_metadata'),
+        extensions=unpacked_meta.extensions,
+        metadata=unpacked_meta.original_metadata,
         parts=parts,
     )
 
@@ -251,25 +263,27 @@ def to_sdk_message(
     if not stored_msg:
         return None
     unpacked_meta = to_sdk_metadata(stored_msg.metadata)
-    part_metadatas = unpacked_meta.get('part_metadata') or []
-    part_types = unpacked_meta.get('part_types') or []
+    part_metadata_list = unpacked_meta.part_metadata or []
+    part_types = unpacked_meta.part_types or []
 
     parts = []
     for i, part in enumerate(stored_msg.parts or []):
-        meta: dict[str, Any] | None = None
-        if i < len(part_metadatas):
-            meta = part_metadatas[i]
-        ptype = ''
+        part_metadata: dict[str, Any] | None = None
+        if i < len(part_metadata_list):
+            part_metadata = part_metadata_list[i]
+        part_type = ''
         if i < len(part_types):
-            ptype = part_types[i]
-        parts.append(to_sdk_part(part, part_metadata=meta, part_type=ptype))
+            part_type = part_types[i]
+        parts.append(
+            to_sdk_part(part, part_metadata=part_metadata, part_type=part_type)
+        )
 
     return Message(
         message_id=stored_msg.message_id,
         role=Role(stored_msg.role),
-        extensions=unpacked_meta.get('extensions'),
-        reference_task_ids=unpacked_meta.get('reference_tasks'),
-        metadata=unpacked_meta.get('original_metadata'),
+        extensions=unpacked_meta.extensions,
+        reference_task_ids=unpacked_meta.reference_task_ids,
+        metadata=unpacked_meta.original_metadata,
         parts=parts,
     )
 
