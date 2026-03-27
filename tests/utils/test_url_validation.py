@@ -30,12 +30,12 @@ class TestValidateAgentCardUrlScheme:
         'HTTPS://EXAMPLE.COM/RPC',
     ])
     def test_http_and_https_are_allowed(self, url):
-        # Should not raise — only scheme + hostname check, DNS may vary
+        # Should not raise - only scheme + hostname check, DNS may vary
         # We only verify scheme acceptance here; real DNS tested separately.
         try:
             validate_agent_card_url(url)
         except A2ASSRFValidationError as exc:
-            # Accept DNS resolution failure — scheme was accepted
+            # Accept DNS resolution failure - scheme was accepted
             assert 'could not be resolved' in str(exc) or 'blocked network' in str(exc)
 
 
@@ -61,7 +61,7 @@ class TestValidateAgentCardUrlPrivateIPs:
 
     def test_public_ip_is_allowed(self):
         """A routable public IP should not be blocked."""
-        # 93.184.216.34 is example.com — guaranteed public
+        # 93.184.216.34 is example.com - guaranteed public
         try:
             validate_agent_card_url('http://93.184.216.34/rpc')
         except A2ASSRFValidationError as exc:

@@ -81,7 +81,7 @@ TERMINAL_TASK_STATES = {
 # ---- NEW: caller identity extractor type (fix for A2A-INJ-01) ----
 # CallerIdExtractor extracts a stable identity string from ServerCallContext.
 # Returns None if caller identity cannot be determined (unauthenticated).
-CallerIdExtractor = Callable[['ServerCallContext | None'], str | None]
+CallerIdExtractor = Callable[["ServerCallContext | None"], str | None]
 # ------------------------------------------------------------------
 
 
@@ -151,10 +151,10 @@ class DefaultRequestHandler(RequestHandler):
         self._context_owners: dict[str, str] = {}
         if get_caller_id is None:
             logger.warning(
-                'DefaultRequestHandler initialized without get_caller_id: '
-                'context ownership is not enforced. Cross-user context injection '
-                '(A2A-INJ-01 / CWE-639) is possible. Provide a get_caller_id '
-                'extractor to enable ownership checks.'
+                "DefaultRequestHandler initialized without get_caller_id: "
+                "context ownership is not enforced. Cross-user context injection "
+                "(A2A-INJ-01 / CWE-639) is possible. Provide a get_caller_id "
+                "extractor to enable ownership checks."
             )
         # ----------------------------------
         self._running_agents = {}
@@ -186,7 +186,7 @@ class DefaultRequestHandler(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
                 error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {task.status.state}'
+                    message=f"Task cannot be canceled - current state: {task.status.state}"
                 )
             )
 
@@ -219,14 +219,14 @@ class DefaultRequestHandler(RequestHandler):
         if not isinstance(result, Task):
             raise ServerError(
                 error=InternalError(
-                    message='Agent did not return valid response for cancel'
+                    message="Agent did not return valid response for cancel"
                 )
             )
 
         if result.status.state != TaskState.canceled:
             raise ServerError(
                 error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {result.status.state}'
+                    message=f"Task cannot be canceled - current state: {result.status.state}"
                 )
             )
 
@@ -264,23 +264,25 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(
                 error=InvalidParamsError(
                     message=(
-                        f'Access denied: cannot send to context_id={context_id!r} '
-                        'because caller identity could not be determined.'
+                        f"Access denied: cannot send to context_id={context_id!r} "
+                        "because caller identity could not be determined."
                     )
                 )
             )
 
         if caller != owner:
             logger.warning(
-                'Context injection attempt blocked: caller=%r tried to send to '
-                'context_id=%s owned by %r.',
-                caller, context_id, owner,
+                "Context injection attempt blocked: caller=%r tried to send to "
+                "context_id=%s owned by %r.",
+                caller,
+                context_id,
+                owner,
             )
             raise ServerError(
                 error=InvalidParamsError(
                     message=(
-                        f'Access denied: context_id={context_id!r} was created '
-                        'by a different caller.'
+                        f"Access denied: context_id={context_id!r} was created "
+                        "by a different caller."
                     )
                 )
             )
@@ -296,7 +298,7 @@ class DefaultRequestHandler(RequestHandler):
         caller = self._get_caller_id(context)
         if caller:
             self._context_owners[context_id] = caller
-            logger.debug('Recorded owner %r for context_id=%s', caller, context_id)
+            logger.debug("Recorded owner %r for context_id=%s", caller, context_id)
 
     async def _setup_message_execution(
         self,
@@ -326,14 +328,14 @@ class DefaultRequestHandler(RequestHandler):
             if task.status.state in TERMINAL_TASK_STATES:
                 raise ServerError(
                     error=InvalidParamsError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state.value}'
+                        message=f"Task {task.id} is in terminal state: {task.status.state.value}"
                     )
                 )
             task = task_manager.update_with_message(params.message, task)
         elif params.message.task_id:
             raise ServerError(
                 error=TaskNotFoundError(
-                    message=f'Task {params.message.task_id} was specified but does not exist'
+                    message=f"Task {params.message.task_id} was specified but does not exist"
                 )
             )
 
@@ -344,7 +346,7 @@ class DefaultRequestHandler(RequestHandler):
             task=task,
             context=context,
         )
-        task_id = cast('str', request_context.task_id)
+        task_id = cast("str", request_context.task_id)
 
         # Record ownership for new contexts after successful validation
         new_context_id = request_context.context_id or context_id
@@ -372,12 +374,12 @@ class DefaultRequestHandler(RequestHandler):
     def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
         if task_id != event_task_id:
             logger.error(
-                'Agent generated task_id=%s does not match the RequestContext task_id=%s.',
+                "Agent generated task_id=%s does not match the RequestContext task_id=%s.",
                 event_task_id,
                 task_id,
             )
             raise ServerError(
-                InternalError(message='Task ID mismatch in agent response')
+                InternalError(message="Task ID mismatch in agent response")
             )
 
     async def _send_push_notification_if_needed(
@@ -415,6 +417,7 @@ class DefaultRequestHandler(RequestHandler):
 
         interrupted_or_non_blocking = False
         try:
+
             async def push_notification_callback() -> None:
                 await self._send_push_notification_if_needed(task_id, result_aggregator)
 
@@ -429,11 +432,11 @@ class DefaultRequestHandler(RequestHandler):
             )
 
             if bg_consume_task is not None:
-                bg_consume_task.set_name(f'continue_consuming:{task_id}')
+                bg_consume_task.set_name(f"continue_consuming:{task_id}")
                 self._track_background_task(bg_consume_task)
 
         except Exception:
-            logger.exception('Agent execution failed')
+            logger.exception("Agent execution failed")
             producer_task.cancel()
             raise
         finally:
@@ -441,7 +444,7 @@ class DefaultRequestHandler(RequestHandler):
                 cleanup_task = asyncio.create_task(
                     self._cleanup_producer(producer_task, task_id)
                 )
-                cleanup_task.set_name(f'cleanup_producer:{task_id}')
+                cleanup_task.set_name(f"cleanup_producer:{task_id}")
                 self._track_background_task(cleanup_task)
             else:
                 await self._cleanup_producer(producer_task, task_id)
@@ -452,7 +455,9 @@ class DefaultRequestHandler(RequestHandler):
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
             if params.configuration:
-                result = apply_history_length(result, params.configuration.history_length)
+                result = apply_history_length(
+                    result, params.configuration.history_length
+                )
 
         await self._send_push_notification_if_needed(task_id, result_aggregator)
         return result
@@ -483,17 +488,21 @@ class DefaultRequestHandler(RequestHandler):
                     self._validate_task_id_match(task_id, event.id)
                 await self._send_push_notification_if_needed(task_id, result_aggregator)
                 yield event
-        except (asyncio.CancelledError, GeneratorExit):
+        except asyncio.CancelledError, GeneratorExit:
             bg_task = asyncio.create_task(result_aggregator.consume_all(consumer))
-            bg_task.set_name(f'background_consume:{task_id}')
+            bg_task.set_name(f"background_consume:{task_id}")
             self._track_background_task(bg_task)
             raise
         finally:
-            cleanup_task = asyncio.create_task(self._cleanup_producer(producer_task, task_id))
-            cleanup_task.set_name(f'cleanup_producer:{task_id}')
+            cleanup_task = asyncio.create_task(
+                self._cleanup_producer(producer_task, task_id)
+            )
+            cleanup_task.set_name(f"cleanup_producer:{task_id}")
             self._track_background_task(cleanup_task)
 
-    async def _register_producer(self, task_id: str, producer_task: asyncio.Task) -> None:
+    async def _register_producer(
+        self, task_id: str, producer_task: asyncio.Task
+    ) -> None:
         async with self._running_agents_lock:
             self._running_agents[task_id] = producer_task
 
@@ -504,19 +513,21 @@ class DefaultRequestHandler(RequestHandler):
             try:
                 completed.result()
             except asyncio.CancelledError:
-                logger.debug('Background task %s cancelled', completed.get_name())
+                logger.debug("Background task %s cancelled", completed.get_name())
             except Exception:
-                logger.exception('Background task %s failed', completed.get_name())
+                logger.exception("Background task %s failed", completed.get_name())
             finally:
                 self._background_tasks.discard(completed)
 
         task.add_done_callback(_on_done)
 
-    async def _cleanup_producer(self, producer_task: asyncio.Task, task_id: str) -> None:
+    async def _cleanup_producer(
+        self, producer_task: asyncio.Task, task_id: str
+    ) -> None:
         try:
             await producer_task
         except asyncio.CancelledError:
-            logger.debug('Producer task %s was cancelled during cleanup', task_id)
+            logger.debug("Producer task %s was cancelled during cleanup", task_id)
         await self._queue_manager.close(task_id)
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
@@ -531,7 +542,9 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.task_id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
-        await self._push_config_store.set_info(params.task_id, params.push_notification_config)
+        await self._push_config_store.set_info(
+            params.task_id, params.push_notification_config
+        )
         return params
 
     async def on_get_task_push_notification_config(
@@ -546,7 +559,9 @@ class DefaultRequestHandler(RequestHandler):
             raise ServerError(error=TaskNotFoundError())
         push_notification_config = await self._push_config_store.get_info(params.id)
         if not push_notification_config or not push_notification_config[0]:
-            raise ServerError(error=InternalError(message='Push notification config not found'))
+            raise ServerError(
+                error=InternalError(message="Push notification config not found")
+            )
         return TaskPushNotificationConfig(
             task_id=params.id,
             push_notification_config=push_notification_config[0],
@@ -563,7 +578,7 @@ class DefaultRequestHandler(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise ServerError(
                 error=InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state.value}'
+                    message=f"Task {task.id} is in terminal state: {task.status.state.value}"
                 )
             )
         task_manager = TaskManager(
@@ -591,7 +606,9 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
-        push_notification_config_list = await self._push_config_store.get_info(params.id)
+        push_notification_config_list = await self._push_config_store.get_info(
+            params.id
+        )
         return [
             TaskPushNotificationConfig(task_id=params.id, push_notification_config=cfg)
             for cfg in push_notification_config_list
@@ -607,4 +624,6 @@ class DefaultRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
-        await self._push_config_store.delete_info(params.id, params.push_notification_config_id)
+        await self._push_config_store.delete_info(
+            params.id, params.push_notification_config_id
+        )

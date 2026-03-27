@@ -29,8 +29,10 @@ from a2a.types import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+
 # ---- NEW IMPORT (fix for A2A-SSRF-01) ----
 from a2a.utils.url_validation import A2ASSRFValidationError, validate_agent_card_url
+
 # -------------------------------------------
 
 
@@ -53,8 +55,8 @@ class A2ACardResolver:
             base_url: The base URL of the agent's host.
             agent_card_path: The path to the agent card endpoint, relative to the base URL.
         """
-        self.base_url = base_url.rstrip('/')
-        self.agent_card_path = agent_card_path.lstrip('/')
+        self.base_url = base_url.rstrip("/")
+        self.agent_card_path = agent_card_path.lstrip("/")
         self.httpx_client = httpx_client
 
     async def get_agent_card(
@@ -87,9 +89,9 @@ class A2ACardResolver:
         if not relative_card_path:
             path_segment = self.agent_card_path
         else:
-            path_segment = relative_card_path.lstrip('/')
+            path_segment = relative_card_path.lstrip("/")
 
-        target_url = f'{self.base_url}/{path_segment}'
+        target_url = f"{self.base_url}/{path_segment}"
 
         try:
             response = await self.httpx_client.get(
@@ -99,7 +101,7 @@ class A2ACardResolver:
             response.raise_for_status()
             agent_card_data = response.json()
             logger.info(
-                'Successfully fetched agent card data from %s: %s',
+                "Successfully fetched agent card data from %s: %s",
                 target_url,
                 agent_card_data,
             )
@@ -115,7 +117,7 @@ class A2ACardResolver:
                     validate_agent_card_url(iface.url)
             except A2ASSRFValidationError as e:
                 raise A2AClientJSONError(
-                    f'AgentCard from {target_url} failed SSRF URL validation: {e}'
+                    f"AgentCard from {target_url} failed SSRF URL validation: {e}"
                 ) from e
             # -----------------------------------------------------------------
 
@@ -125,20 +127,20 @@ class A2ACardResolver:
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(
                 e.response.status_code,
-                f'Failed to fetch agent card from {target_url}: {e}',
+                f"Failed to fetch agent card from {target_url}: {e}",
             ) from e
         except json.JSONDecodeError as e:
             raise A2AClientJSONError(
-                f'Failed to parse JSON for agent card from {target_url}: {e}'
+                f"Failed to parse JSON for agent card from {target_url}: {e}"
             ) from e
         except httpx.RequestError as e:
             raise A2AClientHTTPError(
                 503,
-                f'Network communication error fetching agent card from {target_url}: {e}',
+                f"Network communication error fetching agent card from {target_url}: {e}",
             ) from e
         except ValidationError as e:
             raise A2AClientJSONError(
-                f'Failed to validate agent card structure from {target_url}: {e.json()}'
+                f"Failed to validate agent card structure from {target_url}: {e.json()}"
             ) from e
 
         return agent_card
