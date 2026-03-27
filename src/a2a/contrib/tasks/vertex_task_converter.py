@@ -264,16 +264,9 @@ def to_sdk_message(
             ptype = part_types[i]
         parts.append(to_sdk_part(part, part_metadata=meta, part_type=ptype))
 
-    role = None
-    if stored_msg.role:
-        try:
-            role = Role(stored_msg.role)
-        except ValueError:
-            role = None
-
     return Message(
         message_id=stored_msg.message_id,
-        role=role,  # type: ignore
+        role=Role(stored_msg.role),
         extensions=unpacked_meta.get('extensions'),
         reference_task_ids=unpacked_meta.get('reference_tasks'),
         metadata=unpacked_meta.get('original_metadata'),
