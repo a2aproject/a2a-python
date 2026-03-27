@@ -94,3 +94,9 @@ Tful
 tiangolo
 typeerror
 vulnz
+ASSRF
+canonname
+gaierror
+IMDS
+INJ
+sockaddr
