@@ -1,6 +1,6 @@
 """Test that streaming SSE responses clean up without athrow() errors.
 
-Reproduces https://github.com/a2aproject/a2a-python/issues/XXX —
+Reproduces https://github.com/a2aproject/a2a-python/issues/911 —
 ``RuntimeError: athrow(): asynchronous generator is already running``
 during event-loop shutdown after consuming a streaming response.
 """
