@@ -2,13 +2,16 @@
 
 from __future__ import annotations
 
-from datetime import datetime
 from enum import Enum
+from typing import TYPE_CHECKING, Any
 
-from typing import Any
+
+if TYPE_CHECKING:
+    from datetime import datetime
+
+from pydantic import Field, field_serializer
 
 from a2a._base import A2ABaseModel
-from pydantic import Field, field_serializer
 
 
 class TaskState(str, Enum):
@@ -66,7 +69,7 @@ class SendMessageConfiguration(A2ABaseModel):
 
     accepted_output_modes: list[str] | None = Field(default=None, description='A list of media types the client is prepared to accept for response parts. Agents SHOULD use this to tailor their output.')
     task_push_notification_config: TaskPushNotificationConfig = Field(default=None, description='Configuration for the agent to send push notifications for task updates. Task id should be empty when sending this configuration in a `SendMessage` request.')
-    history_length: int | None = Field(default=None, description='The maximum number of most recent messages from the task\'s history to retrieve in the response. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit.')
+    history_length: int | None = Field(default=None, description="The maximum number of most recent messages from the task's history to retrieve in the response. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit.")
     return_immediately: bool = Field(default=False, description='If `true`, the operation returns immediately after creating the task, even if processing is still in progress. If `false` (default), the operation MUST wait until the task reaches a terminal (`COMPLETED`, `FAILED`, `CANCELED`, `REJECTED`) or interrupted (`INPUT_REQUIRED`, `AUTH_REQUIRED`) state before returning.')
 
     def to_proto_json(self) -> dict:
@@ -81,7 +84,7 @@ class Part(A2ABaseModel):
     metadata: dict[str, Any] = Field(default=None, description='Optional. metadata associated with this part.')
     filename: str = Field(default='', description='An optional `filename` for the file (e.g., "document.pdf").')
     media_type: str = Field(default='', description='The `media_type` (MIME type) of the part content (e.g., "text/plain", "application/json", "image/png"). This field is available for all part types.')
-    content: str | bytes | str | Any | None = None
+    content: str | bytes | Any | None = None
 
 
     def to_proto_json(self) -> dict:
@@ -109,7 +112,7 @@ class Message(A2ABaseModel):
 
 
 class TaskStatus(A2ABaseModel):
-    """A container for the status of a task"""
+    """A container for the status of a task."""
 
     state: TaskState = Field(..., description='The current state of this task.')
     message: Message = Field(default=None, description='A message associated with the status.')
@@ -208,8 +211,8 @@ class AgentInterface(A2ABaseModel):
 class AgentProvider(A2ABaseModel):
     """Represents the service provider of an agent."""
 
-    url: str = Field(..., description='A URL for the agent provider\'s website or relevant documentation. Example: "https://ai.google.dev"')
-    organization: str = Field(..., description='The name of the agent provider\'s organization. Example: "Google"')
+    url: str = Field(..., description="A URL for the agent provider's website or relevant documentation. Example: \"https://ai.google.dev\"")
+    organization: str = Field(..., description="The name of the agent provider's organization. Example: \"Google\"")
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -234,13 +237,13 @@ class AgentCapabilities(A2ABaseModel):
 class AgentSkill(A2ABaseModel):
     """Represents a distinct capability or function that an agent can perform."""
 
-    id: str = Field(..., description='A unique identifier for the agent\'s skill.')
+    id: str = Field(..., description="A unique identifier for the agent's skill.")
     name: str = Field(..., description='A human-readable name for the skill.')
     description: str = Field(..., description='A detailed description of the skill.')
-    tags: list[str] = Field(..., description='A set of keywords describing the skill\'s capabilities.')
+    tags: list[str] = Field(..., description="A set of keywords describing the skill's capabilities.")
     examples: list[str] | None = Field(default=None, description='Example prompts or scenarios that this skill can handle.')
-    input_modes: list[str] | None = Field(default=None, description='The set of supported input media types for this skill, overriding the agent\'s defaults.')
-    output_modes: list[str] | None = Field(default=None, description='The set of supported output media types for this skill, overriding the agent\'s defaults.')
+    input_modes: list[str] | None = Field(default=None, description="The set of supported input media types for this skill, overriding the agent's defaults.")
+    output_modes: list[str] | None = Field(default=None, description="The set of supported output media types for this skill, overriding the agent's defaults.")
     security_requirements: list[SecurityRequirement] | None = Field(default=None, description='Security schemes necessary for this skill.')
 
     def to_proto_json(self) -> dict:
@@ -250,7 +253,7 @@ class AgentSkill(A2ABaseModel):
 
 
 class AgentCard(A2ABaseModel):
-    """A self-describing manifest for an agent. It provides essential metadata including the agent's identity, capabilities, skills, supported communication methods, and security requirements. Next ID: 20"""
+    """A self-describing manifest for an agent. It provides essential metadata including the agent's identity, capabilities, skills, supported communication methods, and security requirements. Next ID: 20."""
 
     name: str = Field(..., description='A human readable name for the agent. Example: "Recipe Agent"')
     description: str = Field(..., description='A human-readable description of the agent, assisting users and other agents in understanding its purpose. Example: "Agent that helps users with recipes and cooking."')
@@ -278,7 +281,7 @@ class AgentExtension(A2ABaseModel):
 
     uri: str = Field(default='', description='The unique URI identifying the extension.')
     description: str = Field(default='', description='A human-readable description of how this agent uses the extension.')
-    required: bool = Field(default=False, description='If true, the client must understand and comply with the extension\'s requirements.')
+    required: bool = Field(default=False, description="If true, the client must understand and comply with the extension's requirements.")
     params: dict[str, Any] = Field(default=None, description='Optional. Extension-specific configuration parameters.')
 
     def to_proto_json(self) -> dict:
@@ -323,7 +326,7 @@ class SecurityRequirement(A2ABaseModel):
 
 
 class SecurityScheme(A2ABaseModel):
-    """Defines a security scheme that can be used to secure an agent's endpoints. This is a discriminated union type based on the OpenAPI 3.2 Security Scheme Object. See: https://spec.openapis.org/oas/v3.2.0.html#security-scheme-object"""
+    """Defines a security scheme that can be used to secure an agent's endpoints. This is a discriminated union type based on the OpenAPI 3.2 Security Scheme Object. See: https://spec.openapis.org/oas/v3.2.0.html#security-scheme-object."""
 
     scheme: APIKeySecurityScheme | HTTPAuthSecurityScheme | OAuth2SecurityScheme | OpenIdConnectSecurityScheme | MutualTlsSecurityScheme | None = None
 
@@ -389,7 +392,7 @@ class OpenIdConnectSecurityScheme(A2ABaseModel):
     """Defines a security scheme using OpenID Connect."""
 
     description: str = Field(default='', description='An optional description for the security scheme.')
-    open_id_connect_url: str = Field(..., description='The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider\'s metadata.')
+    open_id_connect_url: str = Field(..., description="The [OpenID Connect Discovery URL](https://openid.net/specs/openid-connect-discovery-1_0.html) for the OIDC provider's metadata.")
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -495,7 +498,7 @@ class GetTaskRequest(A2ABaseModel):
 
     tenant: str = Field(default='', description='Optional. Tenant ID, provided as a path parameter.')
     id: str = Field(..., description='The resource ID of the task to retrieve.')
-    history_length: int | None = Field(default=None, description='The maximum number of most recent messages from the task\'s history to retrieve. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit.')
+    history_length: int | None = Field(default=None, description="The maximum number of most recent messages from the task's history to retrieve. An unset value means the client does not impose any limit. A value of zero is a request to not include any messages. The server MUST NOT return more messages than the provided value, but MAY apply a lower limit.")
 
     def to_proto_json(self) -> dict:
         """Serialize to a ProtoJSON-compatible dict (camelCase keys, no None values)."""
@@ -511,7 +514,7 @@ class ListTasksRequest(A2ABaseModel):
     status: TaskState = Field(default=None, description='Filter tasks by their current status state.')
     page_size: int | None = Field(default=None, description='The maximum number of tasks to return. The service may return fewer than this value. If unspecified, at most 50 tasks will be returned. The minimum value is 1. The maximum value is 100.')
     page_token: str = Field(default='', description='A page token, received from a previous `ListTasks` call. `ListTasksResponse.next_page_token`. Provide this to retrieve the subsequent page.')
-    history_length: int | None = Field(default=None, description='The maximum number of messages to include in each task\'s history.')
+    history_length: int | None = Field(default=None, description="The maximum number of messages to include in each task's history.")
     status_timestamp_after: datetime = Field(default=None, description='Filter tasks which have a status updated after the provided timestamp in ISO 8601 format (e.g., "2023-10-27T10:00:00Z"). Only tasks with a status timestamp time greater than or equal to this value will be returned.')
     include_artifacts: bool | None = Field(default=None, description='Whether to include artifacts in the returned tasks. Defaults to false to reduce payload size.')
 
@@ -657,50 +660,55 @@ class ListTaskPushNotificationConfigsResponse(A2ABaseModel):
 
 
 __all__ = [
-    "TaskState",
-    "Role",
-    "AuthenticationInfo",
-    "TaskPushNotificationConfig",
-    "SendMessageConfiguration",
-    "Part",
-    "Message",
-    "TaskStatus",
-    "Task",
-    "Artifact",
-    "TaskStatusUpdateEvent",
-    "TaskArtifactUpdateEvent",
-    "AgentInterface",
-    "AgentProvider",
-    "AgentCapabilities",
-    "AgentSkill",
-    "AgentCard",
-    "AgentExtension",
-    "AgentCardSignature",
-    "StringList",
-    "SecurityRequirement",
-    "SecurityScheme",
-    "APIKeySecurityScheme",
-    "HTTPAuthSecurityScheme",
-    "OAuthFlows",
-    "OAuth2SecurityScheme",
-    "OpenIdConnectSecurityScheme",
-    "MutualTlsSecurityScheme",
-    "AuthorizationCodeOAuthFlow",
-    "ClientCredentialsOAuthFlow",
-    "ImplicitOAuthFlow",
-    "PasswordOAuthFlow",
-    "DeviceCodeOAuthFlow",
-    "SendMessageRequest",
-    "GetTaskRequest",
-    "ListTasksRequest",
-    "ListTasksResponse",
-    "CancelTaskRequest",
-    "GetTaskPushNotificationConfigRequest",
-    "DeleteTaskPushNotificationConfigRequest",
-    "SubscribeToTaskRequest",
-    "ListTaskPushNotificationConfigsRequest",
-    "GetExtendedAgentCardRequest",
-    "SendMessageResponse",
-    "StreamResponse",
-    "ListTaskPushNotificationConfigsResponse",
+    'APIKeySecurityScheme',
+    'AgentCapabilities',
+    'AgentCard',
+    'AgentCardSignature',
+    'AgentExtension',
+    'AgentInterface',
+    'AgentProvider',
+    'AgentSkill',
+    'Artifact',
+    'AuthenticationInfo',
+    'AuthorizationCodeOAuthFlow',
+    'CancelTaskRequest',
+    'ClientCredentialsOAuthFlow',
+    'DeleteTaskPushNotificationConfigRequest',
+    'DeviceCodeOAuthFlow',
+    'GetExtendedAgentCardRequest',
+    'GetTaskPushNotificationConfigRequest',
+    'GetTaskRequest',
+    'HTTPAuthSecurityScheme',
+    'ImplicitOAuthFlow',
+    'ListTaskPushNotificationConfigsRequest',
+    'ListTaskPushNotificationConfigsResponse',
+    'ListTasksRequest',
+    'ListTasksResponse',
+    'Message',
+    'MutualTlsSecurityScheme',
+    'OAuth2SecurityScheme',
+    'OAuthFlows',
+    'OpenIdConnectSecurityScheme',
+    'Part',
+    'PasswordOAuthFlow',
+    'Role',
+    'SecurityRequirement',
+    'SecurityScheme',
+    'SendMessageConfiguration',
+    'SendMessageRequest',
+    'SendMessageResponse',
+    'StreamResponse',
+    'StringList',
+    'SubscribeToTaskRequest',
+    'Task',
+    'TaskArtifactUpdateEvent',
+    'TaskPushNotificationConfig',
+    'TaskState',
+    'TaskStatus',
+    'TaskStatusUpdateEvent',
 ]
+
+
+# Rebuild models that use TYPE_CHECKING imports (forward references)
+TaskStatus.model_rebuild()
+ListTasksRequest.model_rebuild()
