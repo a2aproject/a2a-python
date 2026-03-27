@@ -6,7 +6,7 @@ from typing import Any, NoReturn
 
 import httpx
 
-from httpx_sse import SSEError, aconnect_sse
+from httpx_sse import EventSource, SSEError
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
@@ -75,7 +75,7 @@ async def send_http_stream_request(
 ) -> AsyncGenerator[str]:
     """Sends a streaming HTTP request, yielding SSE data strings and handling exceptions."""
     with handle_http_exceptions(status_error_handler):
-        async with aconnect_sse(
+        async with _SSEEventSource(
             httpx_client, method, url, **kwargs
         ) as event_source:
             try:
@@ -98,3 +98,39 @@ async def send_http_stream_request(
                 if not sse.data:
                     continue
                 yield sse.data
+
+
+class _SSEEventSource:
+    """Class-based replacement for ``httpx_sse.aconnect_sse``.
+
+    ``aconnect_sse`` is an ``@asynccontextmanager`` whose internal async
+    generator gets tracked by the event loop. When the enclosing async
+    generator is abandoned, the event loop's generator cleanup collides
+    with the cascading cleanup — see https://bugs.python.org/issue38559.
+
+    Plain ``__aenter__``/``__aexit__`` coroutines avoid this entirely.
+    """
+
+    def __init__(
+        self,
+        client: httpx.AsyncClient,
+        method: str,
+        url: str,
+        **kwargs: Any,
+    ) -> None:
+        headers = httpx.Headers(kwargs.pop('headers', None))
+        headers.setdefault('Accept', 'text/event-stream')
+        headers.setdefault('Cache-Control', 'no-store')
+        self._request = client.build_request(
+            method, url, headers=headers, **kwargs
+        )
+        self._client = client
+        self._response: httpx.Response | None = None
+
+    async def __aenter__(self) -> EventSource:
+        self._response = await self._client.send(self._request, stream=True)
+        return EventSource(self._response)
+
+    async def __aexit__(self, *args: object) -> None:
+        if self._response is not None:
+            await self._response.aclose()
