@@ -35,7 +35,6 @@ from a2a.types import (
     TextPart,
 )
 
-
 def test_to_sdk_task_state() -> None:
     assert (
         to_sdk_task_state(vertexai_types.A2aTaskState.STATE_UNSPECIFIED)
@@ -317,23 +316,11 @@ def test_sdk_part_text_conversion_round_trip() -> None:
 
 
 def test_sdk_part_data_conversion_round_trip() -> None:
-    # A DataPart is converted to `inline_data` in Vertex AI, which lacks the original
-    # `DataPart` vs `FilePart` distinction. When reading it back from the stored
-    # protocol format, it becomes a `FilePart` with base64-encoded `FileWithBytes`
-    # and `mime_type="application/json"`.
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
-    round_trip_sdk_part = to_sdk_part(stored_part)
+    round_trip_sdk_part = to_sdk_part(stored_part, part_metadata=None, part_type='data')
 
-    expected_b64 = base64.b64encode(b'{"key": "value"}').decode('utf-8')
-    assert round_trip_sdk_part == Part(
-        root=FilePart(
-            file=FileWithBytes(
-                bytes=expected_b64,
-                mime_type='application/json',
-            )
-        )
-    )
+    assert round_trip_sdk_part == sdk_part
 
 
 def test_sdk_part_file_bytes_conversion_round_trip() -> None:
@@ -363,16 +350,6 @@ def test_sdk_part_file_uri_conversion_round_trip() -> None:
     stored_part = to_stored_part(sdk_part)
     round_trip_sdk_part = to_sdk_part(stored_part)
     assert round_trip_sdk_part == sdk_part
-
-
-def test_sdk_artifact_conversion_round_trip() -> None:
-    sdk_artifact = Artifact(
-        artifact_id='art-123',
-        parts=[Part(root=TextPart(text='part_1'))],
-    )
-    stored_artifact = to_stored_artifact(sdk_artifact)
-    round_trip_sdk_artifact = to_sdk_artifact(stored_artifact)
-    assert round_trip_sdk_artifact == sdk_artifact
 
 
 def test_sdk_task_conversion_round_trip() -> None:
@@ -408,7 +385,8 @@ def test_sdk_task_conversion_round_trip() -> None:
     assert round_trip_sdk_task.artifacts == sdk_task.artifacts
     assert round_trip_sdk_task.history == []
 
-def test_artifact_conversion_round_trip() -> None:
+
+def test_stored_artifact_conversion_round_trip() -> None:
     """Test converting an Artifact to TaskArtifact and back restores everything."""
     original_artifact = Artifact(
         artifact_id='art123',
@@ -454,13 +432,11 @@ def test_artifact_conversion_round_trip() -> None:
     assert restored_artifact.parts[1].root.metadata is None
 
 
-def test_message_conversion_round_trip() -> None:
+def test_stored_message_conversion_round_trip() -> None:
     """Test converting a Message to TaskMessage and back restores everything."""
     original_message = Message(
         message_id='msg456',
         role=Role.agent,
-        context_id='ctx1',
-        task_id='tsk1',
         reference_task_ids=['tsk2', 'tsk3'],
         extensions=['ext_msg'],
         metadata={'msg_meta': 42},
@@ -482,8 +458,6 @@ def test_message_conversion_round_trip() -> None:
 
     assert restored_message.message_id == original_message.message_id
     assert restored_message.role == original_message.role
-    # context_id and task_id are not serialized via Message metadata in Go implementation but via Task,
-    # but reference_task_ids and extensions ARE part of Message metadata.
     assert (
         restored_message.reference_task_ids
         == original_message.reference_task_ids
