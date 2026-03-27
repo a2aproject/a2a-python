@@ -104,9 +104,9 @@ class _SSEEventSource:
     """Class-based replacement for ``httpx_sse.aconnect_sse``.
 
     ``aconnect_sse`` is an ``@asynccontextmanager`` whose internal async
-    generator leaks into ``loop._asyncgens``.  When the enclosing async
-    generator is abandoned, ``shutdown_asyncgens`` collides with the
-    cascading ``athrow()`` cleanup — see https://bugs.python.org/issue38559.
+    generator gets tracked by the event loop. When the enclosing async
+    generator is abandoned, the event loop's generator cleanup collides
+    with the cascading cleanup — see https://bugs.python.org/issue38559.
 
     Plain ``__aenter__``/``__aexit__`` coroutines avoid this entirely.
     """
