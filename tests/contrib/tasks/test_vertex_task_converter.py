@@ -10,10 +10,12 @@ from vertexai import types as vertexai_types
 from google.genai import types as genai_types
 from a2a.contrib.tasks.vertex_task_converter import (
     to_sdk_artifact,
+    to_sdk_message,
     to_sdk_part,
     to_sdk_task,
     to_sdk_task_state,
     to_stored_artifact,
+    to_stored_message,
     to_stored_part,
     to_stored_task,
     to_stored_task_state,
@@ -24,7 +26,9 @@ from a2a.types import (
     FilePart,
     FileWithBytes,
     FileWithUri,
+    Message,
     Part,
+    Role,
     Task,
     TaskState,
     TaskStatus,
@@ -313,23 +317,13 @@ def test_sdk_part_text_conversion_round_trip() -> None:
 
 
 def test_sdk_part_data_conversion_round_trip() -> None:
-    # A DataPart is converted to `inline_data` in Vertex AI, which lacks the original
-    # `DataPart` vs `FilePart` distinction. When reading it back from the stored
-    # protocol format, it becomes a `FilePart` with base64-encoded `FileWithBytes`
-    # and `mime_type="application/json"`.
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
-    round_trip_sdk_part = to_sdk_part(stored_part)
-
-    expected_b64 = base64.b64encode(b'{"key": "value"}').decode('utf-8')
-    assert round_trip_sdk_part == Part(
-        root=FilePart(
-            file=FileWithBytes(
-                bytes=expected_b64,
-                mime_type='application/json',
-            )
-        )
+    round_trip_sdk_part = to_sdk_part(
+        stored_part, part_metadata=None, part_type='data'
     )
+
+    assert round_trip_sdk_part == sdk_part
 
 
 def test_sdk_part_file_bytes_conversion_round_trip() -> None:
@@ -359,16 +353,6 @@ def test_sdk_part_file_uri_conversion_round_trip() -> None:
     stored_part = to_stored_part(sdk_part)
     round_trip_sdk_part = to_sdk_part(stored_part)
     assert round_trip_sdk_part == sdk_part
-
-
-def test_sdk_artifact_conversion_round_trip() -> None:
-    sdk_artifact = Artifact(
-        artifact_id='art-123',
-        parts=[Part(root=TextPart(text='part_1'))],
-    )
-    stored_artifact = to_stored_artifact(sdk_artifact)
-    round_trip_sdk_artifact = to_sdk_artifact(stored_artifact)
-    assert round_trip_sdk_artifact == sdk_artifact
 
 
 def test_sdk_task_conversion_round_trip() -> None:
@@ -403,3 +387,88 @@ def test_sdk_task_conversion_round_trip() -> None:
     assert round_trip_sdk_task.metadata == sdk_task.metadata
     assert round_trip_sdk_task.artifacts == sdk_task.artifacts
     assert round_trip_sdk_task.history == []
+
+
+def test_stored_artifact_conversion_round_trip() -> None:
+    """Test converting an Artifact to TaskArtifact and back restores everything."""
+    original_artifact = Artifact(
+        artifact_id='art123',
+        name='My cool artifact',
+        description='A very interesting description',
+        extensions=['ext1', 'ext2'],
+        metadata={'custom': 'value'},
+        parts=[
+            Part(
+                root=TextPart(
+                    text='hello', metadata={'part_meta': 'hello_meta'}
+                )
+            ),
+            Part(root=DataPart(data={'foo': 'bar'})),  # no metadata
+        ],
+    )
+
+    stored = to_stored_artifact(original_artifact)
+    assert isinstance(stored, vertexai_types.TaskArtifact)
+
+    # ensure it was populated correctly
+    assert stored.display_name == 'My cool artifact'
+    assert stored.description == 'A very interesting description'
+    assert stored.metadata['__vertex_compat_v'] == 1.0
+
+    restored_artifact = to_sdk_artifact(stored)
+
+    assert restored_artifact.artifact_id == original_artifact.artifact_id
+    assert restored_artifact.name == original_artifact.name
+    assert restored_artifact.description == original_artifact.description
+    assert restored_artifact.extensions == original_artifact.extensions
+    assert restored_artifact.metadata == original_artifact.metadata
+
+    assert len(restored_artifact.parts) == 2
+    assert isinstance(restored_artifact.parts[0].root, TextPart)
+    assert restored_artifact.parts[0].root.text == 'hello'
+    assert restored_artifact.parts[0].root.metadata == {
+        'part_meta': 'hello_meta'
+    }
+
+    assert isinstance(restored_artifact.parts[1].root, DataPart)
+    assert restored_artifact.parts[1].root.data == {'foo': 'bar'}
+    assert restored_artifact.parts[1].root.metadata is None
+
+
+def test_stored_message_conversion_round_trip() -> None:
+    """Test converting a Message to TaskMessage and back restores everything."""
+    original_message = Message(
+        message_id='msg456',
+        role=Role.agent,
+        reference_task_ids=['tsk2', 'tsk3'],
+        extensions=['ext_msg'],
+        metadata={'msg_meta': 42},
+        parts=[
+            Part(root=TextPart(text='message text')),
+        ],
+    )
+
+    stored = to_stored_message(original_message)
+    assert stored is not None
+    assert isinstance(stored, vertexai_types.TaskMessage)
+
+    assert stored.message_id == 'msg456'
+    assert stored.role == 'agent'
+    assert stored.metadata['__vertex_compat_v'] == 1.0
+
+    restored_message = to_sdk_message(stored)
+    assert restored_message is not None
+
+    assert restored_message.message_id == original_message.message_id
+    assert restored_message.role == original_message.role
+    assert (
+        restored_message.reference_task_ids
+        == original_message.reference_task_ids
+    )
+    assert restored_message.extensions == original_message.extensions
+    assert restored_message.metadata == original_message.metadata
+
+    assert len(restored_message.parts) == 1
+    assert isinstance(restored_message.parts[0].root, TextPart)
+    assert restored_message.parts[0].root.text == 'message text'
+    assert restored_message.parts[0].root.metadata is None
