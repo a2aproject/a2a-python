@@ -21,7 +21,7 @@ _ALLOWED_SCHEMES = frozenset({'http', 'https'})
 # Networks that must never be reachable via a resolved AgentCard URL.
 # Covers: loopback, RFC 1918 private ranges, link-local (IMDS), and other
 # IANA-reserved blocks that have no legitimate use as public agent endpoints.
-_BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
+_BLOCKED_NETWORKS: tuple[ipaddress.IPv4Network | ipaddress.IPv6Network, ...] = (
     # Loopback
     ipaddress.ip_network('127.0.0.0/8'),
     ipaddress.ip_network('::1/128'),
@@ -29,19 +29,19 @@ _BLOCKED_NETWORKS: list[ipaddress.IPv4Network | ipaddress.IPv6Network] = [
     ipaddress.ip_network('10.0.0.0/8'),
     ipaddress.ip_network('172.16.0.0/12'),
     ipaddress.ip_network('192.168.0.0/16'),
-    # Link-local — covers AWS/GCP/Azure/OCI IMDS (169.254.169.254)
+    # Link-local -- covers AWS/GCP/Azure/OCI IMDS (169.254.169.254)
     ipaddress.ip_network('169.254.0.0/16'),
     ipaddress.ip_network('fe80::/10'),
-    # IPv6 unique local (ULA) — equivalent of RFC 1918 for IPv6
+    # IPv6 unique local (ULA) -- equivalent of RFC 1918 for IPv6
     ipaddress.ip_network('fc00::/7'),
-    # Shared address space (RFC 6598 — carrier-grade NAT)
+    # Shared address space (RFC 6598 -- carrier-grade NAT)
     ipaddress.ip_network('100.64.0.0/10'),
     # Other IANA reserved / unroutable
     ipaddress.ip_network('0.0.0.0/8'),
     ipaddress.ip_network('192.0.0.0/24'),
     ipaddress.ip_network('198.18.0.0/15'),
     ipaddress.ip_network('240.0.0.0/4'),
-]
+)
 
 
 class A2ASSRFValidationError(ValueError):
@@ -56,7 +56,7 @@ def validate_agent_card_url(url: str) -> None:
     1. URL must be parseable and non-empty.
     2. Scheme must be ``http`` or ``https``.
     3. Hostname must be present and non-empty.
-    4. The hostname must resolve to a publicly routable IP address — it must
+    4. The hostname must resolve to a publicly routable IP address -- it must
        not resolve to a loopback, private, link-local, or otherwise reserved
        address (SSRF / IMDS protection).
 

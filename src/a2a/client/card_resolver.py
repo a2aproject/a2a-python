@@ -46,6 +46,13 @@ class A2ACardResolver:
         base_url: str,
         agent_card_path: str = AGENT_CARD_WELL_KNOWN_PATH,
     ) -> None:
+        """Initializes the A2ACardResolver.
+
+        Args:
+            httpx_client: An async HTTP client instance (e.g., httpx.AsyncClient).
+            base_url: The base URL of the agent's host.
+            agent_card_path: The path to the agent card endpoint, relative to the base URL.
+        """
         self.base_url = base_url.rstrip('/')
         self.agent_card_path = agent_card_path.lstrip('/')
         self.httpx_client = httpx_client
@@ -56,6 +63,27 @@ class A2ACardResolver:
         http_kwargs: dict[str, Any] | None = None,
         signature_verifier: Callable[[AgentCard], None] | None = None,
     ) -> AgentCard:
+        """Fetches an agent card from a specified path relative to the base_url.
+
+        If relative_card_path is None, it defaults to the resolver's configured
+        agent_card_path (for the public agent card).
+
+        Args:
+            relative_card_path: Optional path to the agent card endpoint,
+                relative to the base URL. If None, uses the default public
+                agent card path. Use `'/'` for an empty path.
+            http_kwargs: Optional dictionary of keyword arguments to pass to the
+                underlying httpx.get request.
+            signature_verifier: A callable used to verify the agent card's signatures.
+
+        Returns:
+            An `AgentCard` object representing the agent's capabilities.
+
+        Raises:
+            A2AClientHTTPError: If an HTTP error occurs during the request.
+            A2AClientJSONError: If the response body cannot be decoded as JSON,
+                validated against the AgentCard schema, or fails SSRF URL validation.
+        """
         if not relative_card_path:
             path_segment = self.agent_card_path
         else:
@@ -77,7 +105,7 @@ class A2ACardResolver:
             )
             agent_card = AgentCard.model_validate(agent_card_data)
 
-            # ---- FIX: A2A-SSRF-01 — validate card.url before returning ----
+            # ---- FIX: A2A-SSRF-01 -- validate card.url before returning ----
             # Without this check, any caller who controls the card endpoint
             # can redirect all subsequent RPC calls to an internal address.
             try:

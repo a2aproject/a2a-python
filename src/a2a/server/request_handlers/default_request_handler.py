@@ -6,15 +6,15 @@ callers from injecting messages into another user's context.
 Root cause of vulnerability:
   _setup_message_execution() uses params.message.context_id directly without
   any ownership check. An attacker who knows a victim's contextId can send a
-  new task under that context — task_manager.get_task() returns None for the
+  new task under that context -- task_manager.get_task() returns None for the
   new task_id, so the original task-level check is never reached.
 
 Fix design:
-  DefaultRequestHandler maintains a _context_owners dict (context_id → owner)
+  DefaultRequestHandler maintains a _context_owners dict (context_id -> owner)
   in memory. When a get_caller_id extractor is configured:
     1. On first message for a context_id: record caller as owner.
     2. On subsequent messages for same context_id: verify caller matches owner.
-  If get_caller_id is None (default): no ownership tracking — backward compatible.
+  If get_caller_id is None (default): no ownership tracking -- backward compatible.
 
 Target file: src/a2a/server/request_handlers/default_request_handler.py
 """
@@ -118,7 +118,7 @@ class DefaultRequestHandler(RequestHandler):
                 fingerprint). When provided, the handler tracks which caller
                 created each contextId and rejects messages from different
                 callers attempting to join that context (A2A-INJ-01 fix).
-                If None (default), no ownership tracking is performed —
+                If None (default), no ownership tracking is performed --
                 backward compatible with existing deployments.
 
                 Example::
@@ -147,8 +147,15 @@ class DefaultRequestHandler(RequestHandler):
         )
         # ---- NEW (fix for A2A-INJ-01) ----
         self._get_caller_id: CallerIdExtractor | None = get_caller_id
-        # Maps context_id → owner identity; populated on first message per context.
+        # Maps context_id -> owner identity; populated on first message per context.
         self._context_owners: dict[str, str] = {}
+        if get_caller_id is None:
+            logger.warning(
+                'DefaultRequestHandler initialized without get_caller_id: '
+                'context ownership is not enforced. Cross-user context injection '
+                '(A2A-INJ-01 / CWE-639) is possible. Provide a get_caller_id '
+                'extractor to enable ownership checks.'
+            )
         # ----------------------------------
         self._running_agents = {}
         self._running_agents_lock = asyncio.Lock()
@@ -168,7 +175,10 @@ class DefaultRequestHandler(RequestHandler):
     async def on_cancel_task(
         self, params: TaskIdParams, context: ServerCallContext | None = None
     ) -> Task | None:
-        """Default handler for 'tasks/cancel'."""
+        """Default handler for 'tasks/cancel'.
+
+        Attempts to cancel the task managed by the `AgentExecutor`.
+        """
         task: Task | None = await self.task_store.get(params.id, context)
         if not task:
             raise ServerError(error=TaskNotFoundError())
@@ -225,6 +235,12 @@ class DefaultRequestHandler(RequestHandler):
     async def _run_event_stream(
         self, request: RequestContext, queue: EventQueue
     ) -> None:
+        """Runs the agent's `execute` method and closes the queue afterwards.
+
+        Args:
+            request: The request context for the agent.
+            queue: The event queue for the agent to publish to.
+        """
         await self.agent_executor.execute(request, queue)
         await queue.close()
 
@@ -236,32 +252,13 @@ class DefaultRequestHandler(RequestHandler):
         """Enforce context ownership when get_caller_id is configured.
 
         Called before any message is processed for an existing context_id.
+        Only invoked when context_id is already present in _context_owners,
+        which guarantees _get_caller_id is not None and owner is not None.
         Raises ServerError(InvalidParamsError) if the caller does not own
         the context.
         """
-        if self._get_caller_id is None:
-            # Ownership tracking not configured — log warning and allow.
-            # Operators should configure get_caller_id in production.
-            logger.warning(
-                'Context ownership not enforced for context_id=%s: '
-                'no get_caller_id configured on DefaultRequestHandler. '
-                'This allows cross-user context injection (A2A-INJ-01 / CWE-639). '
-                'Provide a get_caller_id extractor to enable ownership checks.',
-                context_id,
-            )
-            return
-
-        caller = self._get_caller_id(context)
-        owner = self._context_owners.get(context_id)
-
-        if owner is None:
-            # Context exists in the store but ownership was not recorded
-            # (e.g. created before this patch was deployed). Skip check.
-            logger.debug(
-                'context_id=%s has no recorded owner; skipping ownership check.',
-                context_id,
-            )
-            return
+        caller = self._get_caller_id(context)  # type: ignore[misc]
+        owner = self._context_owners[context_id]
 
         if caller is None:
             raise ServerError(
@@ -308,10 +305,10 @@ class DefaultRequestHandler(RequestHandler):
     ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
         context_id = params.message.context_id
 
-        # ---- FIX: A2A-INJ-01 — enforce context ownership BEFORE task lookup ----
+        # ---- FIX: A2A-INJ-01 -- enforce context ownership BEFORE task lookup ----
         # The check must happen at context_id level, not task level. An attacker
         # who sends a new task_id under an existing context_id would otherwise
-        # bypass a task-level check (get_task() returns None → check never runs).
+        # bypass a task-level check (get_task() returns None -> check never runs).
         if context_id and context_id in self._context_owners:
             self._check_context_ownership(context_id, context)
         # -----------------------------------------------------------------------
@@ -396,7 +393,11 @@ class DefaultRequestHandler(RequestHandler):
         params: MessageSendParams,
         context: ServerCallContext | None = None,
     ) -> Message | Task:
-        """Default handler for 'message/send' (non-streaming)."""
+        """Default handler for 'message/send' interface (non-streaming).
+
+        Starts the agent execution for the message and waits for the final
+        result (Task or Message).
+        """
         (
             _task_manager,
             task_id,
@@ -461,7 +462,11 @@ class DefaultRequestHandler(RequestHandler):
         params: MessageSendParams,
         context: ServerCallContext | None = None,
     ) -> AsyncGenerator[Event]:
-        """Default handler for 'message/stream' (streaming)."""
+        """Default handler for 'message/stream' (streaming).
+
+        Starts the agent execution and yields events as they are produced
+        by the agent.
+        """
         (
             _task_manager,
             task_id,
