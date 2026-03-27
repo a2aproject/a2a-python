@@ -1,9 +1,11 @@
 import json
+
 from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, NoReturn
 
 import httpx
+
 from httpx_sse import EventSource, SSEError
 
 from a2a.client.client import ClientCallContext
@@ -99,20 +101,14 @@ async def send_http_stream_request(
 
 
 class _SSEEventSource:
-    """Class-based async context manager for SSE connections.
+    """Class-based replacement for ``httpx_sse.aconnect_sse``.
 
-    A drop-in replacement for ``httpx_sse.aconnect_sse`` that is safe to use
-    inside async generators.  ``aconnect_sse`` uses ``@asynccontextmanager``
-    which internally creates an async generator registered with the event
-    loop.  When the enclosing async generator is abandoned,
-    ``shutdown_asyncgens`` tries to finalize both generators independently
-    and the nested ``athrow()`` calls collide with
-    ``RuntimeError: athrow(): asynchronous generator is already running``.
+    ``aconnect_sse`` is an ``@asynccontextmanager`` whose internal async
+    generator leaks into ``loop._asyncgens``.  When the enclosing async
+    generator is abandoned, ``shutdown_asyncgens`` collides with the
+    cascading ``athrow()`` cleanup — see https://bugs.python.org/issue38559.
 
-    This class avoids the problem because ``__aenter__``/``__aexit__`` are
-    plain coroutines - no async generators are created, nothing is registered
-    with ``loop._asyncgens``, and ``shutdown_asyncgens`` has nothing to
-    collide with.
+    Plain ``__aenter__``/``__aexit__`` coroutines avoid this entirely.
     """
 
     def __init__(
