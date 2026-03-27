@@ -55,15 +55,15 @@ TransportProducer = Callable[
 ]
 
 
-class ClientFactory:
-    """ClientFactory is used to generate the appropriate client for the agent.
+class A2AClientFactory:
+    """A2AClientFactory is used to generate the appropriate client for the agent.
 
     The factory is configured with a `ClientConfig` and optionally a list of
     `Consumer`s to use for all generated `Client`s. The expected use is:
 
     .. code-block:: python
 
-        factory = ClientFactory(config, consumers)
+        factory = A2AClientFactory(config, consumers)
         # Optionally register custom client implementations
         factory.register('my_customer_transport', NewCustomTransportClient)
         # Then with an agent card make a client with additional consumers and
@@ -101,7 +101,7 @@ class ClientFactory:
                 url: str,
                 config: ClientConfig,
             ) -> ClientTransport:
-                interface = ClientFactory._find_best_interface(
+                interface = A2AClientFactory._find_best_interface(
                     list(card.supported_interfaces),
                     protocol_bindings=[TransportProtocol.JSONRPC],
                     url=url,
@@ -140,7 +140,7 @@ class ClientFactory:
                 url: str,
                 config: ClientConfig,
             ) -> ClientTransport:
-                interface = ClientFactory._find_best_interface(
+                interface = A2AClientFactory._find_best_interface(
                     list(card.supported_interfaces),
                     protocol_bindings=[TransportProtocol.HTTP_JSON],
                     url=url,
@@ -188,7 +188,7 @@ class ClientFactory:
             ) -> ClientTransport:
                 # The interface has already been selected and passed as `url`.
                 # We determine its version to use the appropriate transport implementation.
-                interface = ClientFactory._find_best_interface(
+                interface = A2AClientFactory._find_best_interface(
                     list(card.supported_interfaces),
                     protocol_bindings=[TransportProtocol.GRPC],
                     url=url,
@@ -274,13 +274,13 @@ class ClientFactory:
 
         Constructs a client that connects to the specified agent. Note that
         creating multiple clients via this method is less efficient than
-        constructing an instance of ClientFactory and reusing that.
+        constructing an instance of A2AClientFactory and reusing that.
 
         .. code-block:: python
 
             # This will search for an AgentCard at /.well-known/agent-card.json
             my_agent_url = 'https://travel.agents.example.com'
-            client = await ClientFactory.connect(my_agent_url)
+            client = await A2AClientFactory.connect(my_agent_url)
 
 
         Args:
@@ -360,7 +360,7 @@ class ClientFactory:
         selected_interface = None
         if self._config.use_client_preference:
             for protocol_binding in client_set:
-                selected_interface = ClientFactory._find_best_interface(
+                selected_interface = A2AClientFactory._find_best_interface(
                     list(card.supported_interfaces),
                     protocol_bindings=[protocol_binding],
                 )
@@ -371,7 +371,7 @@ class ClientFactory:
             for supported_interface in card.supported_interfaces:
                 if supported_interface.protocol_binding in client_set:
                     transport_protocol = supported_interface.protocol_binding
-                    selected_interface = ClientFactory._find_best_interface(
+                    selected_interface = A2AClientFactory._find_best_interface(
                         list(card.supported_interfaces),
                         protocol_bindings=[transport_protocol],
                     )
@@ -428,3 +428,6 @@ def minimal_agent_card(
         version='',
         name='',
     )
+
+
+ClientFactory = A2AClientFactory
