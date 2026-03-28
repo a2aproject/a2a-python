@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import patch
+
+import pytest
 
 
 @pytest.fixture(autouse=True)
@@ -10,8 +11,8 @@ def bypass_ssrf_url_validation(request):
     that either resolve to loopback or are unavailable in CI. The actual SSRF
     validation logic is tested in tests/utils/test_url_validation.py.
     """
-    if "test_url_validation" in request.node.nodeid:
+    if 'test_url_validation' in request.node.nodeid:
         yield
     else:
-        with patch("a2a.client.card_resolver.validate_agent_card_url"):
+        with patch('a2a.client.card_resolver.validate_agent_card_url'):
             yield
