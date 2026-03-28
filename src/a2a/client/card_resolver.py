@@ -6,6 +6,8 @@ from typing import Any
 
 import httpx
 
+from pydantic import ValidationError
+
 from a2a.client.errors import (
     A2AClientHTTPError,
     A2AClientJSONError,
@@ -18,7 +20,6 @@ from a2a.utils.url_validation import (
     A2ASSRFValidationError,
     validate_agent_card_url,
 )
-from pydantic import ValidationError
 
 
 logger = logging.getLogger(__name__)
