@@ -16,6 +16,10 @@ from a2a.types import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+from a2a.utils.url_validation import (
+    A2ASSRFValidationError,
+    validate_agent_card_url,
+)
 
 
 logger = logging.getLogger(__name__)
@@ -65,11 +69,10 @@ class A2ACardResolver:
 
         Raises:
             A2AClientHTTPError: If an HTTP error occurs during the request.
-            A2AClientJSONError: If the response body cannot be decoded as JSON
-                or validated against the AgentCard schema.
+            A2AClientJSONError: If the response body cannot be decoded as JSON,
+                validated against the AgentCard schema, or fails SSRF URL validation.
         """
         if not relative_card_path:
-            # Use the default public agent card path configured during initialization
             path_segment = self.agent_card_path
         else:
             path_segment = relative_card_path.lstrip('/')
@@ -89,8 +92,23 @@ class A2ACardResolver:
                 agent_card_data,
             )
             agent_card = AgentCard.model_validate(agent_card_data)
+
+            # Validate card.url before returning (fix for A2A-SSRF-01).
+            # Without this check, any caller who controls the card endpoint
+            # can redirect all subsequent RPC calls to an internal address.
+            try:
+                validate_agent_card_url(agent_card.url)
+                # Also validate any additional transport URLs declared in the card.
+                for iface in agent_card.additional_interfaces or []:
+                    validate_agent_card_url(iface.url)
+            except A2ASSRFValidationError as e:
+                raise A2AClientJSONError(
+                    f'AgentCard from {target_url} failed SSRF URL validation: {e}'
+                ) from e
+
             if signature_verifier:
                 signature_verifier(agent_card)
+
         except httpx.HTTPStatusError as e:
             raise A2AClientHTTPError(
                 e.response.status_code,
@@ -105,7 +123,7 @@ class A2ACardResolver:
                 503,
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e
-        except ValidationError as e:  # Pydantic validation error
+        except ValidationError as e:
             raise A2AClientJSONError(
                 f'Failed to validate agent card structure from {target_url}: {e.json()}'
             ) from e
