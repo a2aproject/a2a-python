@@ -105,6 +105,8 @@ def to_sdk_metadata(
     version = stored_metadata.get(_METADATA_VERSION_KEY)
     if version is None:
         return _UnpackedMetadata(original_metadata=stored_metadata)
+    if version > _METADATA_VERSION_NUMBER:
+        raise ValueError(f'Unsupported metadata version: {version}')
 
     return _UnpackedMetadata(
         original_metadata=stored_metadata.get(_ORIGINAL_METADATA_KEY),
