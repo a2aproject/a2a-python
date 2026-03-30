@@ -36,6 +36,12 @@ class FakeAgentEnginesA2aTasksEventsClient:
             data = event.event_data
             if getattr(data, 'state_change', None):
                 task.state = getattr(data.state_change, 'new_state', task.state)
+            if getattr(data, 'status_details_change', None):
+                task.status_details = getattr(
+                    data.status_details_change,
+                    'new_task_status',
+                    getattr(task, 'status_details', None),
+                )
             if getattr(data, 'metadata_change', None):
                 task.metadata = getattr(
                     data.metadata_change, 'new_metadata', task.metadata
