@@ -747,3 +747,72 @@ async def test_event_queue_capacity_order_and_concurrency() -> None:
     )
 
     await queue.close(immediate=True)
+
+
+@pytest.mark.asyncio
+async def test_event_queue_blocking_behavior() -> None:
+    _PARENT_QUEUE_SIZE = 10
+    _TAPPED_QUEUE_SIZE = 15
+
+    queue = EventQueueSource(max_queue_size=_PARENT_QUEUE_SIZE)
+    # tapped_queue initially has no consumer, so it will block.
+    tapped_queue = await queue.tap(max_queue_size=_TAPPED_QUEUE_SIZE)
+
+    producer_task_done = asyncio.Event()
+    enqueued_count = 0
+
+    async def producer() -> None:
+        nonlocal enqueued_count
+        for i in range(50):
+            event = create_sample_message(message_id=str(i))
+            await queue.enqueue_event(event)
+            enqueued_count += 1
+        producer_task_done.set()
+
+    consumed_first = []
+
+    async def consumer_first() -> None:
+        while True:
+            try:
+                event = await queue.dequeue_event()
+                consumed_first.append(event)
+                queue.task_done()
+            except QueueShutDown:
+                break
+
+    consumer_first_task = asyncio.create_task(consumer_first())
+    producer_task = asyncio.create_task(producer())
+
+    # Wait to let the producer fill the queues and confirm it is blocked
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(producer_task_done.wait(), timeout=0.1)
+
+    # Validate that: first consumer receives _TAPPED_QUEUE_SIZE + 1 items.
+    # Other items are blocking trying to be enqueued to second queue.
+    assert len(consumed_first) == _TAPPED_QUEUE_SIZE + 1
+
+    # Validate that: once child queue is blocked, parent will continue
+    # processing other items until it reaches its capacity as well.
+    assert not producer_task.done()
+    assert enqueued_count == _PARENT_QUEUE_SIZE + _TAPPED_QUEUE_SIZE + 1
+
+    consumed_second = []
+
+    # create a consumer for second queue.
+    async def consumer_second() -> None:
+        while True:
+            try:
+                event = await tapped_queue.dequeue_event()
+                consumed_second.append(event)
+                tapped_queue.task_done()
+            except QueueShutDown:
+                break
+
+    consumer_second_task = asyncio.create_task(consumer_second())
+    await asyncio.wait_for(producer_task_done.wait(), timeout=1.0)
+    await queue.close(immediate=False)
+    await asyncio.gather(consumer_first_task, consumer_second_task)
+
+    # Validate that: after unblocking second consumer everything ends smoothly.
+    assert len(consumed_first) == 50
+    assert len(consumed_second) == 50
