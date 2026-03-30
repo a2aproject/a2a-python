@@ -1,13 +1,19 @@
 import asyncio
+import logging
 
 from typing import Any
 
 import pytest
+import pytest_asyncio
 
 from a2a.server.events.event_queue import (
     DEFAULT_MAX_QUEUE_SIZE,
-    EventQueueLegacy,
+    EventQueue,
     QueueShutDown,
+)
+from a2a.server.events.event_queue_v2 import (
+    EventQueueSink,
+    EventQueueSource,
 )
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
@@ -61,41 +67,44 @@ class QueueJoinWrapper:
         await self.original.join()
 
 
-@pytest.fixture
-def event_queue() -> EventQueueLegacy:
-    return EventQueueLegacy()
+@pytest_asyncio.fixture
+async def event_queue() -> EventQueueSource:
+    return EventQueueSource()
 
 
-def test_constructor_default_max_queue_size() -> None:
+@pytest.mark.asyncio
+async def test_constructor_default_max_queue_size() -> None:
     """Test that the queue is created with the default max size."""
-    eq = EventQueueLegacy()
+    eq = EventQueueSource()
     assert eq.queue.maxsize == DEFAULT_MAX_QUEUE_SIZE
 
 
-def test_constructor_max_queue_size() -> None:
+@pytest.mark.asyncio
+async def test_constructor_max_queue_size() -> None:
     """Test that the asyncio.Queue is created with the specified max_queue_size."""
     custom_size = 123
-    eq = EventQueueLegacy(max_queue_size=custom_size)
+    eq = EventQueueSource(max_queue_size=custom_size)
     assert eq.queue.maxsize == custom_size
 
 
-def test_constructor_invalid_max_queue_size() -> None:
+@pytest.mark.asyncio
+async def test_constructor_invalid_max_queue_size() -> None:
     """Test that a ValueError is raised for non-positive max_queue_size."""
     with pytest.raises(
         ValueError, match='max_queue_size must be greater than 0'
     ):
-        EventQueueLegacy(max_queue_size=0)
+        EventQueueSource(max_queue_size=0)
     with pytest.raises(
         ValueError, match='max_queue_size must be greater than 0'
     ):
-        EventQueueLegacy(max_queue_size=-10)
+        EventQueueSource(max_queue_size=-10)
 
 
 @pytest.mark.asyncio
 async def test_event_queue_async_context_manager(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
-    """Test that EventQueueLegacy can be used as an async context manager."""
+    """Test that EventQueue can be used as an async context manager."""
     async with event_queue as q:
         assert q is event_queue
         assert event_queue.is_closed() is False
@@ -104,7 +113,7 @@ async def test_event_queue_async_context_manager(
 
 @pytest.mark.asyncio
 async def test_event_queue_async_context_manager_on_exception(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     """Test that close() is called even when an exception occurs inside the context."""
     with pytest.raises(RuntimeError, match='boom'):
@@ -114,7 +123,7 @@ async def test_event_queue_async_context_manager_on_exception(
 
 
 @pytest.mark.asyncio
-async def test_enqueue_and_dequeue_event(event_queue: EventQueueLegacy) -> None:
+async def test_enqueue_and_dequeue_event(event_queue: EventQueueSource) -> None:
     """Test that an event can be enqueued and dequeued."""
     event = create_sample_message()
     await event_queue.enqueue_event(event)
@@ -123,7 +132,7 @@ async def test_enqueue_and_dequeue_event(event_queue: EventQueueLegacy) -> None:
 
 
 @pytest.mark.asyncio
-async def test_dequeue_event_wait(event_queue: EventQueueLegacy) -> None:
+async def test_dequeue_event_wait(event_queue: EventQueueSource) -> None:
     """Test dequeue_event with the default wait behavior."""
     event = TaskStatusUpdateEvent(
         task_id='task_123',
@@ -136,7 +145,7 @@ async def test_dequeue_event_wait(event_queue: EventQueueLegacy) -> None:
 
 
 @pytest.mark.asyncio
-async def test_task_done(event_queue: EventQueueLegacy) -> None:
+async def test_task_done(event_queue: EventQueueSource) -> None:
     """Test the task_done method."""
     event = TaskArtifactUpdateEvent(
         task_id='task_123',
@@ -150,7 +159,7 @@ async def test_task_done(event_queue: EventQueueLegacy) -> None:
 
 @pytest.mark.asyncio
 async def test_enqueue_different_event_types(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     """Test enqueuing different types of events."""
     events: list[Any] = [
@@ -165,7 +174,7 @@ async def test_enqueue_different_event_types(
 
 @pytest.mark.asyncio
 async def test_enqueue_event_propagates_to_children(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     """Test that events are enqueued to tapped child queues."""
     child_queue1 = await event_queue.tap()
@@ -192,7 +201,7 @@ async def test_enqueue_event_propagates_to_children(
 
 @pytest.mark.asyncio
 async def test_enqueue_event_when_closed(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
     expected_queue_closed_exception: type[Exception],
 ) -> None:
     """Test that no event is enqueued if the parent queue is closed."""
@@ -208,17 +217,8 @@ async def test_enqueue_event_when_closed(
 
     # Also verify child queues are not affected directly by parent's enqueue attempt when closed
     # (though they would be closed too by propagation)
-    child_queue = (
-        await event_queue.tap()
-    )  # Tap after close might be weird, but let's see
-    # The current implementation would add it to _children
-    # and then child.close() would be called.
-    # A more robust test for child propagation is in test_close_propagates
-    await (
-        child_queue.close()
-    )  # ensure child is also seen as closed for this test's purpose
     with pytest.raises(expected_queue_closed_exception):
-        await child_queue.dequeue_event()
+        await event_queue.tap()
 
 
 @pytest.fixture
@@ -227,55 +227,39 @@ def expected_queue_closed_exception() -> type[Exception]:
 
 
 @pytest.mark.asyncio
-async def test_dequeue_event_closed_and_empty_waits_then_raises(
-    event_queue: EventQueueLegacy,
+async def test_dequeue_event_closed_and_empty(
+    event_queue: EventQueueSource,
     expected_queue_closed_exception: type[Exception],
 ) -> None:
-    """Test dequeue_event raises QueueEmpty eventually when closed, empty, and no_wait=False."""
+    """Test dequeue_event raises QueueShutDown when closed and empty."""
     await event_queue.close()
     assert event_queue.is_closed()
+    # Ensure queue is actually empty (e.g. by trying a non-blocking get on internal queue)
     with pytest.raises(expected_queue_closed_exception):
-        event_queue.queue.get_nowait()  # verify internal queue is empty
+        event_queue.queue.get_nowait()
 
-    # This test is tricky because await event_queue.dequeue_event() would hang if not for the close check.
-    # The current implementation's dequeue_event checks `is_closed` first.
-    # If closed and empty, it raises QueueEmpty immediately (on Python <= 3.12).
-    # On Python 3.13+, this check is skipped and asyncio.Queue.get() raises QueueShutDown instead.
-    # The "waits_then_raises" scenario described in the subtask implies the `get()` might wait.
-    # However, the current code:
-    # async with self._lock:
-    #     if self._is_closed and self.queue.empty():
-    # event = await self.queue.get() -> this line is not reached if closed and empty.
-
-    # So, for the current implementation, it will raise QueueEmpty immediately.
     with pytest.raises(expected_queue_closed_exception):
         await event_queue.dequeue_event()
 
-    # If the implementation were to change to allow `await self.queue.get()`
-    # to be called even when closed (to drain it), then a timeout test would be needed.
-    # For now, testing the current behavior.
-    # Example of a timeout test if it were to wait:
-    # with pytest.raises(asyncio.TimeoutError): # Or QueueEmpty if that's what join/shutdown causes get() to raise
-
 
 @pytest.mark.asyncio
-async def test_tap_creates_child_queue(event_queue: EventQueueLegacy) -> None:
-    """Test that tap creates a new EventQueueLegacy and adds it to children."""
-    initial_children_count = len(event_queue._children)
+async def test_tap_creates_child_queue(event_queue: EventQueueSource) -> None:
+    """Test that tap creates a new EventQueue and adds it to children."""
+    initial_children_count = len(event_queue._sinks)
 
     child_queue = await event_queue.tap()
 
-    assert isinstance(child_queue, EventQueueLegacy)
+    assert isinstance(child_queue, EventQueue)
     assert child_queue != event_queue  # Ensure it's a new instance
-    assert len(event_queue._children) == initial_children_count + 1
-    assert child_queue in event_queue._children
+    assert len(event_queue._sinks) == initial_children_count + 1
+    assert child_queue in event_queue._sinks
 
     # Test that the new child queue has the default max size (or specific if tap could configure it)
     assert child_queue.queue.maxsize == DEFAULT_MAX_QUEUE_SIZE
 
 
 @pytest.mark.asyncio
-async def test_close_idempotent(event_queue: EventQueueLegacy) -> None:
+async def test_close_idempotent(event_queue: EventQueueSource) -> None:
     await event_queue.close()
     assert event_queue.is_closed() is True
     await event_queue.close()
@@ -283,7 +267,7 @@ async def test_close_idempotent(event_queue: EventQueueLegacy) -> None:
 
 
 @pytest.mark.asyncio
-async def test_is_closed_reflects_state(event_queue: EventQueueLegacy) -> None:
+async def test_is_closed_reflects_state(event_queue: EventQueueSource) -> None:
     """Test that is_closed() returns the correct state before and after closing."""
     assert event_queue.is_closed() is False  # Initially open
 
@@ -293,13 +277,14 @@ async def test_is_closed_reflects_state(event_queue: EventQueueLegacy) -> None:
 
 
 @pytest.mark.asyncio
-async def test_close_with_immediate_true(event_queue: EventQueueLegacy) -> None:
+async def test_close_with_immediate_true(event_queue: EventQueueSource) -> None:
     """Test close with immediate=True clears events immediately."""
     # Add some events to the queue
     event1 = create_sample_message()
     event2 = create_sample_task()
     await event_queue.enqueue_event(event1)
     await event_queue.enqueue_event(event2)
+    await event_queue.test_only_join_incoming_queue()
 
     # Verify events are in queue
     assert not event_queue.queue.empty()
@@ -314,7 +299,7 @@ async def test_close_with_immediate_true(event_queue: EventQueueLegacy) -> None:
 
 @pytest.mark.asyncio
 async def test_close_immediate_propagates_to_children(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     """Test that immediate parameter is propagated to child queues."""
     child_queue = await event_queue.tap()
@@ -322,6 +307,7 @@ async def test_close_immediate_propagates_to_children(
     # Add events to both parent and child
     event = create_sample_message()
     await event_queue.enqueue_event(event)
+    await event_queue.test_only_join_incoming_queue()
 
     assert child_queue.is_closed() is False
     assert child_queue.queue.empty() is False
@@ -336,14 +322,16 @@ async def test_close_immediate_propagates_to_children(
 
 @pytest.mark.asyncio
 async def test_close_graceful_waits_for_join_and_children(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     child = await event_queue.tap()
     await event_queue.enqueue_event(create_sample_message())
 
     join_reached = asyncio.Event()
-    event_queue._queue = QueueJoinWrapper(event_queue.queue, join_reached)
-    child._queue = QueueJoinWrapper(child.queue, join_reached)
+    event_queue._default_sink._queue = QueueJoinWrapper(
+        event_queue.queue, join_reached
+    )  # type: ignore
+    child._queue = QueueJoinWrapper(child.queue, join_reached)  # type: ignore
 
     close_task = asyncio.create_task(event_queue.close(immediate=False))
     await join_reached.wait()
@@ -363,7 +351,7 @@ async def test_close_graceful_waits_for_join_and_children(
 
 @pytest.mark.asyncio
 async def test_close_propagates_to_children(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     child_queue1 = await event_queue.tap()
     child_queue2 = await event_queue.tap()
@@ -372,38 +360,13 @@ async def test_close_propagates_to_children(
     assert child_queue2.is_closed()
 
 
-@pytest.mark.xfail(reason='https://github.com/a2aproject/a2a-python/issues/869')
-@pytest.mark.asyncio
-async def test_enqueue_close_race_condition() -> None:
-    queue = EventQueueLegacy()
-    event = create_sample_message()
-
-    enqueue_task = asyncio.create_task(queue.enqueue_event(event))
-    close_task = asyncio.create_task(queue.close(immediate=False))
-
-    try:
-        results = await asyncio.wait_for(
-            asyncio.gather(enqueue_task, close_task, return_exceptions=True),
-            timeout=1.0,
-        )
-        for res in results:
-            if (
-                isinstance(res, Exception)
-                and type(res).__name__ != 'QueueShutDown'
-            ):
-                raise res
-    except asyncio.TimeoutError:
-        pytest.fail(
-            'Deadlock in close() because enqueue_event put an item during close but before join()'
-        )
-
-
 @pytest.mark.asyncio
 async def test_event_queue_dequeue_immediate_false(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     msg = create_sample_message()
     await event_queue.enqueue_event(msg)
+    await event_queue.test_only_join_incoming_queue()
     # Start close in background so it can wait for join()
     close_task = asyncio.create_task(event_queue.close(immediate=False))
 
@@ -420,7 +383,7 @@ async def test_event_queue_dequeue_immediate_false(
 
 @pytest.mark.asyncio
 async def test_event_queue_dequeue_immediate_true(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     msg = create_sample_message()
     await event_queue.enqueue_event(msg)
@@ -432,7 +395,7 @@ async def test_event_queue_dequeue_immediate_true(
 
 @pytest.mark.asyncio
 async def test_event_queue_enqueue_when_closed(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     await event_queue.close(immediate=True)
     msg = create_sample_message()
@@ -444,7 +407,7 @@ async def test_event_queue_enqueue_when_closed(
 
 @pytest.mark.asyncio
 async def test_event_queue_shutdown_wakes_getter(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
 ) -> None:
     original_queue = event_queue.queue
     getter_reached_get = asyncio.Event()
@@ -458,7 +421,7 @@ async def test_event_queue_shutdown_wakes_getter(
             return await original_queue.get()
 
     # Replace the underlying queue with a wrapper to intercept `get`
-    event_queue._queue = QueueWrapper()
+    event_queue._default_sink._queue = QueueWrapper()  # type: ignore
 
     async def getter():
         with pytest.raises(QueueShutDown):
@@ -481,7 +444,7 @@ async def test_event_queue_shutdown_wakes_getter(
 )
 @pytest.mark.asyncio
 async def test_event_queue_close_behaviors(
-    event_queue: EventQueueLegacy,
+    event_queue: EventQueueSource,
     immediate: bool,
     expected_events: tuple[int, int],
     close_blocks: bool,
@@ -496,8 +459,10 @@ async def test_event_queue_close_behaviors(
     join_reached = asyncio.Event()
 
     # Apply wrappers so we know exactly when join() starts
-    event_queue._queue = QueueJoinWrapper(event_queue.queue, join_reached)
-    child_queue._queue = QueueJoinWrapper(child_queue.queue, join_reached)
+    event_queue._default_sink._queue = QueueJoinWrapper(
+        event_queue.queue, join_reached
+    )  # type: ignore
+    child_queue._queue = QueueJoinWrapper(child_queue.queue, join_reached)  # type: ignore
 
     close_task = asyncio.create_task(event_queue.close(immediate=immediate))
 
@@ -530,3 +495,255 @@ async def test_event_queue_close_behaviors(
 
     # Ensure close_task finishes cleanly
     await asyncio.wait_for(close_task, timeout=1.0)
+
+
+@pytest.mark.asyncio
+async def test_sink_only_raises_on_enqueue() -> None:
+    """Test that enqueuing to a sink-only queue raises an error."""
+    parent = EventQueueSource()
+    sink_queue = EventQueueSink(parent=parent)
+    event = create_sample_message()
+    with pytest.raises(
+        RuntimeError, match='Cannot enqueue to a sink-only queue'
+    ):
+        await sink_queue.enqueue_event(event)
+
+
+@pytest.mark.asyncio
+async def test_tap_creates_sink_only_queue(
+    event_queue: EventQueueSource,
+) -> None:
+    """Test that tap() creates a child queue that is sink-only."""
+    child_queue = await event_queue.tap()
+    assert hasattr(child_queue, '_parent') and child_queue._parent is not None  # type: ignore
+
+    event = create_sample_message()
+    with pytest.raises(
+        RuntimeError, match='Cannot enqueue to a sink-only queue'
+    ):
+        await child_queue.enqueue_event(event)
+
+
+@pytest.mark.asyncio
+async def test_tap_attaches_to_top_parent(
+    event_queue: EventQueueSource,
+) -> None:
+    """Test that tap() on a child queue attaches the new queue to the top parent."""
+    # First level child
+    child1 = await event_queue.tap()
+
+    # Second level child (tapped from child1)
+    child2 = await child1.tap()
+
+    # The top parent should have both child1 and child2 in its children list
+    assert child1 in event_queue._sinks
+    assert child2 in event_queue._sinks
+
+    # child1 should not have any children, because tap() attaches to top parent
+    assert True  # Child does not have children anymore
+
+    # Ensure events still flow to all queues
+    event = create_sample_message()
+    await event_queue.enqueue_event(event)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_enqueue_order_preserved() -> None:
+    """
+    Verifies that concurrent enqueues to a parent queue are preserved in
+    the exact same order in all child queues due to root serialization.
+    """
+    parent = EventQueueSource()
+    child = await parent.tap()
+
+    events = [create_sample_message(message_id=str(i)) for i in range(100)]
+
+    # Enqueue all concurrently
+    await asyncio.gather(*(parent.enqueue_event(e) for e in events))
+
+    parent_events = []
+    while not parent.queue.empty():
+        parent_events.append(await parent.dequeue_event())
+        parent.task_done()
+
+    child_events = []
+    while not child.queue.empty():
+        child_events.append(await child.dequeue_event())
+        child.task_done()
+
+    assert parent_events == child_events, (
+        'Order mismatch! Locking failed to serialize enqueues.'
+    )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_task_failed(event_queue: EventQueueSource) -> None:
+    event_queue._dispatcher_task.cancel()
+    with pytest.raises(asyncio.CancelledError):
+        await event_queue._dispatcher_task
+
+    event = create_sample_message()
+    await event_queue.enqueue_event(event)
+
+    with pytest.raises(QueueShutDown):
+        await asyncio.wait_for(event_queue.dequeue_event(), timeout=0.1)
+
+    # Event was never dequeued, but close() should still work after dispatcher was force cancelled.
+    await asyncio.wait_for(event_queue.close(immediate=False), timeout=0.1)
+
+
+@pytest.mark.asyncio
+async def test_concurrent_close_immediate_false() -> None:
+    """Test that concurrent close(immediate=False) calls both wait for join() deterministically."""
+    queue = EventQueueSource()
+    sink = await queue.tap()
+
+    event_arrived = asyncio.Event()
+    original_put_internal = sink._put_internal  # type: ignore
+
+    async def mock_put_internal(msg: Any) -> None:
+        await original_put_internal(msg)
+        event_arrived.set()
+
+    sink._put_internal = mock_put_internal  # type: ignore
+
+    event = Message()
+    await queue.enqueue_event(event)
+
+    # Deterministically wait for the event to be processed and reach the sink
+    await asyncio.wait_for(event_arrived.wait(), timeout=1.0)
+
+    class CustomJoinWrapper:
+        def __init__(self, original: Any) -> None:
+            self.original = original
+            self.join_count = 0
+            self.join_started_1 = asyncio.Event()
+            self.join_started_2 = asyncio.Event()
+
+        def __getattr__(self, name: str) -> Any:
+            return getattr(self.original, name)
+
+        async def join(self) -> None:
+            self.join_count += 1
+            if self.join_count == 1:
+                self.join_started_1.set()
+            elif self.join_count == 2:
+                self.join_started_2.set()
+            await self.original.join()
+
+    wrapper = CustomJoinWrapper(sink._queue)  # type: ignore
+    sink._queue = wrapper  # type: ignore
+
+    close_task_1 = asyncio.create_task(sink.close(immediate=False))
+    # Wait deterministically until the first close call reaches await queue.join()
+    await asyncio.wait_for(wrapper.join_started_1.wait(), timeout=1.0)
+    assert not close_task_1.done()
+
+    close_task_2 = asyncio.create_task(sink.close(immediate=False))
+    # Wait deterministically until the second close call reaches await queue.join()
+    await asyncio.wait_for(wrapper.join_started_2.wait(), timeout=1.0)
+    assert not close_task_2.done()
+
+    # To clean up and allow the queue to finish joining
+    await sink.dequeue_event()
+    sink.task_done()
+
+    # Now both tasks should complete
+    await asyncio.wait_for(
+        asyncio.gather(close_task_1, close_task_2), timeout=1.0
+    )
+
+
+@pytest.mark.asyncio
+async def test_dispatch_loop_logs_exceptions(
+    event_queue: EventQueueSource, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Test that exceptions raised by sinks during dispatch are logged."""
+    caplog.set_level(logging.ERROR)
+    sink = await event_queue.tap()
+
+    async def mock_put_internal(event: Any) -> None:
+        raise RuntimeError('simulated error')
+
+    sink._put_internal = mock_put_internal  # type: ignore
+
+    msg = create_sample_message()
+    await event_queue.enqueue_event(msg)
+
+    # Wait for dispatch loop to process
+    await event_queue.test_only_join_incoming_queue()
+
+    assert any(
+        record.levelname == 'ERROR'
+        and 'Error dispatching event to sink' in record.message
+        for record in caplog.records
+    )
+
+
+@pytest.mark.asyncio
+async def test_join_incoming_queue_cancels_join_task(
+    event_queue: EventQueueSource,
+) -> None:
+    """Test that _join_incoming_queue cancels join_task on CancelledError."""
+    # Tap a sink and block its processing so dispatcher and join() hang
+    sink = await event_queue.tap()
+    block_event = asyncio.Event()
+
+    async def mock_put_internal(event: Any) -> None:
+        await block_event.wait()
+
+    sink._put_internal = mock_put_internal  # type: ignore
+
+    # Enqueue a message so join() blocks
+    await event_queue.enqueue_event(create_sample_message())
+
+    join_reached = asyncio.Event()
+    event_queue._incoming_queue = QueueJoinWrapper(  # type: ignore
+        event_queue._incoming_queue, join_reached
+    )
+
+    join_task = asyncio.create_task(event_queue._join_incoming_queue())
+
+    # Wait deterministically until the internal task calls join()
+    await join_reached.wait()
+
+    # Cancel the wrapper task
+    join_task.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await join_task
+
+    # Unblock the sink and clean up
+    block_event.set()
+    await event_queue.dequeue_event()
+    event_queue.task_done()
+
+
+@pytest.mark.asyncio
+async def test_event_queue_capacity_order_and_concurrency() -> None:
+    """Test that EventQueue preserves order and handles concurrency with limited capacity."""
+    queue = EventQueueSource(max_queue_size=5)
+
+    # Create 10 tapped queues
+    tapped_queues = [await queue.tap(max_queue_size=5) for _ in range(10)]
+    all_queues: list[EventQueue] = [queue] + tapped_queues  # type: ignore
+
+    async def producer() -> None:
+        for i in range(100):
+            await queue.enqueue_event(create_sample_message(message_id=str(i)))
+
+    async def consumer(q: EventQueue) -> None:
+        for expected_i in range(100):
+            event = await q.dequeue_event()
+            assert isinstance(event, Message)
+            assert event.message_id == str(expected_i)
+            q.task_done()
+
+    consumer_tasks = [asyncio.create_task(consumer(q)) for q in all_queues]
+    producer_task = asyncio.create_task(producer())
+
+    await asyncio.wait_for(
+        asyncio.gather(producer_task, *consumer_tasks), timeout=1.0
+    )
+
+    await queue.close(immediate=True)

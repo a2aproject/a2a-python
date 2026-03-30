@@ -12,7 +12,6 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InternalError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -33,31 +32,6 @@ class EventConsumer:
         self._timeout = 0.5
         self._exception: BaseException | None = None
         logger.debug('EventConsumer initialized')
-
-    async def consume_one(self) -> Event:
-        """Consume one event from the agent event queue non-blocking.
-
-        Returns:
-            The next event from the queue.
-
-        Raises:
-            InternalError: If the queue is empty when attempting to dequeue
-                immediately.
-        """
-        logger.debug('Attempting to consume one event.')
-        try:
-            event = await self.queue.dequeue_event(no_wait=True)
-        except asyncio.QueueEmpty as e:
-            logger.warning('Event queue was empty in consume_one.')
-            raise InternalError(
-                message='Agent did not return any response'
-            ) from e
-
-        logger.debug('Dequeued event of type: %s in consume_one.', type(event))
-
-        self.queue.task_done()
-
-        return event
 
     async def consume_all(self) -> AsyncGenerator[Event]:
         """Consume all the generated streaming events from the agent.
