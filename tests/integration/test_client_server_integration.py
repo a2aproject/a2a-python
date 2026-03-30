@@ -1,4 +1,5 @@
 import asyncio
+
 from collections.abc import AsyncGenerator
 from typing import Any, NamedTuple
 from unittest.mock import ANY, AsyncMock, patch
@@ -7,9 +8,11 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
+
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.applications import Starlette
 
 from a2a.client import Client, ClientConfig
 from a2a.client.base_client import BaseClient
@@ -21,17 +24,16 @@ from a2a.client.service_parameters import (
     with_a2a_extensions,
 )
 from a2a.client.transports import JsonRpcTransport, RestTransport
-from starlette.applications import Starlette
 
 # Compat v0.3 imports for dedicated tests
-from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
     create_rest_routes,
 )
-from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -66,11 +68,7 @@ from a2a.utils.errors import (
     ContentTypeNotSupportedError,
     ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
-    InternalError,
     InvalidAgentResponseError,
-    InvalidParamsError,
-    InvalidRequestError,
-    MethodNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -81,6 +79,7 @@ from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
 )
+
 
 # --- Test Constants ---
 
@@ -347,7 +346,10 @@ async def grpc_server_and_handler(
     servicer = GrpcHandler(agent_card, mock_request_handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
-    yield server_address, mock_request_handler
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
 
 
 @pytest_asyncio.fixture
@@ -1101,7 +1103,7 @@ async def test_validate_version_unsupported(http_transport_setups) -> None:
 
     params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
 
-    with pytest.raises(VersionNotSupportedError) as exc_info:
+    with pytest.raises(VersionNotSupportedError):
         await client.get_task(request=params, context=context)
 
     await client.close()
@@ -1118,7 +1120,7 @@ async def test_validate_decorator_push_notifications_disabled(
 
     params = TaskPushNotificationConfig(task_id='123')
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         await client.create_task_push_notification_config(request=params)
 
     await client.close()
@@ -1140,7 +1142,7 @@ async def test_validate_streaming_disabled(
 
     stream = transport.send_message_streaming(request=params)
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         async for _ in stream:
             pass
 

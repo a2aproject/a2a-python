@@ -3,7 +3,10 @@
 import logging
 
 from a2a.server.request_handlers.default_request_handler import (
-    DefaultRequestHandler,
+    LegacyRequestHandler,
+)
+from a2a.server.request_handlers.default_request_handler_v2 import (
+    DefaultRequestHandlerV2,
 )
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
@@ -40,11 +43,15 @@ except ImportError as e:
             ) from _original_error
 
 
+DefaultRequestHandler = DefaultRequestHandlerV2
+
 __all__ = [
     'DefaultGrpcServerCallContextBuilder',
     'DefaultRequestHandler',
+    'DefaultRequestHandlerV2',
     'GrpcHandler',
     'GrpcServerCallContextBuilder',
+    'LegacyRequestHandler',
     'RequestHandler',
     'build_error_response',
     'prepare_response_object',
