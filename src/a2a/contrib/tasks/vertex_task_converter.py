@@ -34,9 +34,10 @@ _ORIGINAL_METADATA_KEY = 'originalMetadata'
 _EXTENSIONS_KEY = 'extensions'
 _REFERENCE_TASK_IDS_KEY = 'referenceTaskIds'
 _PART_METADATA_KEY = 'partMetadata'
-_PART_TYPES_KEY = 'partTypes'
 _METADATA_VERSION_KEY = '__vertex_compat_v'
 _METADATA_VERSION_NUMBER = 1.0
+
+_DATA_PART_MIME_TYPE = 'application/x-a2a-datapart'
 
 
 _TO_SDK_TASK_STATE = {
@@ -81,14 +82,7 @@ def to_stored_metadata(
     if reference_task_ids:
         metadata[_REFERENCE_TASK_IDS_KEY] = reference_task_ids
 
-    part_types = []
-    part_metadata = []
-    for part in parts:
-        part_types.append('data' if isinstance(part.root, DataPart) else '')
-        part_metadata.append(part.root.metadata)
-
-    metadata[_PART_TYPES_KEY] = part_types
-    metadata[_PART_METADATA_KEY] = part_metadata
+    metadata[_PART_METADATA_KEY] = [part.root.metadata for part in parts]
 
     return metadata
 
@@ -99,7 +93,6 @@ class _UnpackedMetadata:
     extensions: list[str] | None = None
     reference_task_ids: list[str] | None = None
     part_metadata: list[dict[str, Any] | None] | None = None
-    part_types: list[str] | None = None
 
 
 def to_sdk_metadata(
@@ -118,7 +111,6 @@ def to_sdk_metadata(
         extensions=stored_metadata.get(_EXTENSIONS_KEY),
         reference_task_ids=stored_metadata.get(_REFERENCE_TASK_IDS_KEY),
         part_metadata=stored_metadata.get(_PART_METADATA_KEY),
-        part_types=stored_metadata.get(_PART_TYPES_KEY),
     )
 
 
@@ -130,7 +122,7 @@ def to_stored_part(part: Part) -> genai_types.Part:
         data_bytes = json.dumps(part.root.data).encode('utf-8')
         return genai_types.Part(
             inline_data=genai_types.Blob(
-                mime_type='application/json', data=data_bytes
+                mime_type=_DATA_PART_MIME_TYPE, data=data_bytes
             )
         )
     if isinstance(part.root, FilePart):
@@ -155,7 +147,6 @@ def to_stored_part(part: Part) -> genai_types.Part:
 def to_sdk_part(
     stored_part: genai_types.Part,
     part_metadata: dict[str, Any] | None = None,
-    part_type: str = '',
 ) -> Part:
     """Converts a proto Part to a SDK Part."""
     if stored_part.text:
@@ -164,7 +155,7 @@ def to_sdk_part(
         )
     if stored_part.inline_data:
         mime_type = stored_part.inline_data.mime_type
-        if part_type == 'data' and mime_type == 'application/json':
+        if mime_type == _DATA_PART_MIME_TYPE:
             data_dict = json.loads(stored_part.inline_data.data or b'{}')
             return Part(root=DataPart(data=data_dict, metadata=part_metadata))
 
@@ -214,17 +205,13 @@ def to_sdk_artifact(stored_artifact: vertexai_types.TaskArtifact) -> Artifact:
     """Converts a proto TaskArtifact to a SDK Artifact."""
     unpacked_meta = to_sdk_metadata(stored_artifact.metadata)
     part_metadata_list = unpacked_meta.part_metadata or []
-    part_types = unpacked_meta.part_types or []
 
     parts = []
     for i, part in enumerate(stored_artifact.parts or []):
         meta: dict[str, Any] | None = None
         if i < len(part_metadata_list):
             meta = part_metadata_list[i]
-        ptype = ''
-        if i < len(part_types):
-            ptype = part_types[i]
-        parts.append(to_sdk_part(part, part_metadata=meta, part_type=ptype))
+        parts.append(to_sdk_part(part, part_metadata=meta))
 
     return Artifact(
         artifact_id=stored_artifact.artifact_id,
@@ -264,19 +251,13 @@ def to_sdk_message(
         return None
     unpacked_meta = to_sdk_metadata(stored_msg.metadata)
     part_metadata_list = unpacked_meta.part_metadata or []
-    part_types = unpacked_meta.part_types or []
 
     parts = []
     for i, part in enumerate(stored_msg.parts or []):
         part_metadata: dict[str, Any] | None = None
         if i < len(part_metadata_list):
             part_metadata = part_metadata_list[i]
-        part_type = ''
-        if i < len(part_types):
-            part_type = part_types[i]
-        parts.append(
-            to_sdk_part(part, part_metadata=part_metadata, part_type=part_type)
-        )
+        parts.append(to_sdk_part(part, part_metadata=part_metadata))
 
     return Message(
         message_id=stored_msg.message_id,

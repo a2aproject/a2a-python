@@ -9,6 +9,7 @@ pytest.importorskip(
 from vertexai import types as vertexai_types
 from google.genai import types as genai_types
 from a2a.contrib.tasks.vertex_task_converter import (
+    _DATA_PART_MIME_TYPE,
     to_sdk_artifact,
     to_sdk_message,
     to_sdk_part,
@@ -127,7 +128,7 @@ def test_to_stored_part_data() -> None:
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
     assert stored_part.inline_data is not None
-    assert stored_part.inline_data.mime_type == 'application/json'
+    assert stored_part.inline_data.mime_type == _DATA_PART_MIME_TYPE
     assert stored_part.inline_data.data == b'{"key": "value"}'
 
 
@@ -192,6 +193,18 @@ def test_to_sdk_part_inline_data() -> None:
     expected_b64 = base64.b64encode(b'{"key": "val"}').decode('utf-8')
     assert sdk_part.root.file.mime_type == 'application/json'
     assert sdk_part.root.file.bytes == expected_b64
+
+
+def test_to_sdk_part_inline_data_datapart() -> None:
+    stored_part = genai_types.Part(
+        inline_data=genai_types.Blob(
+            mime_type=_DATA_PART_MIME_TYPE,
+            data=b'{"key": "val"}',
+        )
+    )
+    sdk_part = to_sdk_part(stored_part)
+    assert isinstance(sdk_part.root, DataPart)
+    assert sdk_part.root.data == {'key': 'val'}
 
 
 def test_to_sdk_part_file_data() -> None:
@@ -319,9 +332,7 @@ def test_sdk_part_text_conversion_round_trip() -> None:
 def test_sdk_part_data_conversion_round_trip() -> None:
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
-    round_trip_sdk_part = to_sdk_part(
-        stored_part, part_metadata=None, part_type='data'
-    )
+    round_trip_sdk_part = to_sdk_part(stored_part, part_metadata=None)
 
     assert round_trip_sdk_part == sdk_part
 
