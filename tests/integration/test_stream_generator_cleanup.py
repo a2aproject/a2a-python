@@ -119,7 +119,7 @@ async def test_stream_message_no_athrow(client: BaseClient) -> None:
             )
         ]
         assert events
-        assert events[0][0].HasField('message')
+        assert events[0].HasField('message')
 
         gc.collect()
         await loop.shutdown_asyncgens()

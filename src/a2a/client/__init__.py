@@ -11,8 +11,6 @@ from a2a.client.client import (
     Client,
     ClientCallContext,
     ClientConfig,
-    ClientEvent,
-    Consumer,
 )
 from a2a.client.client_factory import ClientFactory, minimal_agent_card
 from a2a.client.errors import (
@@ -35,9 +33,7 @@ __all__ = [
     'ClientCallContext',
     'ClientCallInterceptor',
     'ClientConfig',
-    'ClientEvent',
     'ClientFactory',
-    'Consumer',
     'CredentialService',
     'InMemoryContextCredentialStore',
     'create_text_message_object',

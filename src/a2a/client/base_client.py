@@ -5,10 +5,7 @@ from a2a.client.client import (
     Client,
     ClientCallContext,
     ClientConfig,
-    ClientEvent,
-    Consumer,
 )
-from a2a.client.client_task_manager import ClientTaskManager
 from a2a.client.interceptors import (
     AfterArgs,
     BeforeArgs,
@@ -42,10 +39,9 @@ class BaseClient(Client):
         card: AgentCard,
         config: ClientConfig,
         transport: ClientTransport,
-        consumers: list[Consumer],
         interceptors: list[ClientCallInterceptor],
     ):
-        super().__init__(consumers, interceptors)
+        super().__init__(interceptors)
         self._card = card
         self._config = config
         self._transport = transport
@@ -56,7 +52,7 @@ class BaseClient(Client):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[ClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         """Sends a message to the agent.
 
         This method handles both streaming and non-streaming (polling) interactions
@@ -84,19 +80,14 @@ class BaseClient(Client):
             # In non-streaming case we convert to a StreamResponse so that the
             # client always sees the same iterator.
             stream_response = StreamResponse()
-            client_event: ClientEvent
             if response.HasField('task'):
                 stream_response.task.CopyFrom(response.task)
-                client_event = (stream_response, response.task)
             elif response.HasField('message'):
                 stream_response.message.CopyFrom(response.message)
-                client_event = (stream_response, None)
             else:
-                # Response must have either task or message
                 raise ValueError('Response has neither task nor message')
 
-            await self.consume(client_event, self._card)
-            yield client_event
+            yield stream_response
             return
 
         async for event in self._execute_stream_with_interceptors(
@@ -130,8 +121,7 @@ class BaseClient(Client):
         self,
         stream: AsyncIterator[StreamResponse],
         before_args: BeforeArgs,
-    ) -> AsyncGenerator[ClientEvent]:
-        tracker = ClientTaskManager()
+    ) -> AsyncGenerator[StreamResponse, None]:
         async for stream_response in stream:
             after_args = AfterArgs(
                 result=stream_response,
@@ -140,12 +130,8 @@ class BaseClient(Client):
                 context=before_args.context,
             )
             await self._intercept_after(after_args)
-            intercepted_response = after_args.result
-            client_event = await self._format_stream_event(
-                intercepted_response, tracker
-            )
-            yield client_event
-            if intercepted_response.HasField('message'):
+            yield after_args.result
+            if after_args.result.HasField('message'):
                 return
 
     async def get_task(
@@ -318,7 +304,7 @@ class BaseClient(Client):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[ClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         """Resubscribes to a task's event stream.
 
         This is only available if both the client and server support streaming.
@@ -436,7 +422,7 @@ class BaseClient(Client):
         transport_call: Callable[
             [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
         ],
-    ) -> AsyncIterator[ClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
 
         before_args = BeforeArgs(
             input=input_data,
@@ -455,8 +441,7 @@ class BaseClient(Client):
             )
             await self._intercept_after(after_args, before_result['executed'])
 
-            tracker = ClientTaskManager()
-            yield await self._format_stream_event(after_args.result, tracker)
+            yield after_args.result
             return
 
         stream = transport_call(before_args.input, before_args.context)
@@ -495,19 +480,3 @@ class BaseClient(Client):
             await interceptor.after(args)
             if args.early_return:
                 return
-
-    async def _format_stream_event(
-        self, stream_response: StreamResponse, tracker: ClientTaskManager
-    ) -> ClientEvent:
-        client_event: ClientEvent
-        if stream_response.HasField('message'):
-            client_event = (stream_response, None)
-            await self.consume(client_event, self._card)
-            return client_event
-
-        await tracker.process(stream_response)
-        updated_task = tracker.get_task_or_raise()
-        client_event = (stream_response, updated_task)
-
-        await self.consume(client_event, self._card)
-        return client_event

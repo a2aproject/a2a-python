@@ -268,24 +268,21 @@ async def test_client_factory_connect_with_extra_transports(
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_consumers_and_interceptors(
+async def test_client_factory_connect_with_interceptors(
     base_agent_card: AgentCard,
 ):
-    """Verify consumers and interceptors are passed through correctly."""
-    consumer1 = MagicMock()
+    """Verify interceptors are passed through correctly."""
     interceptor1 = MagicMock()
 
     with patch('a2a.client.client_factory.BaseClient') as mock_base_client:
         await ClientFactory.connect(
             base_agent_card,
-            consumers=[consumer1],
             interceptors=[interceptor1],
         )
 
         mock_base_client.assert_called_once()
         call_args = mock_base_client.call_args[0]
-        assert call_args[3] == [consumer1]
-        assert call_args[4] == [interceptor1]
+        assert call_args[3] == [interceptor1]
 
 
 def test_client_factory_applies_tenant_decorator(base_agent_card: AgentCard):
