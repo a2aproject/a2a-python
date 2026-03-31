@@ -15,6 +15,7 @@ from a2a.server.events import (
     Event,
     EventConsumer,
     EventQueue,
+    EventQueueLegacy,
     InMemoryQueueManager,
     QueueManager,
 )
@@ -192,7 +193,7 @@ class DefaultRequestHandler(RequestHandler):
 
         queue = await self._queue_manager.tap(task.id)
         if not queue:
-            queue = EventQueue()
+            queue = EventQueueLegacy()
 
         await self.agent_executor.cancel(
             RequestContext(
