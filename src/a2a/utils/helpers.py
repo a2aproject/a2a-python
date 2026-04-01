@@ -218,12 +218,31 @@ def validate(
                 if not expression(self):
                     final_message = error_message or str(expression)
                     logger.error('Validation failure: %s', final_message)
-                    raise error_type(final_message)
-
+                    raise (
+                        error_type(final_message)
+                        if final_message
+                        else error_type
+                    )
                 async for item in function(self, *args, **kwargs):
                     yield item
 
             return async_gen_wrapper
+
+        if inspect.iscoroutinefunction(function):
+
+            @functools.wraps(function)
+            async def async_wrapper(self: Any, *args, **kwargs) -> Any:
+                if not expression(self):
+                    final_message = error_message or str(expression)
+                    logger.error('Validation failure: %s', final_message)
+                    raise (
+                        error_type(final_message)
+                        if final_message
+                        else error_type
+                    )
+                return await function(self, *args, **kwargs)
+
+            return async_wrapper
 
         @functools.wraps(function)
         def sync_wrapper(self: Any, *args, **kwargs) -> Any:
