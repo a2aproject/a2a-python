@@ -9,7 +9,7 @@ from pydantic import ValidationError
 
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.events.event_queue import QueueShutDown
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
     InternalError,
@@ -63,68 +63,6 @@ def test_init_logs_debug_message(mock_event_queue: EventQueue):
     with patch('a2a.server.events.event_consumer.logger') as mock_logger:
         EventConsumer(queue=mock_event_queue)  # Instantiate to trigger __init__
         mock_logger.debug.assert_called_once_with('EventConsumer initialized')
-
-
-@pytest.mark.asyncio
-async def test_consume_one_task_event(
-    event_consumer: MagicMock,
-    mock_event_queue: MagicMock,
-):
-    task_event = create_sample_task()
-    mock_event_queue.dequeue_event.return_value = task_event
-    result = await event_consumer.consume_one()
-    assert result == task_event
-    mock_event_queue.task_done.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_consume_one_message_event(
-    event_consumer: MagicMock,
-    mock_event_queue: MagicMock,
-):
-    message_event = create_sample_message()
-    mock_event_queue.dequeue_event.return_value = message_event
-    result = await event_consumer.consume_one()
-    assert result == message_event
-    mock_event_queue.task_done.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_consume_one_a2a_error_event(
-    event_consumer: MagicMock,
-    mock_event_queue: MagicMock,
-):
-    error_event = InternalError()
-    mock_event_queue.dequeue_event.return_value = error_event
-    result = await event_consumer.consume_one()
-    assert result == error_event
-    mock_event_queue.task_done.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_consume_one_jsonrpc_error_event(
-    event_consumer: MagicMock,
-    mock_event_queue: MagicMock,
-):
-    error_event = JSONRPCError(code=123, message='Some Error')
-    mock_event_queue.dequeue_event.return_value = error_event
-    result = await event_consumer.consume_one()
-    assert result == error_event
-    mock_event_queue.task_done.assert_called_once()
-
-
-@pytest.mark.asyncio
-async def test_consume_one_queue_empty(
-    event_consumer: MagicMock,
-    mock_event_queue: MagicMock,
-):
-    mock_event_queue.dequeue_event.side_effect = asyncio.QueueEmpty
-    try:
-        result = await event_consumer.consume_one()
-        assert result is not None
-    except InternalError:
-        pass
-    mock_event_queue.task_done.assert_not_called()
 
 
 @pytest.mark.asyncio
@@ -465,8 +403,8 @@ async def test_consume_all_handles_validation_error(
 @pytest.mark.asyncio
 async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
 
-    parent_queue = EventQueue(max_queue_size=10)
-    child_queue = parent_queue.tap()
+    parent_queue = EventQueueLegacy(max_queue_size=10)
+    child_queue = await parent_queue.tap()
 
     fast_consumer_done = asyncio.Event()
 
@@ -522,7 +460,7 @@ async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
 )
 @pytest.mark.asyncio
 async def test_background_close_deadlocks_on_trailing_events() -> None:
-    queue = EventQueue()
+    queue = EventQueueLegacy()
 
     # Producer enqueues a final event, but then enqueues another event
     # (e.g., simulating a delayed log message, race condition, or multiple messages).
