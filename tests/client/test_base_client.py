@@ -150,7 +150,6 @@ class TestClientTransport:
         )
         assert not mock_transport.send_message.called
         assert len(events) == 1
-        # events[0] is (StreamResponse, Task) tuple
         response = events[0]
         assert response.task.id == 'task-123'
 

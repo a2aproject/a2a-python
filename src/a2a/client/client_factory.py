@@ -63,12 +63,11 @@ class ClientFactory:
 
     .. code-block:: python
 
-        factory = ClientFactory(config, consumers)
+        factory = ClientFactory(config)
         # Optionally register custom client implementations
         factory.register('my_customer_transport', NewCustomTransportClient)
-        # Then with an agent card make a client with additional consumers and
-        # interceptors
-        client = factory.create(card, additional_consumers, interceptors)
+        # Then with an agent card make a client with additional interceptors
+        client = factory.create(card, interceptors)
 
     Now the client can be used consistently regardless of the transport. This
     aligns the client configuration with the server's capabilities.

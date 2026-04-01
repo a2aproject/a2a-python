@@ -64,7 +64,7 @@ class BaseClient(Client):
             context: Optional client call context.
 
         Yields:
-            An async iterator of `ClientEvent`
+            An async iterator of `StreamResponse`
         """
         self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
@@ -314,7 +314,7 @@ class BaseClient(Client):
             context: Optional client call context.
 
         Yields:
-            An async iterator of `ClientEvent` objects.
+            An async iterator of `StreamResponse` objects.
 
         Raises:
             NotImplementedError: If streaming is not supported by the client or server.
@@ -432,7 +432,7 @@ class BaseClient(Client):
         )
         before_result = await self._intercept_before(before_args)
 
-        if before_result:
+        if before_result is not None:
             after_args = AfterArgs(
                 result=before_result['early_return'],
                 method=method,

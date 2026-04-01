@@ -132,9 +132,7 @@ class Client(ABC):
 
         This will automatically use the streaming or non-streaming approach
         as supported by the server and the client config. Client will
-        aggregate update events and return an iterator of (`Task`,`Update`)
-        pairs, or a `Message`. Client will also send these values to any
-        configured `Consumer`s in the client.
+        aggregate update events and return an iterator of `StreamResponse`.
         """
         return
         yield
