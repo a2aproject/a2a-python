@@ -223,8 +223,12 @@ def validate(
                         if final_message
                         else error_type
                     )
-                async for item in function(self, *args, **kwargs):
-                    yield item
+                inner = function(self, *args, **kwargs)
+                try:
+                    async for item in inner:
+                        yield item
+                finally:
+                    await inner.aclose()
 
             return async_gen_wrapper
 
