@@ -34,6 +34,7 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
     PushNotificationConfigNotFoundError,
@@ -49,6 +50,7 @@ from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
@@ -2850,3 +2852,88 @@ async def test_on_message_send_negative_history_length_error(agent_card):
         await request_handler.on_message_send(params, context)
 
     assert 'history length must be non-negative' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_unsupported(agent_card):
+    """Test on_message_send_stream when streaming is unsupported."""
+    agent_card.capabilities.streaming = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-unsupported',
+            parts=[Part(text='hi')],
+        )
+    )
+
+    context = create_server_call_context()
+
+    with pytest.raises(UnsupportedOperationError):
+        async for _ in request_handler.on_message_send_stream(params, context):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_on_get_extended_agent_card_unsupported(agent_card):
+    """Test on_get_extended_agent_card when extended_agent_card is unsupported."""
+    agent_card.capabilities.extended_agent_card = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = GetExtendedAgentCardRequest()
+    context = create_server_call_context()
+
+    with pytest.raises(ExtendedAgentCardNotConfiguredError):
+        await request_handler.on_get_extended_agent_card(params, context)
+
+
+@pytest.mark.asyncio
+async def test_on_create_task_push_notification_config_unsupported(agent_card):
+    """Test on_create_task_push_notification_config when push_notifications is unsupported."""
+    agent_card.capabilities.push_notifications = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = TaskPushNotificationConfig(url='http://callback.com/push')
+
+    context = create_server_call_context()
+
+    with pytest.raises(PushNotificationNotSupportedError):
+        await request_handler.on_create_task_push_notification_config(
+            params, context
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_subscribe_to_task_unsupported(agent_card):
+    """Test on_subscribe_to_task when streaming is unsupported."""
+    agent_card.capabilities.streaming = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = SubscribeToTaskRequest(id='some_task')
+    context = create_server_call_context()
+
+    with pytest.raises(UnsupportedOperationError):
+        # We need to exhaust the generator to trigger the decorator evaluation
+        async for _ in request_handler.on_subscribe_to_task(params, context):
+            pass
