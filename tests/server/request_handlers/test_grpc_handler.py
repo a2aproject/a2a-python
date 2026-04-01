@@ -56,6 +56,7 @@ def grpc_handler(
     mock_request_handler.agent_card = sample_agent_card
     return GrpcHandler(request_handler=mock_request_handler)
 
+
 # --- Test Cases ---
 
 

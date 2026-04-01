@@ -32,7 +32,9 @@ from a2a.server.routes import (
     create_rest_routes,
 )
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.server.request_handlers.default_request_handler import DefaultRequestHandler
+from a2a.server.request_handlers.default_request_handler import (
+    DefaultRequestHandler,
+)
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -1140,7 +1142,6 @@ async def test_validate_decorator_push_notifications_disabled(
         url='http://example.com',
     )
 
-
     with pytest.raises(PushNotificationNotSupportedError) as exc_info:
         await client.create_task_push_notification_config(request=params)
 
@@ -1163,8 +1164,12 @@ async def test_validate_streaming_disabled(
         agent_card=agent_card,
     )
 
-    error_handling_setups.handler.on_message_send_stream.side_effect = real_handler.on_message_send_stream
-    error_handling_setups.handler.on_subscribe_to_task.side_effect = real_handler.on_subscribe_to_task
+    error_handling_setups.handler.on_message_send_stream.side_effect = (
+        real_handler.on_message_send_stream
+    )
+    error_handling_setups.handler.on_subscribe_to_task.side_effect = (
+        real_handler.on_subscribe_to_task
+    )
 
     params = SendMessageRequest(
         message=Message(

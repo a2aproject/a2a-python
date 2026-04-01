@@ -120,9 +120,7 @@ def agent_card():
     return AgentCard(
         name='test_agent',
         version='1.0',
-        capabilities=AgentCapabilities(
-            streaming=True, push_notifications=True
-        ),
+        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
     )
 
 
@@ -610,7 +608,9 @@ async def test_on_message_send_with_push_notification(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_with_push_notification_in_non_blocking_request(agent_card):
+async def test_on_message_send_with_push_notification_in_non_blocking_request(
+    agent_card,
+):
     """Test that push notification callback is called during background event processing for non-blocking requests."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_notification_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -750,7 +750,9 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request(ag
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_with_push_notification_no_existing_Task(agent_card):
+async def test_on_message_send_with_push_notification_no_existing_Task(
+    agent_card,
+):
     """Test on_message_send for new task sets push notification info if provided."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_notification_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -1328,7 +1330,9 @@ async def test_on_message_send_stream_with_push_notification(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_stream_disconnect_then_resubscribe_receives_future_events(agent_card):
+async def test_stream_disconnect_then_resubscribe_receives_future_events(
+    agent_card,
+):
     """Start streaming, disconnect, then resubscribe and ensure subsequent events are streamed."""
     # Arrange
     mock_task_store = AsyncMock(spec=TaskStore)
@@ -1420,7 +1424,9 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events(agent_c
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_client_disconnect_triggers_background_cleanup_and_producer_continues(agent_card):
+async def test_on_message_send_stream_client_disconnect_triggers_background_cleanup_and_producer_continues(
+    agent_card,
+):
     """Simulate client disconnect: stream stops early, cleanup is scheduled in background,
     producer keeps running, and cleanup completes after producer finishes."""
     # Arrange
@@ -2037,7 +2043,9 @@ async def test_get_task_push_notification_config_info_with_config(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_info_with_config_no_id(agent_card):
+async def test_get_task_push_notification_config_info_with_config_no_id(
+    agent_card,
+):
     """Test on_get_task_push_notification_config with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -2268,7 +2276,9 @@ async def test_list_task_push_notification_config_info_with_config(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_list_task_push_notification_config_info_with_config_and_no_id(agent_card):
+async def test_list_task_push_notification_config_info_with_config_and_no_id(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -2398,7 +2408,9 @@ async def test_delete_no_task_push_notification_config_info(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_info_with_config(agent_card):
+async def test_delete_task_push_notification_config_info_with_config(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with push config+id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2445,7 +2457,9 @@ async def test_delete_task_push_notification_config_info_with_config(agent_card)
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_info_with_config_and_no_id(agent_card):
+async def test_delete_task_push_notification_config_info_with_config_and_no_id(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2494,7 +2508,9 @@ TERMINAL_TASK_STATES = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_task_in_terminal_state(terminal_state, agent_card):
+async def test_on_message_send_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_message_send when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_task_{state_name}'
@@ -2540,7 +2556,9 @@ async def test_on_message_send_task_in_terminal_state(terminal_state, agent_card
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_stream_task_in_terminal_state(terminal_state, agent_card):
+async def test_on_message_send_stream_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_message_send_stream when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_stream_task_{state_name}'
@@ -2583,7 +2601,9 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state, age
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_subscribe_to_task_in_terminal_state(terminal_state, agent_card):
+async def test_on_subscribe_to_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_subscribe_to_task when task is in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'resub_terminal_task_{state_name}'
@@ -2654,7 +2674,9 @@ async def test_on_message_send_task_id_provided_but_task_not_found(agent_card):
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_task_id_provided_but_task_not_found(agent_card):
+async def test_on_message_send_stream_task_id_provided_but_task_not_found(
+    agent_card,
+):
     """Test on_message_send_stream when task_id is provided but task doesn't exist."""
     task_id = 'nonexistent_stream_task'
     mock_task_store = AsyncMock(spec=TaskStore)
