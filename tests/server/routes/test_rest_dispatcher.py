@@ -101,6 +101,7 @@ def make_mock_request(
     # Needs to be able to build ServerCallContext, so provide .user and .auth etc. if needed
     mock_req.user = MagicMock(is_authenticated=False)
     mock_req.auth = None
+    mock_req.scope = {}
     return mock_req
 
 
