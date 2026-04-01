@@ -14,6 +14,7 @@ from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
+    build_rest_error_payload,
     rest_error_handler,
     rest_stream_error_handler,
 )
@@ -25,6 +26,7 @@ from a2a.utils.helpers import maybe_await
 
 
 if TYPE_CHECKING:
+    from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -33,6 +35,7 @@ if TYPE_CHECKING:
     _package_starlette_installed = True
 else:
     try:
+        from sse_starlette.event import ServerSentEvent
         from sse_starlette.sse import EventSourceResponse
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -47,6 +50,7 @@ else:
         Route = Any
         Mount = Any
         BaseRoute = Any
+        ServerSentEvent = Any
 
         _package_starlette_installed = False
 
@@ -168,10 +172,17 @@ def create_rest_routes(  # noqa: PLR0913
         except StopAsyncIteration:
             return EventSourceResponse(iter([]))
 
-        async def event_generator() -> AsyncIterator[str]:
+        async def event_generator() -> AsyncIterator[str | ServerSentEvent]:
             yield json.dumps(first_item)
-            async for item in stream:
-                yield json.dumps(item)
+            try:
+                async for item in stream:
+                    yield json.dumps(item)
+            except Exception as e:
+                logger.exception('Error during REST SSE stream')
+                yield ServerSentEvent(
+                    data=json.dumps(build_rest_error_payload(e)),
+                    event='error',
+                )
 
         return EventSourceResponse(event_generator())
 
