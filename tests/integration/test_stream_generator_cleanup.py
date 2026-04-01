@@ -75,15 +75,14 @@ def client():
     handler = DefaultRequestHandler(
         agent_executor=_MessageExecutor(),
         task_store=InMemoryTaskStore(),
+        agent_card=card,
         queue_manager=InMemoryQueueManager(),
     )
     app = Starlette(
         routes=[
             *create_agent_card_routes(agent_card=card, card_url='/card'),
             *create_jsonrpc_routes(
-                agent_card=card,
                 request_handler=handler,
-                extended_agent_card=card,
                 rpc_url='/',
             ),
         ]

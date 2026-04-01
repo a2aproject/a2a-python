@@ -10,8 +10,10 @@ from google.protobuf.message import Message as ProtoMessage
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -24,7 +26,6 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.proto_utils import validate_proto_required_fields
 
 
@@ -32,8 +33,13 @@ class RequestHandler(ABC):
     """A2A request handler interface.
 
     This interface defines the methods that an A2A server implementation must
-    provide to handle incoming JSON-RPC requests.
+    provide to handle incoming A2A requests from any transport (gRPC, REST, JSON-RPC).
     """
+
+    @property
+    @abstractmethod
+    def agent_card(self) -> AgentCard:
+        """The core agent card to serve logic against."""
 
     @abstractmethod
     async def on_get_task(
@@ -59,7 +65,7 @@ class RequestHandler(ABC):
     ) -> ListTasksResponse:
         """Handles the tasks/list method.
 
-        Retrieves all task for an agent. Supports filtering, pagination,
+        Retrieves all tasks for an agent. Supports filtering, pagination,
         ordering, limiting the history length, excluding artifacts, etc.
 
         Args:
@@ -124,12 +130,10 @@ class RequestHandler(ABC):
 
         Yields:
             `Event` objects from the agent's execution.
-
-        Raises:
-            UnsupportedOperationError: By default, if not implemented.
         """
-        raise UnsupportedOperationError
-        yield
+        # This is needed for typechecker to recognise this method as an async generator.
+        if False:
+            yield
 
     @abstractmethod
     async def on_create_task_push_notification_config(
@@ -183,12 +187,10 @@ class RequestHandler(ABC):
 
         Yields:
              `Event` objects from the agent's ongoing execution for the specified task.
-
-        Raises:
-             UnsupportedOperationError: By default, if not implemented.
         """
-        raise UnsupportedOperationError
-        yield
+        # This is needed for typechecker to recognise the method as an async generator.
+        if False:
+            yield
 
     @abstractmethod
     async def on_list_task_push_notification_configs(
@@ -224,6 +226,25 @@ class RequestHandler(ABC):
 
         Returns:
             None
+        """
+
+    @abstractmethod
+    async def on_get_extended_agent_card(
+        self,
+        params: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> AgentCard:
+        """Handles the 'GetExtendedAgentCard' method.
+
+        Retrieves the extended agent card for the agent.
+
+        Args:
+            params: Parameters for the request.
+            context: Context provided by the server.
+
+        Returns:
+            The `AgentCard` object representing the extended properties of the agent.
+
         """
 
 

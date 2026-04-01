@@ -5,23 +5,18 @@ import logging
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
-from google.protobuf.json_format import MessageToDict
-
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.rest_handler import RESTHandler
 from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
-from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
 )
-from a2a.utils.helpers import maybe_await
 
 
 if TYPE_CHECKING:
@@ -53,36 +48,20 @@ else:
 logger = logging.getLogger(__name__)
 
 
-def create_rest_routes(  # noqa: PLR0913
-    agent_card: AgentCard,
+def create_rest_routes(
     request_handler: RequestHandler,
-    extended_agent_card: AgentCard | None = None,
     context_builder: CallContextBuilder | None = None,
-    card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-    | None = None,
-    extended_card_modifier: Callable[
-        [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
-    ]
-    | None = None,
     enable_v0_3_compat: bool = False,
     path_prefix: str = '',
 ) -> list['BaseRoute']:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
     Args:
-        agent_card: The AgentCard describing the agent's capabilities.
         request_handler: The handler instance responsible for processing A2A
           requests via http.
-        extended_agent_card: An optional, distinct AgentCard to be served
-          at the authenticated extended card endpoint.
         context_builder: The CallContextBuilder used to construct the
           ServerCallContext passed to the request_handler. If None the
           DefaultCallContextBuilder is used.
-        card_modifier: An optional callback to dynamically modify the public
-          agent card before it is served.
-        extended_card_modifier: An optional callback to dynamically modify
-          the extended agent card before it is served. It receives the
-          call context.
         enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
           endpoints using REST03Adapter.
         path_prefix: The URL prefix for the REST endpoints.
@@ -97,12 +76,16 @@ def create_rest_routes(  # noqa: PLR0913
     v03_routes = {}
     if enable_v0_3_compat:
         v03_adapter = REST03Adapter(
-            agent_card=agent_card,
+            agent_card=request_handler.agent_card,
             http_handler=request_handler,
-            extended_agent_card=extended_agent_card,
+            extended_agent_card=getattr(
+                request_handler, 'extended_agent_card', None
+            ),
             context_builder=context_builder,
-            card_modifier=card_modifier,
-            extended_card_modifier=extended_card_modifier,
+            card_modifier=getattr(request_handler, 'card_modifier', None),
+            extended_card_modifier=getattr(
+                request_handler, 'extended_card_modifier', None
+            ),
         )
         v03_routes = v03_adapter.routes()
 
@@ -116,9 +99,7 @@ def create_rest_routes(  # noqa: PLR0913
             )
         )
 
-    handler = RESTHandler(
-        agent_card=agent_card, request_handler=request_handler
-    )
+    handler = RESTHandler(request_handler=request_handler)
     _context_builder = context_builder or DefaultCallContextBuilder()
 
     def _build_call_context(request: 'Request') -> ServerCallContext:
@@ -175,24 +156,6 @@ def create_rest_routes(  # noqa: PLR0913
 
         return EventSourceResponse(event_generator())
 
-    async def _handle_authenticated_agent_card(
-        request: 'Request', call_context: ServerCallContext
-    ) -> dict[str, Any]:
-        if not agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='Authenticated card not supported'
-            )
-        card_to_serve = extended_agent_card or agent_card
-
-        if extended_card_modifier:
-            card_to_serve = await maybe_await(
-                extended_card_modifier(card_to_serve, call_context)
-            )
-        elif card_modifier:
-            card_to_serve = await maybe_await(card_modifier(card_to_serve))
-
-        return MessageToDict(card_to_serve, preserving_proto_field_name=True)
-
     # Dictionary of routes, mapping to bound helper methods
     base_routes: dict[tuple[str, str], Callable[[Request], Any]] = {
         ('/message:send', 'POST'): functools.partial(
@@ -234,7 +197,7 @@ def create_rest_routes(  # noqa: PLR0913
             _handle_request, handler.list_tasks
         ),
         ('/extendedAgentCard', 'GET'): functools.partial(
-            _handle_request, _handle_authenticated_agent_card
+            _handle_request, handler.get_extended_agent_card
         ),
     }
 

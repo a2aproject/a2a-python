@@ -53,8 +53,9 @@ async def app(
     request_handler: RequestHandler,
 ) -> Starlette:
     """Builds the Starlette application for testing."""
+    request_handler.agent_card = agent_card
     rest_routes = create_rest_routes(
-        agent_card, request_handler, enable_v0_3_compat=True
+        request_handler=request_handler, enable_v0_3_compat=True
     )
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/well-known/agent.json'

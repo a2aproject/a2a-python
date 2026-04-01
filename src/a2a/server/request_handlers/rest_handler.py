@@ -22,7 +22,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     CancelTaskRequest,
     GetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
@@ -30,7 +29,6 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import constants, proto_utils
 from a2a.utils.errors import TaskNotFoundError
 from a2a.utils.helpers import (
-    validate,
     validate_version,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -47,21 +45,18 @@ class RESTHandler:
     doing this, it ensures that this implementation and the gRPC transcoding
     (via Envoy) are equivalent. This handler should be used if using the gRPC handler
     with Envoy is not feasible for a given deployment solution. Use this handler
-    and a related application if you desire to ONLY server the RESTful API.
+    and a related application if you desire to ONLY serve the RESTful API.
     """
 
     def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
     ):
         """Initializes the RESTHandler.
 
         Args:
-          agent_card: The AgentCard describing the agent's capabilities.
           request_handler: The underlying `RequestHandler` instance to delegate requests to.
         """
-        self.agent_card = agent_card
         self.request_handler = request_handler
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
@@ -92,10 +87,6 @@ class RESTHandler:
         return MessageToDict(response)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def on_message_send_stream(
         self,
         request: Request,
@@ -146,10 +137,6 @@ class RESTHandler:
         raise TaskNotFoundError
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def on_subscribe_to_task(
         self,
         request: Request,
@@ -201,10 +188,6 @@ class RESTHandler:
         return MessageToDict(config)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
     async def set_push_notification(
         self,
         request: Request,
@@ -332,3 +315,24 @@ class RESTHandler:
             )
         )
         return MessageToDict(result)
+
+    @validate_version(constants.PROTOCOL_VERSION_1_0)
+    async def get_extended_agent_card(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the '/extendedAgentCard' REST method.
+
+        Args:
+            request: The incoming `Request` object.
+            context: Context provided by the server.
+
+        Returns:
+            A `dict` representing the `AgentCard`.
+        """
+        params = a2a_pb2.GetExtendedAgentCardRequest()
+        card = await self.request_handler.on_get_extended_agent_card(
+            params, context
+        )
+        return MessageToDict(card, preserving_proto_field_name=False)

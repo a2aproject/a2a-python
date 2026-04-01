@@ -166,12 +166,13 @@ class ClientSetup(NamedTuple):
 
 
 @pytest.fixture
-def base_e2e_setup():
+def base_e2e_setup(agent_card):
     task_store = InMemoryTaskStore()
     handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
         queue_manager=InMemoryQueueManager(),
+        agent_card=agent_card,
     )
     return task_store, handler
 
@@ -179,9 +180,7 @@ def base_e2e_setup():
 @pytest.fixture
 def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    rest_routes = create_rest_routes(
-        agent_card=agent_card, request_handler=handler
-    )
+    rest_routes = create_rest_routes(request_handler=handler)
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/'
     )
@@ -209,9 +208,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=handler,
-        extended_agent_card=agent_card,
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
@@ -250,8 +247,8 @@ async def grpc_setup(
             break
     else:
         raise ValueError('No gRPC interface found in agent card')
-
-    servicer = GrpcHandler(grpc_agent_card, handler)
+    handler._agent_card = grpc_agent_card
+    servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
 

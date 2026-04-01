@@ -66,6 +66,7 @@ async def test_agent_card_integration(header_val: str | None) -> None:
     handler = DefaultRequestHandler(
         agent_executor=DummyAgentExecutor(),
         task_store=task_store,
+        agent_card=AgentCard(name='test_agent', version='1.0'),
         queue_manager=InMemoryQueueManager(),
         push_config_store=InMemoryPushNotificationConfigStore(),
     )
@@ -76,9 +77,7 @@ async def test_agent_card_integration(header_val: str | None) -> None:
         *create_agent_card_routes(
             agent_card=agent_card, card_url='/.well-known/agent-card.json'
         ),
-        *create_jsonrpc_routes(
-            agent_card=agent_card, request_handler=handler, rpc_url='/'
-        ),
+        *create_jsonrpc_routes(request_handler=handler, rpc_url='/'),
     ]
     jsonrpc_app = Starlette(routes=jsonrpc_routes)
     app.mount('/jsonrpc', jsonrpc_app)
@@ -87,7 +86,7 @@ async def test_agent_card_integration(header_val: str | None) -> None:
         *create_agent_card_routes(
             agent_card=agent_card, card_url='/.well-known/agent-card.json'
         ),
-        *create_rest_routes(agent_card=agent_card, request_handler=handler),
+        *create_rest_routes(request_handler=handler),
     ]
     rest_app = Starlette(routes=rest_routes)
     app.mount('/rest', rest_app)

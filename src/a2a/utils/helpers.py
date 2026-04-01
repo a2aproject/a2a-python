@@ -135,19 +135,23 @@ def build_text_artifact(text: str, artifact_id: str) -> Artifact:
 
 
 def validate(
-    expression: Callable[[Any], bool], error_message: str | None = None
+    expression: Callable[[Any], bool],
+    error_message: str | None = None,
+    error_type: type[Exception] = UnsupportedOperationError,
 ) -> Callable:
     """Decorator that validates if a given expression evaluates to True.
 
     Typically used on class methods to check capabilities or configuration
     before executing the method's logic. If the expression is False,
-    an `UnsupportedOperationError` is raised.
+    the specified `error_type` (defaults to `UnsupportedOperationError`) is raised.
 
     Args:
         expression: A callable that takes the instance (`self`) as its argument
                     and returns a boolean.
-        error_message: An optional custom error message for the `UnsupportedOperationError`.
+        error_message: An optional custom error message for the error raised.
                        If None, the string representation of the expression will be used.
+        error_type: The exception class to raise on validation failure.
+                   Must take a `message` keyword argument (inherited from A2AError).
 
     Examples:
         Demonstrating with an async method:
@@ -207,24 +211,26 @@ def validate(
     """
 
     def decorator(function: Callable) -> Callable:
-        if inspect.iscoroutinefunction(function):
+        if inspect.isasyncgenfunction(function):
 
             @functools.wraps(function)
-            async def async_wrapper(self: Any, *args, **kwargs) -> Any:
+            async def async_gen_wrapper(self: Any, *args, **kwargs) -> Any:
                 if not expression(self):
                     final_message = error_message or str(expression)
-                    logger.error('Unsupported Operation: %s', final_message)
-                    raise UnsupportedOperationError(message=final_message)
-                return await function(self, *args, **kwargs)
+                    logger.error('Validation failure: %s', final_message)
+                    raise error_type(final_message)
 
-            return async_wrapper
+                async for item in function(self, *args, **kwargs):
+                    yield item
+
+            return async_gen_wrapper
 
         @functools.wraps(function)
         def sync_wrapper(self: Any, *args, **kwargs) -> Any:
             if not expression(self):
                 final_message = error_message or str(expression)
-                logger.error('Unsupported Operation: %s', final_message)
-                raise UnsupportedOperationError(message=final_message)
+                logger.error('Validation failure: %s', final_message)
+                raise error_type(final_message)
             return function(self, *args, **kwargs)
 
         return sync_wrapper

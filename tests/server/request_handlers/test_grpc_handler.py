@@ -53,10 +53,8 @@ def sample_agent_card() -> types.AgentCard:
 def grpc_handler(
     mock_request_handler: AsyncMock, sample_agent_card: types.AgentCard
 ) -> GrpcHandler:
-    return GrpcHandler(
-        agent_card=sample_agent_card, request_handler=mock_request_handler
-    )
-
+    mock_request_handler.agent_card = sample_agent_card
+    return GrpcHandler(request_handler=mock_request_handler)
 
 # --- Test Cases ---
 
@@ -182,13 +180,19 @@ async def test_get_extended_agent_card(
     grpc_handler: GrpcHandler,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
+    mock_request_handler: AsyncMock,
 ) -> None:
     """Test GetExtendedAgentCard call."""
+
+    async def to_coro(*args, **kwargs):
+        return sample_agent_card
+
+    mock_request_handler.on_get_extended_agent_card.side_effect = to_coro
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
     response = await grpc_handler.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
-
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == sample_agent_card.name
     assert response.version == sample_agent_card.version
 
@@ -207,17 +211,20 @@ async def test_get_extended_agent_card_with_modifier(
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
-    grpc_handler_modified = GrpcHandler(
-        agent_card=sample_agent_card,
-        request_handler=mock_request_handler,
-        card_modifier=modifier,
-    )
+    # Use side_effect to ensure it returns an awaitable
+    async def side_effect_func(*_args, **_kwargs):
+        return await modifier(sample_agent_card)
 
+    mock_request_handler.on_get_extended_agent_card.side_effect = (
+        side_effect_func
+    )
+    mock_request_handler.agent_card = sample_agent_card
+    grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
     response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
-
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == 'Modified gRPC Agent'
     assert response.version == sample_agent_card.version
 
@@ -237,17 +244,17 @@ async def test_get_agent_card_with_modifier_sync(
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
-    grpc_handler_modified = GrpcHandler(
-        agent_card=sample_agent_card,
-        request_handler=mock_request_handler,
-        card_modifier=modifier,
-    )
+    async def async_modifier(*args, **kwargs):
+        return modifier(sample_agent_card)
 
+    mock_request_handler.on_get_extended_agent_card.side_effect = async_modifier
+    mock_request_handler.agent_card = sample_agent_card
+    grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
     response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
-
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == 'Modified gRPC Agent'
     assert response.version == sample_agent_card.version
 
@@ -346,7 +353,7 @@ async def test_list_tasks_success(
         ),
     ],
 )
-async def test_abort_context_error_mapping(  # noqa: PLR0913
+async def test_abort_context_error_mapping(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,

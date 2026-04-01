@@ -23,9 +23,7 @@ def mock_handler():
 def test_routes_creation(agent_card, mock_handler):
     """Tests that create_jsonrpc_routes creates Route objects list."""
     routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=mock_handler,
-        rpc_url='/a2a/jsonrpc',
+        request_handler=mock_handler, rpc_url='/a2a/jsonrpc'
     )
 
     assert isinstance(routes, list)
@@ -41,7 +39,7 @@ def test_jsonrpc_custom_url(agent_card, mock_handler):
     """Tests that custom rpc_url is respected for routing."""
     custom_url = '/custom/api/jsonrpc'
     routes = create_jsonrpc_routes(
-        agent_card=agent_card, request_handler=mock_handler, rpc_url=custom_url
+        request_handler=mock_handler, rpc_url=custom_url
     )
 
     app = Starlette(routes=routes)

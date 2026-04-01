@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -31,8 +31,10 @@ from a2a.server.tasks import (
     TaskStore,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -47,13 +49,16 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
+    PushNotificationConfigNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -88,27 +93,43 @@ class DefaultRequestHandler(RequestHandler):
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
+        agent_card: AgentCard,
         queue_manager: QueueManager | None = None,
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
+        extended_agent_card: AgentCard | None = None,
+        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
+        | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
+        ]
+        | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
         Args:
             agent_executor: The `AgentExecutor` instance to run agent logic.
             task_store: The `TaskStore` instance to manage task persistence.
+            agent_card: The AgentCard describing the agent's capabilities.
             queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
             push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
             push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
             request_context_builder: The `RequestContextBuilder` instance used
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
+            extended_agent_card: An optional, distinct AgentCard to be served at the authenticated extended card endpoint.
+            card_modifier: An optional callback to dynamically modify the public agent card before it is served.
+            extended_card_modifier: An optional callback to dynamically modify the extended agent card before it is served. It receives the call context.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
+        self._agent_card = agent_card
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self.extended_agent_card = extended_agent_card
+        self.card_modifier = card_modifier
+        self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -121,6 +142,11 @@ class DefaultRequestHandler(RequestHandler):
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
+
+    @property
+    def agent_card(self) -> AgentCard:
+        """The agent card to be served by default."""
+        return self._agent_card
 
     @validate_request_params
     async def on_get_task(
@@ -396,6 +422,10 @@ class DefaultRequestHandler(RequestHandler):
         return result
 
     @validate_request_params
+    @validate(
+        lambda self: self.agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
@@ -485,6 +515,14 @@ class DefaultRequestHandler(RequestHandler):
             self._running_agents.pop(task_id, None)
 
     @validate_request_params
+    @validate(
+        lambda self: (
+            self.agent_card.capabilities.push_notifications
+            and self._push_config_store
+        ),
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
@@ -494,15 +532,12 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushNotifier` to be configured.
         """
-        if not self._push_config_store:
-            raise PushNotificationNotSupportedError
-
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
 
-        await self._push_config_store.set_info(
+        await self._push_config_store.set_info(  # type: ignore[union-attr]
             task_id,
             params,
             context,
@@ -511,6 +546,14 @@ class DefaultRequestHandler(RequestHandler):
         return params
 
     @validate_request_params
+    @validate(
+        lambda self: (
+            self.agent_card.capabilities.push_notifications
+            and self._push_config_store
+        ),
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -520,9 +563,6 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        if not self._push_config_store:
-            raise PushNotificationNotSupportedError
-
         task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -530,16 +570,20 @@ class DefaultRequestHandler(RequestHandler):
             raise TaskNotFoundError
 
         push_notification_configs: list[TaskPushNotificationConfig] = (
-            await self._push_config_store.get_info(task_id, context) or []
+            await self._push_config_store.get_info(task_id, context) or []  # type: ignore[union-attr]
         )
 
         for config in push_notification_configs:
             if config.id == config_id:
                 return config
 
-        raise InternalError(message='Push notification config not found')
+        raise PushNotificationConfigNotFoundError
 
     @validate_request_params
+    @validate(
+        lambda self: self.agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
@@ -583,6 +627,14 @@ class DefaultRequestHandler(RequestHandler):
             yield event
 
     @validate_request_params
+    @validate(
+        lambda self: (
+            self.agent_card.capabilities.push_notifications
+            and self._push_config_store
+        ),
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -592,15 +644,12 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        if not self._push_config_store:
-            raise PushNotificationNotSupportedError
-
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
 
-        push_notification_config_list = await self._push_config_store.get_info(
+        push_notification_config_list = await self._push_config_store.get_info(  # type: ignore[union-attr]
             task_id, context
         )
 
@@ -609,6 +658,14 @@ class DefaultRequestHandler(RequestHandler):
         )
 
     @validate_request_params
+    @validate(
+        lambda self: (
+            self.agent_card.capabilities.push_notifications
+            and self._push_config_store
+        ),
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
@@ -618,13 +675,35 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires a `PushConfigStore` to be configured.
         """
-        if not self._push_config_store:
-            raise PushNotificationNotSupportedError
-
         task_id = params.task_id
         config_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
 
-        await self._push_config_store.delete_info(task_id, context, config_id)
+        await self._push_config_store.delete_info(task_id, context, config_id)  # type: ignore[union-attr]
+
+    @validate_request_params
+    @validate(
+        lambda self: self.agent_card.capabilities.extended_agent_card,
+        error_message='The agent does not have an extended agent card configured',
+        error_type=ExtendedAgentCardNotConfiguredError,
+    )
+    async def on_get_extended_agent_card(
+        self,
+        params: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> AgentCard:
+        """Default handler for 'GetExtendedAgentCard'.
+
+        Requires `capabilities.extended_agent_card` to be true.
+        """
+        card = self.extended_agent_card or self.agent_card
+
+        if self.extended_card_modifier:
+            return await maybe_await(self.extended_card_modifier(card, context))
+
+        if self.card_modifier:
+            return await maybe_await(self.card_modifier(card))
+
+        return card

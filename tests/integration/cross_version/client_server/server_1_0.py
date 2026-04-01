@@ -158,10 +158,12 @@ async def main_async(http_port: int, grpc_port: int):
 
     task_store = InMemoryTaskStore()
     handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(),
-        task_store=task_store,
+        MockAgentExecutor(),
+        task_store,
+        agent_card,
         queue_manager=InMemoryQueueManager(),
         push_config_store=InMemoryPushNotificationConfigStore(),
+        extended_agent_card=agent_card,
     )
 
     app = FastAPI()
@@ -171,9 +173,7 @@ async def main_async(http_port: int, grpc_port: int):
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=handler,
-        extended_agent_card=agent_card,
         rpc_url='/',
         enable_v0_3_compat=True,
     )
@@ -183,7 +183,6 @@ async def main_async(http_port: int, grpc_port: int):
     )
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
         request_handler=handler,
         enable_v0_3_compat=True,
     )
@@ -194,7 +193,7 @@ async def main_async(http_port: int, grpc_port: int):
 
     # Start gRPC Server
     server = grpc.aio.server()
-    servicer = GrpcHandler(agent_card, handler)
+    servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
 
     compat_servicer = CompatGrpcHandler(agent_card, handler)
