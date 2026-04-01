@@ -1,0 +1,21 @@
+[project]
+name = "itk-python-v10-agent"
+version = "0.1.0"
+description = "ITK Python v1.0 Agent"
+dependencies = [
+    "a2a-sdk[sqlite,grpc,http-server]",
+    "fastapi",
+    "uvicorn",
+    "grpcio",
+    "grpcio-tools",
+    "protobuf",
+    "sse-starlette",
+    "httpx-sse",
+    "packaging",
+]
+
+[tool.uv]
+package = false
+
+[tool.uv.sources]
+a2a-sdk = { path = ".." }

@@ -179,6 +179,8 @@ class ClientFactory:
                     'You can install them with \'pip install "a2a-sdk[grpc]"\''
                 )
 
+            _grpc_transport = GrpcTransport
+
             def grpc_transport_producer(
                 card: AgentCard,
                 url: str,
@@ -203,13 +205,7 @@ class ClientFactory:
                 ):
                     return CompatGrpcTransport.create(card, url, config)
 
-                if GrpcTransport is not None:
-                    return GrpcTransport.create(card, url, config)
-
-                raise ImportError(
-                    'GrpcTransport is not available. '
-                    'You can install it with \'pip install "a2a-sdk[grpc]"\''
-                )
+                return _grpc_transport.create(card, url, config)
 
             self.register(
                 TransportProtocol.GRPC,

@@ -1,6 +1,5 @@
 """JSON-RPC application for A2A server."""
 
-import contextlib
 import json
 import logging
 import traceback
@@ -154,7 +153,7 @@ class DefaultCallContextBuilder(CallContextBuilder):
         """
         user: A2AUser = UnauthenticatedUser()
         state = {}
-        with contextlib.suppress(Exception):
+        if 'user' in request.scope:
             user = StarletteUserProxy(request.user)
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
@@ -216,8 +215,8 @@ class JsonRpcDispatcher:
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
             context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the request_handler. If None, no
-              ServerCallContext is passed.
+              ServerCallContext passed to the request_handler. If None the
+              DefaultCallContextBuilder is used.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
             extended_card_modifier: An optional callback to dynamically modify

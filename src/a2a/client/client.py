@@ -247,8 +247,6 @@ class Client(ABC):
         card: AgentCard,
     ) -> None:
         """Processes the event via all the registered `Consumer`s."""
-        if not event:
-            return
         for c in self._consumers:
             await c(event, card)
 

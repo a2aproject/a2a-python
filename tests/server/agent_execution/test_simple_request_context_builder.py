@@ -127,10 +127,12 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         mock_ref_task1 = create_sample_task(task_id=ref_task_id1)
         mock_ref_task3 = create_sample_task(task_id=ref_task_id3)
 
+        server_call_context = ServerCallContext(user=UnauthenticatedUser())
+
         # Configure task_store.get mock
         # Note: AsyncMock side_effect needs to handle multiple calls if they have different args.
         # A simple way is a list of return values, or a function.
-        async def get_side_effect(task_id):
+        async def get_side_effect(task_id, server_call_context):
             if task_id == ref_task_id1:
                 return mock_ref_task1
             if task_id == ref_task_id3:
@@ -144,7 +146,6 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
                 reference_task_ids=[ref_task_id1, ref_task_id2, ref_task_id3]
             )
         )
-        server_call_context = ServerCallContext(user=UnauthenticatedUser())
 
         request_context = await builder.build(
             params=params,
@@ -155,9 +156,15 @@ class TestSimpleRequestContextBuilder(unittest.IsolatedAsyncioTestCase):
         )
 
         self.assertEqual(self.mock_task_store.get.call_count, 3)
-        self.mock_task_store.get.assert_any_call(ref_task_id1)
-        self.mock_task_store.get.assert_any_call(ref_task_id2)
-        self.mock_task_store.get.assert_any_call(ref_task_id3)
+        self.mock_task_store.get.assert_any_call(
+            ref_task_id1, server_call_context
+        )
+        self.mock_task_store.get.assert_any_call(
+            ref_task_id2, server_call_context
+        )
+        self.mock_task_store.get.assert_any_call(
+            ref_task_id3, server_call_context
+        )
 
         self.assertIsNotNone(request_context.related_tasks)
         self.assertEqual(

@@ -44,7 +44,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
-from a2a.compat.v0_3.conversions import (
+from a2a.compat.v0_3.model_conversions import (
     core_to_compat_push_notification_config_model,
 )
 

@@ -11,10 +11,10 @@ class RequestContextBuilder(ABC):
     @abstractmethod
     async def build(
         self,
+        context: ServerCallContext,
         params: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
-        context: ServerCallContext | None = None,
     ) -> RequestContext:
         pass
