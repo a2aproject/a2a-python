@@ -65,8 +65,8 @@ def create_rest_routes(  # noqa: PLR0913
         extended_agent_card: An optional, distinct AgentCard to be served
           at the authenticated extended card endpoint.
         context_builder: The CallContextBuilder used to construct the
-          ServerCallContext passed to the request_handler. If None, no
-          ServerCallContext is passed.
+          ServerCallContext passed to the request_handler. If None the
+          DefaultCallContextBuilder is used.
         card_modifier: An optional callback to dynamically modify the public
           agent card before it is served.
         extended_card_modifier: An optional callback to dynamically modify
