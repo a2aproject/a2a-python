@@ -55,7 +55,7 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
-        run: uv sync --locked
+        run: uv sync --all-extras --locked
 
       # Coverage comparison for PRs (only on Python 3.13 to avoid duplicate work)
       - name: Checkout Base Branch
@@ -68,7 +68,7 @@ jobs:
       - name: Run coverage (Base)
         if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
         run: |
-          uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage
+          uv run --all-extras pytest --cov=a2a --cov-report=json --cov-report=html:coverage
           mv coverage.json /tmp/coverage-base.json
 
       - name: Checkout PR Branch (Restore)
@@ -80,7 +80,7 @@ jobs:
       - name: Run coverage (PR)
         if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
         run: |
-          uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage --cov-report=term --cov-fail-under=88
+          uv run --all-extras pytest --cov=a2a --cov-report=json --cov-report=html:coverage --cov-report=term --cov-fail-under=88
           mv coverage.json coverage-pr.json
           cp /tmp/coverage-base.json coverage-base.json
 
@@ -106,7 +106,7 @@ jobs:
       # Run standard tests (for matrix items that didn't run coverage PR)
       - name: Run tests (Standard)
         if: matrix.python-version != '3.13' || github.event_name != 'pull_request'
-        run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=88
+        run: uv run --all-extras pytest --cov=a2a --cov-report term --cov-fail-under=88
 
       - name: Upload Artifact (base)
         uses: actions/upload-artifact@v4
@@ -117,4 +117,4 @@ jobs:
           retention-days: 14
 
       - name: Show coverage summary in log
-        run: uv run coverage report
+        run: uv run --all-extras coverage report
