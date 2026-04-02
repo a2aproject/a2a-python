@@ -26,6 +26,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
+from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.proto_utils import validate_proto_required_fields
 
 
