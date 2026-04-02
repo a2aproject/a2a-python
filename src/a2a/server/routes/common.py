@@ -1,13 +1,17 @@
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
+
 if TYPE_CHECKING:
+    from starlette.authentication import BaseUser
     from starlette.requests import Request
 else:
     try:
+        from starlette.authentication import BaseUser
         from starlette.requests import Request
     except ImportError:
         Request = Any
+        BaseUser = Any
 
 from a2a.auth.user import UnauthenticatedUser, User
 from a2a.extensions.common import (
@@ -23,7 +27,7 @@ UserBuilder = Callable[[Request], User]
 class StarletteUser(User):
     """Adapts a Starlette BaseUser to the A2A User interface."""
 
-    def __init__(self, user: Any):
+    def __init__(self, user: BaseUser):
         self._user = user
 
     @property
