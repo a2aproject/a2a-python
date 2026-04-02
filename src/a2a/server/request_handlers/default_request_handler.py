@@ -112,15 +112,15 @@ class DefaultRequestHandler(RequestHandler):
         Args:
             agent_executor: The `AgentExecutor` instance to run agent logic.
             task_store: The `TaskStore` instance to manage task persistence.
-            agent_card: The AgentCard describing the agent's capabilities.
+            agent_card: The `AgentCard` describing the agent's capabilities.
             queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
             push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
             push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
             request_context_builder: The `RequestContextBuilder` instance used
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
-            extended_agent_card: An optional, distinct AgentCard to be served at the authenticated extended card endpoint.
-            card_modifier: An optional callback to dynamically modify the public agent card before it is served.
-            extended_card_modifier: An optional callback to dynamically modify the extended agent card before it is served. It receives the call context.
+            extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
+            card_modifier: An optional callback to dynamically modify the public `AgentCard` before it is served.
+            extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
