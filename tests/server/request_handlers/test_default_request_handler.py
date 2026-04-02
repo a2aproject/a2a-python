@@ -2854,6 +2854,37 @@ async def test_on_message_send_negative_history_length_error(agent_card):
 
 
 @pytest.mark.asyncio
+async def test_on_get_extended_agent_card_success(agent_card):
+    """Test on_get_extended_agent_card when extended_agent_card is supported."""
+    agent_card.capabilities.extended_agent_card = True
+
+    extended_agent_card = AgentCard(
+        name='Extended Agent',
+        description='An extended agent',
+        version='1.0.0',
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
+    )
+
+    params = GetExtendedAgentCardRequest()
+    context = create_server_call_context()
+
+    result = await request_handler.on_get_extended_agent_card(params, context)
+
+    assert result == extended_agent_card
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_stream_unsupported(agent_card):
     """Test on_message_send_stream when streaming is unsupported."""
     agent_card.capabilities.streaming = False
