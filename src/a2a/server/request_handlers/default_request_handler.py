@@ -21,6 +21,7 @@ from a2a.server.events import (
 )
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
+    validate,
     validate_request_params,
 )
 from a2a.server.tasks import (
@@ -58,7 +59,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.helpers import maybe_await, validate
+from a2a.utils.helpers import maybe_await
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,

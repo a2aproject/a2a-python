@@ -29,7 +29,6 @@ from a2a.utils.helpers import (
     build_text_artifact,
     canonicalize_agent_card,
     create_task_obj,
-    validate,
 )
 
 
@@ -247,27 +246,6 @@ def test_build_text_artifact():
     assert artifact.artifact_id == artifact_id
     assert len(artifact.parts) == 1
     assert artifact.parts[0].text == text
-
-
-# Test validate decorator
-def test_validate_decorator():
-    class TestClass:
-        condition = True
-
-        @validate(lambda self: self.condition, 'Condition not met')
-        def test_method(self) -> str:
-            return 'Success'
-
-    obj = TestClass()
-
-    # Test passing condition
-    assert obj.test_method() == 'Success'
-
-    # Test failing condition
-    obj.condition = False
-    with pytest.raises(UnsupportedOperationError) as exc_info:
-        obj.test_method()
-    assert 'Condition not met' in str(exc_info.value)
 
 
 # Tests for are_modalities_compatible

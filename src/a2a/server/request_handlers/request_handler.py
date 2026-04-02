@@ -1,5 +1,6 @@
 import functools
 import inspect
+import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Callable
@@ -28,6 +29,9 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.proto_utils import validate_proto_required_fields
+
+
+logger = logging.getLogger(__name__)
 
 
 class RequestHandler(ABC):
@@ -284,3 +288,130 @@ def validate_request_params(method: Callable) -> Callable:
         return await method(self, params, context, *args, **kwargs)
 
     return async_wrapper
+
+
+def validate(
+    expression: Callable[[Any], bool],
+    error_message: str | None = None,
+    error_type: type[Exception] = UnsupportedOperationError,
+) -> Callable:
+    """Decorator that validates if a given expression evaluates to True.
+
+    Typically used on class methods to check capabilities or configuration
+    before executing the method's logic. If the expression is False,
+    the specified `error_type` (defaults to `UnsupportedOperationError`) is raised.
+
+    Args:
+        expression: A callable that takes the instance (`self`) as its argument
+                    and returns a boolean.
+        error_message: An optional custom error message for the error raised.
+                       If None, the string representation of the expression will be used.
+        error_type: The exception class to raise on validation failure.
+                   Must take a `message` keyword argument (inherited from A2AError).
+
+    Examples:
+        Demonstrating with an async method:
+        >>> import asyncio
+        >>> from a2a.utils.errors import UnsupportedOperationError
+        >>>
+        >>> class MyAgent:
+        ...     def __init__(self, streaming_enabled: bool):
+        ...         self.streaming_enabled = streaming_enabled
+        ...
+        ...     @validate(
+        ...         lambda self: self.streaming_enabled,
+        ...         'Streaming is not enabled for this agent',
+        ...     )
+        ...     async def stream_response(self, message: str):
+        ...         return f'Streaming: {message}'
+        >>>
+        >>> async def run_async_test():
+        ...     # Successful call
+        ...     agent_ok = MyAgent(streaming_enabled=True)
+        ...     result = await agent_ok.stream_response('hello')
+        ...     print(result)
+        ...
+        ...     # Call that fails validation
+        ...     agent_fail = MyAgent(streaming_enabled=False)
+        ...     try:
+        ...         await agent_fail.stream_response('world')
+        ...     except UnsupportedOperationError as e:
+        ...         print(e.message)
+        >>>
+        >>> asyncio.run(run_async_test())
+        Streaming: hello
+        Streaming is not enabled for this agent
+
+        Demonstrating with a sync method:
+        >>> class SecureAgent:
+        ...     def __init__(self):
+        ...         self.auth_enabled = False
+        ...
+        ...     @validate(
+        ...         lambda self: self.auth_enabled,
+        ...         'Authentication must be enabled for this operation',
+        ...     )
+        ...     def secure_operation(self, data: str):
+        ...         return f'Processing secure data: {data}'
+        >>>
+        >>> # Error case example
+        >>> agent = SecureAgent()
+        >>> try:
+        ...     agent.secure_operation('secret')
+        ... except UnsupportedOperationError as e:
+        ...     print(e.message)
+        Authentication must be enabled for this operation
+
+    Note:
+        This decorator works with both sync and async methods automatically.
+    """
+
+    def decorator(function: Callable) -> Callable:
+        if inspect.isasyncgenfunction(function):
+
+            @functools.wraps(function)
+            async def async_gen_wrapper(self: Any, *args, **kwargs) -> Any:
+                if not expression(self):
+                    final_message = error_message or str(expression)
+                    logger.error('Validation failure: %s', final_message)
+                    raise (
+                        error_type(final_message)
+                        if final_message
+                        else error_type
+                    )
+                inner = function(self, *args, **kwargs)
+                try:
+                    async for item in inner:
+                        yield item
+                finally:
+                    await inner.aclose()
+
+            return async_gen_wrapper
+
+        if inspect.iscoroutinefunction(function):
+
+            @functools.wraps(function)
+            async def async_wrapper(self: Any, *args, **kwargs) -> Any:
+                if not expression(self):
+                    final_message = error_message or str(expression)
+                    logger.error('Validation failure: %s', final_message)
+                    raise (
+                        error_type(final_message)
+                        if final_message
+                        else error_type
+                    )
+                return await function(self, *args, **kwargs)
+
+            return async_wrapper
+
+        @functools.wraps(function)
+        def sync_wrapper(self: Any, *args, **kwargs) -> Any:
+            if not expression(self):
+                final_message = error_message or str(expression)
+                logger.error('Validation failure: %s', final_message)
+                raise error_type(final_message)
+            return function(self, *args, **kwargs)
+
+        return sync_wrapper
+
+    return decorator
