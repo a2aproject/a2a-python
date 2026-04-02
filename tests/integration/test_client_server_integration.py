@@ -394,7 +394,6 @@ def grpc_03_setup(
         card=agent_card,
         config=ClientConfig(),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
     return TransportSetup(client=client, handler=handler)
@@ -420,7 +419,8 @@ async def test_client_sends_message_streaming(transport_setups) -> None:
     events = [event async for event in stream]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_STREAM.id
 
@@ -449,7 +449,8 @@ async def test_client_sends_message_blocking(transport_setups) -> None:
     events = [event async for event in client.send_message(request=params)]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_BLOCKING.id
     handler.on_message_send.assert_awaited_once_with(params, ANY)
@@ -598,8 +599,7 @@ async def test_client_subscribe(transport_setups) -> None:
     stream = client.subscribe(request=params)
     first_event = await stream.__anext__()
 
-    _, task = first_event
-    assert task.id == RESUBSCRIBE_EVENT.task_id
+    assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
     handler.on_subscribe_to_task.assert_called_once()
 
     await client.close()
@@ -634,7 +634,6 @@ async def test_json_transport_base_client_send_message_with_extensions(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -807,7 +806,6 @@ async def test_client_get_signed_extended_card(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -902,7 +900,6 @@ async def test_client_get_signed_base_and_extended_cards(
         card=base_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 

@@ -65,7 +65,7 @@ def assert_artifacts_match(artifacts, expected_artifacts):
 
 def assert_events_match(events, expected_events):
     assert len(events) == len(expected_events)
-    for (event, _), (expected_type, expected_val) in zip(
+    for event, (expected_type, expected_val) in zip(
         events, expected_events, strict=True
     ):
         assert event.HasField(expected_type)
@@ -317,7 +317,7 @@ async def test_end_to_end_send_message_blocking(transport_setups):
         )
     ]
     assert len(events) == 1
-    response, _ = events[0]
+    response = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
     assert_artifacts_match(
@@ -355,7 +355,7 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
         )
     ]
     assert len(events) == 1
-    response, _ = events[0]
+    response = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert_history_matches(
@@ -393,7 +393,8 @@ async def test_end_to_end_send_message_streaming(transport_setups):
         ],
     )
 
-    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+    task_id = events[0].status_update.task_id
+    task = await client.get_task(request=GetTaskRequest(id=task_id))
     assert_history_matches(
         task.history,
         [
@@ -421,8 +422,8 @@ async def test_end_to_end_get_task(transport_setups):
             request=SendMessageRequest(message=message_to_send)
         )
     ]
-    _, task = events[-1]
-    task_id = task.id
+    response = events[0]
+    task_id = response.status_update.task_id
 
     get_request = GetTaskRequest(id=task_id)
     retrieved_task = await client.get_task(request=get_request)
@@ -453,7 +454,7 @@ async def test_end_to_end_list_tasks(transport_setups):
     expected_task_ids = []
     for i in range(total_items):
         # One event is enough to get the task ID
-        _, task = await anext(
+        response = await anext(
             client.send_message(
                 request=SendMessageRequest(
                     message=Message(
@@ -464,7 +465,7 @@ async def test_end_to_end_list_tasks(transport_setups):
                 )
             )
         )
-        expected_task_ids.append(task.id)
+        expected_task_ids.append(response.status_update.task_id)
 
     list_request = ListTasksRequest(page_size=page_size)
 
@@ -519,7 +520,8 @@ async def test_end_to_end_input_required(transport_setups):
         ],
     )
 
-    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+    task_id = events[0].status_update.task_id
+    task = await client.get_task(request=GetTaskRequest(id=task_id))
 
     assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert_history_matches(

@@ -11,7 +11,7 @@ from packaging.version import InvalidVersion, Version
 
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
-from a2a.client.client import Client, ClientConfig, Consumer
+from a2a.client.client import Client, ClientConfig
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
@@ -63,12 +63,11 @@ class ClientFactory:
 
     .. code-block:: python
 
-        factory = ClientFactory(config, consumers)
+        factory = ClientFactory(config)
         # Optionally register custom client implementations
         factory.register('my_customer_transport', NewCustomTransportClient)
-        # Then with an agent card make a client with additional consumers and
-        # interceptors
-        client = factory.create(card, additional_consumers, interceptors)
+        # Then with an agent card make a client with additional interceptors
+        client = factory.create(card, interceptors)
 
     Now the client can be used consistently regardless of the transport. This
     aligns the client configuration with the server's capabilities.
@@ -77,17 +76,12 @@ class ClientFactory:
     def __init__(
         self,
         config: ClientConfig,
-        consumers: list[Consumer] | None = None,
     ):
-        if consumers is None:
-            consumers = []
-
         client = config.httpx_client or httpx.AsyncClient()
         client.headers.setdefault(VERSION_HEADER, PROTOCOL_VERSION_CURRENT)
         config.httpx_client = client
 
         self._config = config
-        self._consumers = consumers
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
@@ -263,7 +257,6 @@ class ClientFactory:
         cls,
         agent: str | AgentCard,
         client_config: ClientConfig | None = None,
-        consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
         relative_card_path: str | None = None,
         resolver_http_kwargs: dict[str, Any] | None = None,
@@ -286,7 +279,7 @@ class ClientFactory:
         Args:
           agent: The base URL of the agent, or the AgentCard to connect to.
           client_config: The ClientConfig to use when connecting to the agent.
-          consumers: A list of `Consumer` methods to pass responses to.
+
           interceptors: A list of interceptors to use for each request. These
             are used for things like attaching credentials or http headers
             to all outbound requests.
@@ -325,7 +318,7 @@ class ClientFactory:
         factory = cls(client_config)
         for label, generator in (extra_transports or {}).items():
             factory.register(label, generator)
-        return factory.create(card, consumers, interceptors)
+        return factory.create(card, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:
         """Register a new transport producer for a given transport label."""
@@ -334,14 +327,12 @@ class ClientFactory:
     def create(
         self,
         card: AgentCard,
-        consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
     ) -> Client:
         """Create a new `Client` for the provided `AgentCard`.
 
         Args:
           card: An `AgentCard` defining the characteristics of the agent.
-          consumers: A list of `Consumer` methods to pass responses to.
           interceptors: A list of interceptors to use for each request. These
             are used for things like attaching credentials or http headers
             to all outbound requests.
@@ -381,10 +372,6 @@ class ClientFactory:
         if transport_protocol not in self._registry:
             raise ValueError(f'no client available for {transport_protocol}')
 
-        all_consumers = self._consumers.copy()
-        if consumers:
-            all_consumers.extend(consumers)
-
         transport = self._registry[transport_protocol](
             card, selected_interface.url, self._config
         )
@@ -398,7 +385,6 @@ class ClientFactory:
             card,
             self._config,
             transport,
-            all_consumers,
             interceptors or [],
         )
 

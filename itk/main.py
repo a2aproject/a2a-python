@@ -138,17 +138,19 @@ async def handle_call_agent(call: instruction_pb2.CallAgent) -> list[str]:
             nested_msg = wrap_instruction_to_request(call.instruction)
             request = SendMessageRequest(message=nested_msg)
 
-            results = []
+            results: list[str] = []
             async for event in client.send_message(request):
-                # Event is streaming response and task
+                # Event is StreamResponse
                 logger.info('Event: %s', event)
-                stream_resp, task = event
+                stream_resp = event
 
                 message = None
                 if stream_resp.HasField('message'):
                     message = stream_resp.message
-                elif task and task.status.HasField('message'):
-                    message = task.status.message
+                elif stream_resp.HasField(
+                    'task'
+                ) and stream_resp.task.status.HasField('message'):
+                    message = stream_resp.task.status.message
                 elif stream_resp.HasField(
                     'status_update'
                 ) and stream_resp.status_update.status.HasField('message'):
