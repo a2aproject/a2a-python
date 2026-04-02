@@ -61,17 +61,9 @@ def create_jsonrpc_routes(
         enable_v0_3_compat=enable_v0_3_compat,
     )
 
-    normalized_path = rpc_url
-    if not rpc_url.startswith('/'):
-        logger.warning(
-            "The rpc_url '%s' does not start with a leading slash '/'. automatically prepending it.",
-            rpc_url,
-        )
-        normalized_path = f'/{rpc_url}'
-
     return [
         Route(
-            path=normalized_path,
+            path=rpc_url,
             endpoint=dispatcher.handle_requests,
             methods=['POST'],
         )
