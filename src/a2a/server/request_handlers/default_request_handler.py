@@ -53,7 +53,6 @@ from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
-    PushNotificationConfigNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -579,7 +578,7 @@ class DefaultRequestHandler(RequestHandler):
             if config.id == config_id:
                 return config
 
-        raise PushNotificationConfigNotFoundError
+        raise TaskNotFoundError
 
     @validate_request_params
     @validate(

@@ -37,7 +37,6 @@ from a2a.types import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
-    PushNotificationConfigNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -1995,7 +1994,7 @@ async def test_get_task_push_notification_config_info_not_found(agent_card):
     )
 
     context = create_server_call_context()
-    with pytest.raises(PushNotificationConfigNotFoundError):
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_get_task_push_notification_config(
             params, context
         )

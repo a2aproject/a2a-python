@@ -40,12 +40,6 @@ class TaskNotCancelableError(A2AError):
     message = 'Task cannot be canceled'
 
 
-class PushNotificationConfigNotFoundError(A2AError):
-    """Exception raised when a push notification configuration is not found."""
-
-    message = 'Push notification config not found'
-
-
 class PushNotificationNotSupportedError(A2AError):
     """Exception raised when push notifications are not supported."""
 
@@ -145,7 +139,6 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     ExtendedAgentCardNotConfiguredError: -32007,
     ExtensionSupportRequiredError: -32008,
     VersionNotSupportedError: -32009,
-    PushNotificationConfigNotFoundError: -32010,
     InvalidParamsError: -32602,
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
@@ -157,9 +150,6 @@ A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
     TaskNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
     TaskNotCancelableError: RestErrorMap(
         409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
-    ),
-    PushNotificationConfigNotFoundError: RestErrorMap(
-        404, 'NOT_FOUND', 'PUSH_NOTIFICATION_CONFIG_NOT_FOUND'
     ),
     PushNotificationNotSupportedError: RestErrorMap(
         400,
