@@ -152,9 +152,8 @@ async def test_mutation_observability(agent_card: AgentCard, use_copying: bool):
         )
     ]
 
-    task = events[-1][1]
-    assert task is not None
-    task_id = task.id
+    event = events[-1]
+    task_id = event.status_update.task_id
 
     # 2. Second message to mutate it
     message_to_send_2 = Message(
