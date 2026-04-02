@@ -28,8 +28,9 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
 )
 from a2a.server.routes.common import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
+    UserBuilder,
+    build_server_call_context,
+    default_user_builder,
 )
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
@@ -144,7 +145,7 @@ class JsonRpcDispatcher:
         agent_card: AgentCard,
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
-        context_builder: CallContextBuilder | None = None,
+        user_builder: UserBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
         extended_card_modifier: Callable[
@@ -161,9 +162,8 @@ class JsonRpcDispatcher:
               requests via http.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
-            context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the request_handler. If None the
-              DefaultCallContextBuilder is used.
+            user_builder: Optional custom user builder to extract user from the
+              request.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
             extended_card_modifier: An optional callback to dynamically modify
@@ -183,7 +183,7 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._user_builder = user_builder or default_user_builder
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 
@@ -192,7 +192,7 @@ class JsonRpcDispatcher:
                 agent_card=agent_card,
                 http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
-                context_builder=self._context_builder,
+                user_builder=self._user_builder,
                 card_modifier=card_modifier,
                 extended_card_modifier=extended_card_modifier,
             )
@@ -334,7 +334,9 @@ class JsonRpcDispatcher:
                 )
 
             # 3) Build call context and wrap the request for downstream handling
-            call_context = self._context_builder.build(request)
+            call_context = build_server_call_context(
+                request, self._user_builder
+            )
             call_context.tenant = getattr(specific_request, 'tenant', '')
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id
