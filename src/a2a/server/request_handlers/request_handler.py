@@ -133,8 +133,8 @@ class RequestHandler(ABC):
             `Event` objects from the agent's execution.
         """
         # This is needed for typechecker to recognise this method as an async generator.
-        if False:
-            yield
+        raise UnsupportedOperationError
+        yield
 
     @abstractmethod
     async def on_create_task_push_notification_config(
@@ -189,9 +189,8 @@ class RequestHandler(ABC):
         Yields:
              `Event` objects from the agent's ongoing execution for the specified task.
         """
-        # This is needed for typechecker to recognise the method as an async generator.
-        if False:
-            yield
+        raise UnsupportedOperationError
+        yield
 
     @abstractmethod
     async def on_list_task_push_notification_configs(
