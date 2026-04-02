@@ -18,7 +18,7 @@ jobs:
       github.event.workflow_run.conclusion == 'success'
     steps:
       - name: Download Coverage Artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           run-id: ${{ github.event.workflow_run.id }}
           github-token: ${{ secrets.A2A_BOT_PAT }}
@@ -26,14 +26,14 @@ jobs:
       
       - name: Upload Coverage Report
         id: upload-report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
           retention-days: 14
 
       - name: Post Comment
-        uses: actions/github-script@v6
+        uses: actions/github-script@v8
         env:
           ARTIFACT_URL: ${{ steps.upload-report.outputs.artifact-url }}
         with:
