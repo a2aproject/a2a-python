@@ -254,6 +254,8 @@ class TestJsonRpcDispatcherV03Compat:
         mock_agent_card.capabilities = MagicMock()
         mock_agent_card.capabilities.streaming = False
 
+        mock_handler._agent_card = mock_agent_card
+
         from starlette.applications import Starlette
 
         jsonrpc_routes = create_jsonrpc_routes(

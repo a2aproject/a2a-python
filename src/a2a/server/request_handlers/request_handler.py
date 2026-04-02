@@ -36,6 +36,12 @@ class RequestHandler(ABC):
     provide to handle incoming A2A requests from any transport (gRPC, REST, JSON-RPC).
     """
 
+    # TODO: Remove this property when we implement GetExtendedCard method in compat request handler.
+    @property
+    @abstractmethod
+    def agent_card(self) -> AgentCard:
+        """The core agent card to serve logic against."""
+
     @abstractmethod
     async def on_get_task(
         self,

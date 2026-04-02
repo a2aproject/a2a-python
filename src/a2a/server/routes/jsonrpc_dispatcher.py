@@ -220,7 +220,7 @@ class JsonRpcDispatcher:
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
-                agent_card=getattr(request_handler, '_agent_card', None),
+                agent_card=request_handler.agent_card,
                 http_handler=request_handler,
                 extended_agent_card=getattr(
                     request_handler, '_extended_agent_card', None

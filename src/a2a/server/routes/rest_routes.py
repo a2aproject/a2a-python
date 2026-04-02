@@ -70,7 +70,7 @@ def create_rest_routes(
     routes: list[BaseRoute] = []
     if enable_v0_3_compat:
         v03_adapter = REST03Adapter(
-            agent_card=getattr(request_handler, '_agent_card', None),
+            agent_card=request_handler.agent_card,
             http_handler=request_handler,
             extended_agent_card=getattr(
                 request_handler, '_extended_agent_card', None
