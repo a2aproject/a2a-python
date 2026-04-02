@@ -143,12 +143,6 @@ class DefaultRequestHandler(RequestHandler):
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
 
-    # TODO: Remove this property when we implement GetExtendedCard method in compat request handler.
-    @property
-    def agent_card(self) -> AgentCard:
-        """The core agent card to serve logic against."""
-        return self._agent_card
-
     @validate_request_params
     async def on_get_task(
         self,
@@ -698,10 +692,9 @@ class DefaultRequestHandler(RequestHandler):
 
         Requires `capabilities.extended_agent_card` to be true.
         """
-        if not self.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError
-
         extended_card = self.extended_agent_card
+        if not extended_card:
+            raise ExtendedAgentCardNotConfiguredError
 
         if self.extended_card_modifier:
             return await maybe_await(

@@ -37,6 +37,7 @@ def sample_agent_card() -> a2a_pb2.AgentCard:
         capabilities=a2a_pb2.AgentCapabilities(
             streaming=True,
             push_notifications=True,
+            extended_agent_card=True,
         ),
         supported_interfaces=[
             a2a_pb2.AgentInterface(
@@ -52,8 +53,10 @@ def sample_agent_card() -> a2a_pb2.AgentCard:
 def handler(
     mock_request_handler: AsyncMock, sample_agent_card: a2a_pb2.AgentCard
 ) -> compat_grpc_handler.CompatGrpcHandler:
+    mock_request_handler.agent_card = sample_agent_card
     return compat_grpc_handler.CompatGrpcHandler(
-        agent_card=sample_agent_card, request_handler=mock_request_handler
+        request_handler=mock_request_handler,
+        agent_card=sample_agent_card,
     )
 
 
@@ -448,6 +451,38 @@ async def test_get_agent_card_success(
         url='http://jsonrpc.v03.com',
         version='1.0.0',
         protocol_version='0.3',
+        supports_authenticated_extended_card=True,
+        preferred_transport='JSONRPC',
+        capabilities=a2a_v0_3_pb2.AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+        ),
+    )
+    assert response == expected_res
+
+
+@pytest.mark.asyncio
+async def test_get_extended_card_success(
+    handler: compat_grpc_handler.CompatGrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+    sample_agent_card: a2a_pb2.AgentCard,
+) -> None:
+    request = a2a_v0_3_pb2.GetAgentCardRequest()
+    mock_request_handler.on_get_extended_agent_card.return_value = (
+        sample_agent_card
+    )
+    mock_request_handler.extended_agent_card = sample_agent_card
+
+    response = await handler.GetExtendedCard(request, mock_grpc_context)
+
+    expected_res = a2a_v0_3_pb2.AgentCard(
+        name='Test Agent',
+        description='A test agent',
+        url='http://jsonrpc.v03.com',
+        version='1.0.0',
+        protocol_version='0.3',
+        supports_authenticated_extended_card=True,
         preferred_transport='JSONRPC',
         capabilities=a2a_v0_3_pb2.AgentCapabilities(
             streaming=True,
