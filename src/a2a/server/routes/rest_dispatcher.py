@@ -334,6 +334,7 @@ class RestDispatcher:
     ) -> Response:
         """Handles the 'agentCard' REST method."""
 
+        @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.AgentCard:
