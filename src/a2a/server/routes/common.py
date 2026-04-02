@@ -1,6 +1,13 @@
 from collections.abc import Callable
+from typing import TYPE_CHECKING, Any
 
-from starlette.requests import Request
+if TYPE_CHECKING:
+    from starlette.requests import Request
+else:
+    try:
+        from starlette.requests import Request
+    except ImportError:
+        Request = Any
 
 from a2a.auth.user import UnauthenticatedUser, User
 from a2a.extensions.common import (
@@ -13,20 +20,27 @@ from a2a.server.context import ServerCallContext
 UserBuilder = Callable[[Request], User]
 
 
+class StarletteUser(User):
+    """Adapts a Starlette BaseUser to the A2A User interface."""
+
+    def __init__(self, user: Any):
+        self._user = user
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Returns whether the current user is authenticated."""
+        return self._user.is_authenticated
+
+    @property
+    def user_name(self) -> str:
+        """Returns the user name of the current user."""
+        return self._user.display_name
+
+
 def default_user_builder(request: Request) -> User:
     """Default strategy for creating an A2AUser from a Starlette Request."""
     if 'user' in request.scope:
-
-        class BaseUser(User):
-            @property
-            def is_authenticated(self) -> bool:
-                return request.user.is_authenticated
-
-            @property
-            def user_name(self) -> str:
-                return request.user.display_name
-
-        return BaseUser()
+        return StarletteUser(request.user)
     return UnauthenticatedUser()
 
 
@@ -37,7 +51,7 @@ def build_server_call_context(
 
     Args:
         request: The incoming Starlette Request object.
-        user_builder: Optional custom user builder.
+        user_builder: A callable that creates a User from the request.
 
     Returns:
         A ServerCallContext instance populated with user and state.
