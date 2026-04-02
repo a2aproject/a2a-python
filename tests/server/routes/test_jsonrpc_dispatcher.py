@@ -126,7 +126,7 @@ class TestJsonRpcDispatcherOptionalDependencies:
         mock_handler = MagicMock(spec=RequestHandler)
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://example.com'
-        mock_handler.agent_card = mock_agent_card
+        mock_handler._agent_card = mock_agent_card
         return {'request_handler': mock_handler}
 
     @pytest.fixture(scope='class')

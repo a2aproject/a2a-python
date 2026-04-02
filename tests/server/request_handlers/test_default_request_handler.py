@@ -2894,7 +2894,7 @@ async def test_on_get_extended_agent_card_unsupported(agent_card):
     params = GetExtendedAgentCardRequest()
     context = create_server_call_context()
 
-    with pytest.raises(ExtendedAgentCardNotConfiguredError):
+    with pytest.raises(UnsupportedOperationError):
         await request_handler.on_get_extended_agent_card(params, context)
 
 

@@ -150,7 +150,7 @@ def mock_request_handler(agent_card) -> AsyncMock:
     handler = AsyncMock(spec=RequestHandler)
 
     # Configure on_message_send for non-streaming calls
-    handler.agent_card = agent_card
+    handler._agent_card = agent_card
     handler.on_message_send.return_value = TASK_FROM_BLOCKING
 
     # Configure on_message_send_stream for streaming calls

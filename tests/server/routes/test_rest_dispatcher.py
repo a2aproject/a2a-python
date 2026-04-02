@@ -46,7 +46,7 @@ def agent_card():
 def mock_handler(agent_card):
     handler = AsyncMock(spec=RequestHandler)
     # Default success cases
-    handler.agent_card = agent_card
+    handler._agent_card = agent_card
     handler.on_message_send.return_value = Message(message_id='test_msg')
     handler.on_cancel_task.return_value = Task(id='test_task')
     handler.on_get_task.return_value = Task(id='test_task')

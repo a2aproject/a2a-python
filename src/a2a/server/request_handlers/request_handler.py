@@ -36,11 +36,6 @@ class RequestHandler(ABC):
     provide to handle incoming A2A requests from any transport (gRPC, REST, JSON-RPC).
     """
 
-    @property
-    @abstractmethod
-    def agent_card(self) -> AgentCard:
-        """The core agent card to serve logic against."""
-
     @abstractmethod
     async def on_get_task(
         self,

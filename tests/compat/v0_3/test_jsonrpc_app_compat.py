@@ -51,7 +51,7 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
     mock_agent_card.capabilities.push_notifications = True
     mock_agent_card.capabilities.extended_agent_card = True
-    mock_handler.agent_card = mock_agent_card
+    mock_handler._agent_card = mock_agent_card
     jsonrpc_routes = create_jsonrpc_routes(
         request_handler=mock_handler,
         enable_v0_3_compat=True,

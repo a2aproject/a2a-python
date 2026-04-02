@@ -31,6 +31,7 @@ def test_routes_creation(agent_card, mock_handler):
 
 def test_routes_creation_v03_compat(agent_card, mock_handler):
     """Tests that create_rest_routes creates more routes with enable_v0_3_compat."""
+    mock_handler._agent_card = agent_card
     routes_without_compat = create_rest_routes(
         request_handler=mock_handler, enable_v0_3_compat=False
     )

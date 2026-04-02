@@ -53,7 +53,7 @@ def sample_agent_card() -> types.AgentCard:
 def grpc_handler(
     mock_request_handler: AsyncMock, sample_agent_card: types.AgentCard
 ) -> GrpcHandler:
-    mock_request_handler.agent_card = sample_agent_card
+    mock_request_handler._agent_card = sample_agent_card
     return GrpcHandler(request_handler=mock_request_handler)
 
 
@@ -219,7 +219,7 @@ async def test_get_extended_agent_card_with_modifier(
     mock_request_handler.on_get_extended_agent_card.side_effect = (
         side_effect_func
     )
-    mock_request_handler.agent_card = sample_agent_card
+    mock_request_handler._agent_card = sample_agent_card
     grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
     response = await grpc_handler_modified.GetExtendedAgentCard(
@@ -249,7 +249,7 @@ async def test_get_agent_card_with_modifier_sync(
         return modifier(sample_agent_card)
 
     mock_request_handler.on_get_extended_agent_card.side_effect = async_modifier
-    mock_request_handler.agent_card = sample_agent_card
+    mock_request_handler._agent_card = sample_agent_card
     grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
     request_proto = a2a_pb2.GetExtendedAgentCardRequest()
     response = await grpc_handler_modified.GetExtendedAgentCard(
