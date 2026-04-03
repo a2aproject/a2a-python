@@ -31,47 +31,12 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
 )
 from a2a.server.routes import jsonrpc_dispatcher
-from a2a.server.routes.jsonrpc_dispatcher import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
-    JsonRpcDispatcher,
-    StarletteUserProxy,
-)
+
+from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.utils.errors import A2AError
-
-
-# --- StarletteUserProxy Tests ---
-
-
-class TestStarletteUserProxy:
-    def test_starlette_user_proxy_is_authenticated_true(self):
-        starlette_user_mock = MagicMock(spec=StarletteBaseUser)
-        starlette_user_mock.is_authenticated = True
-        proxy = StarletteUserProxy(starlette_user_mock)
-        assert proxy.is_authenticated is True
-
-    def test_starlette_user_proxy_is_authenticated_false(self):
-        starlette_user_mock = MagicMock(spec=StarletteBaseUser)
-        starlette_user_mock.is_authenticated = False
-        proxy = StarletteUserProxy(starlette_user_mock)
-        assert proxy.is_authenticated is False
-
-    def test_starlette_user_proxy_user_name(self):
-        starlette_user_mock = MagicMock(spec=StarletteBaseUser)
-        starlette_user_mock.display_name = 'Test User DisplayName'
-        proxy = StarletteUserProxy(starlette_user_mock)
-        assert proxy.user_name == 'Test User DisplayName'
-
-    def test_starlette_user_proxy_user_name_raises_attribute_error(self):
-        starlette_user_mock = MagicMock(spec=StarletteBaseUser)
-        del starlette_user_mock.display_name
-
-        proxy = StarletteUserProxy(starlette_user_mock)
-        with pytest.raises(AttributeError, match='display_name'):
-            _ = proxy.user_name
 
 
 # --- JsonRpcDispatcher Tests ---
