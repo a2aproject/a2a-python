@@ -107,6 +107,7 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
+  "fastapi>=0.115.2",
   "mypy>=1.15.0",
   "PyJWT>=2.0.0",
   "pytest>=8.3.5",
