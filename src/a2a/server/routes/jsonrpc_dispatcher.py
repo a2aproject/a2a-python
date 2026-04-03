@@ -31,7 +31,6 @@ from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
 )
-from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
