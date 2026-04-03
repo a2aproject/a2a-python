@@ -61,7 +61,9 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         """
         self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
-        self._context_builder = context_builder or DefaultGrpcServerCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultGrpcServerCallContextBuilder()
+        )
         self.card_modifier = card_modifier
 
     async def _handle_unary(

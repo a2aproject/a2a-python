@@ -9,8 +9,8 @@ from google.protobuf.json_format import MessageToDict, Parse
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
-    ServerCallContextBuilder,
     DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -106,7 +106,9 @@ class RestDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._context_builder = context_builder or DefaultServerCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
         self.request_handler = request_handler
 
     def _build_call_context(self, request: Request) -> ServerCallContext:

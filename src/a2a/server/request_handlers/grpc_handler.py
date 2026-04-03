@@ -129,7 +129,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
-        self._context_builder = context_builder or DefaultGrpcServerCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultGrpcServerCallContextBuilder()
+        )
         self.card_modifier = card_modifier
 
     async def _handle_unary(

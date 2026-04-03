@@ -28,8 +28,8 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
 )
 from a2a.server.routes.common import (
-    ServerCallContextBuilder,
     DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
 )
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
@@ -183,7 +183,9 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._context_builder = context_builder or DefaultServerCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 

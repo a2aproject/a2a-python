@@ -35,8 +35,8 @@ from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3.rest_handler import REST03Handler
 from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import (
-    ServerCallContextBuilder,
     DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
 )
 from a2a.utils.error_handlers import (
     rest_error_handler,
@@ -63,7 +63,7 @@ class REST03Adapter:
         agent_card: 'AgentCard',
         http_handler: 'RequestHandler',
         extended_agent_card: 'AgentCard | None' = None,
-        context_builder: 'ContextBuilder | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
         card_modifier: 'Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None' = None,
         extended_card_modifier: 'Callable[[AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard] | None' = None,
     ):
@@ -74,7 +74,9 @@ class REST03Adapter:
         self.handler = REST03Handler(
             agent_card=agent_card, request_handler=http_handler
         )
-        self._context_builder = context_builder or DefaultServerCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     @rest_error_handler
     async def _handle_request(
