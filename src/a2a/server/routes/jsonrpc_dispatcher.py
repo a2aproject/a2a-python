@@ -398,11 +398,12 @@ class JsonRpcDispatcher:
             An `AsyncGenerator` object to stream results to the client.
         """
         stream: AsyncGenerator | None = None
-        if context.state.get('method') == 'SendStreamingMessage':
+        method = context.state.get('method')
+        if method == 'SendStreamingMessage':
             stream = self.request_handler.on_message_send_stream(
                 request_obj, context
             )
-        elif context.state.get('method') == 'SubscribeToTask':
+        elif method == 'SubscribeToTask':
             stream = self.request_handler.on_subscribe_to_task(
                 request_obj, context
             )
@@ -549,7 +550,8 @@ class JsonRpcDispatcher:
         Returns:
             A dict containing the result or error.
         """
-        match context.state.get('method'):
+        method = context.state.get('method')
+        match method:
             case 'SendMessage':
                 return await self._handle_send_message(request_obj, context)
             case 'CancelTask':
@@ -580,7 +582,6 @@ class JsonRpcDispatcher:
                     request_obj, context
                 )
             case _:
-                method = context.state.get('method')
                 logger.error('Unhandled method: %s', method)
                 raise UnsupportedOperationError(
                     message=f'Method {method} is not supported.'
