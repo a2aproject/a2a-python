@@ -1,8 +1,8 @@
 ---
 name: Check Spelling
 on:
-  pull_request_target:
-    branches: ["**"]
+  pull_request:
+    branches: ['**']
     types: [opened, reopened, synchronize]
   issue_comment:
     types: [created]
@@ -11,7 +11,6 @@ jobs:
     name: Check Spelling
     permissions:
       contents: read
-      pull-requests: read
       actions: read
       security-events: write
     outputs:
@@ -75,6 +74,6 @@ jobs:
             cspell:sql/src/tsql.txt
             cspell:terraform/dict/terraform.txt
             cspell:typescript/dict/typescript.txt
-          check_extra_dictionaries: ""
+          check_extra_dictionaries: ''
           only_check_changed_files: true
-          longest_word: "10"
+          longest_word: '10'
