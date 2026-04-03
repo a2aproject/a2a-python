@@ -116,7 +116,13 @@ class TestGetAgentCard:
         mock_httpx_client.get.return_value = mock_response
 
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ) as mock_validate:
             result = await resolver.get_agent_card()
             mock_httpx_client.get.assert_called_once_with(
@@ -141,7 +147,13 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(relative_card_path=custom_path)
 
@@ -163,7 +175,13 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(relative_card_path=custom_path)
 
@@ -188,7 +206,13 @@ class TestGetAgentCard:
             'headers': {'Authorization': 'Bearer token'},
         }
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(http_kwargs=http_kwargs)
             mock_httpx_client.get.assert_called_once_with(
@@ -210,7 +234,13 @@ class TestGetAgentCard:
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(relative_card_path='/')
             mock_httpx_client.get.assert_called_once_with(f'{base_url}/')
@@ -297,7 +327,13 @@ class TestGetAgentCard:
         mock_httpx_client.get.return_value = mock_response
         with (
             patch.object(
-                AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+                AgentCard,
+                'model_validate',
+                return_value=Mock(
+                    spec=AgentCard,
+                    url='https://example.com/a2a',
+                    additional_interfaces=None,
+                ),
             ),
             caplog.at_level(logging.INFO),
         ):
@@ -321,7 +357,13 @@ class TestGetAgentCard:
         mock_httpx_client.get.return_value = mock_response
 
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(relative_card_path=None)
             mock_httpx_client.get.assert_called_once_with(
@@ -342,7 +384,13 @@ class TestGetAgentCard:
         mock_httpx_client.get.return_value = mock_response
 
         with patch.object(
-            AgentCard, 'model_validate', return_value=Mock(spec=AgentCard)
+            AgentCard,
+            'model_validate',
+            return_value=Mock(
+                spec=AgentCard,
+                url='https://example.com/a2a',
+                additional_interfaces=None,
+            ),
         ):
             await resolver.get_agent_card(relative_card_path='')
 
@@ -373,7 +421,11 @@ class TestGetAgentCard:
         """Test that get_agent_card returns an AgentCard instance."""
         mock_response.json.return_value = valid_agent_card_data
         mock_httpx_client.get.return_value = mock_response
-        mock_agent_card = Mock(spec=AgentCard)
+        mock_agent_card = Mock(
+            spec=AgentCard,
+            url='https://example.com/a2a',
+            additional_interfaces=None,
+        )
 
         with patch.object(
             AgentCard, 'model_validate', return_value=mock_agent_card
