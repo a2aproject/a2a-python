@@ -111,3 +111,25 @@ def test_get_task_v03_compat(
     assert 'result' in data
     assert data['result']['id'] == 'test_task_id'
     assert data['result']['status']['state'] == 'completed'
+
+
+def test_get_extended_agent_card_v03_compat(
+    client: TestClient,
+) -> None:
+    """Test that the v0.3 method name 'agent/getAuthenticatedExtendedCard' is correctly routed."""
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '3',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'params': {},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data['jsonrpc'] == '2.0'
+    assert data['id'] == '3'
+    assert 'result' in data
+    # The result should be a v0.3 AgentCard
+    assert 'supportsAuthenticatedExtendedCard' in data['result']
