@@ -363,6 +363,10 @@ async def test_compat_jsonrpc_transport_get_extended_agent_card_method_name(
                 'name': 'ExtendedAgent',
                 'url': 'http://agent',
                 'version': '1.0.0',
+                'description': 'Description',
+                'skills': [],
+                'defaultInputModes': [],
+                'defaultOutputModes': [],
                 'capabilities': {},
                 'supportsAuthenticatedExtendedCard': True,
             }

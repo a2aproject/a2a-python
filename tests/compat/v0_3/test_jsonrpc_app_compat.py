@@ -11,6 +11,8 @@ from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    AgentCapabilities,
+    AgentInterface,
     Message as Message10,
     Part as Part10,
     Role as Role10,
@@ -18,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus as TaskStatus10,
     TaskState as TaskState10,
 )
+
 from a2a.compat.v0_3 import a2a_v0_3_pb2
 
 
@@ -44,15 +47,21 @@ def mock_handler():
 
 @pytest.fixture
 def test_app(mock_handler):
-    mock_agent_card = MagicMock(spec=AgentCard)
-    mock_agent_card.url = 'http://mockurl.com'
-    # Set up capabilities.streaming to avoid validation issues
-    mock_agent_card.capabilities = MagicMock()
-    mock_agent_card.capabilities.streaming = False
-    mock_agent_card.capabilities.push_notifications = True
-    mock_agent_card.capabilities.extended_agent_card = True
+    agent_card = AgentCard(
+        name='TestAgent',
+        description='Test Description',
+        version='1.0.0',
+        capabilities=AgentCapabilities(
+            streaming=False, push_notifications=True, extended_agent_card=True
+        ),
+    )
+    interface = agent_card.supported_interfaces.add()
+    interface.url = 'http://mockurl.com'
+    interface.protocol_binding = 'jsonrpc'
+    interface.protocol_version = '0.3'
+
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=mock_agent_card,
+        agent_card=agent_card,
         request_handler=mock_handler,
         enable_v0_3_compat=True,
         rpc_url='/',
