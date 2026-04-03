@@ -32,10 +32,8 @@ from a2a.extensions.common import (
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
-from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils import proto_utils
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
-from a2a.utils.helpers import maybe_await, validate
 from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 
@@ -45,7 +43,7 @@ logger = logging.getLogger(__name__)
 
 
 class CallContextBuilder(ABC):
-    """A class for building ServerCallContexts using the Starlette Request."""
+    """A class for building ServerCallContexts using gRPC contexts."""
 
     @abstractmethod
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
@@ -108,27 +106,19 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
 
     def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
         context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
     ):
         """Initializes the GrpcHandler.
 
         Args:
-            agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
             context_builder: The CallContextBuilder object. If none the
                              DefaultCallContextBuilder is used.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
         """
-        self.agent_card = agent_card
         self.request_handler = request_handler
         self.context_builder = context_builder or DefaultCallContextBuilder()
-        self.card_modifier = card_modifier
 
     async def _handle_unary(
         self,
@@ -191,10 +181,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
         """Handles the 'StreamMessage' gRPC method."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_pb2.StreamResponse]:
@@ -232,10 +218,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_pb2.StreamResponse]:
         """Handles the 'SubscribeToTask' gRPC method."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_pb2.StreamResponse]:
@@ -274,10 +256,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     ) -> a2a_pb2.TaskPushNotificationConfig:
         """Handles the 'CreateTaskPushNotificationConfig' gRPC method."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.push_notifications,
-            'Push notifications are not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> a2a_pb2.TaskPushNotificationConfig:
@@ -372,10 +350,17 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         context: grpc.aio.ServicerContext,
     ) -> a2a_pb2.AgentCard:
         """Get the extended agent card for the agent served."""
-        card_to_serve = self.agent_card
-        if self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
-        return card_to_serve
+
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_pb2.AgentCard:
+            return await self.request_handler.on_get_extended_agent_card(
+                request, server_context
+            )
+
+        return await self._handle_unary(
+            request, context, _handler, a2a_pb2.AgentCard()
+        )
 
     async def abort_context(
         self, error: A2AError, context: grpc.aio.ServicerContext

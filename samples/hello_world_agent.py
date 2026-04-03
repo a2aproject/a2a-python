@@ -191,17 +191,17 @@ async def serve(
 
     task_store = InMemoryTaskStore()
     request_handler = DefaultRequestHandler(
-        agent_executor=SampleAgentExecutor(), task_store=task_store
+        agent_executor=SampleAgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
     )
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
         request_handler=request_handler,
         path_prefix='/a2a/rest',
         enable_v0_3_compat=True,
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=request_handler,
         rpc_url='/a2a/jsonrpc',
         enable_v0_3_compat=True,
@@ -216,7 +216,7 @@ async def serve(
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')
-    servicer = GrpcHandler(agent_card, request_handler)
+    servicer = GrpcHandler(request_handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, grpc_server)
 
     compat_grpc_server = grpc.aio.server()

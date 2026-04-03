@@ -86,7 +86,7 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
 
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=mock_agent_card, request_handler=mock_handler, rpc_url='/'
+        request_handler=mock_handler, rpc_url='/'
     )
 
     from starlette.applications import Starlette
@@ -126,7 +126,8 @@ class TestJsonRpcDispatcherOptionalDependencies:
         mock_handler = MagicMock(spec=RequestHandler)
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://example.com'
-        return {'agent_card': mock_agent_card, 'request_handler': mock_handler}
+        mock_handler._agent_card = mock_agent_card
+        return {'request_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_starlette_not_installed(self):
@@ -253,13 +254,12 @@ class TestJsonRpcDispatcherV03Compat:
         mock_agent_card.capabilities = MagicMock()
         mock_agent_card.capabilities.streaming = False
 
+        mock_handler._agent_card = mock_agent_card
+
         from starlette.applications import Starlette
 
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=mock_agent_card,
-            request_handler=mock_handler,
-            enable_v0_3_compat=True,
-            rpc_url='/',
+            request_handler=mock_handler, enable_v0_3_compat=True, rpc_url='/'
         )
         app = Starlette(routes=jsonrpc_routes)
         client = TestClient(app)

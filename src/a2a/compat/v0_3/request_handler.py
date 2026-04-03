@@ -9,9 +9,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import Task
 from a2a.utils import proto_utils as core_proto_utils
-from a2a.utils.errors import (
-    TaskNotFoundError,
-)
+from a2a.utils.errors import TaskNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -170,3 +168,15 @@ class RequestHandler03:
         await self.request_handler.on_delete_task_push_notification_config(
             v10_req, context
         )
+
+    async def on_get_extended_agent_card(
+        self,
+        request: types_v03.GetAuthenticatedExtendedCardRequest,
+        context: ServerCallContext,
+    ) -> types_v03.AgentCard:
+        """Gets the authenticated extended agent card using v0.3 protocol types."""
+        v10_req = conversions.to_core_get_extended_agent_card_request(request)
+        v10_card = await self.request_handler.on_get_extended_agent_card(
+            v10_req, context
+        )
+        return conversions.to_compat_agent_card(v10_card)

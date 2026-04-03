@@ -10,7 +10,6 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
     from a2a.server.request_handlers.request_handler import RequestHandler
-    from a2a.types.a2a_pb2 import AgentCard
 
     _package_starlette_installed = True
 else:
@@ -30,7 +29,6 @@ from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
 from a2a.utils.helpers import (
-    validate,
     validate_version,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -45,16 +43,13 @@ class REST03Handler:
 
     def __init__(
         self,
-        agent_card: 'AgentCard',
         request_handler: 'RequestHandler',
     ):
         """Initializes the REST03Handler.
 
         Args:
-          agent_card: The AgentCard describing the agent's capabilities (v1.0).
           request_handler: The underlying `RequestHandler` instance to delegate requests to (v1.0).
         """
-        self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
@@ -84,10 +79,6 @@ class REST03Handler:
         return MessageToDict(pb2_v03_resp)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def on_message_send_stream(
         self,
         request: Request,
@@ -142,10 +133,6 @@ class REST03Handler:
         return MessageToDict(pb2_v03_task)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def on_subscribe_to_task(
         self,
         request: Request,
@@ -208,10 +195,6 @@ class REST03Handler:
         return MessageToDict(pb2_v03_config)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
     async def set_push_notification(
         self,
         request: Request,
@@ -317,3 +300,16 @@ class REST03Handler:
     ) -> dict[str, Any]:
         """Handles the 'tasks/list' REST method."""
         raise NotImplementedError('list tasks not implemented')
+
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
+    async def on_get_extended_agent_card(
+        self,
+        request: Request,
+        context: ServerCallContext,
+    ) -> dict[str, Any]:
+        """Handles the 'v1/agent/authenticatedExtendedAgentCard' REST method."""
+        rpc_req = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
+        v03_resp = await self.handler03.on_get_extended_agent_card(
+            rpc_req, context
+        )
+        return v03_resp.model_dump(mode='json', exclude_none=True)

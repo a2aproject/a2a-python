@@ -29,7 +29,7 @@ from a2a.server.request_handlers.grpc_handler import (
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.errors import A2AError, InvalidParamsError
-from a2a.utils.helpers import maybe_await, validate
+from a2a.utils.helpers import maybe_await
 
 
 logger = logging.getLogger(__name__)
@@ -177,10 +177,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'SendStreamingMessage' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -240,10 +236,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'TaskSubscription' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -267,10 +259,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:
         """Handles the 'CreateTaskPushNotificationConfig' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.push_notifications,
-            'Push notifications are not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:
@@ -389,3 +377,23 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             return empty_pb2.Empty()
 
         return await self._handle_unary(context, _handler, empty_pb2.Empty())
+
+    async def GetExtendedCard(
+        self,
+        request: a2a_v0_3_pb2.GetAgentCardRequest,
+        context: grpc.aio.ServicerContext,
+    ) -> a2a_v0_3_pb2.AgentCard:
+        """Get the authenticated extended agent card (v0.3)."""
+
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_v0_3_pb2.AgentCard:
+            req_v03 = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
+            res_v03 = await self.handler03.on_get_extended_agent_card(
+                req_v03, server_context
+            )
+            return proto_utils.ToProto.agent_card(res_v03)
+
+        return await self._handle_unary(
+            context, _handler, a2a_v0_3_pb2.AgentCard()
+        )

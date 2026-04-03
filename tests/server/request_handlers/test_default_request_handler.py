@@ -34,6 +34,7 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -42,10 +43,13 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
@@ -111,13 +115,25 @@ def create_server_call_context() -> ServerCallContext:
     return ServerCallContext(user=UnauthenticatedUser())
 
 
-def test_init_default_dependencies():
+@pytest.fixture
+def agent_card():
+    """Provides a standard AgentCard with streaming and push notifications enabled for tests."""
+    return AgentCard(
+        name='test_agent',
+        version='1.0',
+        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+    )
+
+
+def test_init_default_dependencies(agent_card):
     """Test that default dependencies are created if not provided."""
     agent_executor = MockAgentExecutor()
     task_store = InMemoryTaskStore()
 
     handler = DefaultRequestHandler(
-        agent_executor=agent_executor, task_store=task_store
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=agent_card,
     )
 
     assert isinstance(handler._queue_manager, InMemoryQueueManager)
@@ -134,13 +150,15 @@ def test_init_default_dependencies():
 
 
 @pytest.mark.asyncio
-async def test_on_get_task_not_found():
+async def test_on_get_task_not_found(agent_card):
     """Test on_get_task when task_store.get returns None."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     params = GetTaskRequest(id='non_existent_task')
@@ -153,7 +171,7 @@ async def test_on_get_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_success():
+async def test_on_list_tasks_success(agent_card):
     """Test on_list_tasks successfully returns a page of tasks ."""
     mock_task_store = AsyncMock(spec=TaskStore)
     task2 = create_sample_task(task_id='task2')
@@ -175,7 +193,9 @@ async def test_on_list_tasks_success():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(include_artifacts=True, page_size=10)
     context = create_server_call_context()
@@ -188,7 +208,7 @@ async def test_on_list_tasks_success():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_excludes_artifacts():
+async def test_on_list_tasks_excludes_artifacts(agent_card):
     """Test on_list_tasks excludes artifacts from returned tasks."""
     mock_task_store = AsyncMock(spec=TaskStore)
     task2 = create_sample_task(task_id='task2')
@@ -210,7 +230,9 @@ async def test_on_list_tasks_excludes_artifacts():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(include_artifacts=False, page_size=10)
     context = create_server_call_context()
@@ -221,7 +243,7 @@ async def test_on_list_tasks_excludes_artifacts():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_applies_history_length():
+async def test_on_list_tasks_applies_history_length(agent_card):
     """Test on_list_tasks applies history length filter."""
     mock_task_store = AsyncMock(spec=TaskStore)
     history = [
@@ -239,7 +261,9 @@ async def test_on_list_tasks_applies_history_length():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(history_length=1, page_size=10)
     context = create_server_call_context()
@@ -250,11 +274,13 @@ async def test_on_list_tasks_applies_history_length():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_negative_history_length_error():
+async def test_on_list_tasks_negative_history_length_error(agent_card):
     """Test on_list_tasks raises error for negative history length."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(history_length=-1, page_size=10)
     context = create_server_call_context()
@@ -272,7 +298,9 @@ async def test_on_cancel_task_task_not_found():
     mock_task_store.get.return_value = None
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = CancelTaskRequest(id='task_not_found_for_cancel')
 
@@ -286,7 +314,7 @@ async def test_on_cancel_task_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_cancel_task_queue_tap_returns_none():
+async def test_on_cancel_task_queue_tap_returns_none(agent_card):
     """Test on_cancel_task when queue_manager.tap returns None."""
     mock_task_store = AsyncMock(spec=TaskStore)
     sample_task = create_sample_task(task_id='tap_none_task')
@@ -314,6 +342,7 @@ async def test_on_cancel_task_queue_tap_returns_none():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
 
     context = create_server_call_context()
@@ -341,7 +370,7 @@ async def test_on_cancel_task_queue_tap_returns_none():
 
 
 @pytest.mark.asyncio
-async def test_on_cancel_task_cancels_running_agent():
+async def test_on_cancel_task_cancels_running_agent(agent_card):
     """Test on_cancel_task cancels a running agent task."""
     task_id = 'running_agent_task_to_cancel'
     sample_task = create_sample_task(task_id=task_id)
@@ -366,6 +395,7 @@ async def test_on_cancel_task_cancels_running_agent():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
 
     # Simulate a running agent task
@@ -385,7 +415,7 @@ async def test_on_cancel_task_cancels_running_agent():
 
 
 @pytest.mark.asyncio
-async def test_on_cancel_task_completes_during_cancellation():
+async def test_on_cancel_task_completes_during_cancellation(agent_card):
     """Test on_cancel_task fails to cancel a task due to concurrent task completion."""
     task_id = 'running_agent_task_to_cancel'
     sample_task = create_sample_task(task_id=task_id)
@@ -410,6 +440,7 @@ async def test_on_cancel_task_completes_during_cancellation():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
 
     # Simulate a running agent task
@@ -431,7 +462,7 @@ async def test_on_cancel_task_completes_during_cancellation():
 
 
 @pytest.mark.asyncio
-async def test_on_cancel_task_invalid_result_type():
+async def test_on_cancel_task_invalid_result_type(agent_card):
     """Test on_cancel_task when result_aggregator returns a Message instead of a Task."""
     task_id = 'cancel_invalid_result_task'
     sample_task = create_sample_task(task_id=task_id)
@@ -456,6 +487,7 @@ async def test_on_cancel_task_invalid_result_type():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
 
     with patch(
@@ -475,7 +507,7 @@ async def test_on_cancel_task_invalid_result_type():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_with_push_notification():
+async def test_on_message_send_with_push_notification(agent_card):
     """Test on_message_send sets push notification info if provided."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_notification_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -511,6 +543,7 @@ async def test_on_message_send_with_push_notification():
         task_store=mock_task_store,
         push_config_store=mock_push_notification_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
 
     push_config = TaskPushNotificationConfig(url='http://callback.com/push')
@@ -576,7 +609,9 @@ async def test_on_message_send_with_push_notification():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_with_push_notification_in_non_blocking_request():
+async def test_on_message_send_with_push_notification_in_non_blocking_request(
+    agent_card,
+):
     """Test that push notification callback is called during background event processing for non-blocking requests."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_notification_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -615,6 +650,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         push_config_store=mock_push_notification_store,
         request_context_builder=mock_request_context_builder,
         push_sender=mock_push_sender,
+        agent_card=agent_card,
     )
 
     # Configure push notification
@@ -715,7 +751,9 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_with_push_notification_no_existing_Task():
+async def test_on_message_send_with_push_notification_no_existing_Task(
+    agent_card,
+):
     """Test on_message_send for new task sets push notification info if provided."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_notification_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -740,6 +778,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         task_store=mock_task_store,
         push_config_store=mock_push_notification_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
 
     push_config = TaskPushNotificationConfig(url='http://callback.com/push')
@@ -799,8 +838,8 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_no_result_from_aggregator():
-    """Test on_message_send when aggregator returns (None, False)."""
+async def test_on_message_send_no_result_from_aggregator(agent_card):
+    """Test on_message_send when aggregator returns (None, False). Completes unsuccessfully and raises InternalError."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
     mock_request_context_builder = AsyncMock(spec=RequestContextBuilder)
@@ -815,6 +854,7 @@ async def test_on_message_send_no_result_from_aggregator():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -848,7 +888,8 @@ async def test_on_message_send_no_result_from_aggregator():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_task_id_mismatch():
+async def test_on_message_send_task_id_mismatch(agent_card):
+    """Test on_message_send returns InternalError if aggregator returns mismatched Task ID."""
     """Test on_message_send when result task ID doesn't match request context task ID."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -866,6 +907,7 @@ async def test_on_message_send_task_id_mismatch():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -933,7 +975,7 @@ class HelloAgentExecutor(AgentExecutor):
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_non_blocking():
+async def test_on_message_send_non_blocking(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
 
@@ -941,6 +983,7 @@ async def test_on_message_send_non_blocking():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -979,7 +1022,7 @@ async def test_on_message_send_non_blocking():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_limit_history():
+async def test_on_message_send_limit_history(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
 
@@ -987,6 +1030,7 @@ async def test_on_message_send_limit_history():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -1016,7 +1060,7 @@ async def test_on_message_send_limit_history():
 
 
 @pytest.mark.asyncio
-async def test_on_get_task_limit_history():
+async def test_on_get_task_limit_history(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
 
@@ -1024,6 +1068,7 @@ async def test_on_get_task_limit_history():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -1056,7 +1101,7 @@ async def test_on_get_task_limit_history():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_interrupted_flow():
+async def test_on_message_send_interrupted_flow(agent_card):
     """Test on_message_send when flow is interrupted (e.g., auth_required)."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1072,6 +1117,7 @@ async def test_on_message_send_interrupted_flow():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -1137,7 +1183,7 @@ async def test_on_message_send_interrupted_flow():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_with_push_notification():
+async def test_on_message_send_stream_with_push_notification(agent_card):
     """Test on_message_send_stream sets and uses push notification info."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_push_config_store = AsyncMock(spec=PushNotificationConfigStore)
@@ -1175,6 +1221,7 @@ async def test_on_message_send_stream_with_push_notification():
         push_config_store=mock_push_config_store,
         push_sender=mock_push_sender,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
 
     push_config = TaskPushNotificationConfig(
@@ -1284,7 +1331,9 @@ async def test_on_message_send_stream_with_push_notification():
 
 
 @pytest.mark.asyncio
-async def test_stream_disconnect_then_resubscribe_receives_future_events():
+async def test_stream_disconnect_then_resubscribe_receives_future_events(
+    agent_card,
+):
     """Start streaming, disconnect, then resubscribe and ensure subsequent events are streamed."""
     # Arrange
     mock_task_store = AsyncMock(spec=TaskStore)
@@ -1308,6 +1357,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         queue_manager=queue_manager,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -1375,7 +1425,9 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_client_disconnect_triggers_background_cleanup_and_producer_continues():
+async def test_on_message_send_stream_client_disconnect_triggers_background_cleanup_and_producer_continues(
+    agent_card,
+):
     """Simulate client disconnect: stream stops early, cleanup is scheduled in background,
     producer keeps running, and cleanup completes after producer finishes."""
     # Arrange
@@ -1406,6 +1458,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -1514,7 +1567,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
 
 
 @pytest.mark.asyncio
-async def test_disconnect_persists_final_task_to_store():
+async def test_disconnect_persists_final_task_to_store(agent_card):
     """After client disconnect, ensure background consumer persists final Task to store."""
     task_store = InMemoryTaskStore()
     queue_manager = InMemoryQueueManager()
@@ -1545,7 +1598,10 @@ async def test_disconnect_persists_final_task_to_store():
     agent = FinishingAgent()
 
     handler = DefaultRequestHandler(
-        agent_executor=agent, task_store=task_store, queue_manager=queue_manager
+        agent_executor=agent,
+        task_store=task_store,
+        queue_manager=queue_manager,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -1604,7 +1660,7 @@ async def wait_until(predicate, timeout: float = 0.2, interval: float = 0.0):
 
 
 @pytest.mark.asyncio
-async def test_background_cleanup_task_is_tracked_and_cleared():
+async def test_background_cleanup_task_is_tracked_and_cleared(agent_card):
     """Ensure background cleanup task is tracked while pending and removed when done."""
     # Arrange
     mock_task_store = AsyncMock(spec=TaskStore)
@@ -1633,6 +1689,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -1722,7 +1779,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_task_id_mismatch():
+async def test_on_message_send_stream_task_id_mismatch(agent_card):
     """Test on_message_send_stream raises error if yielded task ID mismatches."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(
@@ -1741,6 +1798,7 @@ async def test_on_message_send_stream_task_id_mismatch():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=agent_card,
     )
     params = SendMessageRequest(
         message=Message(
@@ -1782,7 +1840,7 @@ async def test_on_message_send_stream_task_id_mismatch():
 
 
 @pytest.mark.asyncio
-async def test_cleanup_producer_task_id_not_in_running_agents():
+async def test_cleanup_producer_task_id_not_in_running_agents(agent_card):
     """Test _cleanup_producer when task_id is not in _running_agents (e.g., already cleaned up)."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_queue_manager = AsyncMock(spec=QueueManager)
@@ -1790,6 +1848,7 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
 
     task_id = 'task_already_cleaned'
@@ -1819,12 +1878,13 @@ async def test_cleanup_producer_task_id_not_in_running_agents():
 
 
 @pytest.mark.asyncio
-async def test_set_task_push_notification_config_no_notifier():
+async def test_set_task_push_notification_config_no_notifier(agent_card):
     """Test on_create_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
-        push_config_store=None,  # Explicitly None
+        push_config_store=None,  # Explicitly None,
+        agent_card=agent_card,
     )
     params = TaskPushNotificationConfig(
         task_id='task1',
@@ -1838,7 +1898,7 @@ async def test_set_task_push_notification_config_no_notifier():
 
 
 @pytest.mark.asyncio
-async def test_set_task_push_notification_config_task_not_found():
+async def test_set_task_push_notification_config_task_not_found(agent_card):
     """Test on_create_task_push_notification_config when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
@@ -1850,6 +1910,7 @@ async def test_set_task_push_notification_config_task_not_found():
         task_store=mock_task_store,
         push_config_store=mock_push_store,
         push_sender=mock_push_sender,
+        agent_card=agent_card,
     )
     params = TaskPushNotificationConfig(
         task_id='non_existent_task',
@@ -1866,12 +1927,13 @@ async def test_set_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_no_store():
+async def test_get_task_push_notification_config_no_store(agent_card):
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
-        push_config_store=None,  # Explicitly None
+        push_config_store=None,  # Explicitly None,
+        agent_card=agent_card,
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='task1',
@@ -1885,7 +1947,7 @@ async def test_get_task_push_notification_config_no_store():
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_task_not_found():
+async def test_get_task_push_notification_config_task_not_found(agent_card):
     """Test on_get_task_push_notification_config when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
@@ -1895,6 +1957,7 @@ async def test_get_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=agent_card,
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='task_push_notification_config'
@@ -1910,7 +1973,7 @@ async def test_get_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_info_not_found():
+async def test_get_task_push_notification_config_info_not_found(agent_card):
     """Test on_get_task_push_notification_config when push_config_store.get_info returns None."""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -1924,13 +1987,14 @@ async def test_get_task_push_notification_config_info_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=agent_card,
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='task_push_notification_config'
     )
 
     context = create_server_call_context()
-    with pytest.raises(InternalError):
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_get_task_push_notification_config(
             params, context
         )
@@ -1941,7 +2005,7 @@ async def test_get_task_push_notification_config_info_not_found():
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_info_with_config():
+async def test_get_task_push_notification_config_info_with_config(agent_card):
     """Test on_get_task_push_notification_config with valid push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -1952,6 +2016,7 @@ async def test_get_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
 
     set_config_params = TaskPushNotificationConfig(
@@ -1979,7 +2044,9 @@ async def test_get_task_push_notification_config_info_with_config():
 
 
 @pytest.mark.asyncio
-async def test_get_task_push_notification_config_info_with_config_no_id():
+async def test_get_task_push_notification_config_info_with_config_no_id(
+    agent_card,
+):
     """Test on_get_task_push_notification_config with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -1990,6 +2057,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
 
     set_config_params = TaskPushNotificationConfig(
@@ -2015,13 +2083,15 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
 
 
 @pytest.mark.asyncio
-async def test_on_subscribe_to_task_task_not_found():
+async def test_on_subscribe_to_task_task_not_found(agent_card):
     """Test on_subscribe_to_task when the task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = SubscribeToTaskRequest(id='resub_task_not_found')
 
@@ -2036,7 +2106,7 @@ async def test_on_subscribe_to_task_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_subscribe_to_task_queue_not_found():
+async def test_on_subscribe_to_task_queue_not_found(agent_card):
     """Test on_subscribe_to_task when the queue is not found by queue_manager.tap."""
     mock_task_store = AsyncMock(spec=TaskStore)
     sample_task = create_sample_task(task_id='resub_queue_not_found')
@@ -2049,6 +2119,7 @@ async def test_on_subscribe_to_task_queue_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=mock_queue_manager,
+        agent_card=agent_card,
     )
     params = SubscribeToTaskRequest(id='resub_queue_not_found')
 
@@ -2063,9 +2134,11 @@ async def test_on_subscribe_to_task_queue_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream():
+async def test_on_message_send_stream(agent_card):
     request_handler = DefaultRequestHandler(
-        MockAgentExecutor(), InMemoryTaskStore()
+        MockAgentExecutor(),
+        InMemoryTaskStore(),
+        agent_card=agent_card,
     )
     message_params = SendMessageRequest(
         message=Message(
@@ -2100,12 +2173,13 @@ async def test_on_message_send_stream():
 
 
 @pytest.mark.asyncio
-async def test_list_task_push_notification_config_no_store():
+async def test_list_task_push_notification_config_no_store(agent_card):
     """Test on_list_task_push_notification_configs when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
-        push_config_store=None,  # Explicitly None
+        push_config_store=None,  # Explicitly None,
+        agent_card=agent_card,
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task1')
 
@@ -2116,7 +2190,7 @@ async def test_list_task_push_notification_config_no_store():
 
 
 @pytest.mark.asyncio
-async def test_list_task_push_notification_config_task_not_found():
+async def test_list_task_push_notification_config_task_not_found(agent_card):
     """Test on_list_task_push_notification_configs when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
@@ -2126,6 +2200,7 @@ async def test_list_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=agent_card,
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
 
@@ -2139,7 +2214,7 @@ async def test_list_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_list_no_task_push_notification_config_info():
+async def test_list_no_task_push_notification_config_info(agent_card):
     """Test on_get_task_push_notification_config when push_config_store.get_info returns []"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2152,6 +2227,7 @@ async def test_list_no_task_push_notification_config_info():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
 
@@ -2162,7 +2238,7 @@ async def test_list_no_task_push_notification_config_info():
 
 
 @pytest.mark.asyncio
-async def test_list_task_push_notification_config_info_with_config():
+async def test_list_task_push_notification_config_info_with_config(agent_card):
     """Test on_list_task_push_notification_configs with push config+id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2185,6 +2261,7 @@ async def test_list_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task_1')
 
@@ -2200,7 +2277,9 @@ async def test_list_task_push_notification_config_info_with_config():
 
 
 @pytest.mark.asyncio
-async def test_list_task_push_notification_config_info_with_config_and_no_id():
+async def test_list_task_push_notification_config_info_with_config_and_no_id(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -2211,6 +2290,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
 
     # multiple calls without config id should replace the existing
@@ -2243,12 +2323,13 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_no_store():
+async def test_delete_task_push_notification_config_no_store(agent_card):
     """Test on_delete_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
-        push_config_store=None,  # Explicitly None
+        push_config_store=None,  # Explicitly None,
+        agent_card=agent_card,
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task1', id='config1'
@@ -2261,7 +2342,7 @@ async def test_delete_task_push_notification_config_no_store():
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_task_not_found():
+async def test_delete_task_push_notification_config_task_not_found(agent_card):
     """Test on_delete_task_push_notification_config when task is not found."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None  # Task not found
@@ -2271,6 +2352,7 @@ async def test_delete_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=agent_card,
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='config1'
@@ -2287,7 +2369,7 @@ async def test_delete_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_delete_no_task_push_notification_config_info():
+async def test_delete_no_task_push_notification_config_info(agent_card):
     """Test on_delete_task_push_notification_config without config info"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2305,6 +2387,7 @@ async def test_delete_no_task_push_notification_config_info():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task1', id='config_non_existant'
@@ -2326,7 +2409,9 @@ async def test_delete_no_task_push_notification_config_info():
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_info_with_config():
+async def test_delete_task_push_notification_config_info_with_config(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with push config+id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2350,6 +2435,7 @@ async def test_delete_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task_1', id='config_1'
@@ -2372,7 +2458,9 @@ async def test_delete_task_push_notification_config_info_with_config():
 
 
 @pytest.mark.asyncio
-async def test_delete_task_push_notification_config_info_with_config_and_no_id():
+async def test_delete_task_push_notification_config_info_with_config_and_no_id(
+    agent_card,
+):
     """Test on_list_task_push_notification_configs with no push config id"""
     mock_task_store = AsyncMock(spec=TaskStore)
 
@@ -2391,6 +2479,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=agent_card,
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task_1', id='task_1'
@@ -2420,7 +2509,9 @@ TERMINAL_TASK_STATES = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_task_in_terminal_state(terminal_state):
+async def test_on_message_send_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_message_send when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_task_{state_name}'
@@ -2434,7 +2525,9 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
     # So we should patch that instead.
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -2464,7 +2557,9 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
+async def test_on_message_send_stream_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_message_send_stream when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_stream_task_{state_name}'
@@ -2475,7 +2570,9 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -2505,7 +2602,9 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
+async def test_on_subscribe_to_task_in_terminal_state(
+    terminal_state, agent_card
+):
     """Test on_subscribe_to_task when task is in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'resub_terminal_task_{state_name}'
@@ -2520,6 +2619,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         queue_manager=AsyncMock(spec=QueueManager),
+        agent_card=agent_card,
     )
     params = SubscribeToTaskRequest(id=f'{task_id}')
 
@@ -2537,13 +2637,15 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_task_id_provided_but_task_not_found():
+async def test_on_message_send_task_id_provided_but_task_not_found(agent_card):
     """Test on_message_send when task_id is provided but task doesn't exist."""
     task_id = 'nonexistent_task'
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -2573,13 +2675,17 @@ async def test_on_message_send_task_id_provided_but_task_not_found():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_stream_task_id_provided_but_task_not_found():
+async def test_on_message_send_stream_task_id_provided_but_task_not_found(
+    agent_card,
+):
     """Test on_message_send_stream when task_id is provided but task doesn't exist."""
     task_id = 'nonexistent_stream_task'
     mock_task_store = AsyncMock(spec=TaskStore)
 
     request_handler = DefaultRequestHandler(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -2637,14 +2743,16 @@ class HelloWorldAgentExecutor(AgentExecutor):
 # we should reconsider the approach.
 @pytest.mark.asyncio
 @pytest.mark.timeout(1)
-async def test_on_message_send_error_does_not_hang():
+async def test_on_message_send_error_does_not_hang(agent_card):
     """Test that if the consumer raises an exception during blocking wait, the producer is cancelled and no deadlock occurs."""
     agent = HelloWorldAgentExecutor()
     task_store = AsyncMock(spec=TaskStore)
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandler(
-        agent_executor=agent, task_store=task_store
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=agent_card,
     )
 
     params = SendMessageRequest(
@@ -2662,11 +2770,13 @@ async def test_on_message_send_error_does_not_hang():
 
 
 @pytest.mark.asyncio
-async def test_on_get_task_negative_history_length_error():
+async def test_on_get_task_negative_history_length_error(agent_card):
     """Test on_get_task raises error for negative history length."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     # GetTaskRequest also has history_length
     params = GetTaskRequest(id='task1', history_length=-1)
@@ -2679,11 +2789,13 @@ async def test_on_get_task_negative_history_length_error():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_page_size_too_small():
+async def test_on_list_tasks_page_size_too_small(agent_card):
     """Test on_list_tasks raises error for page_size < 1."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(page_size=0)
     context = create_server_call_context()
@@ -2695,11 +2807,13 @@ async def test_on_list_tasks_page_size_too_small():
 
 
 @pytest.mark.asyncio
-async def test_on_list_tasks_page_size_too_large():
+async def test_on_list_tasks_page_size_too_large(agent_card):
     """Test on_list_tasks raises error for page_size > 100."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandler(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
     params = ListTasksRequest(page_size=101)
     context = create_server_call_context()
@@ -2711,12 +2825,14 @@ async def test_on_list_tasks_page_size_too_large():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_negative_history_length_error():
+async def test_on_message_send_negative_history_length_error(agent_card):
     """Test on_message_send raises error for negative history length in configuration."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
     request_handler = DefaultRequestHandler(
-        agent_executor=mock_agent_executor, task_store=mock_task_store
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
     )
 
     message_config = SendMessageConfiguration(
@@ -2735,3 +2851,119 @@ async def test_on_message_send_negative_history_length_error():
         await request_handler.on_message_send(params, context)
 
     assert 'history length must be non-negative' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_get_extended_agent_card_success(agent_card):
+    """Test on_get_extended_agent_card when extended_agent_card is supported."""
+    agent_card.capabilities.extended_agent_card = True
+
+    extended_agent_card = AgentCard(
+        name='Extended Agent',
+        description='An extended agent',
+        version='1.0.0',
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+        extended_agent_card=extended_agent_card,
+    )
+
+    params = GetExtendedAgentCardRequest()
+    context = create_server_call_context()
+
+    result = await request_handler.on_get_extended_agent_card(params, context)
+
+    assert result == extended_agent_card
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_unsupported(agent_card):
+    """Test on_message_send_stream when streaming is unsupported."""
+    agent_card.capabilities.streaming = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-unsupported',
+            parts=[Part(text='hi')],
+        )
+    )
+
+    context = create_server_call_context()
+
+    with pytest.raises(UnsupportedOperationError):
+        async for _ in request_handler.on_message_send_stream(params, context):
+            pass
+
+
+@pytest.mark.asyncio
+async def test_on_get_extended_agent_card_unsupported(agent_card):
+    """Test on_get_extended_agent_card when extended_agent_card is unsupported."""
+    agent_card.capabilities.extended_agent_card = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = GetExtendedAgentCardRequest()
+    context = create_server_call_context()
+
+    with pytest.raises(UnsupportedOperationError):
+        await request_handler.on_get_extended_agent_card(params, context)
+
+
+@pytest.mark.asyncio
+async def test_on_create_task_push_notification_config_unsupported(agent_card):
+    """Test on_create_task_push_notification_config when push_notifications is unsupported."""
+    agent_card.capabilities.push_notifications = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = TaskPushNotificationConfig(url='http://callback.com/push')
+
+    context = create_server_call_context()
+
+    with pytest.raises(PushNotificationNotSupportedError):
+        await request_handler.on_create_task_push_notification_config(
+            params, context
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_subscribe_to_task_unsupported(agent_card):
+    """Test on_subscribe_to_task when streaming is unsupported."""
+    agent_card.capabilities.streaming = False
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        agent_card=agent_card,
+    )
+
+    params = SubscribeToTaskRequest(id='some_task')
+    context = create_server_call_context()
+
+    with pytest.raises(UnsupportedOperationError):
+        # We need to exhaust the generator to trigger the decorator evaluation
+        async for _ in request_handler.on_subscribe_to_task(params, context):
+            pass
