@@ -49,20 +49,15 @@ class GrpcContextBuilder(ABC):
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds a ServerCallContext from a gRPC ServicerContext."""
 
-    @abstractmethod
-    def build_user(self, context: grpc.aio.ServicerContext) -> User:
-        """Builds a User from a gRPC ServicerContext."""
-
 
 class DefaultGrpcContextBuilder(GrpcContextBuilder):
     """Default implementation of GrpcContextBuilder."""
 
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds a ServerCallContext from a gRPC ServicerContext."""
-        user = self.build_user(context)
         state = {'grpc_context': context}
         return ServerCallContext(
-            user=user,
+            user=self.build_user(context),
             state=state,
             requested_extensions=get_requested_extensions(
                 _get_metadata_value(context, HTTP_EXTENSION_HEADER)
@@ -87,6 +82,7 @@ def _get_metadata_value(
         for k, e in md
         if k.lower() == lower_key
     ]
+
 
 _ERROR_CODE_MAP = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
@@ -125,8 +121,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-            context_builder: Optional custom user builder to extract user from the
-                          gRPC context.
+            context_builder: The GrpcContextBuilder used to construct the
+              ServerCallContext passed to the request_handler. If None the
+              DefaultGrpcContextBuilder is used.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
         """
