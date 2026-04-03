@@ -27,7 +27,7 @@ jobs:
     steps:
       - name: check-spelling
         id: spelling
-        uses: check-spelling/check-spelling@main
+        uses: check-spelling/check-spelling@a35147f799f30f8739c33f92222c847214e82e67 # https://github.com/check-spelling/check-spelling/issues/103#issuecomment-4181666219
         with:
           suppress_push_for_open_pull_request: ${{ github.actor != 'dependabot[bot]' && 1 }}
           checkout: true
