@@ -59,7 +59,7 @@ class JSONRPC03Adapter:
         'tasks/pushNotificationConfig/list': types_v03.ListTaskPushNotificationConfigRequest,
         'tasks/pushNotificationConfig/delete': types_v03.DeleteTaskPushNotificationConfigRequest,
         'tasks/resubscribe': types_v03.TaskResubscriptionRequest,
-        'agent/authenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
+        'agent/getAuthenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
     }
 
     def __init__(  # noqa: PLR0913
@@ -225,7 +225,7 @@ class JSONRPC03Adapter:
                     id=request_id, result=None
                 )
             )
-        elif method == 'agent/authenticatedExtendedCard':
+        elif method == 'agent/getAuthenticatedExtendedCard':
             res_card = await self.get_authenticated_extended_card(
                 request_obj, context
             )
@@ -248,7 +248,7 @@ class JSONRPC03Adapter:
         request: types_v03.GetAuthenticatedExtendedCardRequest,
         context: ServerCallContext,
     ) -> types_v03.AgentCard:
-        """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method."""
+        """Handles the 'agent/getAuthenticatedExtendedCard' JSON-RPC method."""
         if not self.agent_card.capabilities.extended_agent_card:
             raise ExtendedAgentCardNotConfiguredError(
                 message='Authenticated card not supported'
