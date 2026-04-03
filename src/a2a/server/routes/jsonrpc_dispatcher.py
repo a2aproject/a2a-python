@@ -6,7 +6,7 @@ import traceback
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
-from typing import TYPE_CHECKING, Any, cast
+from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
@@ -31,7 +31,6 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
     build_error_response,
 )
-from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -436,7 +435,7 @@ class JsonRpcDispatcher:
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
-        request_obj: A2ARequest,
+        request_obj: Any,
         context: ServerCallContext,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
@@ -452,11 +451,11 @@ class JsonRpcDispatcher:
         stream: AsyncGenerator | None = None
         if context.state.get('method') == 'SendStreamingMessage':
             stream = self.request_handler.on_message_send_stream(
-                cast('SendMessageRequest', request_obj), context
+                request_obj, context
             )
         elif context.state.get('method') == 'SubscribeToTask':
             stream = self.request_handler.on_subscribe_to_task(
-                cast('SubscribeToTaskRequest', request_obj), context
+                request_obj, context
             )
 
         if stream is None:
@@ -589,7 +588,7 @@ class JsonRpcDispatcher:
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def _process_non_streaming_request(  # noqa: PLR0911
         self,
-        request_obj: A2ARequest,
+        request_obj: Any,
         context: ServerCallContext,
     ) -> dict[str, Any] | None:
         """Processes non-streaming requests.
@@ -603,46 +602,33 @@ class JsonRpcDispatcher:
         """
         match context.state.get('method'):
             case 'SendMessage':
-                return await self._handle_send_message(
-                    cast('SendMessageRequest', request_obj), context
-                )
+                return await self._handle_send_message(request_obj, context)
             case 'CancelTask':
-                return await self._handle_cancel_task(
-                    cast('CancelTaskRequest', request_obj), context
-                )
+                return await self._handle_cancel_task(request_obj, context)
             case 'GetTask':
-                return await self._handle_get_task(
-                    cast('GetTaskRequest', request_obj), context
-                )
+                return await self._handle_get_task(request_obj, context)
             case 'ListTasks':
-                return await self._handle_list_tasks(
-                    cast('ListTasksRequest', request_obj), context
-                )
+                return await self._handle_list_tasks(request_obj, context)
             case 'CreateTaskPushNotificationConfig':
                 return await self._handle_create_task_push_notification_config(
-                    cast('TaskPushNotificationConfig', request_obj), context
+                    request_obj, context
                 )
             case 'GetTaskPushNotificationConfig':
                 return await self._handle_get_task_push_notification_config(
-                    cast('GetTaskPushNotificationConfigRequest', request_obj),
-                    context,
+                    request_obj, context
                 )
             case 'ListTaskPushNotificationConfigs':
                 return await self._handle_list_task_push_notification_configs(
-                    cast('ListTaskPushNotificationConfigsRequest', request_obj),
-                    context,
+                    request_obj, context
                 )
             case 'DeleteTaskPushNotificationConfig':
                 await self._handle_delete_task_push_notification_config(
-                    cast(
-                        'DeleteTaskPushNotificationConfigRequest', request_obj
-                    ),
-                    context,
+                    request_obj, context
                 )
                 return None
             case 'GetExtendedAgentCard':
                 return await self._handle_get_extended_agent_card(
-                    cast('GetExtendedAgentCardRequest', request_obj), context
+                    request_obj, context
                 )
             case _:
                 method = context.state.get('method')
