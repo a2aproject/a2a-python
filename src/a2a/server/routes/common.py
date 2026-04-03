@@ -45,10 +45,6 @@ class ContextBuilder(ABC):
     def build(self, request: Request) -> ServerCallContext:
         """Builds a ServerCallContext from a Starlette Request."""
 
-    @abstractmethod
-    def build_user(self, request: Request) -> User:
-        """Builds a User from a Starlette Request."""
-
 
 class DefaultContextBuilder(ContextBuilder):
     """A default implementation of ContextBuilder."""
