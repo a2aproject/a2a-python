@@ -450,19 +450,13 @@ class JsonRpcDispatcher:
             An `AsyncGenerator` object to stream results to the client.
         """
         stream: AsyncGenerator | None = None
-        if (
-            isinstance(request_obj, SendMessageRequest)
-            and context.state.get('method') == 'SendStreamingMessage'
-        ):
+        if context.state.get('method') == 'SendStreamingMessage':
             stream = self.request_handler.on_message_send_stream(
-                request_obj, context
+                cast(SendMessageRequest, request_obj), context
             )
-        elif (
-            isinstance(request_obj, SubscribeToTaskRequest)
-            and context.state.get('method') == 'SubscribeToTask'
-        ):
+        elif context.state.get('method') == 'SubscribeToTask':
             stream = self.request_handler.on_subscribe_to_task(
-                request_obj, context
+                cast(SubscribeToTaskRequest, request_obj), context
             )
 
         if stream is None:
@@ -598,7 +592,7 @@ class JsonRpcDispatcher:
         request_obj: A2ARequest,
         context: ServerCallContext,
     ) -> dict[str, Any] | None:
-        """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
+        """Processes non-streaming requests.
 
         Args:
             request_obj: The proto request message.
@@ -607,7 +601,7 @@ class JsonRpcDispatcher:
         Returns:
             A dict containing the result or error.
         """
-        match context.state.get('method', None):
+        match context.state.get('method'):
             case 'SendMessage':
                 return await self._handle_send_message(
                     cast('SendMessageRequest', request_obj), context
@@ -651,11 +645,10 @@ class JsonRpcDispatcher:
                     cast('GetExtendedAgentCardRequest', request_obj), context
                 )
             case _:
-                logger.error(
-                    'Unhandled validated request type: %s', type(request_obj)
-                )
+                method = context.state.get('method')
+                logger.error('Unhandled method: %s', method)
                 raise UnsupportedOperationError(
-                    message=f'Request type {type(request_obj).__name__} is unknown.'
+                    message=f'Method {method} is not supported.'
                 )
 
     def _create_response(
