@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
     from a2a.server.request_handlers.request_handler import RequestHandler
-    from a2a.server.routes import CallContextBuilder
     from a2a.types.a2a_pb2 import AgentCard
 
     _package_starlette_installed = True
@@ -37,6 +36,10 @@ from a2a.server.jsonrpc_models import (
 )
 from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
+)
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
 )
 from a2a.utils import constants
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
@@ -67,7 +70,7 @@ class JSONRPC03Adapter:
         agent_card: 'AgentCard',
         http_handler: 'RequestHandler',
         extended_agent_card: 'AgentCard | None' = None,
-        context_builder: 'CallContextBuilder | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
         card_modifier: 'Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None' = None,
         extended_card_modifier: 'Callable[[AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard] | None' = None,
     ):
@@ -78,7 +81,9 @@ class JSONRPC03Adapter:
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
-        self._context_builder = context_builder
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     def supports_method(self, method: str) -> bool:
         """Returns True if the v0.3 adapter supports the given method name."""
@@ -126,11 +131,7 @@ class JSONRPC03Adapter:
                     CoreInvalidRequestError(data=str(e)),
                 )
 
-            call_context = (
-                self._context_builder.build(request)
-                if self._context_builder
-                else ServerCallContext()
-            )
+            call_context = self._context_builder.build(request)
             call_context.tenant = (
                 getattr(specific_request.params, 'tenant', '')
                 if hasattr(specific_request, 'params')
