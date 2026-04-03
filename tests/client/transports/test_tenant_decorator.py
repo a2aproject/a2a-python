@@ -127,3 +127,22 @@ class TestTenantTransportDecorator:
         async for _ in decorator.send_message_streaming(request_msg):
             pass
         assert request_msg.tenant == tenant_id
+
+    @pytest.mark.asyncio
+    async def test_close_delegates_to_base(
+        self, mock_transport: AsyncMock
+    ) -> None:
+        """Test that close() is delegated to the underlying transport."""
+        decorator = TenantTransportDecorator(mock_transport, 'test-tenant')
+        await decorator.close()
+        mock_transport.close.assert_awaited_once()
+
+    @pytest.mark.asyncio
+    async def test_async_context_manager(
+        self, mock_transport: AsyncMock
+    ) -> None:
+        """Test that the decorator works as an async context manager."""
+        decorator = TenantTransportDecorator(mock_transport, 'test-tenant')
+        async with decorator as transport:
+            assert transport is decorator
+        mock_transport.close.assert_awaited_once()

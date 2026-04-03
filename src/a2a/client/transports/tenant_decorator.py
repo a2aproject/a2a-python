@@ -43,7 +43,7 @@ class TenantTransportDecorator(ClientTransport):
         *,
         context: ClientCallContext | None = None,
     ) -> SendMessageResponse:
-        """Sends a streaming message request to the agent and yields responses as they arrive."""
+        """Sends a non-streaming message request to the agent."""
         request.tenant = self._resolve_tenant(request.tenant)
         return await self._base.send_message(request, context=context)
 
