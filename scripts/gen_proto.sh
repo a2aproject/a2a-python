@@ -1,8 +1,16 @@
 #!/bin/bash
 set -e
 
+# Install proto2pydantic plugin for Pydantic model generation
+echo "Installing protoc-gen-proto2pydantic@v0.5.2..."
+go install github.com/protocgen/proto2pydantic@v0.5.2
+
 # Run buf generate to regenerate protobuf code and OpenAPI spec
 npx --yes @bufbuild/buf generate
+
+# Format generated Pydantic models (line-length wrapping for long Field() descriptions)
+echo "Formatting generated Pydantic models..."
+ruff format src/a2a/types/a2a_pydantic.py
 
 # The OpenAPI generator produces a file named like 'a2a.swagger.json' or similar.
 # We need it to be 'a2a.json' for the A2A SDK.

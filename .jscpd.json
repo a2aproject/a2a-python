@@ -6,7 +6,8 @@
     "**/src/a2a/grpc/**",
     "**/src/a2a/compat/**",
     "**/.nox/**",
-    "**/.venv/**"
+    "**/.venv/**",
+    "**/src/a2a/types/*_pydantic.py"
   ],
   "threshold": 3,
   "reporters": ["html", "markdown"]
