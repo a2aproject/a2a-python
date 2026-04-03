@@ -376,7 +376,7 @@ class CompatJsonRpcTransport(ClientTransport):
             return card
 
         rpc_request = JSONRPC20Request(
-            method='agent/authenticatedExtendedCard',
+            method='agent/getAuthenticatedExtendedCard',
             params={},
             _id=str(uuid4()),
         )
