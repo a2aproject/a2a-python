@@ -452,11 +452,11 @@ class JsonRpcDispatcher:
         stream: AsyncGenerator | None = None
         if context.state.get('method') == 'SendStreamingMessage':
             stream = self.request_handler.on_message_send_stream(
-                cast(SendMessageRequest, request_obj), context
+                cast('SendMessageRequest', request_obj), context
             )
         elif context.state.get('method') == 'SubscribeToTask':
             stream = self.request_handler.on_subscribe_to_task(
-                cast(SubscribeToTaskRequest, request_obj), context
+                cast('SubscribeToTaskRequest', request_obj), context
             )
 
         if stream is None:
