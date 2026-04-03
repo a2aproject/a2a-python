@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes.common import UserBuilder
+from a2a.server.routes.common import ContextBuilder
 from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -46,7 +46,7 @@ def create_rest_routes(  # noqa: PLR0913
     agent_card: AgentCard,
     request_handler: RequestHandler,
     extended_agent_card: AgentCard | None = None,
-    user_builder: UserBuilder | None = None,
+   context_builder: ContextBuilder | None = None,
     card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
     | None = None,
     extended_card_modifier: Callable[
@@ -64,7 +64,7 @@ def create_rest_routes(  # noqa: PLR0913
           requests via http.
         extended_agent_card: An optional, distinct AgentCard to be served
           at the authenticated extended card endpoint.
-        user_builder: Optional custom user builder to extract user from the
+       context_builder: Optional custom user builder to extract user from the
           request.
         card_modifier: An optional callback to dynamically modify the public
           agent card before it is served.
@@ -86,7 +86,7 @@ def create_rest_routes(  # noqa: PLR0913
         agent_card=agent_card,
         request_handler=request_handler,
         extended_agent_card=extended_agent_card,
-        user_builder=user_builder,
+       context_builder=user_builder,
         card_modifier=card_modifier,
         extended_card_modifier=extended_card_modifier,
     )
@@ -97,7 +97,7 @@ def create_rest_routes(  # noqa: PLR0913
             agent_card=agent_card,
             http_handler=request_handler,
             extended_agent_card=extended_agent_card,
-            user_builder=user_builder,
+           context_builder=user_builder,
             card_modifier=card_modifier,
             extended_card_modifier=extended_card_modifier,
         )

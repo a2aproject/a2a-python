@@ -1,3 +1,4 @@
+from abc import ABC, abstractmethod
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
@@ -20,10 +21,6 @@ from a2a.extensions.common import (
 )
 from a2a.server.context import ServerCallContext
 
-
-UserBuilder = Callable[[Request], User]
-
-
 class StarletteUser(User):
     """Adapts a Starlette BaseUser to the A2A User interface."""
 
@@ -41,36 +38,52 @@ class StarletteUser(User):
         return self._user.display_name
 
 
-def default_user_builder(request: Request) -> User:
-    """Default strategy for creating an A2AUser from a Starlette Request."""
-    if 'user' in request.scope:
-        return StarletteUser(request.user)
-    return UnauthenticatedUser()
+class ContextBuilder(ABC):
+    """A class for building ServerCallContexts using the Starlette Request."""
+
+    @abstractmethod
+    def build(self, request: Request) -> ServerCallContext:
+        """Builds a ServerCallContext from a Starlette Request."""
+
+    @abstractmethod
+    def build_user(self, request: Request) -> User:
+        """Builds a User from a Starlette Request."""
 
 
-def build_server_call_context(
-    request: Request, user_builder: UserBuilder
-) -> ServerCallContext:
-    """Builds a ServerCallContext from a Starlette Request.
+class DefaultContextBuilder(ContextBuilder):
+    """A default implementation of ContextBuilder."""
 
-    Args:
-        request: The incoming Starlette Request object.
-        user_builder: A callable that creates a User from the request.
+    def build(self, request: Request) -> ServerCallContext:
+        """Builds a ServerCallContext from a Starlette Request.
 
-    Returns:
-        A ServerCallContext instance populated with user and state.
-    """
-    user = user_builder(request)
+        Args:
+            request: The incoming Starlette Request object.
 
-    state = {}
-    if 'auth' in request.scope:
-        state['auth'] = request.auth
-    state['headers'] = dict(request.headers)
+        Returns:
+            A ServerCallContext instance populated with user and state
+            information from the request.
+        """
+        state = {}
+        if 'auth' in request.scope:
+            state['auth'] = request.auth
+        state['headers'] = dict(request.headers)
+        return ServerCallContext(
+            user=self.build_user(request),
+            state=state,
+            requested_extensions=get_requested_extensions(
+                request.headers.getlist(HTTP_EXTENSION_HEADER)
+            ),
+        )
 
-    return ServerCallContext(
-        user=user,
-        state=state,
-        requested_extensions=get_requested_extensions(
-            request.headers.getlist(HTTP_EXTENSION_HEADER)
-        ),
-    )
+    def build_user(self, request: Request) -> User:
+        """Builds a User from a Starlette Request.
+
+        Args:
+            request: The incoming Starlette Request object.
+
+        Returns:
+            A User instance populated with user information from the request.
+        """
+        if 'user' in request.scope:
+            return StarletteUser(request.user)
+        return UnauthenticatedUser()

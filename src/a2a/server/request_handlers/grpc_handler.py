@@ -40,7 +40,7 @@ from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 logger = logging.getLogger(__name__)
 
-GrpcUserBuilder = Callable[[grpc.aio.ServicerContext], User]
+GrpcContextBuilder = Callable[[grpc.aio.ServicerContext], User]
 
 
 def default_grpc_user_builder(context: grpc.aio.ServicerContext) -> User:
@@ -64,10 +64,10 @@ def _get_metadata_value(
 
 
 def build_grpc_server_call_context(
-    context: grpc.aio.ServicerContext, user_builder: GrpcUserBuilder
+    context: grpc.aio.ServicerContext,context_builder: GrpcContextBuilder
 ) -> ServerCallContext:
     """Builds a ServerCallContext from a gRPC ServicerContext."""
-    user = user_builder(context)
+    user =context_builder(context)
     state = {'grpc_context': context}
     return ServerCallContext(
         user=user,
@@ -105,7 +105,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
-        user_builder: GrpcUserBuilder | None = None,
+       context_builder: GrpcContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
     ):
@@ -115,14 +115,14 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-            user_builder: Optional custom user builder to extract user from the
+           context_builder: Optional custom user builder to extract user from the
                           gRPC context.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
-        self.user_builder = user_builder or default_grpc_user_builder
+        self.user_builder =context_builder or default_grpc_user_builder
         self.card_modifier = card_modifier
 
     async def _handle_unary(

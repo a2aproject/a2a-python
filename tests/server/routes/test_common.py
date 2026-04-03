@@ -58,7 +58,7 @@ def _make_mock_request(scope=None, headers=None):
     return request
 
 
-class TestDefaultUserBuilder:
+class TestDefaultContextBuilder:
     def test_returns_unauthenticated_user_when_no_user_in_scope(self):
         request = _make_mock_request(scope={})
         user = default_user_builder(request)

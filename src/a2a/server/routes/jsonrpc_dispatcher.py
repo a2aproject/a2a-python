@@ -28,9 +28,8 @@ from a2a.server.request_handlers.response_helpers import (
     build_error_response,
 )
 from a2a.server.routes.common import (
-    UserBuilder,
-    build_server_call_context,
-    default_user_builder,
+    ContextBuilder,
+
 )
 from a2a.types import A2ARequest
 from a2a.types.a2a_pb2 import (
@@ -145,7 +144,7 @@ class JsonRpcDispatcher:
         agent_card: AgentCard,
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
-        user_builder: UserBuilder | None = None,
+       context_builder: ContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
         extended_card_modifier: Callable[
@@ -162,7 +161,7 @@ class JsonRpcDispatcher:
               requests via http.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
-            user_builder: Optional custom user builder to extract user from the
+           context_builder: Optional custom user builder to extract user from the
               request.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
@@ -183,7 +182,7 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._user_builder = user_builder or default_user_builder
+        self._context_builder = context_builder or DefaultContextBuilder()
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 
@@ -192,7 +191,7 @@ class JsonRpcDispatcher:
                 agent_card=agent_card,
                 http_handler=request_handler,
                 extended_agent_card=extended_agent_card,
-                user_builder=self._user_builder,
+               context_builder=self._context_builder,
                 card_modifier=card_modifier,
                 extended_card_modifier=extended_card_modifier,
             )

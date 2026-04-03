@@ -22,7 +22,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.server.routes import jsonrpc_dispatcher
 from a2a.server.routes.common import (
-    UserBuilder,
+    ContextBuilder,
     build_server_call_context,
 )
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
