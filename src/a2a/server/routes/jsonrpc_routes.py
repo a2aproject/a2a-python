@@ -51,9 +51,9 @@ def create_jsonrpc_routes(  # noqa: PLR0913
         rpc_url: The URL prefix for the RPC endpoints.
         extended_agent_card: An optional, distinct AgentCard to be served
           at the authenticated extended card endpoint.
-        context_builder: The ContextBuilder used to construct the
+        context_builder: The ServerCallContextBuilder used to construct the
           ServerCallContext passed to the request_handler. If None the
-          DefaultContextBuilder is used.
+          DefaultServerCallContextBuilder is used.
         card_modifier: An optional callback to dynamically modify the public
           agent card before it is served.
         extended_card_modifier: An optional callback to dynamically modify

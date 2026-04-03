@@ -54,8 +54,8 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             agent_card: The AgentCard describing the agent's capabilities (v1.0).
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-            context_builder: Optional custom user builder to extract user from the
-                          gRPC context.
+            context_builder: The CallContextBuilder object. If none the
+                             DefaultCallContextBuilder is used.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
         """
