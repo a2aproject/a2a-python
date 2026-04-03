@@ -1,5 +1,50 @@
 # Changelog
 
+## [1.0.0-alpha.1](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.0...v1.0.0-alpha.1) (2026-04-03)
+
+
+### ⚠ BREAKING CHANGES
+
+* **server:** add build_user function to DefaultContextBuilder to allow A2A user creation customization ([#925](https://github.com/a2aproject/a2a-python/issues/925))
+* **client:** remove `ClientTaskManager` and `Consumers` from client ([#916](https://github.com/a2aproject/a2a-python/issues/916))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for rest ([#892](https://github.com/a2aproject/a2a-python/issues/892))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for jsonrpc ([#873](https://github.com/a2aproject/a2a-python/issues/873))
+
+### Features
+
+* A2A Version Header validation on server side. ([#865](https://github.com/a2aproject/a2a-python/issues/865)) ([b261ceb](https://github.com/a2aproject/a2a-python/commit/b261ceb98bf46cc1e479fcdace52fef8371c8e58))
+* Create EventQueue interface and make tap() async. ([#914](https://github.com/a2aproject/a2a-python/issues/914)) ([9ccf99c](https://github.com/a2aproject/a2a-python/commit/9ccf99c63d4e556eadea064de6afa0b4fc4e19d6)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* EventQueue - unify implementation between python versions ([#877](https://github.com/a2aproject/a2a-python/issues/877)) ([7437b88](https://github.com/a2aproject/a2a-python/commit/7437b88328fc71ed07e8e50f22a2eb0df4bf4201)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* InMemoryTaskStore creates a copy of Task by default to make it consistent with database task stores  ([#887](https://github.com/a2aproject/a2a-python/issues/887)) ([8c65e84](https://github.com/a2aproject/a2a-python/commit/8c65e84fb844251ce1d8f04d26dbf465a89b9a29)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* **server:** add async context manager support to EventQueue ([#743](https://github.com/a2aproject/a2a-python/issues/743)) ([f68b22f](https://github.com/a2aproject/a2a-python/commit/f68b22f0323ed4ff9267fabcf09c9d873baecc39))
+* **server:** validate presence according to `google.api.field_behavior` annotations ([#870](https://github.com/a2aproject/a2a-python/issues/870)) ([4586c3e](https://github.com/a2aproject/a2a-python/commit/4586c3ec0b507d64caa3ced72d68a34ec5b37a11))
+
+
+### Bug Fixes
+
+* [#898](https://github.com/a2aproject/a2a-python/issues/898). ([6fa139e](https://github.com/a2aproject/a2a-python/commit/6fa139e41f51190f30e2f3ed4a8bc247574d4a66))
+* Add `packaging` to base dependencies ([#897](https://github.com/a2aproject/a2a-python/issues/897)) ([7a9aec7](https://github.com/a2aproject/a2a-python/commit/7a9aec7779448faa85a828d1076bcc47cda7bdbb))
+* fix `athrow()` RuntimeError on streaming responses ([#912](https://github.com/a2aproject/a2a-python/issues/912)) ([ca7edc3](https://github.com/a2aproject/a2a-python/commit/ca7edc3b670538ce0f051c49f2224173f186d3f4))
+* fix docstrings related to `CallContextBuilder` args in constructors and make ServerCallContext mandatory in `compat` folder ([#907](https://github.com/a2aproject/a2a-python/issues/907)) ([9cade9b](https://github.com/a2aproject/a2a-python/commit/9cade9bdadfb94f2f857ec2dc302a2c402e7f0ea))
+* fix error handling for gRPC and SSE streaming ([#879](https://github.com/a2aproject/a2a-python/issues/879)) ([2b323d0](https://github.com/a2aproject/a2a-python/commit/2b323d0b191279fb5f091199aa30865299d5fcf2))
+* fix REST error handling ([#893](https://github.com/a2aproject/a2a-python/issues/893)) ([405be3f](https://github.com/a2aproject/a2a-python/commit/405be3fa3ef8c60f730452b956879beeaecc5957))
+* Remove unconditional SQLAlchemy dependency from SDK core ([#898](https://github.com/a2aproject/a2a-python/issues/898)) ([ab762f0](https://github.com/a2aproject/a2a-python/commit/ab762f0448911a9ac05b6e3fec0104615e0ec557)), closes [#883](https://github.com/a2aproject/a2a-python/issues/883)
+* replace stale entry in a2a.types.__all__ with actual import name ([#902](https://github.com/a2aproject/a2a-python/issues/902)) ([05cd5e9](https://github.com/a2aproject/a2a-python/commit/05cd5e9b73b55d2863c58c13be0c7dd21d8124bb))
+* wrong method name for ExtendedAgentCard endpoint in JsonRpc compat version ([#931](https://github.com/a2aproject/a2a-python/issues/931)) ([5d22186](https://github.com/a2aproject/a2a-python/commit/5d22186b8ee0f64b744512cdbe7ab6176fa97c60))
+
+
+### Documentation
+
+* add Database Migration Documentation ([#864](https://github.com/a2aproject/a2a-python/issues/864)) ([fd12dff](https://github.com/a2aproject/a2a-python/commit/fd12dffa3a7aa93816c762a155ed9b505086b924))
+
+
+### Code Refactoring
+
+* **client:** remove `ClientTaskManager` and `Consumers` from client ([#916](https://github.com/a2aproject/a2a-python/issues/916)) ([97058bb](https://github.com/a2aproject/a2a-python/commit/97058bb444ea663d77c3b62abcf2fd0c30a1a526)), closes [#734](https://github.com/a2aproject/a2a-python/issues/734)
+* **server:** add build_user function to DefaultContextBuilder to allow A2A user creation customization ([#925](https://github.com/a2aproject/a2a-python/issues/925)) ([2648c5e](https://github.com/a2aproject/a2a-python/commit/2648c5e50281ceb9795b10a726bd23670b363ae1))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for jsonrpc ([#873](https://github.com/a2aproject/a2a-python/issues/873)) ([734d062](https://github.com/a2aproject/a2a-python/commit/734d0621dc6170d10d0cdf9c074e5ae28531fc71))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for rest ([#892](https://github.com/a2aproject/a2a-python/issues/892)) ([4be2064](https://github.com/a2aproject/a2a-python/commit/4be2064b5d511e0b4617507ed0c376662688ebeb))
+
 ## 1.0.0-alpha.0 (2026-03-17)
 
 
