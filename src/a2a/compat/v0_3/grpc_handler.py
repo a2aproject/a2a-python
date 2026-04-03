@@ -23,9 +23,8 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.grpc_handler import (
     _ERROR_CODE_MAP,
+    DefaultGrpcContextBuilder,
     GrpcContextBuilder,
-    build_grpc_server_call_context,
-    default_grpc_user_builder,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
@@ -45,7 +44,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
-       context_builder: GrpcContextBuilder | None = None,
+        context_builder: GrpcContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
     ):
@@ -55,14 +54,14 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             agent_card: The AgentCard describing the agent's capabilities (v1.0).
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-           context_builder: Optional custom user builder to extract user from the
+            context_builder: Optional custom user builder to extract user from the
                           gRPC context.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
         """
         self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
-        self.user_builder =context_builder or default_grpc_user_builder
+        self._context_builder = context_builder or DefaultGrpcContextBuilder()
         self.card_modifier = card_modifier
 
     async def _handle_unary(
@@ -73,9 +72,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> TResponse:
         """Centralized error handling and context management for unary calls."""
         try:
-            server_context = build_grpc_server_call_context(
-                context, self.user_builder
-            )
+            server_context = self._context_builder.build(context)
             result = await handler_func(server_context)
             self._set_extension_metadata(context, server_context)
         except A2AError as e:
@@ -91,9 +88,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[TResponse]:
         """Centralized error handling and context management for streaming calls."""
         try:
-            server_context = build_grpc_server_call_context(
-                context, self.user_builder
-            )
+            server_context = self._context_builder.build(context)
             async for item in handler_func(server_context):
                 yield item
             self._set_extension_metadata(context, server_context)

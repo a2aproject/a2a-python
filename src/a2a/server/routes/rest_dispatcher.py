@@ -10,8 +10,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     ContextBuilder,
-    build_server_call_context,
-    default_user_builder,
+    DefaultContextBuilder,
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -72,7 +71,7 @@ class RestDispatcher:
         agent_card: AgentCard,
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
-       context_builder: ContextBuilder | None = None,
+        context_builder: ContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
         extended_card_modifier: Callable[
@@ -87,7 +86,7 @@ class RestDispatcher:
             request_handler: The underlying `RequestHandler` instance to delegate requests to.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
-           context_builder: Optional custom user builder to extract user from the
+            context_builder: Optional custom user builder to extract user from the
               request.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
@@ -106,11 +105,11 @@ class RestDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._user_builder =context_builder or default_user_builder
+        self._context_builder = context_builder or DefaultContextBuilder()
         self.request_handler = request_handler
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
-        call_context = build_server_call_context(request, self._user_builder)
+        call_context = self._context_builder.build(request)
         if 'tenant' in request.path_params:
             call_context.tenant = request.path_params['tenant']
         return call_context

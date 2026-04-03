@@ -36,8 +36,7 @@ from a2a.compat.v0_3.rest_handler import REST03Handler
 from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import (
     ContextBuilder,
-    build_server_call_context,
-    default_user_builder,
+    DefaultContextBuilder,
 )
 from a2a.utils.error_handlers import (
     rest_error_handler,
@@ -64,7 +63,7 @@ class REST03Adapter:
         agent_card: 'AgentCard',
         http_handler: 'RequestHandler',
         extended_agent_card: 'AgentCard | None' = None,
-       context_builder: 'ContextBuilder | None' = None,
+        context_builder: 'ContextBuilder | None' = None,
         card_modifier: 'Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None' = None,
         extended_card_modifier: 'Callable[[AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard] | None' = None,
     ):
@@ -75,7 +74,7 @@ class REST03Adapter:
         self.handler = REST03Handler(
             agent_card=agent_card, request_handler=http_handler
         )
-        self._user_builder =context_builder or default_user_builder
+        self._context_builder = context_builder or DefaultContextBuilder()
 
     @rest_error_handler
     async def _handle_request(
@@ -83,7 +82,7 @@ class REST03Adapter:
         method: 'Callable[[Request, ServerCallContext], Awaitable[Any]]',
         request: Request,
     ) -> Response:
-        call_context = build_server_call_context(request, self._user_builder)
+        call_context = self._context_builder.build(request)
         response = await method(request, call_context)
         return JSONResponse(content=response)
 
@@ -100,7 +99,7 @@ class REST03Adapter:
                 message=f'Failed to pre-consume request body: {e}'
             ) from e
 
-        call_context = build_server_call_context(request, self._user_builder)
+        call_context = self._context_builder.build(request)
 
         async def event_generator(
             stream: AsyncIterable[Any],

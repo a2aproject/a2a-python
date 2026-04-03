@@ -13,8 +13,7 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import (
     StarletteUser,
-    build_server_call_context,
-    default_user_builder,
+    DefaultContextBuilder,
 )
 
 
@@ -61,7 +60,7 @@ def _make_mock_request(scope=None, headers=None):
 class TestDefaultContextBuilder:
     def test_returns_unauthenticated_user_when_no_user_in_scope(self):
         request = _make_mock_request(scope={})
-        user = default_user_builder(request)
+        user = DefaultContextBuilder().build_user(request)
         assert isinstance(user, UnauthenticatedUser)
         assert user.is_authenticated is False
         assert user.user_name == ''
@@ -73,7 +72,7 @@ class TestDefaultContextBuilder:
         request = _make_mock_request(scope={'user': starlette_user})
         request.user = starlette_user
 
-        user = default_user_builder(request)
+        user = DefaultContextBuilder().build_user(request)
         assert isinstance(user, StarletteUser)
         assert user.is_authenticated is True
         assert user.user_name == 'Alice'
@@ -85,7 +84,7 @@ class TestDefaultContextBuilder:
         request = _make_mock_request(scope={'user': starlette_user})
         request.user = starlette_user
 
-        user = default_user_builder(request)
+        user = DefaultContextBuilder().build_user(request)
         assert isinstance(user, StarletteUser)
         assert user.is_authenticated is False
 
@@ -98,7 +97,7 @@ class TestBuildServerCallContext:
         request = _make_mock_request(
             scope={}, headers={'content-type': 'application/json'}
         )
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
 
         assert isinstance(ctx, ServerCallContext)
         assert isinstance(ctx.user, UnauthenticatedUser)
@@ -111,46 +110,47 @@ class TestBuildServerCallContext:
         request = _make_mock_request(scope={'auth': auth_credentials})
         request.auth = auth_credentials
 
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert ctx.state['auth'] is auth_credentials
 
     def test_auth_not_populated_when_not_in_scope(self):
         request = _make_mock_request(scope={})
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert 'auth' not in ctx.state
 
     def test_headers_captured_in_state(self):
         request = _make_mock_request(
             headers={'x-custom': 'value', 'authorization': 'Bearer tok'}
         )
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert ctx.state['headers']['x-custom'] == 'value'
         assert ctx.state['headers']['authorization'] == 'Bearer tok'
 
     def test_requested_extensions_single(self):
         request = _make_mock_request(headers={HTTP_EXTENSION_HEADER: 'foo'})
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert ctx.requested_extensions == {'foo'}
 
     def test_requested_extensions_comma_separated(self):
         request = _make_mock_request(
             headers={HTTP_EXTENSION_HEADER: 'foo, bar'}
         )
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert ctx.requested_extensions == {'foo', 'bar'}
 
     def test_no_extensions(self):
         request = _make_mock_request()
-        ctx = build_server_call_context(request, default_user_builder)
+        ctx = DefaultContextBuilder().build(request)
         assert ctx.requested_extensions == set()
 
     def test_custom_user_builder(self):
         custom_user = MagicMock(spec=UnauthenticatedUser)
         custom_user.is_authenticated = True
 
-        def my_builder(req):
-            return custom_user
+        class MyContextBuilder(DefaultContextBuilder):
+            def build_user(self, req):
+                return custom_user
 
         request = _make_mock_request()
-        ctx = build_server_call_context(request, my_builder)
+        ctx = MyContextBuilder().build(request)
         assert ctx.user is custom_user

@@ -1,6 +1,7 @@
 # ruff: noqa: N802
 import logging
 
+from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
 from typing import TypeVar
 
@@ -40,12 +41,37 @@ from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 logger = logging.getLogger(__name__)
 
-GrpcContextBuilder = Callable[[grpc.aio.ServicerContext], User]
+
+class GrpcContextBuilder(ABC):
+    """Interface for building ServerCallContext from gRPC context."""
+
+    @abstractmethod
+    def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
+        """Builds a ServerCallContext from a gRPC ServicerContext."""
+
+    @abstractmethod
+    def build_user(self, context: grpc.aio.ServicerContext) -> User:
+        """Builds a User from a gRPC ServicerContext."""
 
 
-def default_grpc_user_builder(context: grpc.aio.ServicerContext) -> User:
-    """Default strategy for creating a User from a gRPC context."""
-    return UnauthenticatedUser()
+class DefaultGrpcContextBuilder(GrpcContextBuilder):
+    """Default implementation of GrpcContextBuilder."""
+
+    def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
+        """Builds a ServerCallContext from a gRPC ServicerContext."""
+        user = self.build_user(context)
+        state = {'grpc_context': context}
+        return ServerCallContext(
+            user=user,
+            state=state,
+            requested_extensions=get_requested_extensions(
+                _get_metadata_value(context, HTTP_EXTENSION_HEADER)
+            ),
+        )
+
+    def build_user(self, context: grpc.aio.ServicerContext) -> User:
+        """Builds a User from a gRPC ServicerContext."""
+        return UnauthenticatedUser()
 
 
 def _get_metadata_value(
@@ -61,22 +87,6 @@ def _get_metadata_value(
         for k, e in md
         if k.lower() == lower_key
     ]
-
-
-def build_grpc_server_call_context(
-    context: grpc.aio.ServicerContext,context_builder: GrpcContextBuilder
-) -> ServerCallContext:
-    """Builds a ServerCallContext from a gRPC ServicerContext."""
-    user =context_builder(context)
-    state = {'grpc_context': context}
-    return ServerCallContext(
-        user=user,
-        state=state,
-        requested_extensions=get_requested_extensions(
-            _get_metadata_value(context, HTTP_EXTENSION_HEADER)
-        ),
-    )
-
 
 _ERROR_CODE_MAP = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
@@ -105,7 +115,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
-       context_builder: GrpcContextBuilder | None = None,
+        context_builder: GrpcContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
     ):
@@ -115,14 +125,14 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-           context_builder: Optional custom user builder to extract user from the
+            context_builder: Optional custom user builder to extract user from the
                           gRPC context.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
-        self.user_builder =context_builder or default_grpc_user_builder
+        self._context_builder = context_builder or DefaultGrpcContextBuilder()
         self.card_modifier = card_modifier
 
     async def _handle_unary(
@@ -446,8 +456,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         context: grpc.aio.ServicerContext,
         request: message.Message,
     ) -> ServerCallContext:
-        server_context = build_grpc_server_call_context(
-            context, self.user_builder
-        )
+        server_context = self._context_builder.build(context)
         server_context.tenant = getattr(request, 'tenant', '')
         return server_context

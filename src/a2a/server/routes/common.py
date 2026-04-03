@@ -1,5 +1,4 @@
 from abc import ABC, abstractmethod
-from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 
@@ -20,6 +19,7 @@ from a2a.extensions.common import (
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
+
 
 class StarletteUser(User):
     """Adapts a Starlette BaseUser to the A2A User interface."""
