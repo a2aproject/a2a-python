@@ -38,8 +38,8 @@ from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
 )
 from a2a.server.routes.common import (
-    ContextBuilder,
-    DefaultContextBuilder,
+    ServerCallContextBuilder,
+    DefaultServerCallContextBuilder,
 )
 from a2a.utils import constants
 from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
@@ -81,7 +81,7 @@ class JSONRPC03Adapter:
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
-        self._context_builder = context_builder or DefaultContextBuilder()
+        self._context_builder = context_builder or DefaultServerCallContextBuilder()
 
     def supports_method(self, method: str) -> bool:
         """Returns True if the v0.3 adapter supports the given method name."""

@@ -19,7 +19,7 @@ else:
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes.common import ContextBuilder
+from a2a.server.routes.common import ServerCallContextBuilder
 from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 from a2a.types.a2a_pb2 import AgentCard
 
@@ -29,7 +29,7 @@ def create_jsonrpc_routes(  # noqa: PLR0913
     request_handler: RequestHandler,
     rpc_url: str,
     extended_agent_card: AgentCard | None = None,
-    context_builder: ContextBuilder | None = None,
+    context_builder: ServerCallContextBuilder | None = None,
     card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
     | None = None,
     extended_card_modifier: Callable[

@@ -6,7 +6,7 @@ from typing import TYPE_CHECKING, Any
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes.common import ContextBuilder
+from a2a.server.routes.common import ServerCallContextBuilder
 from a2a.server.routes.rest_dispatcher import RestDispatcher
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -46,7 +46,7 @@ def create_rest_routes(  # noqa: PLR0913
     agent_card: AgentCard,
     request_handler: RequestHandler,
     extended_agent_card: AgentCard | None = None,
-    context_builder: ContextBuilder | None = None,
+    context_builder: ServerCallContextBuilder | None = None,
     card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
     | None = None,
     extended_card_modifier: Callable[

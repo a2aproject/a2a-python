@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 try:
     from a2a.server.request_handlers.grpc_handler import (
         GrpcHandler,  # type: ignore
+        DefaultGrpcServerCallContextBuilder,
+        GrpcServerCallContextBuilder,
     )
 except ImportError as e:
     _original_error = e
@@ -43,6 +45,8 @@ __all__ = [
     'GrpcHandler',
     'RequestHandler',
     'build_error_response',
+    'DefaultGrpcServerCallContextBuilder',
+    'GrpcServerCallContextBuilder',
     'prepare_response_object',
     'validate_request_params',
 ]

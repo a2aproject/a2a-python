@@ -42,7 +42,7 @@ from a2a.utils.proto_utils import validation_errors_to_bad_request
 logger = logging.getLogger(__name__)
 
 
-class GrpcContextBuilder(ABC):
+class GrpcServerCallContextBuilder(ABC):
     """Interface for building ServerCallContext from gRPC context."""
 
     @abstractmethod
@@ -50,8 +50,8 @@ class GrpcContextBuilder(ABC):
         """Builds a ServerCallContext from a gRPC ServicerContext."""
 
 
-class DefaultGrpcContextBuilder(GrpcContextBuilder):
-    """Default implementation of GrpcContextBuilder."""
+class DefaultGrpcServerCallContextBuilder(GrpcServerCallContextBuilder):
+    """Default implementation of GrpcServerCallContextBuilder."""
 
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
         """Builds a ServerCallContext from a gRPC ServicerContext."""
@@ -111,7 +111,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
-        context_builder: GrpcContextBuilder | None = None,
+        context_builder: GrpcServerCallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
     ):
@@ -129,7 +129,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         """
         self.agent_card = agent_card
         self.request_handler = request_handler
-        self._context_builder = context_builder or DefaultGrpcContextBuilder()
+        self._context_builder = context_builder or DefaultGrpcServerCallContextBuilder()
         self.card_modifier = card_modifier
 
     async def _handle_unary(

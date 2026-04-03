@@ -38,7 +38,7 @@ class StarletteUser(User):
         return self._user.display_name
 
 
-class ContextBuilder(ABC):
+class ServerCallContextBuilder(ABC):
     """A class for building ServerCallContexts using the Starlette Request."""
 
     @abstractmethod
@@ -46,8 +46,8 @@ class ContextBuilder(ABC):
         """Builds a ServerCallContext from a Starlette Request."""
 
 
-class DefaultContextBuilder(ContextBuilder):
-    """A default implementation of ContextBuilder."""
+class DefaultServerCallContextBuilder(ServerCallContextBuilder):
+    """A default implementation of ServerCallContextBuilder."""
 
     def build(self, request: Request) -> ServerCallContext:
         """Builds a ServerCallContext from a Starlette Request.
