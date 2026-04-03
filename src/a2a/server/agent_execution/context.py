@@ -120,7 +120,7 @@ class RequestContext:
         return self._current_task
 
     @current_task.setter
-    def current_task(self, task: Task) -> None:
+    def current_task(self, task: Task | None) -> None:
         """Sets the current task object."""
         self._current_task = task
 

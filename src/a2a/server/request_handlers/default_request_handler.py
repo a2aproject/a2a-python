@@ -74,7 +74,7 @@ TERMINAL_TASK_STATES = {
 
 
 @trace_class(kind=SpanKind.SERVER)
-class DefaultRequestHandler(RequestHandler):
+class LegacyRequestHandler(RequestHandler):
     """Default request handler for all incoming requests.
 
     This handler provides default implementations for all A2A JSON-RPC methods,
