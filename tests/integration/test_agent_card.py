@@ -66,7 +66,7 @@ async def test_agent_card_integration(header_val: str | None) -> None:
     handler = DefaultRequestHandler(
         agent_executor=DummyAgentExecutor(),
         task_store=task_store,
-        agent_card=AgentCard(name='test_agent', version='1.0'),
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
         push_config_store=InMemoryPushNotificationConfigStore(),
     )

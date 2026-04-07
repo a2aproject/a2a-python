@@ -171,8 +171,8 @@ def base_e2e_setup(agent_card):
     handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
-        queue_manager=InMemoryQueueManager(),
         agent_card=agent_card,
+        queue_manager=InMemoryQueueManager(),
     )
     return task_store, handler
 

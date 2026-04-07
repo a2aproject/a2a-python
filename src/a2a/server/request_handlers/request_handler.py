@@ -373,12 +373,10 @@ def validate(
             async def async_gen_wrapper(self: Any, *args, **kwargs) -> Any:
                 if not expression(self):
                     final_message = error_message or str(expression)
-                    logger.error('Validation failure: %s', final_message)
-                    raise (
-                        error_type(final_message)
-                        if final_message
-                        else error_type
+                    logging.getLogger(__name__).error(
+                        'Validation failure: %s', final_message
                     )
+                    raise error_type(final_message)
                 inner = function(self, *args, **kwargs)
                 try:
                     async for item in inner:
@@ -394,12 +392,10 @@ def validate(
             async def async_wrapper(self: Any, *args, **kwargs) -> Any:
                 if not expression(self):
                     final_message = error_message or str(expression)
-                    logger.error('Validation failure: %s', final_message)
-                    raise (
-                        error_type(final_message)
-                        if final_message
-                        else error_type
+                    logging.getLogger(__name__).error(
+                        'Validation failure: %s', final_message
                     )
+                    raise error_type(final_message)
                 return await function(self, *args, **kwargs)
 
             return async_wrapper
@@ -408,7 +404,9 @@ def validate(
         def sync_wrapper(self: Any, *args, **kwargs) -> Any:
             if not expression(self):
                 final_message = error_message or str(expression)
-                logger.error('Validation failure: %s', final_message)
+                logging.getLogger(__name__).error(
+                    'Validation failure: %s', final_message
+                )
                 raise error_type(final_message)
             return function(self, *args, **kwargs)
 

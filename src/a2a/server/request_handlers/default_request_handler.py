@@ -100,8 +100,6 @@ class DefaultRequestHandler(RequestHandler):
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
         extended_agent_card: AgentCard | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
         extended_card_modifier: Callable[
             [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
         ]
@@ -119,7 +117,6 @@ class DefaultRequestHandler(RequestHandler):
             request_context_builder: The `RequestContextBuilder` instance used
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
-            card_modifier: An optional callback to dynamically modify the public `AgentCard` before it is served.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
         """
         self.agent_executor = agent_executor
@@ -129,7 +126,6 @@ class DefaultRequestHandler(RequestHandler):
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self.extended_agent_card = extended_agent_card
-        self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
             request_context_builder
