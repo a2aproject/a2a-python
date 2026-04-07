@@ -1,23 +1,18 @@
 """JSON-RPC application for A2A server."""
 
-import contextlib
 import json
 import logging
 import traceback
 
-from abc import ABC, abstractmethod
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
-from a2a.auth.user import UnauthenticatedUser
-from a2a.auth.user import User as A2AUser
 from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
-    get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
@@ -32,7 +27,10 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.request_handlers.response_helpers import (
     build_error_response,
 )
-from a2a.types import A2ARequest
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -64,10 +62,7 @@ INTERNAL_ERROR_CODE = -32603
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI
     from sse_starlette.sse import EventSourceResponse
-    from starlette.applications import Starlette
-    from starlette.authentication import BaseUser
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -82,11 +77,8 @@ if TYPE_CHECKING:
 
     _package_starlette_installed = True
 else:
-    FastAPI = Any
     try:
         from sse_starlette.sse import EventSourceResponse
-        from starlette.applications import Starlette
-        from starlette.authentication import BaseUser
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -105,66 +97,11 @@ else:
         # Provide placeholder types for runtime type hinting when dependencies are not installed.
         # These will not be used if the code path that needs them is guarded by _http_server_installed.
         EventSourceResponse = Any
-        Starlette = Any
-        BaseUser = Any
         HTTPException = Any
         Request = Any
         JSONResponse = Any
         Response = Any
         HTTP_413_CONTENT_TOO_LARGE = Any
-
-
-class StarletteUserProxy(A2AUser):
-    """Adapts the Starlette User class to the A2A user representation."""
-
-    def __init__(self, user: BaseUser):
-        self._user = user
-
-    @property
-    def is_authenticated(self) -> bool:
-        """Returns whether the current user is authenticated."""
-        return self._user.is_authenticated
-
-    @property
-    def user_name(self) -> str:
-        """Returns the user name of the current user."""
-        return self._user.display_name
-
-
-class CallContextBuilder(ABC):
-    """A class for building ServerCallContexts using the Starlette Request."""
-
-    @abstractmethod
-    def build(self, request: Request) -> ServerCallContext:
-        """Builds a ServerCallContext from a Starlette Request."""
-
-
-class DefaultCallContextBuilder(CallContextBuilder):
-    """A default implementation of CallContextBuilder."""
-
-    def build(self, request: Request) -> ServerCallContext:
-        """Builds a ServerCallContext from a Starlette Request.
-
-        Args:
-            request: The incoming Starlette Request object.
-
-        Returns:
-            A ServerCallContext instance populated with user and state
-            information from the request.
-        """
-        user: A2AUser = UnauthenticatedUser()
-        state = {}
-        with contextlib.suppress(Exception):
-            user = StarletteUserProxy(request.user)
-            state['auth'] = request.auth
-        state['headers'] = dict(request.headers)
-        return ServerCallContext(
-            user=user,
-            state=state,
-            requested_extensions=get_requested_extensions(
-                request.headers.getlist(HTTP_EXTENSION_HEADER)
-            ),
-        )
 
 
 @trace_class(kind=SpanKind.SERVER)
@@ -198,7 +135,7 @@ class JsonRpcDispatcher:
         agent_card: AgentCard,
         request_handler: RequestHandler,
         extended_agent_card: AgentCard | None = None,
-        context_builder: CallContextBuilder | None = None,
+        context_builder: ServerCallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
         extended_card_modifier: Callable[
@@ -215,9 +152,9 @@ class JsonRpcDispatcher:
               requests via http.
             extended_agent_card: An optional, distinct AgentCard to be served
               at the authenticated extended card endpoint.
-            context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the request_handler. If None, no
-              ServerCallContext is passed.
+            context_builder: The ServerCallContextBuilder used to construct the
+              ServerCallContext passed to the request_handler. If None the
+              DefaultServerCallContextBuilder is used.
             card_modifier: An optional callback to dynamically modify the public
               agent card before it is served.
             extended_card_modifier: An optional callback to dynamically modify
@@ -237,7 +174,9 @@ class JsonRpcDispatcher:
         self.extended_agent_card = extended_agent_card
         self.card_modifier = card_modifier
         self.extended_card_modifier = extended_card_modifier
-        self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
         self.enable_v0_3_compat = enable_v0_3_compat
         self._v03_adapter: JSONRPC03Adapter | None = None
 
@@ -401,7 +340,7 @@ class JsonRpcDispatcher:
             else:
                 try:
                     raw_result = await self._process_non_streaming_request(
-                        request_id, specific_request, call_context
+                        specific_request, call_context
                     )
                     handler_result = JSONRPC20Response(
                         result=raw_result, _id=request_id
@@ -437,7 +376,7 @@ class JsonRpcDispatcher:
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
-        request_obj: A2ARequest,
+        request_obj: Any,
         context: ServerCallContext,
     ) -> AsyncGenerator[dict[str, Any], None]:
         """Processes streaming requests (SendStreamingMessage or SubscribeToTask).
@@ -451,11 +390,12 @@ class JsonRpcDispatcher:
             An `AsyncGenerator` object to stream results to the client.
         """
         stream: AsyncGenerator | None = None
-        if isinstance(request_obj, SendMessageRequest):
+        method = context.state.get('method')
+        if method == 'SendStreamingMessage':
             stream = self.request_handler.on_message_send_stream(
                 request_obj, context
             )
-        elif isinstance(request_obj, SubscribeToTaskRequest):
+        elif method == 'SubscribeToTask':
             stream = self.request_handler.on_subscribe_to_task(
                 request_obj, context
             )
@@ -590,55 +530,53 @@ class JsonRpcDispatcher:
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def _process_non_streaming_request(  # noqa: PLR0911
         self,
-        request_id: str | int | None,
-        request_obj: A2ARequest,
+        request_obj: Any,
         context: ServerCallContext,
     ) -> dict[str, Any] | None:
-        """Processes non-streaming requests (message/send, tasks/get, tasks/cancel, tasks/pushNotificationConfig/*).
+        """Processes non-streaming requests.
 
         Args:
-            request_id: The ID of the request.
             request_obj: The proto request message.
             context: The ServerCallContext for the request.
 
         Returns:
             A dict containing the result or error.
         """
-        match request_obj:
-            case SendMessageRequest():
+        method = context.state.get('method')
+        match method:
+            case 'SendMessage':
                 return await self._handle_send_message(request_obj, context)
-            case CancelTaskRequest():
+            case 'CancelTask':
                 return await self._handle_cancel_task(request_obj, context)
-            case GetTaskRequest():
+            case 'GetTask':
                 return await self._handle_get_task(request_obj, context)
-            case ListTasksRequest():
+            case 'ListTasks':
                 return await self._handle_list_tasks(request_obj, context)
-            case TaskPushNotificationConfig():
+            case 'CreateTaskPushNotificationConfig':
                 return await self._handle_create_task_push_notification_config(
                     request_obj, context
                 )
-            case GetTaskPushNotificationConfigRequest():
+            case 'GetTaskPushNotificationConfig':
                 return await self._handle_get_task_push_notification_config(
                     request_obj, context
                 )
-            case ListTaskPushNotificationConfigsRequest():
+            case 'ListTaskPushNotificationConfigs':
                 return await self._handle_list_task_push_notification_configs(
                     request_obj, context
                 )
-            case DeleteTaskPushNotificationConfigRequest():
-                return await self._handle_delete_task_push_notification_config(
+            case 'DeleteTaskPushNotificationConfig':
+                await self._handle_delete_task_push_notification_config(
                     request_obj, context
                 )
-            case GetExtendedAgentCardRequest():
+                return None
+            case 'GetExtendedAgentCard':
                 return await self._handle_get_extended_agent_card(
                     request_obj, context
                 )
             case _:
-                logger.error(
-                    'Unhandled validated request type: %s', type(request_obj)
-                )
+                logger.error('Unhandled method: %s', method)
                 raise UnsupportedOperationError(
-                    message=f'Request type {type(request_obj).__name__} is unknown.'
+                    message=f'Method {method} is not supported.'
                 )
 
     def _create_response(

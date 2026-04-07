@@ -54,8 +54,8 @@ async def test_send_message_stream(client):
     assert len(events) > 0, 'Expected at least one event'
     first_event = events[0]
 
-    # In v1.0 SDK, send_message returns tuple[StreamResponse, Task | None]
-    stream_response = first_event[0]
+    # In v1.0 SDK, send_message returns StreamResponse
+    stream_response = first_event
 
     # Try to find task_id in the oneof fields of StreamResponse
     task_id = 'unknown'
@@ -92,7 +92,7 @@ async def test_send_message_sync(url, protocol_enum):
         request=SendMessageRequest(message=msg)
     ):
         assert event is not None
-        stream_response = event[0]
+        stream_response = event
 
         status = None
         if stream_response.HasField('task'):
@@ -161,7 +161,7 @@ async def test_subscribe(client, task_id):
         request=SubscribeToTaskRequest(id=task_id)
     ):
         assert event is not None
-        stream_response = event[0]
+        stream_response = event
         if stream_response.HasField('artifact_update'):
             has_artifact = True
             artifact = stream_response.artifact_update.artifact

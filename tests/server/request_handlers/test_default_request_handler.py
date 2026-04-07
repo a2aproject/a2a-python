@@ -1,11 +1,10 @@
 import asyncio
 import contextlib
 import logging
-import uuid
 import time
 import uuid
-from typing import cast
 
+from typing import cast
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -34,7 +33,6 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
-
 from a2a.types import (
     InternalError,
     InvalidParamsError,
@@ -43,29 +41,26 @@ from a2a.types import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-
 from a2a.types.a2a_pb2 import (
     Artifact,
+    CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     ListTasksResponse,
-    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
-    TaskPushNotificationConfig,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    TaskPushNotificationConfig,
+    SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    CancelTaskRequest,
-    SubscribeToTaskRequest,
 )
 from a2a.utils import new_agent_text_message, new_task
 

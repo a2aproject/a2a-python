@@ -59,7 +59,7 @@ jobs:
       # Coverage comparison for PRs (only on Python 3.14 to avoid duplicate work)
       - name: Checkout Base Branch
         if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.pull_request.base.ref || 'main' }}
           clean: true
@@ -75,7 +75,7 @@ jobs:
 
       - name: Checkout PR Branch (Restore)
         if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           clean: true
 
@@ -93,7 +93,7 @@ jobs:
           echo ${{ github.event.pull_request.base.ref || 'main' }} > ./BASE_BRANCH
 
       - name: Upload Coverage Artifacts
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         with:
           name: coverage-data
@@ -111,7 +111,7 @@ jobs:
         run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=88
 
       - name: Upload Artifact (base)
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         if: github.event_name != 'pull_request' && matrix.python-version == '3.14'
         with:
           name: coverage-report

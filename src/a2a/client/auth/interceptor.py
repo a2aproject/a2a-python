@@ -39,9 +39,7 @@ class AuthInterceptor(ClientCallInterceptor):
                     scheme_name, args.context
                 )
                 if credential and scheme_name in agent_card.security_schemes:
-                    scheme = agent_card.security_schemes.get(scheme_name)
-                    if not scheme:
-                        continue
+                    scheme = agent_card.security_schemes[scheme_name]
 
                     if args.context is None:
                         args.context = ClientCallContext()

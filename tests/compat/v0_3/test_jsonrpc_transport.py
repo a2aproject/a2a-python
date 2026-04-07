@@ -349,6 +349,39 @@ async def test_compat_jsonrpc_transport_get_extended_agent_card_not_supported(
 
 
 @pytest.mark.asyncio
+async def test_compat_jsonrpc_transport_get_extended_agent_card_method_name(
+    transport,
+):
+    """Verify the correct v0.3 method name 'agent/getAuthenticatedExtendedCard' is used."""
+    captured_request: dict | None = None
+
+    async def mock_send_request(data, *args, **kwargs):
+        nonlocal captured_request
+        captured_request = data
+        return {
+            'result': {
+                'name': 'ExtendedAgent',
+                'url': 'http://agent',
+                'version': '1.0.0',
+                'description': 'Description',
+                'skills': [],
+                'defaultInputModes': [],
+                'defaultOutputModes': [],
+                'capabilities': {},
+                'supportsAuthenticatedExtendedCard': True,
+            }
+        }
+
+    transport._send_request = mock_send_request
+
+    req = GetExtendedAgentCardRequest()
+    await transport.get_extended_agent_card(req)
+
+    assert captured_request is not None
+    assert captured_request['method'] == 'agent/getAuthenticatedExtendedCard'
+
+
+@pytest.mark.asyncio
 async def test_compat_jsonrpc_transport_close(transport, mock_httpx_client):
     await transport.close()
     mock_httpx_client.aclose.assert_called_once()

@@ -2,7 +2,7 @@ import dataclasses
 import logging
 
 from abc import ABC, abstractmethod
-from collections.abc import AsyncIterator, Callable, Coroutine, MutableMapping
+from collections.abc import AsyncIterator, Callable, MutableMapping
 from types import TracebackType
 from typing import Any
 
@@ -77,13 +77,6 @@ class ClientConfig:
     """Push notification configurations to use for every request."""
 
 
-ClientEvent = tuple[StreamResponse, Task | None]
-
-# Alias for an event consuming callback. It takes either a (task, update) pair
-# or a message as well as the agent card for the agent this came from.
-Consumer = Callable[[ClientEvent, AgentCard], Coroutine[None, Any, Any]]
-
-
 class ClientCallContext(BaseModel):
     """A context passed with each client call, allowing for call-specific.
 
@@ -106,16 +99,13 @@ class Client(ABC):
 
     def __init__(
         self,
-        consumers: list[Consumer] | None = None,
         interceptors: list[ClientCallInterceptor] | None = None,
     ):
-        """Initializes the client with consumers and interceptors.
+        """Initializes the client with interceptors.
 
         Args:
-            consumers: A list of callables to process events from the agent.
             interceptors: A list of interceptors to process requests and responses.
         """
-        self._consumers = consumers or []
         self._interceptors = interceptors or []
 
     async def __aenter__(self) -> Self:
@@ -137,14 +127,12 @@ class Client(ABC):
         request: SendMessageRequest,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[ClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         """Sends a message to the server.
 
         This will automatically use the streaming or non-streaming approach
         as supported by the server and the client config. Client will
-        aggregate update events and return an iterator of (`Task`,`Update`)
-        pairs, or a `Message`. Client will also send these values to any
-        configured `Consumer`s in the client.
+        aggregate update events and return an iterator of `StreamResponse`.
         """
         return
         yield
@@ -218,7 +206,7 @@ class Client(ABC):
         request: SubscribeToTaskRequest,
         *,
         context: ClientCallContext | None = None,
-    ) -> AsyncIterator[ClientEvent]:
+    ) -> AsyncIterator[StreamResponse]:
         """Resubscribes to a task's event stream."""
         return
         yield
@@ -233,24 +221,9 @@ class Client(ABC):
     ) -> AgentCard:
         """Retrieves the agent's card."""
 
-    async def add_event_consumer(self, consumer: Consumer) -> None:
-        """Attaches additional consumers to the `Client`."""
-        self._consumers.append(consumer)
-
     async def add_interceptor(self, interceptor: ClientCallInterceptor) -> None:
         """Attaches additional interceptors to the `Client`."""
         self._interceptors.append(interceptor)
-
-    async def consume(
-        self,
-        event: ClientEvent,
-        card: AgentCard,
-    ) -> None:
-        """Processes the event via all the registered `Consumer`s."""
-        if not event:
-            return
-        for c in self._consumers:
-            await c(event, card)
 
     @abstractmethod
     async def close(self) -> None:
