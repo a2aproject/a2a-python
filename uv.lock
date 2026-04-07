@@ -27,7 +27,6 @@ dependencies = [
 all = [
     { name = "alembic" },
     { name = "cryptography" },
-    { name = "fastapi" },
     { name = "google-cloud-aiplatform" },
     { name = "grpcio" },
     { name = "grpcio-reflection" },
@@ -53,7 +52,6 @@ grpc = [
     { name = "grpcio-tools" },
 ]
 http-server = [
-    { name = "fastapi" },
     { name = "sse-starlette" },
     { name = "starlette" },
 ]
@@ -83,6 +81,7 @@ vertex = [
 [package.dev-dependencies]
 dev = [
     { name = "a2a-sdk", extra = ["all"] },
+    { name = "fastapi" },
     { name = "mypy" },
     { name = "pre-commit" },
     { name = "pyjwt" },
@@ -109,8 +108,6 @@ requires-dist = [
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
     { name = "culsans", marker = "python_full_version < '3.13'", specifier = ">=0.11.0" },
-    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
-    { name = "fastapi", marker = "extra == 'http-server'", specifier = ">=0.115.2" },
     { name = "google-api-core", specifier = ">=1.26.0" },
     { name = "google-cloud-aiplatform", marker = "extra == 'all'", specifier = ">=1.140.0" },
     { name = "google-cloud-aiplatform", marker = "extra == 'vertex'", specifier = ">=1.140.0" },
@@ -154,6 +151,7 @@ provides-extras = ["all", "db-cli", "encryption", "grpc", "http-server", "mysql"
 [package.metadata.requires-dev]
 dev = [
     { name = "a2a-sdk", extras = ["all"], editable = "." },
+    { name = "fastapi", specifier = ">=0.115.2" },
     { name = "mypy", specifier = ">=1.15.0" },
     { name = "pre-commit" },
     { name = "pyjwt", specifier = ">=2.0.0" },
@@ -820,7 +818,7 @@ wheels = [
 
 [[package]]
 name = "fastapi"
-version = "0.135.1"
+version = "0.135.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "annotated-doc" },
@@ -829,9 +827,9 @@ dependencies = [
     { name = "typing-extensions" },
     { name = "typing-inspection" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/e7/7b/f8e0211e9380f7195ba3f3d40c292594fd81ba8ec4629e3854c353aaca45/fastapi-0.135.1.tar.gz", hash = "sha256:d04115b508d936d254cea545b7312ecaa58a7b3a0f84952535b4c9afae7668cd", size = 394962, upload-time = "2026-03-01T18:18:29.369Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f7/e6/7adb4c5fa231e82c35b8f5741a9f2d055f520c29af5546fd70d3e8e1cd2e/fastapi-0.135.3.tar.gz", hash = "sha256:bd6d7caf1a2bdd8d676843cdcd2287729572a1ef524fc4d65c17ae002a1be654", size = 396524, upload-time = "2026-04-01T16:23:58.188Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/e4/72/42e900510195b23a56bde950d26a51f8b723846bfcaa0286e90287f0422b/fastapi-0.135.1-py3-none-any.whl", hash = "sha256:46e2fc5745924b7c840f71ddd277382af29ce1cdb7d5eab5bf697e3fb9999c9e", size = 116999, upload-time = "2026-03-01T18:18:30.831Z" },
+    { url = "https://files.pythonhosted.org/packages/84/a4/5caa2de7f917a04ada20018eccf60d6cc6145b0199d55ca3711b0fc08312/fastapi-0.135.3-py3-none-any.whl", hash = "sha256:9b0f590c813acd13d0ab43dd8494138eb58e484bfac405db1f3187cfc5810d98", size = 117734, upload-time = "2026-04-01T16:23:59.328Z" },
 ]
 
 [[package]]

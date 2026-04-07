@@ -14,25 +14,15 @@ from a2a.types.a2a_pb2 import (
 
 
 if TYPE_CHECKING:
-    from sse_starlette.sse import EventSourceResponse
-    from starlette.requests import Request
-    from starlette.responses import JSONResponse, Response
     from starlette.routing import BaseRoute, Mount, Route
 
     _package_starlette_installed = True
 else:
     try:
-        from sse_starlette.sse import EventSourceResponse
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse, Response
         from starlette.routing import BaseRoute, Mount, Route
 
         _package_starlette_installed = True
     except ImportError:
-        EventSourceResponse = Any
-        Request = Any
-        JSONResponse = Any
-        Response = Any
         Route = Any
         Mount = Any
         BaseRoute = Any

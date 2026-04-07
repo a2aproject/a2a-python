@@ -62,10 +62,7 @@ INTERNAL_ERROR_CODE = -32603
 logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
-    from fastapi import FastAPI
     from sse_starlette.sse import EventSourceResponse
-    from starlette.applications import Starlette
-    from starlette.authentication import BaseUser
     from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -80,11 +77,8 @@ if TYPE_CHECKING:
 
     _package_starlette_installed = True
 else:
-    FastAPI = Any
     try:
         from sse_starlette.sse import EventSourceResponse
-        from starlette.applications import Starlette
-        from starlette.authentication import BaseUser
         from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -103,8 +97,6 @@ else:
         # Provide placeholder types for runtime type hinting when dependencies are not installed.
         # These will not be used if the code path that needs them is guarded by _http_server_installed.
         EventSourceResponse = Any
-        Starlette = Any
-        BaseUser = Any
         HTTPException = Any
         Request = Any
         JSONResponse = Any

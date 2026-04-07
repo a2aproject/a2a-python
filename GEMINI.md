@@ -8,7 +8,7 @@
 
 - **Language**: Python 3.10+
 - **Package Manager**: `uv`
-- **Lead Transports**: FastAPI (REST/JSON-RPC), gRPC
+- **Lead Transports**: Starlette (REST/JSON-RPC), gRPC
 - **Data Layer**: SQLAlchemy (SQL), Pydantic (Logic/Legacy), Protobuf (Modern Messaging)
 - **Key Directories**:
     - `/src`: Core implementation logic.
