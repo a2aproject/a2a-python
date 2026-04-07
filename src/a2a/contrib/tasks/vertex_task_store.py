@@ -86,8 +86,8 @@ class VertexTaskStore(TaskStore):
 
     def _get_status_details_change_event(
         self,
-        previous_task: Task,
-        task: Task,
+        previous_task: CompatTask,
+        task: CompatTask,
         event_sequence_number: int,
     ) -> vertexai_types.TaskEvent | None:
         if task.status.message != previous_task.status.message:
