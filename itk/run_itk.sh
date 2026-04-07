@@ -21,7 +21,7 @@ cleanup() {
 trap cleanup EXIT
 
 # 1. Pull a2a-samples and checkout revision
-: "${A2A_SAMPLES_REVISION:?A2A_SAMPLES_REVISION environment variable must be set}"
+: "${A2A_SAMPLES_REVISION:=$(grep "A2A_SAMPLES_REVISION:" ../.github/workflows/itk.yaml | head -n 1 | awk '{print $2}')}"
 
 if [ ! -d "a2a-samples" ]; then
   git clone https://github.com/a2aproject/a2a-samples.git a2a-samples
@@ -66,12 +66,14 @@ docker rm -f itk-service || true
 docker run -d --name itk-service \
   -v "$A2A_PYTHON_ROOT:/app/agents/repo" \
   -v "$ITK_DIR:/app/agents/repo/itk" \
+  -v "$A2A_PYTHON_ROOT/.git:/app/agents/repo/.git" \
   -p 8000:8000 \
   itk_service
 
 # 5.1. Fix dubious ownership for git (needed for uv-dynamic-versioning)
 docker exec itk-service git config --global --add safe.directory /app/agents/repo
 docker exec itk-service git config --global --add safe.directory /app/agents/repo/itk
+
 
 # 6. Verify service is up and send post request
 MAX_RETRIES=30
