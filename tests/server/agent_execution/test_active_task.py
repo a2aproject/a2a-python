@@ -20,7 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InvalidParamsError, UnsupportedOperationError
+from a2a.utils.errors import InvalidParamsError
 
 
 logger = logging.getLogger(__name__)
@@ -57,18 +57,16 @@ class TestActiveTask:
     def request_context(self) -> Mock:
         return Mock(spec=RequestContext)
 
-    @pytest.fixture
-    def active_task(
+    @pytest_asyncio.fixture
+    async def active_task(
         self,
         agent_executor: Mock,
-        event_queue: EventQueue,
         task_manager: Mock,
         push_sender: Mock,
     ) -> ActiveTask:
         return ActiveTask(
             agent_executor=agent_executor,
             task_id='test-task-id',
-            event_queue=event_queue,
             task_manager=task_manager,
             push_sender=push_sender,
         )
@@ -361,7 +359,6 @@ class TestActiveTask:
     async def test_active_task_cleanup(
         self,
         agent_executor: Mock,
-        event_queue: EventQueue,
         task_manager: Mock,
         request_context: Mock,
     ) -> None:
@@ -370,7 +367,6 @@ class TestActiveTask:
         active_task = ActiveTask(
             agent_executor=agent_executor,
             task_id='test-task-id',
-            event_queue=event_queue,
             task_manager=task_manager,
             on_cleanup=on_cleanup,
         )
@@ -418,11 +414,10 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test behavior when the consumer task fails."""
         # Mock dequeue_event to raise exception
-        event_queue.dequeue_event = AsyncMock(
+        active_task._event_queue_agent.dequeue_event = AsyncMock(
             side_effect=RuntimeError('Consumer crash')
         )
 
@@ -475,7 +470,7 @@ class TestActiveTask:
         self, active_task: ActiveTask, request_context: Mock
     ) -> None:
         """Test canceling a task that was never started."""
-        # TODO
+        # TODO: Implement this test
 
     @pytest.mark.asyncio
     async def test_active_task_cancel_already_finished(
@@ -558,7 +553,6 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test subscribe when the queue is shut down."""
 
@@ -571,9 +565,11 @@ class TestActiveTask:
             call_context=ServerCallContext(), create_task_if_missing=True
         )
 
-        tapped = await event_queue.tap()
+        tapped = await active_task._event_queue_subscribers.tap()
 
-        with patch.object(event_queue, 'tap', return_value=tapped):
+        with patch.object(
+            active_task._event_queue_subscribers, 'tap', return_value=tapped
+        ):
             # Close the queue while subscribe is waiting
             async def close_later():
                 await asyncio.sleep(0.2)
@@ -592,7 +588,6 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test subscribe when an event is yielded and then the queue is shut down."""
         msg = Message(message_id='m1')
@@ -656,7 +651,6 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test subscribe cancellation while yielding (GeneratorExit)."""
         msg = Message(message_id='m1')
@@ -699,7 +693,8 @@ class TestActiveTask:
         )
 
         # Forced queue close.
-        await active_task._event_queue.close()
+        await active_task._event_queue_agent.close()
+        await active_task._event_queue_subscribers.close()
 
         # Now cancel the task itself.
         await active_task.cancel(request_context)
@@ -715,7 +710,6 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test subscribe when dequeue_event fails on the tapped queue."""
 
@@ -735,7 +729,11 @@ class TestActiveTask:
         mock_tapped_queue.close = AsyncMock()
 
         with (
-            patch.object(event_queue, 'tap', return_value=mock_tapped_queue),
+            patch.object(
+                active_task._event_queue_subscribers,
+                'tap',
+                return_value=mock_tapped_queue,
+            ),
             pytest.raises(RuntimeError, match='Tapped queue crash'),
         ):
             async for _ in active_task.subscribe():
@@ -815,7 +813,7 @@ class TestActiveTask:
         await active_task._is_finished.wait()
 
         with pytest.raises(
-            InvalidParamsError, match='Task .* is already completed'
+            InvalidParamsError, match=r'Task .* is already completed'
         ):
             async for _ in active_task.subscribe():
                 pass
@@ -879,7 +877,6 @@ class TestActiveTask:
     async def test_active_task_maybe_cleanup_not_finished(
         self,
         agent_executor: Mock,
-        event_queue: EventQueue,
         task_manager: Mock,
         push_sender: Mock,
     ) -> None:
@@ -888,7 +885,6 @@ class TestActiveTask:
         active_task = ActiveTask(
             agent_executor=agent_executor,
             task_id='test-task-id',
-            event_queue=event_queue,
             task_manager=task_manager,
             push_sender=push_sender,
             on_cleanup=on_cleanup,
@@ -902,7 +898,6 @@ class TestActiveTask:
     async def test_active_task_maybe_cleanup_with_subscribers(
         self,
         agent_executor: Mock,
-        event_queue: EventQueue,
         task_manager: Mock,
         push_sender: Mock,
         request_context: Mock,
@@ -912,7 +907,6 @@ class TestActiveTask:
         active_task = ActiveTask(
             agent_executor=agent_executor,
             task_id='test-task-id',
-            event_queue=event_queue,
             task_manager=task_manager,
             push_sender=push_sender,
             on_cleanup=on_cleanup,
@@ -986,7 +980,6 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
-        event_queue: EventQueue,
     ) -> None:
         """Test the generic exception block in subscribe."""
 
@@ -1007,34 +1000,26 @@ class TestActiveTask:
         mock_tapped_queue.close = AsyncMock()
 
         with (
-            patch.object(event_queue, 'tap', return_value=mock_tapped_queue),
+            patch.object(
+                active_task._event_queue_subscribers,
+                'tap',
+                return_value=mock_tapped_queue,
+            ),
             pytest.raises(Exception, match='Inner error'),
         ):
             async for _ in active_task.subscribe():
                 pass
 
 
-import asyncio
-from unittest.mock import AsyncMock, Mock
-import pytest
-
-from a2a.server.agent_execution.active_task import ActiveTask
-from a2a.server.events.event_queue_v2 import EventQueueSource as EventQueue
-from a2a.types.a2a_pb2 import Task, TaskStatus, TaskState
-from a2a.server.agent_execution.context import RequestContext
-
-
 @pytest.mark.asyncio
 async def test_active_task_subscribe_include_initial_task():
     agent_executor = Mock()
     task_manager = Mock()
-    event_queue = EventQueue()
     request_context = Mock(spec=RequestContext)
 
     active_task = ActiveTask(
         agent_executor=agent_executor,
         task_id='test-task-id',
-        event_queue=event_queue,
         task_manager=task_manager,
         push_sender=Mock(),
     )
@@ -1066,13 +1051,11 @@ async def test_active_task_subscribe_include_initial_task():
 async def test_active_task_subscribe_request_parameter():
     agent_executor = Mock()
     task_manager = Mock()
-    event_queue = EventQueue()
     request_context = Mock(spec=RequestContext)
 
     active_task = ActiveTask(
         agent_executor=agent_executor,
         task_id='test-task-id',
-        event_queue=event_queue,
         task_manager=task_manager,
         push_sender=Mock(),
     )

@@ -15,15 +15,15 @@ if TYPE_CHECKING:
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.context import ServerCallContext
-    from a2a.server.events.event_queue_v2 import Event, EventQueue
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
     )
     from a2a.server.tasks.task_manager import TaskManager
 
-
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
+    Event,
+    EventQueueSource,
     QueueShutDown,
     _create_async_queue,
 )
@@ -47,6 +47,10 @@ TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_CANCELED,
     TaskState.TASK_STATE_FAILED,
     TaskState.TASK_STATE_REJECTED,
+}
+INTERRUPTED_TASK_STATES = {
+    TaskState.TASK_STATE_AUTH_REQUIRED,
+    TaskState.TASK_STATE_INPUT_REQUIRED,
 }
 
 
@@ -76,11 +80,10 @@ class ActiveTask:
       permanently ceased execution and closed its queues.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         agent_executor: AgentExecutor,
         task_id: str,
-        event_queue: EventQueue,
         task_manager: TaskManager,
         push_sender: PushNotificationSender | None = None,
         on_cleanup: Callable[[ActiveTask], None] | None = None,
@@ -90,8 +93,6 @@ class ActiveTask:
         Args:
             agent_executor: The executor to run the agent logic (producer).
             task_id: The unique identifier of the task being managed.
-            event_queue: The queue for events produced by the agent. Acts as the pipe
-                         between the producer and consumer tasks.
             task_manager: The manager for task state and database persistence.
             push_sender: Optional sender for out-of-band push notifications.
             on_cleanup: Optional callback triggered when the task is fully finished
@@ -101,7 +102,10 @@ class ActiveTask:
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
         self._task_id = task_id
-        self._event_queue = event_queue
+        self._event_queue_agent = EventQueueSource()
+        self._event_queue_subscribers = EventQueueSource(
+            create_default_sink=False
+        )
         self._task_manager = task_manager
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
@@ -284,7 +288,7 @@ class ActiveTask:
 
                         try:
                             await self._agent_executor.execute(
-                                request_context, self._event_queue
+                                request_context, self._event_queue_agent
                             )
                             logger.debug(
                                 'Producer[%s]: Execution finished successfully',
@@ -301,7 +305,7 @@ class ActiveTask:
                                 self._task_id,
                             )
                             # TODO: Hide from external consumers
-                            await self._event_queue.enqueue_event(
+                            await self._event_queue_agent.enqueue_event(
                                 cast('Event', _RequestCompleted(request_id))
                             )
                             self._request_queue.task_done()
@@ -319,7 +323,8 @@ class ActiveTask:
                         self._exception = e
             finally:
                 self._request_queue.shutdown(immediate=True)
-                await self._event_queue.close(immediate=False)
+                await self._event_queue_agent.close(immediate=False)
+                await self._event_queue_subscribers.close(immediate=False)
         finally:
             logger.debug('Producer[%s]: Completed', self._task_id)
 
@@ -345,7 +350,7 @@ class ActiveTask:
                             'Consumer[%s]: Waiting for event',
                             self._task_id,
                         )
-                        event = await self._event_queue.dequeue_event()
+                        event = await self._event_queue_agent.dequeue_event()
                         logger.debug(
                             'Consumer[%s]: Dequeued event %s',
                             self._task_id,
@@ -373,15 +378,14 @@ class ActiveTask:
 
                                 # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
                                 res = await self._task_manager.get_task()
-                                is_interrupted = res and res.status.state in (
-                                    TaskState.TASK_STATE_AUTH_REQUIRED,
-                                    TaskState.TASK_STATE_INPUT_REQUIRED,
+                                is_interrupted = (
+                                    res
+                                    and res.status.state
+                                    in INTERRUPTED_TASK_STATES
                                 )
-                                is_terminal = res and res.status.state in (
-                                    TaskState.TASK_STATE_COMPLETED,
-                                    TaskState.TASK_STATE_CANCELED,
-                                    TaskState.TASK_STATE_FAILED,
-                                    TaskState.TASK_STATE_REJECTED,
+                                is_terminal = (
+                                    res
+                                    and res.status.state in TERMINAL_TASK_STATES
                                 )
 
                                 # If we hit a breakpoint or terminal state, lock in the result.
@@ -427,9 +431,11 @@ class ActiveTask:
                                     await self._push_sender.send_notification(
                                         self._task_id, event
                                     )
-
                         finally:
-                            self._event_queue.task_done()
+                            await self._event_queue_subscribers.enqueue_event(
+                                event
+                            )
+                            self._event_queue_agent.task_done()
                 except QueueShutDown:
                     logger.debug(
                         'Consumer[%s]: Event queue shut down', self._task_id
@@ -482,7 +488,7 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        tapped_queue = await self._event_queue.tap()
+        tapped_queue = await self._event_queue_subscribers.tap()
         request_id = await self.enqueue_request(request) if request else None
 
         try:
@@ -562,17 +568,14 @@ class ActiveTask:
         )
 
         async with self._lock:
-            # if self._producer_task and not self._producer_task.done():
             if not self._is_finished.is_set() and self._producer_task:
                 logger.debug(
                     'Cancel[%s]: Cancelling producer task', self._task_id
                 )
-                # We do NOT await self._agent_executor.cancel here
-                # because it might take a while and we want to block on `_is_finished.wait()`
                 self._producer_task.cancel()
                 try:
                     await self._agent_executor.cancel(
-                        request_context, self._event_queue
+                        request_context, self._event_queue_agent
                     )
                 except Exception as e:
                     logger.exception(

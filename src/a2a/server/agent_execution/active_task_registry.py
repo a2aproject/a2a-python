@@ -13,7 +13,6 @@ if TYPE_CHECKING:
     from a2a.server.tasks.task_store import TaskStore
 
 from a2a.server.agent_execution.active_task import ActiveTask
-from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.tasks.task_manager import TaskManager
 
 
@@ -48,7 +47,6 @@ class ActiveTaskRegistry:
             if task_id in self._active_tasks:
                 return self._active_tasks[task_id]
 
-            event_queue = EventQueueSource()
             task_manager = TaskManager(
                 task_id=task_id,
                 context_id=context_id,
@@ -60,7 +58,6 @@ class ActiveTaskRegistry:
             active_task = ActiveTask(
                 agent_executor=self._agent_executor,
                 task_id=task_id,
-                event_queue=event_queue,
                 task_manager=task_manager,
                 push_sender=self._push_sender,
                 on_cleanup=self._on_active_task_cleanup,
@@ -75,6 +72,7 @@ class ActiveTaskRegistry:
 
     def _on_active_task_cleanup(self, active_task: ActiveTask) -> None:
         """Called by ActiveTask when it's finished and has no subscribers."""
+        logger.debug('Active task %s cleanup scheduled', active_task.task_id)
         task = asyncio.create_task(self._remove_task(active_task.task_id))
         self._cleanup_tasks.add(task)
         task.add_done_callback(self._cleanup_tasks.discard)

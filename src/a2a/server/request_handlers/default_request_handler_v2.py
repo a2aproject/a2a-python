@@ -11,6 +11,10 @@ from a2a.server.agent_execution import (
     RequestContextBuilder,
     SimpleRequestContextBuilder,
 )
+from a2a.server.agent_execution.active_task import (
+    INTERRUPTED_TASK_STATES,
+    TERMINAL_TASK_STATES,
+)
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
@@ -30,7 +34,6 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
-    TaskState,
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
@@ -63,12 +66,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 
 # TODO: cleanup context_id management
 
@@ -241,14 +238,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             return task
 
         try:
-            result_states = {
-                TaskState.TASK_STATE_COMPLETED,
-                TaskState.TASK_STATE_FAILED,
-                TaskState.TASK_STATE_CANCELED,
-                TaskState.TASK_STATE_REJECTED,
-                TaskState.TASK_STATE_INPUT_REQUIRED,
-                TaskState.TASK_STATE_AUTH_REQUIRED,
-            }
+            result_states = TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES
 
             result = None
             async for event in active_task.subscribe(request=request_context):
