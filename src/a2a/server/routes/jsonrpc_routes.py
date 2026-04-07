@@ -18,10 +18,8 @@ else:
         _package_starlette_installed = False
 
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes.jsonrpc_dispatcher import (
-    CallContextBuilder,
-    JsonRpcDispatcher,
-)
+from a2a.server.routes.common import ServerCallContextBuilder
+from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +28,7 @@ logger = logging.getLogger(__name__)
 def create_jsonrpc_routes(
     request_handler: RequestHandler,
     rpc_url: str,
-    context_builder: CallContextBuilder | None = None,
+    context_builder: ServerCallContextBuilder | None = None,
     enable_v0_3_compat: bool = False,
 ) -> list['Route']:
     """Creates the Starlette Route for the A2A protocol JSON-RPC endpoint.
@@ -43,9 +41,9 @@ def create_jsonrpc_routes(
         request_handler: The handler instance responsible for processing A2A
           requests via http.
         rpc_url: The URL prefix for the RPC endpoints. Should start with a leading slash '/'.
-        context_builder: The CallContextBuilder used to construct the
+        context_builder: The ServerCallContextBuilder used to construct the
           ServerCallContext passed to the request_handler. If None the
-          DefaultCallContextBuilder is used.
+          DefaultServerCallContextBuilder is used.
         enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
     """
     if not _package_starlette_installed:

@@ -4,30 +4,20 @@ from typing import TYPE_CHECKING, Any
 
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes import CallContextBuilder
+from a2a.server.routes.common import ServerCallContextBuilder
 from a2a.server.routes.rest_dispatcher import RestDispatcher
 
 
 if TYPE_CHECKING:
-    from sse_starlette.sse import EventSourceResponse
-    from starlette.requests import Request
-    from starlette.responses import JSONResponse, Response
     from starlette.routing import BaseRoute, Mount, Route
 
     _package_starlette_installed = True
 else:
     try:
-        from sse_starlette.sse import EventSourceResponse
-        from starlette.requests import Request
-        from starlette.responses import JSONResponse, Response
         from starlette.routing import BaseRoute, Mount, Route
 
         _package_starlette_installed = True
     except ImportError:
-        EventSourceResponse = Any
-        Request = Any
-        JSONResponse = Any
-        Response = Any
         Route = Any
         Mount = Any
         BaseRoute = Any
@@ -39,7 +29,7 @@ logger = logging.getLogger(__name__)
 
 def create_rest_routes(
     request_handler: RequestHandler,
-    context_builder: CallContextBuilder | None = None,
+    context_builder: ServerCallContextBuilder | None = None,
     enable_v0_3_compat: bool = False,
     path_prefix: str = '',
 ) -> list['BaseRoute']:
@@ -48,9 +38,9 @@ def create_rest_routes(
     Args:
         request_handler: The handler instance responsible for processing A2A
           requests via http.
-        context_builder: The CallContextBuilder used to construct the
+        context_builder: The ServerCallContextBuilder used to construct the
           ServerCallContext passed to the request_handler. If None the
-          DefaultCallContextBuilder is used.
+          DefaultServerCallContextBuilder is used.
         enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
           endpoints using REST03Adapter.
         path_prefix: The URL prefix for the REST endpoints.

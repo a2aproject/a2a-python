@@ -23,8 +23,8 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.grpc_handler import (
     _ERROR_CODE_MAP,
-    CallContextBuilder,
-    DefaultCallContextBuilder,
+    DefaultGrpcServerCallContextBuilder,
+    GrpcServerCallContextBuilder,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import AgentCard
@@ -44,7 +44,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         self,
         agent_card: AgentCard,
         request_handler: RequestHandler,
-        context_builder: CallContextBuilder | None = None,
+        context_builder: GrpcServerCallContextBuilder | None = None,
         card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
         | None = None,
     ):
@@ -61,7 +61,9 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         """
         self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
-        self.context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultGrpcServerCallContextBuilder()
+        )
         self.card_modifier = card_modifier
 
     async def _handle_unary(
@@ -72,7 +74,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> TResponse:
         """Centralized error handling and context management for unary calls."""
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._context_builder.build(context)
             result = await handler_func(server_context)
             self._set_extension_metadata(context, server_context)
         except A2AError as e:
@@ -88,7 +90,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[TResponse]:
         """Centralized error handling and context management for streaming calls."""
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._context_builder.build(context)
             async for item in handler_func(server_context):
                 yield item
             self._set_extension_metadata(context, server_context)

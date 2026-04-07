@@ -32,7 +32,10 @@ else:
 
 
 from a2a.compat.v0_3.rest_handler import REST03Handler
-from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -54,10 +57,12 @@ class REST03Adapter:
     def __init__(
         self,
         http_handler: 'RequestHandler',
-        context_builder: 'CallContextBuilder | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
     ):
         self.handler = REST03Handler(request_handler=http_handler)
-        self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     @rest_error_handler
     async def _handle_request(

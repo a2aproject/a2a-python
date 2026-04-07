@@ -24,7 +24,7 @@ from google.rpc import error_details_pb2, status_pb2
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
 from a2a import types
-from a2a.auth.user import UnauthenticatedUser
+from a2a.auth.user import UnauthenticatedUser, User
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
@@ -39,15 +39,32 @@ from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 logger = logging.getLogger(__name__)
 
-# For now we use a trivial wrapper on the grpc context object
 
-
-class CallContextBuilder(ABC):
-    """A class for building ServerCallContexts using gRPC contexts."""
+class GrpcServerCallContextBuilder(ABC):
+    """Interface for building ServerCallContext from gRPC context."""
 
     @abstractmethod
     def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
-        """Builds a ServerCallContext from a gRPC Request."""
+        """Builds a ServerCallContext from a gRPC ServicerContext."""
+
+
+class DefaultGrpcServerCallContextBuilder(GrpcServerCallContextBuilder):
+    """Default implementation of GrpcServerCallContextBuilder."""
+
+    def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
+        """Builds a ServerCallContext from a gRPC ServicerContext."""
+        state = {'grpc_context': context}
+        return ServerCallContext(
+            user=self.build_user(context),
+            state=state,
+            requested_extensions=get_requested_extensions(
+                _get_metadata_value(context, HTTP_EXTENSION_HEADER)
+            ),
+        )
+
+    def build_user(self, context: grpc.aio.ServicerContext) -> User:
+        """Builds a User from a gRPC ServicerContext."""
+        return UnauthenticatedUser()
 
 
 def _get_metadata_value(
@@ -63,22 +80,6 @@ def _get_metadata_value(
         for k, e in md
         if k.lower() == lower_key
     ]
-
-
-class DefaultCallContextBuilder(CallContextBuilder):
-    """A default implementation of CallContextBuilder."""
-
-    def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
-        """Builds the ServerCallContext."""
-        user = UnauthenticatedUser()
-        state = {'grpc_context': context}
-        return ServerCallContext(
-            user=user,
-            state=state,
-            requested_extensions=get_requested_extensions(
-                _get_metadata_value(context, HTTP_EXTENSION_HEADER)
-            ),
-        )
 
 
 _ERROR_CODE_MAP = {
@@ -107,18 +108,21 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
     def __init__(
         self,
         request_handler: RequestHandler,
-        context_builder: CallContextBuilder | None = None,
+        context_builder: GrpcServerCallContextBuilder | None = None,
     ):
         """Initializes the GrpcHandler.
 
         Args:
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
-            context_builder: The CallContextBuilder object. If none the
-                             DefaultCallContextBuilder is used.
+            context_builder: The GrpcContextBuilder used to construct the
+              ServerCallContext passed to the request_handler. If None the
+              DefaultGrpcContextBuilder is used.
         """
         self.request_handler = request_handler
-        self.context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultGrpcServerCallContextBuilder()
+        )
 
     async def _handle_unary(
         self,
@@ -436,6 +440,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         context: grpc.aio.ServicerContext,
         request: message.Message,
     ) -> ServerCallContext:
-        server_context = self.context_builder.build(context)
+        server_context = self._context_builder.build(context)
         server_context.tenant = getattr(request, 'tenant', '')
         return server_context

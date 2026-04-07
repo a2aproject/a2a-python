@@ -11,7 +11,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import rest_dispatcher
 from a2a.server.routes.rest_dispatcher import (
-    DefaultCallContextBuilder,
     RestDispatcher,
 )
 from a2a.types.a2a_pb2 import (

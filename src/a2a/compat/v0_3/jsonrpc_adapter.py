@@ -11,7 +11,6 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
     from a2a.server.request_handlers.request_handler import RequestHandler
-    from a2a.server.routes import CallContextBuilder
 
     _package_starlette_installed = True
 else:
@@ -36,6 +35,10 @@ from a2a.server.jsonrpc_models import (
 from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
 )
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.utils import constants
 from a2a.utils.helpers import validate_version
 
@@ -56,18 +59,20 @@ class JSONRPC03Adapter:
         'tasks/pushNotificationConfig/list': types_v03.ListTaskPushNotificationConfigRequest,
         'tasks/pushNotificationConfig/delete': types_v03.DeleteTaskPushNotificationConfigRequest,
         'tasks/resubscribe': types_v03.TaskResubscriptionRequest,
-        'agent/authenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
+        'agent/getAuthenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
     }
 
     def __init__(
         self,
         http_handler: 'RequestHandler',
-        context_builder: 'CallContextBuilder | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
     ):
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
-        self._context_builder = context_builder
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     def supports_method(self, method: str) -> bool:
         """Returns True if the v0.3 adapter supports the given method name."""
@@ -115,11 +120,7 @@ class JSONRPC03Adapter:
                     CoreInvalidRequestError(data=str(e)),
                 )
 
-            call_context = (
-                self._context_builder.build(request)
-                if self._context_builder
-                else ServerCallContext()
-            )
+            call_context = self._context_builder.build(request)
             call_context.tenant = (
                 getattr(specific_request.params, 'tenant', '')
                 if hasattr(specific_request, 'params')
@@ -214,7 +215,7 @@ class JSONRPC03Adapter:
                     id=request_id, result=None
                 )
             )
-        elif method == 'agent/authenticatedExtendedCard':
+        elif method == 'agent/getAuthenticatedExtendedCard':
             res_card = await self.handler.on_get_extended_agent_card(
                 request_obj, context
             )

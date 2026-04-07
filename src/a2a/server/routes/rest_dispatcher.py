@@ -8,7 +8,10 @@ from google.protobuf.json_format import MessageToDict, Parse
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.routes import CallContextBuilder, DefaultCallContextBuilder
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -64,15 +67,15 @@ class RestDispatcher:
     def __init__(
         self,
         request_handler: RequestHandler,
-        context_builder: CallContextBuilder | None = None,
+        context_builder: ServerCallContextBuilder | None = None,
     ) -> None:
         """Initializes the RestDispatcher.
 
         Args:
             request_handler: The underlying `RequestHandler` instance to delegate requests to.
-            context_builder: The CallContextBuilder used to construct the
-              ServerCallContext passed to the request_handler. If None, no
-              ServerCallContext is passed.
+            context_builder: The ServerCallContextBuilder used to construct the
+              ServerCallContext passed to the request_handler. If None the
+              DefaultServerCallContextBuilder is used.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -81,7 +84,9 @@ class RestDispatcher:
                 'optional dependencies, `a2a-sdk[http-server]`.'
             )
 
-        self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
         self.request_handler = request_handler
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
