@@ -84,6 +84,32 @@ class VertexTaskStore(TaskStore):
             )
         return None
 
+    def _get_status_details_change_event(
+        self,
+        previous_task: Task,
+        task: Task,
+        event_sequence_number: int,
+    ) -> vertexai_types.TaskEvent | None:
+        if task.status.message != previous_task.status.message:
+            status_details = (
+                vertexai_types.TaskStatusDetails(
+                    task_message=vertex_task_converter.to_stored_message(
+                        task.status.message
+                    )
+                )
+                if task.status.message
+                else vertexai_types.TaskStatusDetails()
+            )
+            return vertexai_types.TaskEvent(
+                event_data=vertexai_types.TaskEventData(
+                    status_details_change=vertexai_types.TaskStatusDetailsChange(
+                        new_task_status=status_details,
+                    ),
+                ),
+                event_sequence_number=event_sequence_number,
+            )
+        return None
+
     def _get_metadata_change_event(
         self,
         previous_task: CompatTask,
@@ -166,6 +192,13 @@ class VertexTaskStore(TaskStore):
         )
         if status_event:
             events.append(status_event)
+            event_sequence_number += 1
+
+        status_details_event = self._get_status_details_change_event(
+            previous_task, task, event_sequence_number
+        )
+        if status_details_event:
+            events.append(status_details_event)
             event_sequence_number += 1
 
         metadata_event = self._get_metadata_change_event(
