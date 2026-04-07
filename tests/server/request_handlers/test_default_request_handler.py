@@ -23,7 +23,9 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
-from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.request_handlers import (
+    LegacyRequestHandler as DefaultRequestHandler,
+)
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
     InMemoryTaskStore,

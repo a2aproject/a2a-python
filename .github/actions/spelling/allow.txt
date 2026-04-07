@@ -37,6 +37,7 @@ codegen
 coro
 culsans
 datamodel
+datapart
 deepwiki
 drivername
 DSNs

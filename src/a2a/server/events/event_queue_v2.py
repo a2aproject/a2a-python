@@ -28,7 +28,11 @@ class EventQueueSource(EventQueue):
     in `_incoming_queue` and distributed to all child Sinks by a background dispatcher task.
     """
 
-    def __init__(self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE) -> None:
+    def __init__(
+        self,
+        max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+        create_default_sink: bool = True,
+    ) -> None:
         """Initializes the EventQueueSource."""
         if max_queue_size <= 0:
             raise ValueError('max_queue_size must be greater than 0')
@@ -41,10 +45,15 @@ class EventQueueSource(EventQueue):
         self._is_closed = False
 
         # Internal sink for backward compatibility
-        self._default_sink = EventQueueSink(
-            parent=self, max_queue_size=max_queue_size
-        )
-        self._sinks.add(self._default_sink)
+        self._default_sink: EventQueueSink | None
+        if create_default_sink:
+            self._default_sink = EventQueueSink(
+                parent=self, max_queue_size=max_queue_size
+            )
+            self._sinks.add(self._default_sink)
+        else:
+            self._default_sink = None
+
         self._dispatcher_task = asyncio.create_task(self._dispatch_loop())
 
         self._dispatcher_task_expected_to_cancel = False
@@ -54,6 +63,8 @@ class EventQueueSource(EventQueue):
     @property
     def queue(self) -> AsyncQueue[Event]:
         """Returns the underlying asyncio.Queue of the default sink."""
+        if self._default_sink is None:
+            raise ValueError('No default sink available.')
         return self._default_sink.queue
 
     async def _dispatch_loop(self) -> None:
@@ -183,10 +194,14 @@ class EventQueueSource(EventQueue):
 
     async def dequeue_event(self) -> Event:
         """Dequeues an event from the default internal sink queue."""
+        if self._default_sink is None:
+            raise ValueError('No default sink available.')
         return await self._default_sink.dequeue_event()
 
     def task_done(self) -> None:
         """Signals that a formerly enqueued task is complete via the default internal sink queue."""
+        if self._default_sink is None:
+            raise ValueError('No default sink available.')
         self._default_sink.task_done()
 
     async def close(self, immediate: bool = False) -> None:
