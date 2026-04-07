@@ -261,6 +261,14 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         AgentInterface(
             protocol_binding=TransportProtocol.JSONRPC,
             url=f'http://127.0.0.1:{http_port}/jsonrpc/',
+            protocol_version='1.0',
+        )
+    )
+    interfaces.append(
+        AgentInterface(
+            protocol_binding=TransportProtocol.JSONRPC,
+            url=f'http://127.0.0.1:{http_port}/jsonrpc/',
+            protocol_version='0.3',
         )
     )
     interfaces.append(

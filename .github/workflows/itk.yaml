@@ -28,4 +28,4 @@ jobs:
         run: bash run_itk.sh
         working-directory: itk
         env:
-          A2A_SAMPLES_REVISION: itk-v0.1-alpha
+          A2A_SAMPLES_REVISION: itk-v.0.11-alpha
