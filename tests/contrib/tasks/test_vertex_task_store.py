@@ -65,7 +65,9 @@ from a2a.contrib.tasks.vertex_task_store import VertexTaskStore
 from a2a.server.context import ServerCallContext
 from a2a.types.a2a_pb2 import (
     Artifact,
+    Message,
     Part,
+    Role,
     Task,
     TaskState,
     TaskStatus,
@@ -530,3 +532,71 @@ async def test_metadata_field_mapping(
     )
     assert retrieved_none is not None
     assert retrieved_none.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_update_task_status_details(
+    vertex_store: VertexTaskStore,
+) -> None:
+    """Test updating an existing task by changing the status details (message) with part metadata."""
+    task_id = 'update-test-task-status-details'
+    original_task = Task(
+        id=task_id,
+        context_id='session-update',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+        metadata=None,
+        artifacts=[],
+        history=[],
+    )
+    await vertex_store.save(original_task, ServerCallContext())
+
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
+    assert retrieved_before_update is not None
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
+
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_FAILED
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
+    updated_task.status.message.CopyFrom(
+        Message(
+            message_id='msg-error-1',
+            role=Role.ROLE_AGENT,
+            parts=[
+                Part(
+                    text='Task failed due to an unknown error',
+                    metadata={'error_code': 'UNKNOWN', 'retryable': False},
+                )
+            ],
+        )
+    )
+
+    await vertex_store.save(updated_task, ServerCallContext())
+
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
+    assert retrieved_after_update is not None
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_FAILED
+    assert retrieved_after_update.status.message is not None
+    assert retrieved_after_update.status.message.message_id == 'msg-error-1'
+    assert retrieved_after_update.status.message.role == Role.ROLE_AGENT
+    assert len(retrieved_after_update.status.message.parts) == 1
+
+    part = retrieved_after_update.status.message.parts[0]
+    assert part.text == 'Task failed due to an unknown error'
+    assert part.metadata == {'error_code': 'UNKNOWN', 'retryable': False}
+
+    # Also test clearing the message
+    cleared_task = Task()
+    cleared_task.CopyFrom(updated_task)
+    cleared_task.status.ClearField('message')
+
+    await vertex_store.save(cleared_task, ServerCallContext())
+    retrieved_cleared = await vertex_store.get(task_id, ServerCallContext())
+    assert retrieved_cleared is not None
+    assert not retrieved_cleared.status.HasField('message')
