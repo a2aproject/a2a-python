@@ -352,9 +352,28 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         card_to_serve = self.agent_card
         if self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
-        return proto_utils.ToProto.agent_card(
+        compat_card = proto_utils.ToProto.agent_card(
             conversions.to_compat_agent_card(card_to_serve)
         )
+
+        if self.agent_card.capabilities.extended_agent_card:
+
+            async def _handler(
+                server_context: ServerCallContext,
+            ) -> a2a_v0_3_pb2.AgentCard:
+                req_v03 = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
+                res_v03 = await self.handler03.on_get_extended_agent_card(
+                    req_v03, server_context
+                )
+                if res_v03:
+                    return proto_utils.ToProto.agent_card(res_v03)
+                return compat_card
+
+            return await self._handle_unary(
+                context, _handler, a2a_v0_3_pb2.AgentCard()
+            )
+
+        return compat_card
 
     async def DeleteTaskPushNotificationConfig(
         self,
@@ -379,23 +398,3 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             return empty_pb2.Empty()
 
         return await self._handle_unary(context, _handler, empty_pb2.Empty())
-
-    async def GetExtendedCard(
-        self,
-        request: a2a_v0_3_pb2.GetAgentCardRequest,
-        context: grpc.aio.ServicerContext,
-    ) -> a2a_v0_3_pb2.AgentCard:
-        """Get the authenticated extended agent card (v0.3)."""
-
-        async def _handler(
-            server_context: ServerCallContext,
-        ) -> a2a_v0_3_pb2.AgentCard:
-            req_v03 = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
-            res_v03 = await self.handler03.on_get_extended_agent_card(
-                req_v03, server_context
-            )
-            return proto_utils.ToProto.agent_card(res_v03)
-
-        return await self._handle_unary(
-            context, _handler, a2a_v0_3_pb2.AgentCard()
-        )
