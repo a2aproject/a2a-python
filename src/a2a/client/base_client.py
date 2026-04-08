@@ -66,7 +66,7 @@ class BaseClient(Client):
         Yields:
             An async iterator of `StreamResponse`
         """
-        self._apply_client_config(request)
+        request = self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._execute_with_interceptors(
                 input_data=request,
@@ -100,7 +100,12 @@ class BaseClient(Client):
         ):
             yield event
 
-    def _apply_client_config(self, request: SendMessageRequest) -> None:
+    def _apply_client_config(
+        self, request: SendMessageRequest
+    ) -> SendMessageRequest:
+        request_copy = SendMessageRequest()
+        request_copy.CopyFrom(request)
+        request = request_copy
         request.configuration.return_immediately |= self._config.polling
         if (
             not request.configuration.HasField('task_push_notification_config')
@@ -116,6 +121,7 @@ class BaseClient(Client):
             request.configuration.accepted_output_modes.extend(
                 self._config.accepted_output_modes
             )
+        return request
 
     async def _process_stream(
         self,
