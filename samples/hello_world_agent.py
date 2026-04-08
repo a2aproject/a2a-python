@@ -13,9 +13,7 @@ from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers import GrpcHandler
-from a2a.server.request_handlers.default_request_handler import (
-    DefaultRequestHandler,
-)
+from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
