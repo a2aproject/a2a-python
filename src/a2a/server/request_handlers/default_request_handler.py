@@ -287,6 +287,60 @@ class DefaultRequestHandler(RequestHandler):
             if isinstance(latest_task, Task):
                 await self._push_sender.send_notification(latest_task)
 
+    async def _on_message_send_non_blocking(
+        self,
+        params: MessageSendParams,
+        task_manager: TaskManager,
+        task_id: str,
+        queue: EventQueue,
+        result_aggregator: ResultAggregator,
+        producer_task: asyncio.Task,
+        consumer: EventConsumer,
+    ) -> Task:
+        """Non-blocking fast path for ``on_message_send``.
+
+        Returns the task immediately without waiting for executor events.
+        Event consumption and push notifications are handled in a background
+        task. This avoids the latency introduced by the ``EventConsumer``
+        polling loop which can add seconds of delay when the event loop is
+        busy with other work.
+        """
+        task = await task_manager.get_task()
+        if not task:
+            task = Task(
+                id=task_id,
+                context_id=params.message.context_id,
+                status=TaskStatus(state=TaskState.submitted),
+                history=[params.message],
+            )
+
+        async def _background_consume() -> None:
+            try:
+                async for _event in result_aggregator.consume_and_emit(
+                    consumer
+                ):
+                    await self._send_push_notification_if_needed(
+                        task_id, result_aggregator
+                    )
+            except Exception:
+                logger.exception(
+                    'Background event consumption failed for task %s',
+                    task_id,
+                )
+            finally:
+                await self._cleanup_producer(producer_task, task_id)
+
+        bg_task = asyncio.create_task(_background_consume())
+        bg_task.set_name(f'non_blocking_consume:{task_id}')
+        self._track_background_task(bg_task)
+
+        if params.configuration:
+            task = apply_history_length(
+                task, params.configuration.history_length
+            )
+
+        return task
+
     async def on_message_send(
         self,
         params: MessageSendParams,
@@ -300,9 +354,7 @@ class DefaultRequestHandler(RequestHandler):
         When ``blocking`` is ``False``, the handler returns the task
         immediately without waiting for executor events and processes
         everything in the background. Results are delivered via push
-        notifications. This avoids the latency introduced by the
-        ``EventConsumer`` polling loop which can add seconds of delay
-        when the event loop is busy with other work.
+        notifications.
         """
         (
             _task_manager,
@@ -319,44 +371,16 @@ class DefaultRequestHandler(RequestHandler):
         if params.configuration and params.configuration.blocking is False:
             blocking = False
 
-        # Non-blocking fast path: return the task immediately and process
-        # events entirely in the background via push notifications.
         if not blocking:
-            task = await _task_manager.get_task()
-            if not task:
-                task = Task(
-                    id=task_id,
-                    context_id=params.message.context_id,
-                    status=TaskStatus(state=TaskState.submitted),
-                    history=[params.message],
-                )
-
-            async def _background_consume() -> None:
-                try:
-                    async for _event in result_aggregator.consume_and_emit(
-                        consumer
-                    ):
-                        await self._send_push_notification_if_needed(
-                            task_id, result_aggregator
-                        )
-                except Exception:
-                    logger.exception(
-                        'Background event consumption failed for task %s',
-                        task_id,
-                    )
-                finally:
-                    await self._cleanup_producer(producer_task, task_id)
-
-            bg_task = asyncio.create_task(_background_consume())
-            bg_task.set_name(f'non_blocking_consume:{task_id}')
-            self._track_background_task(bg_task)
-
-            if params.configuration:
-                task = apply_history_length(
-                    task, params.configuration.history_length
-                )
-
-            return task
+            return await self._on_message_send_non_blocking(
+                params,
+                _task_manager,
+                task_id,
+                queue,
+                result_aggregator,
+                producer_task,
+                consumer,
+            )
 
         # Blocking path: wait for completion or interruption.
         interrupted_or_non_blocking = False
