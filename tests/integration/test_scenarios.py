@@ -141,7 +141,7 @@ async def create_client(handler, agent_card, streaming=False):
     agent_card.supported_interfaces[0].protocol_binding = TransportProtocol.GRPC
 
     servicer = GrpcHandler(
-        agent_card, handler, context_builder=MockCallContextBuilder()
+        request_handler=handler, context_builder=MockCallContextBuilder()
     )
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
@@ -165,9 +165,19 @@ def create_handler(
     task_store = task_store or InMemoryTaskStore()
     queue_manager = queue_manager or InMemoryQueueManager()
     return (
-        LegacyRequestHandler(agent_executor, task_store, queue_manager)
+        LegacyRequestHandler(
+            agent_executor,
+            task_store,
+            agent_card(),
+            queue_manager,
+        )
         if use_legacy
-        else DefaultRequestHandlerV2(agent_executor, task_store, queue_manager)
+        else DefaultRequestHandlerV2(
+            agent_executor,
+            task_store,
+            agent_card(),
+            queue_manager,
+        )
     )
 
 
@@ -437,9 +447,8 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
         # Legacy is not creating tasks for agent failures.
         assert len((await client.list_tasks(ListTasksRequest())).tasks) == 0
     else:
-        # TODO: should it be TASK_STATE_FAILED ?
         (task,) = (await client.list_tasks(ListTasksRequest())).tasks
-        assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+        assert task.status.state == TaskState.TASK_STATE_FAILED
 
 
 # Scenario 12/13: Exception after initial event
@@ -503,9 +512,12 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
 
     await asyncio.gather(*tasks)
 
-    # TODO: should it be TASK_STATE_FAILED ?
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
-    assert task.status.state == TaskState.TASK_STATE_WORKING
+    if use_legacy:
+        # Legacy does not update task state on exception.
+        assert task.status.state == TaskState.TASK_STATE_WORKING
+    else:
+        assert task.status.state == TaskState.TASK_STATE_FAILED
 
 
 # Scenario 14: Exception in Cancel
@@ -563,9 +575,12 @@ async def test_scenario_14_error_in_cancel(use_legacy, streaming):
     with pytest.raises(A2AClientError, match='TEST_ERROR_IN_CANCEL'):
         await client.cancel_task(CancelTaskRequest(id=task_id))
 
-    # TODO: should it be TASK_STATE_CANCELED or TASK_STATE_FAILED?
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
-    assert task.status.state == TaskState.TASK_STATE_WORKING
+    if use_legacy:
+        # Legacy does not update task state on exception.
+        assert task.status.state == TaskState.TASK_STATE_WORKING
+    else:
+        assert task.status.state == TaskState.TASK_STATE_FAILED
 
 
 # Scenario 15: Subscribe to task that errors out
@@ -632,9 +647,12 @@ async def test_scenario_15_subscribe_error(use_legacy):
         with pytest.raises(A2AClientError, match='TEST_ERROR_IN_EXECUTE'):
             await consume_task
 
-    # TODO: should it be TASK_STATE_FAILED?
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
-    assert task.status.state == TaskState.TASK_STATE_WORKING
+    if use_legacy:
+        # Legacy does not update task state on exception.
+        assert task.status.state == TaskState.TASK_STATE_WORKING
+    else:
+        assert task.status.state == TaskState.TASK_STATE_FAILED
 
 
 # Scenario 16: Slow execution and return_immediately=True

@@ -7,24 +7,15 @@ from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
+    AgentInterface,
     ListTaskPushNotificationConfigsResponse as V10ListPushConfigsResp,
-)
-from a2a.types.a2a_pb2 import (
     Message as V10Message,
-)
-from a2a.types.a2a_pb2 import (
     Part as V10Part,
-)
-from a2a.types.a2a_pb2 import (
     Task as V10Task,
-)
-from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig as V10PushConfig,
-)
-from a2a.types.a2a_pb2 import (
     TaskState as V10TaskState,
-)
-from a2a.types.a2a_pb2 import (
     TaskStatus as V10TaskStatus,
 )
 from a2a.utils.errors import TaskNotFoundError
@@ -32,7 +23,16 @@ from a2a.utils.errors import TaskNotFoundError
 
 @pytest.fixture
 def mock_core_handler():
-    return AsyncMock(spec=RequestHandler)
+    handler = AsyncMock(spec=RequestHandler)
+
+    handler.agent_card = AgentCard(
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        )
+    )
+    return handler
 
 
 @pytest.fixture
@@ -355,3 +355,35 @@ async def test_on_delete_task_push_notification_config(
 
     assert result is None
     mock_core_handler.on_delete_task_push_notification_config.assert_called_once()
+
+
+@pytest.mark.anyio
+async def test_on_get_extended_agent_card_success(
+    v03_handler, mock_core_handler, mock_context
+):
+    v03_req = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
+
+    mock_core_handler.on_get_extended_agent_card.return_value = AgentCard(
+        name='Extended Agent',
+        description='An extended test agent',
+        version='1.0.0',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://jsonrpc.v03.com',
+                protocol_version='0.3',
+            )
+        ],
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
+    )
+
+    result = await v03_handler.on_get_extended_agent_card(v03_req, mock_context)
+
+    assert isinstance(result, types_v03.AgentCard)
+    assert result.name == 'Extended Agent'
+    assert result.capabilities.streaming is True
+    assert result.capabilities.push_notifications is True
+    mock_core_handler.on_get_extended_agent_card.assert_called_once()

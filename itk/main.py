@@ -289,7 +289,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         name='ITK v10 Agent',
         description='Python agent using SDK 1.0.',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
@@ -299,7 +303,16 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     handler = DefaultRequestHandler(
         agent_executor=V10AgentExecutor(),
         task_store=task_store,
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
+    )
+
+    handler_extended = DefaultRequestHandler(
+        agent_executor=V10AgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
+        queue_manager=InMemoryQueueManager(),
+        extended_agent_card=agent_card,
     )
 
     app = FastAPI()
@@ -308,9 +321,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=handler,
-        extended_agent_card=agent_card,
+        request_handler=handler_extended,
         rpc_url='/',
         enable_v0_3_compat=True,
     )
@@ -320,7 +331,6 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     )
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
         request_handler=handler,
         enable_v0_3_compat=True,
     )
@@ -328,9 +338,9 @@ async def main_async(http_port: int, grpc_port: int) -> None:
 
     server = grpc.aio.server()
 
-    compat_servicer = CompatGrpcHandler(agent_card, handler)
+    compat_servicer = CompatGrpcHandler(handler)
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(compat_servicer, server)
-    servicer = GrpcHandler(agent_card, handler)
+    servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
 
     server.add_insecure_port(f'127.0.0.1:{grpc_port}')

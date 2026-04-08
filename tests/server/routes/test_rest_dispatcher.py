@@ -31,12 +31,25 @@ from a2a.utils.errors import (
 
 
 @pytest.fixture
-def mock_handler():
+def agent_card():
+    card = MagicMock(spec=AgentCard)
+    card.capabilities = AgentCapabilities(
+        streaming=True,
+        push_notifications=True,
+        extended_agent_card=True,
+    )
+    return card
+
+
+@pytest.fixture
+def mock_handler(agent_card):
     handler = AsyncMock(spec=RequestHandler)
     # Default success cases
+    handler._agent_card = agent_card
     handler.on_message_send.return_value = Message(message_id='test_msg')
     handler.on_cancel_task.return_value = Task(id='test_task')
     handler.on_get_task.return_value = Task(id='test_task')
+    handler.on_get_extended_agent_card.return_value = agent_card()
     handler.on_list_tasks.return_value = ListTasksResponse()
     handler.on_get_task_push_notification_config.return_value = (
         TaskPushNotificationConfig(url='http://test')
@@ -59,19 +72,8 @@ def mock_handler():
 
 
 @pytest.fixture
-def agent_card():
-    card = MagicMock(spec=AgentCard)
-    card.capabilities = AgentCapabilities(
-        streaming=True,
-        push_notifications=True,
-        extended_agent_card=True,
-    )
-    return card
-
-
-@pytest.fixture
-def rest_dispatcher_instance(agent_card, mock_handler):
-    return RestDispatcher(agent_card=agent_card, request_handler=mock_handler)
+def rest_dispatcher_instance(mock_handler):
+    return RestDispatcher(request_handler=mock_handler)
 
 
 from starlette.datastructures import Headers
@@ -117,13 +119,13 @@ class TestRestDispatcherInitialization:
         )
 
     def test_missing_starlette_raises_importerror(
-        self, mark_pkg_starlette_not_installed, agent_card, mock_handler
+        self, mark_pkg_starlette_not_installed, mock_handler
     ):
         with pytest.raises(
             ImportError,
             match='Packages `starlette` and `sse-starlette` are required',
         ):
-            RestDispatcher(agent_card=agent_card, request_handler=mock_handler)
+            RestDispatcher(request_handler=mock_handler)
 
 
 @pytest.mark.asyncio
@@ -237,18 +239,6 @@ class TestRestDispatcherEndpoints:
         response = await rest_dispatcher_instance.delete_push_notification(req)
         assert response.status_code == 200
 
-    async def test_set_push_notification_disabled_raises(
-        self, agent_card, mock_handler
-    ):
-        agent_card.capabilities.push_notifications = False
-        dispatcher = RestDispatcher(
-            agent_card=agent_card, request_handler=mock_handler
-        )
-        req = make_mock_request(method='POST', path_params={'id': 'task1'})
-
-        response = await dispatcher.set_push_notification(req)
-        assert response.status_code == 400  # UnsupportedOperation maps to 400
-
     async def test_handle_authenticated_agent_card(
         self, rest_dispatcher_instance
     ):
@@ -258,45 +248,9 @@ class TestRestDispatcherEndpoints:
         )
         assert response.status_code == 200
 
-    async def test_handle_authenticated_agent_card_unsupported(
-        self, agent_card, mock_handler
-    ):
-        agent_card.capabilities.extended_agent_card = False
-        dispatcher = RestDispatcher(
-            agent_card=agent_card, request_handler=mock_handler
-        )
-        req = make_mock_request()
-
-        response = await dispatcher.handle_authenticated_agent_card(req)
-        assert response.status_code == 400
-
 
 @pytest.mark.asyncio
 class TestRestDispatcherStreaming:
-    async def test_on_message_send_stream_unsupported(
-        self, agent_card, mock_handler
-    ):
-        agent_card.capabilities.streaming = False
-        dispatcher = RestDispatcher(
-            agent_card=agent_card, request_handler=mock_handler
-        )
-        req = make_mock_request(method='POST')
-
-        response = await dispatcher.on_message_send_stream(req)
-        assert response.status_code == 400
-
-    async def test_on_subscribe_to_task_unsupported(
-        self, agent_card, mock_handler
-    ):
-        agent_card.capabilities.streaming = False
-        dispatcher = RestDispatcher(
-            agent_card=agent_card, request_handler=mock_handler
-        )
-        req = make_mock_request(method='GET', path_params={'id': 't1'})
-
-        response = await dispatcher.on_subscribe_to_task(req)
-        assert response.status_code == 400
-
     async def test_on_message_send_stream_success(
         self, rest_dispatcher_instance
     ):
@@ -327,3 +281,16 @@ class TestRestDispatcherStreaming:
         assert len(chunks) == 2
         assert 'chunk1' in str(chunks[0])
         assert 'chunk2' in str(chunks[1])
+
+    async def test_on_message_send_stream_handler_error(self, mock_handler):
+        from a2a.utils.errors import UnsupportedOperationError
+
+        mock_handler.on_message_send_stream.side_effect = (
+            UnsupportedOperationError('Mocked error')
+        )
+
+        dispatcher = RestDispatcher(request_handler=mock_handler)
+        req = make_mock_request(method='POST')
+
+        response = await dispatcher.on_message_send_stream(req)
+        assert response.status_code == 400

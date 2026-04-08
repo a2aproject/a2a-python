@@ -37,6 +37,7 @@ def sample_agent_card() -> a2a_pb2.AgentCard:
         capabilities=a2a_pb2.AgentCapabilities(
             streaming=True,
             push_notifications=True,
+            extended_agent_card=True,
         ),
         supported_interfaces=[
             a2a_pb2.AgentInterface(
@@ -53,7 +54,7 @@ def handler(
     mock_request_handler: AsyncMock, sample_agent_card: a2a_pb2.AgentCard
 ) -> compat_grpc_handler.CompatGrpcHandler:
     return compat_grpc_handler.CompatGrpcHandler(
-        agent_card=sample_agent_card, request_handler=mock_request_handler
+        request_handler=mock_request_handler,
     )
 
 
@@ -437,9 +438,15 @@ async def test_list_push_config_success(
 @pytest.mark.asyncio
 async def test_get_agent_card_success(
     handler: compat_grpc_handler.CompatGrpcHandler,
+    mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
+    sample_agent_card: a2a_pb2.AgentCard,
 ) -> None:
     request = a2a_v0_3_pb2.GetAgentCardRequest()
+    mock_request_handler.on_get_extended_agent_card.return_value = (
+        sample_agent_card
+    )
+
     response = await handler.GetAgentCard(request, mock_grpc_context)
 
     expected_res = a2a_v0_3_pb2.AgentCard(
@@ -448,6 +455,7 @@ async def test_get_agent_card_success(
         url='http://jsonrpc.v03.com',
         version='1.0.0',
         protocol_version='0.3',
+        supports_authenticated_extended_card=True,
         preferred_transport='JSONRPC',
         capabilities=a2a_v0_3_pb2.AgentCapabilities(
             streaming=True,

@@ -75,7 +75,9 @@ def agent_server(notifications_client: httpx.AsyncClient):
     )
     process.start()
     try:
-        wait_for_server_ready(f'{url}/extendedAgentCard')
+        wait_for_server_ready(
+            f'{url}/extendedAgentCard', headers={'A2A-Version': '1.0'}
+        )
     except TimeoutError as e:
         process.terminate()
         raise e

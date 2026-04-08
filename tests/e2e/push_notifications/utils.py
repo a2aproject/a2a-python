@@ -20,12 +20,14 @@ def run_server(app, host, port) -> None:
     uvicorn.run(app, host=host, port=port, log_level='warning')
 
 
-def wait_for_server_ready(url: str, timeout: int = 10) -> None:
+def wait_for_server_ready(
+    url: str, timeout: int = 10, headers: dict | None = None
+) -> None:
     """Polls the provided URL endpoint until the server is up."""
     start_time = time.time()
     while True:
         with contextlib.suppress(httpx.ConnectError):
-            with httpx.Client() as client:
+            with httpx.Client(headers=headers) as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     return
