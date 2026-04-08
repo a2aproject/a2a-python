@@ -340,7 +340,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -367,7 +367,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
