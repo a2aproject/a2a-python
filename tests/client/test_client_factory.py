@@ -1,18 +1,16 @@
 """Tests for the ClientFactory."""
 
-from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 import typing
 
 import httpx
 import pytest
 
-from a2a.client import ClientConfig, ClientFactory
+from a2a.client import ClientConfig, ClientFactory, create_client
 from a2a.client.client_factory import TransportProducer
 from a2a.client.transports import (
     JsonRpcTransport,
     RestTransport,
-    ClientTransport,
 )
 from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
@@ -127,26 +125,27 @@ def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
         factory.create(base_agent_card)
 
 
-@pytest.mark.asyncio
-async def test_client_factory_connect_with_agent_card(
+def test_client_factory_create_with_default_config(
     base_agent_card: AgentCard,
 ):
-    """Verify that connect works correctly when provided with an AgentCard."""
-    client = await ClientFactory.connect(base_agent_card)
+    """Verify that create works correctly with a default ClientConfig."""
+    factory = ClientFactory(ClientConfig())
+    client = factory.create(base_agent_card)
     assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_url(base_agent_card: AgentCard):
-    """Verify that connect works correctly when provided with a URL."""
+async def test_client_factory_create_from_url(base_agent_card: AgentCard):
+    """Verify that create_from_url resolves the card and creates a client."""
     with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
         mock_resolver.return_value.get_agent_card = AsyncMock(
             return_value=base_agent_card
         )
 
         agent_url = 'http://example.com'
-        client = await ClientFactory.connect(agent_url)
+        factory = ClientFactory(ClientConfig())
+        client = await factory.create_from_url(agent_url)
 
         mock_resolver.assert_called_once()
         assert mock_resolver.call_args[0][1] == agent_url
@@ -157,10 +156,10 @@ async def test_client_factory_connect_with_url(base_agent_card: AgentCard):
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_url_and_client_config(
+async def test_client_factory_create_from_url_uses_factory_httpx_client(
     base_agent_card: AgentCard,
 ):
-    """Verify connect with a URL and a pre-configured httpx client."""
+    """Verify create_from_url uses the factory's configured httpx client."""
     with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
         mock_resolver.return_value.get_agent_card = AsyncMock(
             return_value=base_agent_card
@@ -170,7 +169,8 @@ async def test_client_factory_connect_with_url_and_client_config(
         mock_httpx_client = httpx.AsyncClient()
         config = ClientConfig(httpx_client=mock_httpx_client)
 
-        client = await ClientFactory.connect(agent_url, client_config=config)
+        factory = ClientFactory(config)
+        client = await factory.create_from_url(agent_url)
 
         mock_resolver.assert_called_once_with(mock_httpx_client, agent_url)
         mock_resolver.return_value.get_agent_card.assert_awaited_once()
@@ -180,10 +180,10 @@ async def test_client_factory_connect_with_url_and_client_config(
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_resolver_args(
+async def test_client_factory_create_from_url_passes_resolver_args(
     base_agent_card: AgentCard,
 ):
-    """Verify connect passes resolver arguments correctly."""
+    """Verify create_from_url passes resolver arguments correctly."""
     with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
         mock_resolver.return_value.get_agent_card = AsyncMock(
             return_value=base_agent_card
@@ -193,12 +193,11 @@ async def test_client_factory_connect_with_resolver_args(
         relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
-        # The resolver args are only passed if an httpx_client is provided in config
         config = ClientConfig(httpx_client=httpx.AsyncClient())
+        factory = ClientFactory(config)
 
-        await ClientFactory.connect(
+        await factory.create_from_url(
             agent_url,
-            client_config=config,
             relative_card_path=relative_path,
             resolver_http_kwargs=http_kwargs,
         )
@@ -211,10 +210,10 @@ async def test_client_factory_connect_with_resolver_args(
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_resolver_args_without_client(
+async def test_client_factory_create_from_url_with_default_config(
     base_agent_card: AgentCard,
 ):
-    """Verify resolver args are ignored if no httpx_client is provided."""
+    """Verify create_from_url works with a default ClientConfig."""
     with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
         mock_resolver.return_value.get_agent_card = AsyncMock(
             return_value=base_agent_card
@@ -224,12 +223,16 @@ async def test_client_factory_connect_resolver_args_without_client(
         relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
-        await ClientFactory.connect(
+        factory = ClientFactory(ClientConfig())
+
+        await factory.create_from_url(
             agent_url,
             relative_card_path=relative_path,
             resolver_http_kwargs=http_kwargs,
         )
 
+        # Factory always creates an httpx client, so resolver gets it
+        mock_resolver.assert_called_once()
         mock_resolver.return_value.get_agent_card.assert_awaited_once_with(
             relative_card_path=relative_path,
             http_kwargs=http_kwargs,
@@ -237,16 +240,17 @@ async def test_client_factory_connect_resolver_args_without_client(
         )
 
 
-@pytest.mark.asyncio
-async def test_client_factory_connect_with_extra_transports(
+def test_client_factory_register_and_create_custom_transport(
     base_agent_card: AgentCard,
 ):
-    """Verify that connect can register and use extra transports."""
+    """Verify that register() + create() uses custom transports."""
 
     class CustomTransport:
         pass
 
-    def custom_transport_producer(*args, **kwargs):
+    def custom_transport_producer(
+        *args: typing.Any, **kwargs: typing.Any
+    ) -> CustomTransport:
         return CustomTransport()
 
     base_agent_card.supported_interfaces.insert(
@@ -255,27 +259,60 @@ async def test_client_factory_connect_with_extra_transports(
     )
 
     config = ClientConfig(supported_protocol_bindings=['custom'])
-
-    client = await ClientFactory.connect(
-        base_agent_card,
-        client_config=config,
-        extra_transports=typing.cast(
-            dict[str, TransportProducer], {'custom': custom_transport_producer}
-        ),
+    factory = ClientFactory(config)
+    factory.register(
+        'custom',
+        typing.cast(TransportProducer, custom_transport_producer),
     )
 
+    client = factory.create(base_agent_card)
     assert isinstance(client._transport, CustomTransport)  # type: ignore[attr-defined]
 
 
 @pytest.mark.asyncio
-async def test_client_factory_connect_with_interceptors(
+async def test_client_factory_create_from_url_uses_registered_transports(
+    base_agent_card: AgentCard,
+):
+    """Verify that create_from_url() respects custom transports from register()."""
+
+    class CustomTransport:
+        pass
+
+    def custom_transport_producer(
+        *args: typing.Any, **kwargs: typing.Any
+    ) -> CustomTransport:
+        return CustomTransport()
+
+    base_agent_card.supported_interfaces.insert(
+        0,
+        AgentInterface(protocol_binding='custom', url='custom://foo'),
+    )
+
+    with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
+        mock_resolver.return_value.get_agent_card = AsyncMock(
+            return_value=base_agent_card
+        )
+
+        config = ClientConfig(supported_protocol_bindings=['custom'])
+        factory = ClientFactory(config)
+        factory.register(
+            'custom',
+            typing.cast(TransportProducer, custom_transport_producer),
+        )
+
+        client = await factory.create_from_url('http://example.com')
+        assert isinstance(client._transport, CustomTransport)  # type: ignore[attr-defined]
+
+
+def test_client_factory_create_with_interceptors(
     base_agent_card: AgentCard,
 ):
     """Verify interceptors are passed through correctly."""
     interceptor1 = MagicMock()
 
     with patch('a2a.client.client_factory.BaseClient') as mock_base_client:
-        await ClientFactory.connect(
+        factory = ClientFactory(ClientConfig())
+        factory.create(
             base_agent_card,
             interceptors=[interceptor1],
         )
@@ -298,3 +335,44 @@ def test_client_factory_applies_tenant_decorator(base_agent_card: AgentCard):
     assert isinstance(client._transport, TenantTransportDecorator)  # type: ignore[attr-defined]
     assert client._transport._tenant == 'my-tenant'  # type: ignore[attr-defined]
     assert isinstance(client._transport._base, JsonRpcTransport)  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_create_client_with_agent_card(base_agent_card: AgentCard):
+    """Verify create_client works when given an AgentCard directly."""
+    client = await create_client(base_agent_card)
+    assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_create_client_with_url(base_agent_card: AgentCard):
+    """Verify create_client resolves a URL and creates a client."""
+    with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
+        mock_resolver.return_value.get_agent_card = AsyncMock(
+            return_value=base_agent_card
+        )
+
+        client = await create_client('http://example.com')
+
+        mock_resolver.assert_called_once()
+        assert mock_resolver.call_args[0][1] == 'http://example.com'
+        assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+
+
+@pytest.mark.asyncio
+async def test_create_client_with_url_and_config(base_agent_card: AgentCard):
+    """Verify create_client passes client_config to the factory."""
+    with patch('a2a.client.client_factory.A2ACardResolver') as mock_resolver:
+        mock_resolver.return_value.get_agent_card = AsyncMock(
+            return_value=base_agent_card
+        )
+
+        mock_httpx_client = httpx.AsyncClient()
+        config = ClientConfig(httpx_client=mock_httpx_client)
+
+        await create_client('http://example.com', client_config=config)
+
+        mock_resolver.assert_called_once_with(
+            mock_httpx_client, 'http://example.com'
+        )
