@@ -27,31 +27,31 @@ class TaskManager:
 
     def __init__(
         self,
+        task_store: TaskStore,
+        context: ServerCallContext,
         task_id: str | None,
         context_id: str | None,
-        task_store: TaskStore,
         initial_message: Message | None,
-        context: ServerCallContext | None = None,
     ):
         """Initializes the TaskManager.
 
         Args:
+            task_store: The `TaskStore` instance for persistence.
+            context: The `ServerCallContext` that this task is produced under.
             task_id: The ID of the task, if known from the request.
             context_id: The ID of the context, if known from the request.
-            task_store: The `TaskStore` instance for persistence.
             initial_message: The `Message` that initiated the task, if any.
                              Used when creating a new task object.
-            context: The `ServerCallContext` that this task is produced under.
         """
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
 
+        self.task_store = task_store
+        self._call_context: ServerCallContext = context
         self.task_id = task_id
         self.context_id = context_id
-        self.task_store = task_store
         self._initial_message = initial_message
         self._current_task: Task | None = None
-        self._call_context: ServerCallContext | None = context
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,

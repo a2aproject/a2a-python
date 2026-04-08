@@ -12,7 +12,6 @@ from google.protobuf import empty_pb2
 from a2a.compat.v0_3 import (
     a2a_v0_3_pb2,
     a2a_v0_3_pb2_grpc,
-    conversions,
     proto_utils,
 )
 from a2a.compat.v0_3 import (
@@ -23,13 +22,11 @@ from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.grpc_handler import (
     _ERROR_CODE_MAP,
-    CallContextBuilder,
-    DefaultCallContextBuilder,
+    DefaultGrpcServerCallContextBuilder,
+    GrpcServerCallContextBuilder,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.errors import A2AError, InvalidParamsError
-from a2a.utils.helpers import maybe_await, validate
 
 
 logger = logging.getLogger(__name__)
@@ -42,27 +39,21 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
 
     def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
-        context_builder: CallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
+        context_builder: GrpcServerCallContextBuilder | None = None,
     ):
         """Initializes the CompatGrpcHandler.
 
         Args:
-            agent_card: The AgentCard describing the agent's capabilities (v1.0).
             request_handler: The underlying `RequestHandler` instance to
                              delegate requests to.
             context_builder: The CallContextBuilder object. If none the
                              DefaultCallContextBuilder is used.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
         """
-        self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
-        self.context_builder = context_builder or DefaultCallContextBuilder()
-        self.card_modifier = card_modifier
+        self._context_builder = (
+            context_builder or DefaultGrpcServerCallContextBuilder()
+        )
 
     async def _handle_unary(
         self,
@@ -72,7 +63,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> TResponse:
         """Centralized error handling and context management for unary calls."""
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._context_builder.build(context)
             result = await handler_func(server_context)
             self._set_extension_metadata(context, server_context)
         except A2AError as e:
@@ -88,7 +79,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[TResponse]:
         """Centralized error handling and context management for streaming calls."""
         try:
-            server_context = self.context_builder.build(context)
+            server_context = self._context_builder.build(context)
             async for item in handler_func(server_context):
                 yield item
             self._set_extension_metadata(context, server_context)
@@ -177,10 +168,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'SendStreamingMessage' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -240,10 +227,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
         """Handles the 'TaskSubscription' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> AsyncIterable[a2a_v0_3_pb2.StreamResponse]:
@@ -267,10 +250,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
     ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:
         """Handles the 'CreateTaskPushNotificationConfig' gRPC method (v0.3)."""
 
-        @validate(
-            lambda _: self.agent_card.capabilities.push_notifications,
-            'Push notifications are not supported by the agent',
-        )
         async def _handler(
             server_context: ServerCallContext,
         ) -> a2a_v0_3_pb2.TaskPushNotificationConfig:
@@ -358,12 +337,19 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         request: a2a_v0_3_pb2.GetAgentCardRequest,
         context: grpc.aio.ServicerContext,
     ) -> a2a_v0_3_pb2.AgentCard:
-        """Get the agent card for the agent served (v0.3)."""
-        card_to_serve = self.agent_card
-        if self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
-        return proto_utils.ToProto.agent_card(
-            conversions.to_compat_agent_card(card_to_serve)
+        """Get the extended agent card for the agent served (v0.3)."""
+
+        async def _handler(
+            server_context: ServerCallContext,
+        ) -> a2a_v0_3_pb2.AgentCard:
+            req_v03 = types_v03.GetAuthenticatedExtendedCardRequest(id=0)
+            res_v03 = await self.handler03.on_get_extended_agent_card(
+                req_v03, server_context
+            )
+            return proto_utils.ToProto.agent_card(res_v03)
+
+        return await self._handle_unary(
+            context, _handler, a2a_v0_3_pb2.AgentCard()
         )
 
     async def DeleteTaskPushNotificationConfig(

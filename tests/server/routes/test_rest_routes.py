@@ -35,26 +35,21 @@ def mock_handler():
 
 def test_routes_creation(agent_card, mock_handler):
     """Tests that create_rest_routes creates Route objects list."""
-    routes = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler
-    )
+    routes = create_rest_routes(request_handler=mock_handler)
 
     assert isinstance(routes, list)
     assert len(routes) > 0
-    assert all(isinstance(r, BaseRoute) for r in routes)
+    assert all((isinstance(r, BaseRoute) for r in routes))
 
 
 def test_routes_creation_v03_compat(agent_card, mock_handler):
     """Tests that create_rest_routes creates more routes with enable_v0_3_compat."""
+    mock_handler._agent_card = agent_card
     routes_without_compat = create_rest_routes(
-        agent_card=agent_card,
-        request_handler=mock_handler,
-        enable_v0_3_compat=False,
+        request_handler=mock_handler, enable_v0_3_compat=False
     )
     routes_with_compat = create_rest_routes(
-        agent_card=agent_card,
-        request_handler=mock_handler,
-        enable_v0_3_compat=True,
+        request_handler=mock_handler, enable_v0_3_compat=True
     )
 
     assert len(routes_with_compat) > len(routes_without_compat)
@@ -64,9 +59,7 @@ def test_rest_endpoints_routing(agent_card, mock_handler):
     """Tests that mounted routes route to the handler endpoints."""
     mock_handler.on_message_send.return_value = Task(id='123')
 
-    routes = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler
-    )
+    routes = create_rest_routes(request_handler=mock_handler)
     app = Starlette(routes=routes)
     client = TestClient(app)
 
@@ -83,9 +76,7 @@ def test_rest_endpoints_routing_tenant(agent_card, mock_handler):
     """Tests that mounted routes with {tenant} route to the handler endpoints."""
     mock_handler.on_message_send.return_value = Task(id='123')
 
-    routes = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler
-    )
+    routes = create_rest_routes(request_handler=mock_handler)
     app = Starlette(routes=routes)
     client = TestClient(app)
 
@@ -107,9 +98,7 @@ def test_rest_list_tasks(agent_card, mock_handler):
     """Tests that list tasks endpoint is routed to the handler."""
     mock_handler.on_list_tasks.return_value = ListTasksResponse()
 
-    routes = create_rest_routes(
-        agent_card=agent_card, request_handler=mock_handler
-    )
+    routes = create_rest_routes(request_handler=mock_handler)
     app = Starlette(routes=routes)
     client = TestClient(app)
 

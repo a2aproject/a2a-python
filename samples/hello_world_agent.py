@@ -12,10 +12,7 @@ from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
-from a2a.server.request_handlers import GrpcHandler
-from a2a.server.request_handlers.default_request_handler import (
-    DefaultRequestHandler,
-)
+from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
@@ -191,17 +188,17 @@ async def serve(
 
     task_store = InMemoryTaskStore()
     request_handler = DefaultRequestHandler(
-        agent_executor=SampleAgentExecutor(), task_store=task_store
+        agent_executor=SampleAgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
     )
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
         request_handler=request_handler,
         path_prefix='/a2a/rest',
         enable_v0_3_compat=True,
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=request_handler,
         rpc_url='/a2a/jsonrpc',
         enable_v0_3_compat=True,
@@ -216,12 +213,12 @@ async def serve(
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')
-    servicer = GrpcHandler(agent_card, request_handler)
+    servicer = GrpcHandler(request_handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, grpc_server)
 
     compat_grpc_server = grpc.aio.server()
     compat_grpc_server.add_insecure_port(f'{host}:{compat_grpc_port}')
-    compat_servicer = CompatGrpcHandler(agent_card, request_handler)
+    compat_servicer = CompatGrpcHandler(request_handler)
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(
         compat_servicer, compat_grpc_server
     )

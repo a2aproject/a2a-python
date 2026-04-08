@@ -75,7 +75,9 @@ def agent_server(notifications_client: httpx.AsyncClient):
     )
     process.start()
     try:
-        wait_for_server_ready(f'{url}/extendedAgentCard')
+        wait_for_server_ready(
+            f'{url}/extendedAgentCard', headers={'A2A-Version': '1.0'}
+        )
     except TimeoutError as e:
         process.terminate()
         raise e
@@ -131,10 +133,7 @@ async def test_notification_triggering_with_in_message_config_e2e(
         )
     ]
     assert len(responses) == 1
-    assert isinstance(responses[0], tuple)
-    # ClientEvent is tuple[StreamResponse, Task | None]
-    # responses[0][0] is StreamResponse with task field
-    stream_response = responses[0][0]
+    stream_response = responses[0]
     assert stream_response.HasField('task')
     task = stream_response.task
 
@@ -189,9 +188,7 @@ async def test_notification_triggering_after_config_change_e2e(
         )
     ]
     assert len(responses) == 1
-    assert isinstance(responses[0], tuple)
-    # ClientEvent is tuple[StreamResponse, Task | None]
-    stream_response = responses[0][0]
+    stream_response = responses[0]
     assert stream_response.HasField('task')
     task = stream_response.task
     assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED

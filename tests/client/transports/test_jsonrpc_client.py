@@ -433,7 +433,7 @@ class TestClose:
 
 class TestStreamingErrors:
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_sse_error(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -457,7 +457,7 @@ class TestStreamingErrors:
                 pass
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_request_error(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -483,7 +483,7 @@ class TestStreamingErrors:
                 pass
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_timeout(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -560,7 +560,7 @@ class TestExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_server_error_propagates(
         self,
         mock_aconnect_sse: AsyncMock,

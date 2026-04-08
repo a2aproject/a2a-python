@@ -39,6 +39,7 @@ def test_app():
     handler = DefaultRequestHandler(
         agent_executor=DummyAgentExecutor(),
         task_store=InMemoryTaskStore(),
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
         push_config_store=InMemoryPushNotificationConfigStore(),
     )
@@ -61,19 +62,13 @@ def test_app():
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=handler,
-        rpc_url='/jsonrpc',
-        enable_v0_3_compat=True,
+        request_handler=handler, rpc_url='/jsonrpc', enable_v0_3_compat=True
     )
     app.routes.extend(agent_card_routes)
     app.routes.extend(jsonrpc_routes)
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
-        request_handler=handler,
-        path_prefix='/rest',
-        enable_v0_3_compat=True,
+        request_handler=handler, path_prefix='/rest', enable_v0_3_compat=True
     )
     app.routes.extend(rest_routes)
     return app
@@ -98,7 +93,7 @@ def client(test_app):
         ('INVALID', 'none'),
     ],
 )
-def test_version_header_integration(  # noqa: PLR0912, PLR0913, PLR0915
+def test_version_header_integration(
     client, transport, endpoint_ver, is_streaming, header_val, should_succeed
 ):
     headers = {}

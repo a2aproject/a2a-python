@@ -62,9 +62,12 @@ def backend_type(request) -> str:
 
 
 from a2a.contrib.tasks.vertex_task_store import VertexTaskStore
+from a2a.server.context import ServerCallContext
 from a2a.types.a2a_pb2 import (
     Artifact,
+    Message,
     Part,
+    Role,
     Task,
     TaskState,
     TaskStatus,
@@ -140,9 +143,11 @@ async def test_save_task(vertex_store: VertexTaskStore) -> None:
     task_to_save = Task()
     task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
     task_to_save.id = 'save-test-task-2'
-    await vertex_store.save(task_to_save)
+    await vertex_store.save(task_to_save, ServerCallContext())
 
-    retrieved_task = await vertex_store.get(task_to_save.id)
+    retrieved_task = await vertex_store.get(
+        task_to_save.id, ServerCallContext()
+    )
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
 
@@ -156,9 +161,11 @@ async def test_get_task(vertex_store: VertexTaskStore) -> None:
     task_to_save = Task()
     task_to_save.CopyFrom(MINIMAL_TASK_OBJ)
     task_to_save.id = task_id
-    await vertex_store.save(task_to_save)
+    await vertex_store.save(task_to_save, ServerCallContext())
 
-    retrieved_task = await vertex_store.get(task_to_save.id)
+    retrieved_task = await vertex_store.get(
+        task_to_save.id, ServerCallContext()
+    )
     assert retrieved_task is not None
     assert retrieved_task.id == task_to_save.id
     assert retrieved_task.context_id == task_to_save.context_id
@@ -170,7 +177,9 @@ async def test_get_nonexistent_task(
     vertex_store: VertexTaskStore,
 ) -> None:
     """Test retrieving a nonexistent task."""
-    retrieved_task = await vertex_store.get('nonexistent-task-id')
+    retrieved_task = await vertex_store.get(
+        'nonexistent-task-id', ServerCallContext()
+    )
     assert retrieved_task is None
 
 
@@ -196,8 +205,8 @@ async def test_save_and_get_detailed_task(
     test_task.metadata['key1'] = 'value1'
     test_task.metadata['key2'] = 123
 
-    await vertex_store.save(test_task)
-    retrieved_task = await vertex_store.get(test_task.id)
+    await vertex_store.save(test_task, ServerCallContext())
+    retrieved_task = await vertex_store.get(test_task.id, ServerCallContext())
 
     assert retrieved_task is not None
     assert retrieved_task.id == test_task.id
@@ -221,9 +230,11 @@ async def test_update_task_status_and_metadata(
         artifacts=[],
         history=[],
     )
-    await vertex_store.save(original_task)
+    await vertex_store.save(original_task, ServerCallContext())
 
-    retrieved_before_update = await vertex_store.get(task_id)
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_before_update is not None
     assert (
         retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
@@ -236,9 +247,11 @@ async def test_update_task_status_and_metadata(
     updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
     updated_task.metadata.update({'update_key': 'update_value'})
 
-    await vertex_store.save(updated_task)
+    await vertex_store.save(updated_task, ServerCallContext())
 
-    retrieved_after_update = await vertex_store.get(task_id)
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_after_update is not None
     assert retrieved_after_update.status.state == TaskState.TASK_STATE_COMPLETED
     assert retrieved_after_update.metadata == {'update_key': 'update_value'}
@@ -260,9 +273,11 @@ async def test_update_task_add_artifact(vertex_store: VertexTaskStore) -> None:
         ],
         history=[],
     )
-    await vertex_store.save(original_task)
+    await vertex_store.save(original_task, ServerCallContext())
 
-    retrieved_before_update = await vertex_store.get(task_id)
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_before_update is not None
     assert (
         retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
@@ -281,9 +296,11 @@ async def test_update_task_add_artifact(vertex_store: VertexTaskStore) -> None:
         )
     )
 
-    await vertex_store.save(updated_task)
+    await vertex_store.save(updated_task, ServerCallContext())
 
-    retrieved_after_update = await vertex_store.get(task_id)
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_after_update is not None
     assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
@@ -321,9 +338,11 @@ async def test_update_task_update_artifact(
         ],
         history=[],
     )
-    await vertex_store.save(original_task)
+    await vertex_store.save(original_task, ServerCallContext())
 
-    retrieved_before_update = await vertex_store.get(task_id)
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_before_update is not None
     assert (
         retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
@@ -337,9 +356,11 @@ async def test_update_task_update_artifact(
 
     updated_task.artifacts[0].parts[0].text = 'ahoy'
 
-    await vertex_store.save(updated_task)
+    await vertex_store.save(updated_task, ServerCallContext())
 
-    retrieved_after_update = await vertex_store.get(task_id)
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_after_update is not None
     assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
@@ -377,9 +398,11 @@ async def test_update_task_delete_artifact(
         ],
         history=[],
     )
-    await vertex_store.save(original_task)
+    await vertex_store.save(original_task, ServerCallContext())
 
-    retrieved_before_update = await vertex_store.get(task_id)
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_before_update is not None
     assert (
         retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
@@ -393,9 +416,11 @@ async def test_update_task_delete_artifact(
 
     del updated_task.artifacts[1]
 
-    await vertex_store.save(updated_task)
+    await vertex_store.save(updated_task, ServerCallContext())
 
-    retrieved_after_update = await vertex_store.get(task_id)
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
     assert retrieved_after_update is not None
     assert retrieved_after_update.status.state == TaskState.TASK_STATE_WORKING
 
@@ -426,8 +451,10 @@ async def test_metadata_field_mapping(
         context_id='session-meta-1',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    await vertex_store.save(task_no_metadata)
-    retrieved_no_metadata = await vertex_store.get('task-metadata-test-1')
+    await vertex_store.save(task_no_metadata, ServerCallContext())
+    retrieved_no_metadata = await vertex_store.get(
+        'task-metadata-test-1', ServerCallContext()
+    )
     assert retrieved_no_metadata is not None
     assert retrieved_no_metadata.metadata == {}
 
@@ -439,8 +466,10 @@ async def test_metadata_field_mapping(
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         metadata=simple_metadata,
     )
-    await vertex_store.save(task_simple_metadata)
-    retrieved_simple = await vertex_store.get('task-metadata-test-2')
+    await vertex_store.save(task_simple_metadata, ServerCallContext())
+    retrieved_simple = await vertex_store.get(
+        'task-metadata-test-2', ServerCallContext()
+    )
     assert retrieved_simple is not None
     assert retrieved_simple.metadata == simple_metadata
 
@@ -463,8 +492,10 @@ async def test_metadata_field_mapping(
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         metadata=complex_metadata,
     )
-    await vertex_store.save(task_complex_metadata)
-    retrieved_complex = await vertex_store.get('task-metadata-test-3')
+    await vertex_store.save(task_complex_metadata, ServerCallContext())
+    retrieved_complex = await vertex_store.get(
+        'task-metadata-test-3', ServerCallContext()
+    )
     assert retrieved_complex is not None
     assert retrieved_complex.metadata == complex_metadata
 
@@ -474,16 +505,18 @@ async def test_metadata_field_mapping(
         context_id='session-meta-4',
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
     )
-    await vertex_store.save(task_update_metadata)
+    await vertex_store.save(task_update_metadata, ServerCallContext())
 
     # Update metadata
     task_update_metadata.metadata.Clear()
     task_update_metadata.metadata.update(
         {'updated': True, 'timestamp': '2024-01-01'}
     )
-    await vertex_store.save(task_update_metadata)
+    await vertex_store.save(task_update_metadata, ServerCallContext())
 
-    retrieved_updated = await vertex_store.get('task-metadata-test-4')
+    retrieved_updated = await vertex_store.get(
+        'task-metadata-test-4', ServerCallContext()
+    )
     assert retrieved_updated is not None
     assert retrieved_updated.metadata == {
         'updated': True,
@@ -492,8 +525,78 @@ async def test_metadata_field_mapping(
 
     # Test 5: Update metadata from dict to None
     task_update_metadata.metadata.Clear()
-    await vertex_store.save(task_update_metadata)
+    await vertex_store.save(task_update_metadata, ServerCallContext())
 
-    retrieved_none = await vertex_store.get('task-metadata-test-4')
+    retrieved_none = await vertex_store.get(
+        'task-metadata-test-4', ServerCallContext()
+    )
     assert retrieved_none is not None
     assert retrieved_none.metadata == {}
+
+
+@pytest.mark.asyncio
+async def test_update_task_status_details(
+    vertex_store: VertexTaskStore,
+) -> None:
+    """Test updating an existing task by changing the status details (message) with part metadata."""
+    task_id = 'update-test-task-status-details'
+    original_task = Task(
+        id=task_id,
+        context_id='session-update',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+        metadata=None,
+        artifacts=[],
+        history=[],
+    )
+    await vertex_store.save(original_task, ServerCallContext())
+
+    retrieved_before_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
+    assert retrieved_before_update is not None
+    assert (
+        retrieved_before_update.status.state == TaskState.TASK_STATE_SUBMITTED
+    )
+
+    updated_task = Task()
+    updated_task.CopyFrom(original_task)
+    updated_task.status.state = TaskState.TASK_STATE_FAILED
+    updated_task.status.timestamp.FromJsonString('2023-01-02T11:00:00Z')
+    updated_task.status.message.CopyFrom(
+        Message(
+            message_id='msg-error-1',
+            role=Role.ROLE_AGENT,
+            parts=[
+                Part(
+                    text='Task failed due to an unknown error',
+                    metadata={'error_code': 'UNKNOWN', 'retryable': False},
+                )
+            ],
+        )
+    )
+
+    await vertex_store.save(updated_task, ServerCallContext())
+
+    retrieved_after_update = await vertex_store.get(
+        task_id, ServerCallContext()
+    )
+    assert retrieved_after_update is not None
+    assert retrieved_after_update.status.state == TaskState.TASK_STATE_FAILED
+    assert retrieved_after_update.status.message is not None
+    assert retrieved_after_update.status.message.message_id == 'msg-error-1'
+    assert retrieved_after_update.status.message.role == Role.ROLE_AGENT
+    assert len(retrieved_after_update.status.message.parts) == 1
+
+    part = retrieved_after_update.status.message.parts[0]
+    assert part.text == 'Task failed due to an unknown error'
+    assert part.metadata == {'error_code': 'UNKNOWN', 'retryable': False}
+
+    # Also test clearing the message
+    cleared_task = Task()
+    cleared_task.CopyFrom(updated_task)
+    cleared_task.status.ClearField('message')
+
+    await vertex_store.save(cleared_task, ServerCallContext())
+    retrieved_cleared = await vertex_store.get(task_id, ServerCallContext())
+    assert retrieved_cleared is not None
+    assert not retrieved_cleared.status.HasField('message')

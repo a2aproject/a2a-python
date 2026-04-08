@@ -24,7 +24,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
 )
 from a2a.utils import constants
-from a2a.utils.errors import UnsupportedOperationError, VersionNotSupportedError
+from a2a.utils.errors import VersionNotSupportedError
 from a2a.utils.telemetry import trace_function
 
 
@@ -72,7 +72,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
     """
     new_artifact_data: Artifact = event.artifact
     artifact_id: str = new_artifact_data.artifact_id
-    append_parts: bool = event.append or False
+    append_parts: bool = event.append
 
     existing_artifact: Artifact | None = None
     existing_artifact_list_index: int | None = None
@@ -110,6 +110,9 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             task.id,
         )
         existing_artifact.parts.extend(new_artifact_data.parts)
+        existing_artifact.metadata.update(
+            dict(new_artifact_data.metadata.items())
+        )
     else:
         # We received a chunk to append, but we don't have an existing artifact.
         # we will ignore this chunk
@@ -132,104 +135,6 @@ def build_text_artifact(text: str, artifact_id: str) -> Artifact:
     """
     part = Part(text=text)
     return Artifact(parts=[part], artifact_id=artifact_id)
-
-
-def validate(
-    expression: Callable[[Any], bool], error_message: str | None = None
-) -> Callable:
-    """Decorator that validates if a given expression evaluates to True.
-
-    Typically used on class methods to check capabilities or configuration
-    before executing the method's logic. If the expression is False,
-    an `UnsupportedOperationError` is raised.
-
-    Args:
-        expression: A callable that takes the instance (`self`) as its argument
-                    and returns a boolean.
-        error_message: An optional custom error message for the `UnsupportedOperationError`.
-                       If None, the string representation of the expression will be used.
-
-    Examples:
-        Demonstrating with an async method:
-        >>> import asyncio
-        >>> from a2a.utils.errors import UnsupportedOperationError
-        >>>
-        >>> class MyAgent:
-        ...     def __init__(self, streaming_enabled: bool):
-        ...         self.streaming_enabled = streaming_enabled
-        ...
-        ...     @validate(
-        ...         lambda self: self.streaming_enabled,
-        ...         'Streaming is not enabled for this agent',
-        ...     )
-        ...     async def stream_response(self, message: str):
-        ...         return f'Streaming: {message}'
-        >>>
-        >>> async def run_async_test():
-        ...     # Successful call
-        ...     agent_ok = MyAgent(streaming_enabled=True)
-        ...     result = await agent_ok.stream_response('hello')
-        ...     print(result)
-        ...
-        ...     # Call that fails validation
-        ...     agent_fail = MyAgent(streaming_enabled=False)
-        ...     try:
-        ...         await agent_fail.stream_response('world')
-        ...     except UnsupportedOperationError as e:
-        ...         print(e.message)
-        >>>
-        >>> asyncio.run(run_async_test())
-        Streaming: hello
-        Streaming is not enabled for this agent
-
-        Demonstrating with a sync method:
-        >>> class SecureAgent:
-        ...     def __init__(self):
-        ...         self.auth_enabled = False
-        ...
-        ...     @validate(
-        ...         lambda self: self.auth_enabled,
-        ...         'Authentication must be enabled for this operation',
-        ...     )
-        ...     def secure_operation(self, data: str):
-        ...         return f'Processing secure data: {data}'
-        >>>
-        >>> # Error case example
-        >>> agent = SecureAgent()
-        >>> try:
-        ...     agent.secure_operation('secret')
-        ... except UnsupportedOperationError as e:
-        ...     print(e.message)
-        Authentication must be enabled for this operation
-
-    Note:
-        This decorator works with both sync and async methods automatically.
-    """
-
-    def decorator(function: Callable) -> Callable:
-        if inspect.iscoroutinefunction(function):
-
-            @functools.wraps(function)
-            async def async_wrapper(self: Any, *args, **kwargs) -> Any:
-                if not expression(self):
-                    final_message = error_message or str(expression)
-                    logger.error('Unsupported Operation: %s', final_message)
-                    raise UnsupportedOperationError(message=final_message)
-                return await function(self, *args, **kwargs)
-
-            return async_wrapper
-
-        @functools.wraps(function)
-        def sync_wrapper(self: Any, *args, **kwargs) -> Any:
-            if not expression(self):
-                final_message = error_message or str(expression)
-                logger.error('Unsupported Operation: %s', final_message)
-                raise UnsupportedOperationError(message=final_message)
-            return function(self, *args, **kwargs)
-
-        return sync_wrapper
-
-    return decorator
 
 
 def are_modalities_compatible(
@@ -372,7 +277,7 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
 
             @functools.wraps(func)
             def async_gen_wrapper(
-                self: Any, *args: Any, **kwargs: Any
+                *args: Any, **kwargs: Any
             ) -> AsyncIterator[Any]:
                 actual_version = _get_actual_version(args, kwargs)
                 if not _is_version_compatible(actual_version):
@@ -385,12 +290,12 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
                         message=f"A2A version '{actual_version}' is not supported by this handler. "
                         f"Expected version '{expected_version}'."
                     )
-                return func(self, *args, **kwargs)
+                return func(*args, **kwargs)
 
             return cast('F', async_gen_wrapper)
 
         @functools.wraps(func)
-        async def async_wrapper(self: Any, *args: Any, **kwargs: Any) -> Any:
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
             actual_version = _get_actual_version(args, kwargs)
             if not _is_version_compatible(actual_version):
                 logger.warning(
@@ -402,7 +307,7 @@ def validate_version(expected_version: str) -> Callable[[F], F]:
                     message=f"A2A version '{actual_version}' is not supported by this handler. "
                     f"Expected version '{expected_version}'."
                 )
-            return await func(self, *args, **kwargs)
+            return await func(*args, **kwargs)
 
         return cast('F', async_wrapper)
 

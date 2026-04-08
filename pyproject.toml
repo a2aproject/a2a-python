@@ -34,7 +34,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-http-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
+http-server = ["sse-starlette", "starlette"]
 encryption = ["cryptography>=43.0.0"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio-status>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
@@ -107,6 +107,7 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
+  "fastapi>=0.115.2",
   "mypy>=1.15.0",
   "PyJWT>=2.0.0",
   "pytest>=8.3.5",
@@ -199,6 +200,8 @@ indent-width = 4 # Google Style Guide §3.4: 4 spaces
 target-version = "py310" # Minimum Python version
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 ignore = [
     "COM812", # Trailing comma missing.
     "FBT001", # Boolean positional arg in function definition

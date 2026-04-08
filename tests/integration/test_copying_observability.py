@@ -94,15 +94,15 @@ def setup_client(agent_card: AgentCard, use_copying: bool) -> ClientSetup:
     handler = DefaultRequestHandler(
         agent_executor=MockMutatingAgentExecutor(),
         task_store=task_store,
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
+        extended_agent_card=agent_card,
     )
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=handler,
-        extended_agent_card=agent_card,
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
@@ -152,9 +152,8 @@ async def test_mutation_observability(agent_card: AgentCard, use_copying: bool):
         )
     ]
 
-    task = events[-1][1]
-    assert task is not None
-    task_id = task.id
+    event = events[-1]
+    task_id = event.status_update.task_id
 
     # 2. Second message to mutate it
     message_to_send_2 = Message(

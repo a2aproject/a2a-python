@@ -72,7 +72,6 @@ def base_client(
         card=sample_agent_card,
         config=config,
         transport=mock_transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -151,11 +150,8 @@ class TestClientTransport:
         )
         assert not mock_transport.send_message.called
         assert len(events) == 1
-        # events[0] is (StreamResponse, Task) tuple
-        stream_response, tracked_task = events[0]
-        assert stream_response.task.id == 'task-123'
-        assert tracked_task is not None
-        assert tracked_task.id == 'task-123'
+        response = events[0]
+        assert response.task.id == 'task-123'
 
     @pytest.mark.asyncio
     async def test_send_message_non_streaming(
@@ -183,10 +179,8 @@ class TestClientTransport:
         assert mock_transport.send_message.call_args[0][0].metadata == meta
         assert not mock_transport.send_message_streaming.called
         assert len(events) == 1
-        stream_response, tracked_task = events[0]
-        assert stream_response.task.id == 'task-456'
-        assert tracked_task is not None
-        assert tracked_task.id == 'task-456'
+        response = events[0]
+        assert response.task.id == 'task-456'
 
     @pytest.mark.asyncio
     async def test_send_message_non_streaming_agent_capability_false(
@@ -211,10 +205,43 @@ class TestClientTransport:
         mock_transport.send_message.assert_called_once()
         assert not mock_transport.send_message_streaming.called
         assert len(events) == 1
-        stream_response, tracked_task = events[0]
-        assert stream_response is not None
-        assert tracked_task is not None
-        assert tracked_task.id == 'task-789'
+        response = events[0]
+        assert response.task.id == 'task-789'
+
+    @pytest.mark.asyncio
+    async def test_send_message_does_not_mutate_request(
+        self,
+        base_client: BaseClient,
+        mock_transport: MagicMock,
+        sample_message: Message,
+    ):
+        base_client._config.streaming = False
+        base_client._config.polling = True
+        base_client._config.accepted_output_modes = ['application/json']
+        base_client._config.push_notification_configs = [
+            TaskPushNotificationConfig(
+                task_id='task-1',
+            )
+        ]
+
+        task = Task(
+            id='task-no-mutate',
+            context_id='ctx-no-mutate',
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        )
+        response = SendMessageResponse()
+        response.task.CopyFrom(task)
+        mock_transport.send_message.return_value = response
+
+        request = SendMessageRequest(message=sample_message)
+
+        original = SendMessageRequest()
+        original.CopyFrom(request)
+
+        events = [event async for event in base_client.send_message(request)]
+        assert len(events) == 1
+
+        assert request == original
 
     @pytest.mark.asyncio
     async def test_send_message_callsite_config_overrides_non_streaming(
@@ -244,8 +271,8 @@ class TestClientTransport:
         mock_transport.send_message.assert_called_once()
         assert not mock_transport.send_message_streaming.called
         assert len(events) == 1
-        stream_response, _ = events[0]
-        assert stream_response.task.id == 'task-cfg-ns-1'
+        response = events[0]
+        assert response.task.id == 'task-cfg-ns-1'
 
         params = mock_transport.send_message.call_args[0][0]
         assert params.configuration.history_length == 2
@@ -286,8 +313,8 @@ class TestClientTransport:
         mock_transport.send_message_streaming.assert_called_once()
         assert not mock_transport.send_message.called
         assert len(events) == 1
-        stream_response, _ = events[0]
-        assert stream_response.task.id == 'task-cfg-s-1'
+        response = events[0]
+        assert response.task.id == 'task-cfg-s-1'
 
         params = mock_transport.send_message_streaming.call_args[0][0]
         assert params.configuration.history_length == 0

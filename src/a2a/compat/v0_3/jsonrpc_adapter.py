@@ -1,6 +1,6 @@
 import logging
 
-from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterable, AsyncIterator
 from typing import TYPE_CHECKING, Any
 
 from sse_starlette.sse import EventSourceResponse
@@ -11,8 +11,6 @@ if TYPE_CHECKING:
     from starlette.requests import Request
 
     from a2a.server.request_handlers.request_handler import RequestHandler
-    from a2a.server.routes import CallContextBuilder
-    from a2a.types.a2a_pb2 import AgentCard
 
     _package_starlette_installed = True
 else:
@@ -25,7 +23,6 @@ else:
 
         _package_starlette_installed = False
 
-from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
@@ -38,9 +35,12 @@ from a2a.server.jsonrpc_models import (
 from a2a.server.jsonrpc_models import (
     JSONRPCError as CoreJSONRPCError,
 )
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.utils import constants
-from a2a.utils.errors import ExtendedAgentCardNotConfiguredError
-from a2a.utils.helpers import maybe_await, validate_version
+from a2a.utils.helpers import validate_version
 
 
 logger = logging.getLogger(__name__)
@@ -59,26 +59,20 @@ class JSONRPC03Adapter:
         'tasks/pushNotificationConfig/list': types_v03.ListTaskPushNotificationConfigRequest,
         'tasks/pushNotificationConfig/delete': types_v03.DeleteTaskPushNotificationConfigRequest,
         'tasks/resubscribe': types_v03.TaskResubscriptionRequest,
-        'agent/authenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
+        'agent/getAuthenticatedExtendedCard': types_v03.GetAuthenticatedExtendedCardRequest,
     }
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        agent_card: 'AgentCard',
         http_handler: 'RequestHandler',
-        extended_agent_card: 'AgentCard | None' = None,
-        context_builder: 'CallContextBuilder | None' = None,
-        card_modifier: 'Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None' = None,
-        extended_card_modifier: 'Callable[[AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard] | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
     ):
-        self.agent_card = agent_card
-        self.extended_agent_card = extended_agent_card
-        self.card_modifier = card_modifier
-        self.extended_card_modifier = extended_card_modifier
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
-        self._context_builder = context_builder
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     def supports_method(self, method: str) -> bool:
         """Returns True if the v0.3 adapter supports the given method name."""
@@ -126,11 +120,7 @@ class JSONRPC03Adapter:
                     CoreInvalidRequestError(data=str(e)),
                 )
 
-            call_context = (
-                self._context_builder.build(request)
-                if self._context_builder
-                else ServerCallContext()
-            )
+            call_context = self._context_builder.build(request)
             call_context.tenant = (
                 getattr(specific_request.params, 'tenant', '')
                 if hasattr(specific_request, 'params')
@@ -225,8 +215,8 @@ class JSONRPC03Adapter:
                     id=request_id, result=None
                 )
             )
-        elif method == 'agent/authenticatedExtendedCard':
-            res_card = await self.get_authenticated_extended_card(
+        elif method == 'agent/getAuthenticatedExtendedCard':
+            res_card = await self.handler.on_get_extended_agent_card(
                 request_obj, context
             )
             result = types_v03.GetAuthenticatedExtendedCardResponse(
@@ -242,31 +232,6 @@ class JSONRPC03Adapter:
                 mode='json', by_alias=True, exclude_none=True
             )
         )
-
-    async def get_authenticated_extended_card(
-        self,
-        request: types_v03.GetAuthenticatedExtendedCardRequest,
-        context: ServerCallContext,
-    ) -> types_v03.AgentCard:
-        """Handles the 'agent/authenticatedExtendedCard' JSON-RPC method."""
-        if not self.agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='Authenticated card not supported'
-            )
-
-        base_card = self.extended_agent_card
-        if base_card is None:
-            base_card = self.agent_card
-
-        card_to_serve = base_card
-        if self.extended_card_modifier and context:
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(base_card, context)
-            )
-        elif self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(base_card))
-
-        return conversions.to_compat_agent_card(card_to_serve)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def _process_streaming_request(

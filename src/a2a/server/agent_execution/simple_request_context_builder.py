@@ -35,11 +35,11 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
 
     async def build(
         self,
+        context: ServerCallContext,
         params: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
-        context: ServerCallContext | None = None,
     ) -> RequestContext:
         """Builds the request context for an agent execution.
 
@@ -48,11 +48,11 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
         referenced in `params.message.reference_task_ids` from the `task_store`.
 
         Args:
+            context: The server call context, containing metadata about the call.
             params: The parameters of the incoming message send request.
             task_id: The ID of the task being executed.
             context_id: The ID of the current execution context.
             task: The primary task object associated with the request.
-            context: The server call context, containing metadata about the call.
 
         Returns:
             An instance of RequestContext populated with the provided information
@@ -68,19 +68,19 @@ class SimpleRequestContextBuilder(RequestContextBuilder):
         ):
             tasks = await asyncio.gather(
                 *[
-                    self._task_store.get(task_id)
+                    self._task_store.get(task_id, context)
                     for task_id in params.message.reference_task_ids
                 ]
             )
             related_tasks = [x for x in tasks if x is not None]
 
         return RequestContext(
+            call_context=context,
             request=params,
             task_id=task_id,
             context_id=context_id,
             task=task,
             related_tasks=related_tasks,
-            call_context=context,
             task_id_generator=self._task_id_generator,
             context_id_generator=self._context_id_generator,
         )

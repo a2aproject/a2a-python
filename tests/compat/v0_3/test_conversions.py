@@ -73,6 +73,8 @@ from a2a.compat.v0_3.conversions import (
     to_core_task_push_notification_config,
     to_core_task_status,
     to_core_task_status_update_event,
+)
+from a2a.compat.v0_3.model_conversions import (
     core_to_compat_task_model,
     compat_task_model_to_core,
     core_to_compat_push_notification_config_model,

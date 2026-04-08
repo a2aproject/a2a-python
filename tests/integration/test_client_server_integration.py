@@ -1,4 +1,5 @@
 import asyncio
+
 from collections.abc import AsyncGenerator
 from typing import Any, NamedTuple
 from unittest.mock import ANY, AsyncMock, patch
@@ -7,9 +8,11 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
+
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.applications import Starlette
 
 from a2a.client import Client, ClientConfig
 from a2a.client.base_client import BaseClient
@@ -21,17 +24,19 @@ from a2a.client.service_parameters import (
     with_a2a_extensions,
 )
 from a2a.client.transports import JsonRpcTransport, RestTransport
-from starlette.applications import Starlette
 
 # Compat v0.3 imports for dedicated tests
-from a2a.compat.v0_3 import a2a_v0_3_pb2, a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
     create_rest_routes,
 )
-from a2a.server.request_handlers import GrpcHandler, RequestHandler
+from a2a.server.request_handlers.default_request_handler import (
+    LegacyRequestHandler,
+)
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -66,11 +71,7 @@ from a2a.utils.errors import (
     ContentTypeNotSupportedError,
     ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
-    InternalError,
     InvalidAgentResponseError,
-    InvalidParamsError,
-    InvalidRequestError,
-    MethodNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -81,6 +82,7 @@ from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
 )
+
 
 # --- Test Constants ---
 
@@ -142,11 +144,12 @@ def create_key_provider(verification_key: Any):
 
 
 @pytest.fixture
-def mock_request_handler() -> AsyncMock:
+def mock_request_handler(agent_card) -> AsyncMock:
     """Provides a mock RequestHandler for the server-side handlers."""
     handler = AsyncMock(spec=RequestHandler)
 
     # Configure on_message_send for non-streaming calls
+    handler._agent_card = agent_card
     handler.on_message_send.return_value = TASK_FROM_BLOCKING
 
     # Configure on_message_send_stream for streaming calls
@@ -167,6 +170,14 @@ def mock_request_handler() -> AsyncMock:
         ListTaskPushNotificationConfigsResponse(configs=[CALLBACK_CONFIG])
     )
     handler.on_delete_task_push_notification_config.return_value = None
+
+    # Use async def to ensure it returns an awaitable
+    async def get_extended_agent_card_mock(*args, **kwargs):
+        return agent_card
+
+    handler.on_get_extended_agent_card.side_effect = (
+        get_extended_agent_card_mock  # type: ignore[union-attr]
+    )
 
     async def resubscribe_side_effect(*args, **kwargs):
         yield RESUBSCRIBE_EVENT
@@ -220,7 +231,7 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
     """A base fixture to patch the sse-starlette event loop issue."""
     from sse_starlette import sse
 
-    sse.AppStatus.should_exit_event = asyncio.Event()  # type: ignore[attr-defined]
+    sse.AppStatus.should_exit_event = asyncio.Event()
     yield mock_request_handler, agent_card
 
 
@@ -232,10 +243,7 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=mock_request_handler,
-        extended_agent_card=agent_card,
-        rpc_url='/',
+        request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
@@ -253,9 +261,7 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
 def rest_setup(http_base_setup) -> TransportSetup:
     """Sets up the RestTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    rest_routes = create_rest_routes(
-        agent_card, mock_request_handler, extended_agent_card=agent_card
-    )
+    rest_routes = create_rest_routes(mock_request_handler)
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/'
     )
@@ -344,10 +350,13 @@ async def grpc_server_and_handler(
     server = grpc.aio.server()
     port = server.add_insecure_port('[::]:0')
     server_address = f'localhost:{port}'
-    servicer = GrpcHandler(agent_card, mock_request_handler)
+    servicer = GrpcHandler(request_handler=mock_request_handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
-    yield server_address, mock_request_handler
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
 
 
 @pytest_asyncio.fixture
@@ -358,7 +367,9 @@ async def grpc_03_server_and_handler(
     server = grpc.aio.server()
     port = server.add_insecure_port('[::]:0')
     server_address = f'localhost:{port}'
-    servicer = CompatGrpcHandler(agent_card, mock_request_handler)
+    servicer = CompatGrpcHandler(
+        request_handler=mock_request_handler,
+    )
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
     try:
@@ -384,7 +395,6 @@ def grpc_03_setup(
         card=agent_card,
         config=ClientConfig(),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
     return TransportSetup(client=client, handler=handler)
@@ -410,7 +420,8 @@ async def test_client_sends_message_streaming(transport_setups) -> None:
     events = [event async for event in stream]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_STREAM.id
 
@@ -439,7 +450,8 @@ async def test_client_sends_message_blocking(transport_setups) -> None:
     events = [event async for event in client.send_message(request=params)]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_BLOCKING.id
     handler.on_message_send.assert_awaited_once_with(params, ANY)
@@ -588,8 +600,7 @@ async def test_client_subscribe(transport_setups) -> None:
     stream = client.subscribe(request=params)
     first_event = await stream.__anext__()
 
-    _, task = first_event
-    assert task.id == RESUBSCRIBE_EVENT.task_id
+    assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
     handler.on_subscribe_to_task.assert_called_once()
 
     await client.close()
@@ -624,7 +635,6 @@ async def test_json_transport_base_client_send_message_with_extensions(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -703,10 +713,7 @@ async def test_json_transport_get_signed_base_card(
         agent_card=agent_card, card_url='/', card_modifier=signer
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=mock_request_handler,
-        extended_agent_card=agent_card,
-        rpc_url='/',
+        request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(
@@ -763,7 +770,7 @@ async def test_client_get_signed_extended_card(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -772,15 +779,18 @@ async def test_client_get_signed_extended_card(
         },
     )
 
+    async def get_extended_agent_card_mock_2(*args, **kwargs) -> AgentCard:
+        return signer(extended_agent_card)
+
+    mock_request_handler.on_get_extended_agent_card.side_effect = (
+        get_extended_agent_card_mock_2  # type: ignore[union-attr]
+    )
+
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        extended_card_modifier=lambda card, ctx: signer(card),
-        rpc_url='/',
+        request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(
@@ -797,7 +807,6 @@ async def test_client_get_signed_extended_card(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -837,7 +846,7 @@ async def test_client_get_signed_base_and_extended_cards(
     private_key = ec.generate_private_key(ec.SECP256R1())
     public_key = private_key.public_key()
     signer = create_agent_card_signer(
-        signing_key=private_key,  # type: ignore[arg-type]
+        signing_key=private_key,
         protected_header={
             'alg': 'ES256',
             'kid': 'testkey',
@@ -845,16 +854,20 @@ async def test_client_get_signed_base_and_extended_cards(
             'typ': 'JOSE',
         },
     )
+    signer(extended_agent_card)
 
+    # Use async def to ensure it returns an awaitable
+    async def get_extended_agent_card_mock_3(*args, **kwargs):
+        return extended_agent_card
+
+    mock_request_handler.on_get_extended_agent_card.side_effect = (
+        get_extended_agent_card_mock_3  # type: ignore[union-attr]
+    )
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/', card_modifier=signer
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        extended_card_modifier=lambda card, ctx: signer(card),
-        rpc_url='/',
+        request_handler=mock_request_handler, rpc_url='/'
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(
@@ -888,7 +901,6 @@ async def test_client_get_signed_base_and_extended_cards(
         card=base_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -1104,7 +1116,7 @@ async def test_validate_version_unsupported(http_transport_setups) -> None:
 
     params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
 
-    with pytest.raises(VersionNotSupportedError) as exc_info:
+    with pytest.raises(VersionNotSupportedError):
         await client.get_task(request=params, context=context)
 
     await client.close()
@@ -1117,11 +1129,21 @@ async def test_validate_decorator_push_notifications_disabled(
     """Integration test for @validate decorator with push notifications disabled."""
     client = error_handling_setups.client
 
-    agent_card.capabilities.push_notifications = False
+    real_handler = LegacyRequestHandler(
+        agent_executor=AsyncMock(),
+        task_store=AsyncMock(),
+        agent_card=agent_card,
+    )
 
-    params = TaskPushNotificationConfig(task_id='123')
+    error_handling_setups.handler.on_create_task_push_notification_config.side_effect = real_handler.on_create_task_push_notification_config
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    params = TaskPushNotificationConfig(
+        task_id='123',
+        id='pnc-123',
+        url='http://example.com',
+    )
+
+    with pytest.raises(PushNotificationNotSupportedError):
         await client.create_task_push_notification_config(request=params)
 
     await client.close()
@@ -1137,13 +1159,30 @@ async def test_validate_streaming_disabled(
 
     agent_card.capabilities.streaming = False
 
+    real_handler = LegacyRequestHandler(
+        agent_executor=AsyncMock(),
+        task_store=AsyncMock(),
+        agent_card=agent_card,
+    )
+
+    error_handling_setups.handler.on_message_send_stream.side_effect = (
+        real_handler.on_message_send_stream
+    )
+    error_handling_setups.handler.on_subscribe_to_task.side_effect = (
+        real_handler.on_subscribe_to_task
+    )
+
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, parts=[Part(text='hi')])
+        message=Message(
+            role=Role.ROLE_USER,
+            parts=[Part(text='hi')],
+            message_id='msg-123',
+        )
     )
 
     stream = transport.send_message_streaming(request=params)
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    with pytest.raises(UnsupportedOperationError):
         async for _ in stream:
             pass
 

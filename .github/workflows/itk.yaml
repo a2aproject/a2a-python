@@ -1,0 +1,31 @@
+name: ITK
+
+on:
+  push:
+    branches: [main, 1.0-dev]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'itk/**'
+      - 'pyproject.toml'
+
+permissions:
+  contents: read
+
+jobs:
+  itk:
+    name: ITK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run ITK Tests
+        run: bash run_itk.sh
+        working-directory: itk
+        env:
+          A2A_SAMPLES_REVISION: itk-v.0.11-alpha

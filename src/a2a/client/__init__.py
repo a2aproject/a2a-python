@@ -1,7 +1,5 @@
 """Client-side components for interacting with an A2A agent."""
 
-import logging
-
 from a2a.client.auth import (
     AuthInterceptor,
     CredentialService,
@@ -13,8 +11,6 @@ from a2a.client.client import (
     Client,
     ClientCallContext,
     ClientConfig,
-    ClientEvent,
-    Consumer,
 )
 from a2a.client.client_factory import ClientFactory, minimal_agent_card
 from a2a.client.errors import (
@@ -24,9 +20,6 @@ from a2a.client.errors import (
 )
 from a2a.client.helpers import create_text_message_object
 from a2a.client.interceptors import ClientCallInterceptor
-
-
-logger = logging.getLogger(__name__)
 
 
 __all__ = [
@@ -40,9 +33,7 @@ __all__ = [
     'ClientCallContext',
     'ClientCallInterceptor',
     'ClientConfig',
-    'ClientEvent',
     'ClientFactory',
-    'Consumer',
     'CredentialService',
     'InMemoryContextCredentialStore',
     'create_text_message_object',
