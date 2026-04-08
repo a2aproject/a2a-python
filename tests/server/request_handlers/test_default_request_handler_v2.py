@@ -446,7 +446,7 @@ async def test_get_task_push_notification_config_info_not_found():
         task_id='non_existent_task', id='task_push_notification_config'
     )
     context = create_server_call_context()
-    with pytest.raises(InternalError):
+    with pytest.raises(TaskNotFoundError):
         await request_handler.on_get_task_push_notification_config(
             params, context
         )

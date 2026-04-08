@@ -46,7 +46,6 @@ from a2a.utils.errors import (
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
-    UnsupportedOperationError,
 )
 from a2a.utils.helpers import maybe_await
 from a2a.utils.task import (
@@ -383,7 +382,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             if config.id == config_id:
                 return config
 
-        raise InternalError(message='Push notification config not found')
+        raise TaskNotFoundError
 
     @validate_request_params
     @validate(
@@ -418,7 +417,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> ListTaskPushNotificationConfigsResponse:
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -445,7 +444,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> None:
         if not self._push_config_store:
-            raise UnsupportedOperationError
+            raise PushNotificationNotSupportedError
 
         task_id = params.task_id
         config_id = params.id
