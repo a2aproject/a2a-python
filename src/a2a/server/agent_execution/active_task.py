@@ -32,6 +32,8 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
     InvalidParamsError,
@@ -252,80 +254,75 @@ class ActiveTask:
         """
         logger.debug('Producer[%s]: Started', self._task_id)
         try:
-            try:
+            active = True
+            while active:
+                (
+                    request_context,
+                    request_id,
+                ) = await self._request_queue.get()
+                await self._request_lock.acquire()
+                # TODO: Should we create task manager every time?
+                self._task_manager._call_context = request_context.call_context
+                request_context.current_task = (
+                    await self._task_manager.get_task()
+                )
+
+                message = request_context.message
+                if message:
+                    request_context.current_task = (
+                        self._task_manager.update_with_message(
+                            message,
+                            cast('Task', request_context.current_task),
+                        )
+                    )
+                    await self._task_manager.save_task_event(
+                        request_context.current_task
+                    )
+                self._task_created.set()
+                logger.debug(
+                    'Producer[%s]: Executing agent task %s',
+                    self._task_id,
+                    request_context.current_task,
+                )
+
                 try:
-                    while True:
-                        (
-                            request_context,
-                            request_id,
-                        ) = await self._request_queue.get()
-                        await self._request_lock.acquire()
-                        # TODO: Should we create task manager every time?
-                        self._task_manager._call_context = (
-                            request_context.call_context
-                        )
-                        request_context.current_task = (
-                            await self._task_manager.get_task()
-                        )
-
-                        message = request_context.message
-                        if message:
-                            request_context.current_task = (
-                                self._task_manager.update_with_message(
-                                    message,
-                                    cast('Task', request_context.current_task),
-                                )
-                            )
-                            await self._task_manager.save_task_event(
-                                request_context.current_task
-                            )
-                        self._task_created.set()
-                        logger.debug(
-                            'Producer[%s]: Executing agent task %s',
-                            self._task_id,
-                            request_context.current_task,
-                        )
-
-                        try:
-                            await self._agent_executor.execute(
-                                request_context, self._event_queue_agent
-                            )
-                            logger.debug(
-                                'Producer[%s]: Execution finished successfully',
-                                self._task_id,
-                            )
-                        except Exception as e:
-                            async with self._lock:
-                                if self._exception is None:
-                                    self._exception = e
-                            raise
-                        finally:
-                            logger.debug(
-                                'Producer[%s]: Enqueuing request completed event',
-                                self._task_id,
-                            )
-                            # TODO: Hide from external consumers
-                            await self._event_queue_agent.enqueue_event(
-                                cast('Event', _RequestCompleted(request_id))
-                            )
-                            self._request_queue.task_done()
+                    await self._agent_executor.execute(
+                        request_context, self._event_queue_agent
+                    )
+                    logger.debug(
+                        'Producer[%s]: Execution finished successfully',
+                        self._task_id,
+                    )
                 except QueueShutDown:
                     logger.debug(
                         'Producer[%s]: Request queue shut down', self._task_id
                     )
-            except asyncio.CancelledError:
-                logger.debug('Producer[%s]: Cancelled', self._task_id)
-                raise
-            except Exception as e:
-                logger.exception('Producer[%s]: Failed', self._task_id)
-                async with self._lock:
-                    if self._exception is None:
-                        self._exception = e
-            finally:
-                self._request_queue.shutdown(immediate=True)
-                await self._event_queue_agent.close(immediate=False)
-                await self._event_queue_subscribers.close(immediate=False)
+                    raise
+                except asyncio.CancelledError:
+                    logger.debug('Producer[%s]: Cancelled', self._task_id)
+                    raise
+                except Exception as e:
+                    logger.exception(
+                        'Producer[%s]: Execution failed',
+                        self._task_id,
+                    )
+                    async with self._lock:
+                        await self._mark_task_as_failed(e)
+                    active = False
+                finally:
+                    logger.debug(
+                        'Producer[%s]: Enqueuing request completed event',
+                        self._task_id,
+                    )
+                    # TODO: Hide from external consumers
+                    await self._event_queue_agent.enqueue_event(
+                        cast('Event', _RequestCompleted(request_id))
+                    )
+                    self._request_queue.task_done()
         finally:
+            self._request_queue.shutdown(immediate=True)
+            await self._event_queue_agent.close(immediate=False)
+            await self._event_queue_subscribers.close(immediate=False)
             logger.debug('Producer[%s]: Completed', self._task_id)
 
     async def _run_consumer(self) -> None:  # noqa: PLR0915, PLR0912
@@ -443,8 +440,7 @@ class ActiveTask:
             except Exception as e:
                 logger.exception('Consumer[%s]: Failed', self._task_id)
                 async with self._lock:
-                    if self._exception is None:
-                        self._exception = e
+                    await self._mark_task_as_failed(e)
             finally:
                 # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
@@ -581,9 +577,7 @@ class ActiveTask:
                     logger.exception(
                         'Cancel[%s]: Agent cancel failed', self._task_id
                     )
-                    if not self._exception:
-                        self._exception = e
-
+                    await self._mark_task_as_failed(e)
                     raise
             else:
                 logger.debug(
@@ -618,6 +612,22 @@ class ActiveTask:
             ):
                 logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
                 self._on_cleanup(self)
+
+    async def _mark_task_as_failed(self, exception: Exception) -> None:
+        if self._exception is None:
+            self._exception = exception
+        if self._task_created.is_set():
+            task = await self._task_manager.get_task()
+            if task is not None:
+                await self._event_queue_agent.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=task.id,
+                        context_id=task.context_id,
+                        status=TaskStatus(
+                            state=TaskState.TASK_STATE_FAILED,
+                        ),
+                    )
+                )
 
     async def get_task(self) -> Task:
         """Get task from db."""
