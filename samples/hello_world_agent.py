@@ -221,7 +221,7 @@ async def serve(
 
     compat_grpc_server = grpc.aio.server()
     compat_grpc_server.add_insecure_port(f'{host}:{compat_grpc_port}')
-    compat_servicer = CompatGrpcHandler(agent_card, request_handler)
+    compat_servicer = CompatGrpcHandler(request_handler)
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(
         compat_servicer, compat_grpc_server
     )

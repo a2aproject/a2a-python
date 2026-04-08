@@ -229,7 +229,7 @@ def serve(task_store: TaskStore) -> None:
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'[::]:{grpc_port}')
     servicer = GrpcHandler(request_handler)
-    compat_servicer = CompatGrpcHandler(agent_card, request_handler)
+    compat_servicer = CompatGrpcHandler(request_handler)
     a2a_grpc.add_A2AServiceServicer_to_server(servicer, grpc_server)
     a2a_v0_3_grpc.add_A2AServiceServicer_to_server(compat_servicer, grpc_server)
 

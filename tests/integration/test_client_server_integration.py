@@ -369,7 +369,6 @@ async def grpc_03_server_and_handler(
     server_address = f'localhost:{port}'
     servicer = CompatGrpcHandler(
         request_handler=mock_request_handler,
-        agent_card=agent_card,
     )
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()

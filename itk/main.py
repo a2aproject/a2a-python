@@ -341,7 +341,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
 
     server = grpc.aio.server()
 
-    compat_servicer = CompatGrpcHandler(agent_card, handler)
+    compat_servicer = CompatGrpcHandler(handler)
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(compat_servicer, server)
     servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
