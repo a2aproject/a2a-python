@@ -33,6 +33,8 @@ from a2a.types import (
     UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -53,6 +55,15 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
 )
 from a2a.utils import new_agent_text_message, new_task
+
+
+def create_default_agent_card():
+    """Provides a standard AgentCard with streaming and push notifications enabled for tests."""
+    return AgentCard(
+        name='test_agent',
+        version='1.0',
+        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+    )
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -99,7 +110,9 @@ def test_init_default_dependencies():
     agent_executor = MockAgentExecutor()
     task_store = InMemoryTaskStore()
     handler = DefaultRequestHandlerV2(
-        agent_executor=agent_executor, task_store=task_store
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
     )
     assert isinstance(handler._active_task_registry, ActiveTaskRegistry)
     assert isinstance(
@@ -120,7 +133,9 @@ async def test_on_get_task_not_found():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = GetTaskRequest(id='non_existent_task')
     context = create_server_call_context()
@@ -149,7 +164,9 @@ async def test_on_list_tasks_success():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(include_artifacts=True, page_size=10)
     context = create_server_call_context()
@@ -179,7 +196,9 @@ async def test_on_list_tasks_excludes_artifacts():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(include_artifacts=False, page_size=10)
     context = create_server_call_context()
@@ -203,7 +222,9 @@ async def test_on_list_tasks_applies_history_length():
     )
     mock_task_store.list.return_value = mock_page
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(history_length=1, page_size=10)
     context = create_server_call_context()
@@ -216,7 +237,9 @@ async def test_on_list_tasks_negative_history_length_error():
     """Test on_list_tasks raises error for negative history length."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(history_length=-1, page_size=10)
     context = create_server_call_context()
@@ -231,7 +254,9 @@ async def test_on_cancel_task_task_not_found():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = CancelTaskRequest(id='task_not_found_for_cancel')
     context = create_server_call_context()
@@ -278,6 +303,7 @@ async def test_on_get_task_limit_history():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -323,6 +349,7 @@ async def test_set_task_push_notification_config_no_notifier():
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,
+        agent_card=create_default_agent_card(),
     )
     params = TaskPushNotificationConfig(
         task_id='task1', url='http://example.com'
@@ -345,6 +372,7 @@ async def test_set_task_push_notification_config_task_not_found():
         task_store=mock_task_store,
         push_config_store=mock_push_store,
         push_sender=mock_push_sender,
+        agent_card=create_default_agent_card(),
     )
     params = TaskPushNotificationConfig(
         task_id='non_existent_task', url='http://example.com'
@@ -365,6 +393,7 @@ async def test_get_task_push_notification_config_no_store():
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,
+        agent_card=create_default_agent_card(),
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='task1', id='task_push_notification_config'
@@ -385,6 +414,7 @@ async def test_get_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=create_default_agent_card(),
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='task_push_notification_config'
@@ -410,6 +440,7 @@ async def test_get_task_push_notification_config_info_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=create_default_agent_card(),
     )
     params = GetTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='task_push_notification_config'
@@ -435,6 +466,7 @@ async def test_get_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1', id='config_id', url='http://1.example.com'
@@ -467,6 +499,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1', url='http://1.example.com'
@@ -492,7 +525,9 @@ async def test_on_subscribe_to_task_task_not_found():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = None
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = SubscribeToTaskRequest(id='resub_task_not_found')
     context = create_server_call_context()
@@ -507,7 +542,9 @@ async def test_on_subscribe_to_task_task_not_found():
 @pytest.mark.asyncio
 async def test_on_message_send_stream():
     request_handler = DefaultRequestHandlerV2(
-        MockAgentExecutor(), InMemoryTaskStore()
+        MockAgentExecutor(),
+        InMemoryTaskStore(),
+        create_default_agent_card(),
     )
     message_params = SendMessageRequest(
         message=Message(
@@ -543,6 +580,7 @@ async def test_list_task_push_notification_config_no_store():
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,
+        agent_card=create_default_agent_card(),
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task1')
     with pytest.raises(UnsupportedOperationError):
@@ -561,6 +599,7 @@ async def test_list_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
     context = create_server_call_context()
@@ -583,6 +622,7 @@ async def test_list_no_task_push_notification_config_info():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='non_existent_task')
     result = await request_handler.on_list_task_push_notification_configs(
@@ -612,6 +652,7 @@ async def test_list_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task_1')
     result = await request_handler.on_list_task_push_notification_configs(
@@ -634,6 +675,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     set_config_params1 = TaskPushNotificationConfig(
         task_id='task_1', url='http://1.example.com'
@@ -664,6 +706,7 @@ async def test_delete_task_push_notification_config_no_store():
         agent_executor=MockAgentExecutor(),
         task_store=AsyncMock(spec=TaskStore),
         push_config_store=None,
+        agent_card=create_default_agent_card(),
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task1', id='config1'
@@ -685,6 +728,7 @@ async def test_delete_task_push_notification_config_task_not_found():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=mock_push_store,
+        agent_card=create_default_agent_card(),
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='non_existent_task', id='config1'
@@ -714,6 +758,7 @@ async def test_delete_no_task_push_notification_config_info():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task1', id='config_non_existant'
@@ -752,6 +797,7 @@ async def test_delete_task_push_notification_config_info_with_config():
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task_1', id='config_1'
@@ -784,6 +830,7 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = DeleteTaskPushNotificationConfigRequest(
         task_id='task_1', id='task_1'
@@ -818,7 +865,9 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
     )
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -855,7 +904,9 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
     )
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=MockAgentExecutor(), task_store=mock_task_store
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -924,7 +975,9 @@ async def test_on_message_send_error_does_not_hang():
     task_store.save.side_effect = RuntimeError('This is an Error!')
 
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=agent, task_store=task_store
+        agent_executor=agent,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
     )
 
     params = SendMessageRequest(
@@ -945,7 +998,9 @@ async def test_on_get_task_negative_history_length_error():
     """Test on_get_task raises error for negative history length."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = GetTaskRequest(id='task1', history_length=-1)
     context = create_server_call_context()
@@ -959,7 +1014,9 @@ async def test_on_list_tasks_page_size_too_small():
     """Test on_list_tasks raises error for page_size < 1."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(page_size=0)
     context = create_server_call_context()
@@ -973,7 +1030,9 @@ async def test_on_list_tasks_page_size_too_large():
     """Test on_list_tasks raises error for page_size > 100."""
     mock_task_store = AsyncMock(spec=TaskStore)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=AsyncMock(spec=AgentExecutor), task_store=mock_task_store
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     params = ListTasksRequest(page_size=101)
     context = create_server_call_context()
@@ -988,7 +1047,9 @@ async def test_on_message_send_negative_history_length_error():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=mock_agent_executor, task_store=mock_task_store
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
     )
     message_config = SendMessageConfiguration(
         history_length=-1, accepted_output_modes=['text/plain']
@@ -1014,6 +1075,7 @@ async def test_on_message_send_limit_history():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -1059,6 +1121,7 @@ async def test_on_message_send_task_id_mismatch():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -1107,6 +1170,7 @@ async def test_on_message_send_stream_task_id_mismatch():
         agent_executor=mock_agent_executor,
         task_store=mock_task_store,
         request_context_builder=mock_request_context_builder,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -1155,6 +1219,7 @@ async def test_on_message_send_non_blocking():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     params = SendMessageRequest(
         message=Message(
@@ -1185,6 +1250,7 @@ async def test_on_message_send_with_push_notification():
         agent_executor=HelloAgentExecutor(),
         task_store=task_store,
         push_config_store=push_store,
+        agent_card=create_default_agent_card(),
     )
     push_config = TaskPushNotificationConfig(url='http://example.com/webhook')
     params = SendMessageRequest(

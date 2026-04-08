@@ -35,7 +35,7 @@ from a2a.server.routes import (
     create_rest_routes,
 )
 from a2a.server.request_handlers.default_request_handler import (
-    DefaultRequestHandler,
+    LegacyRequestHandler,
 )
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
@@ -1130,7 +1130,7 @@ async def test_validate_decorator_push_notifications_disabled(
     """Integration test for @validate decorator with push notifications disabled."""
     client = error_handling_setups.client
 
-    real_handler = DefaultRequestHandler(
+    real_handler = LegacyRequestHandler(
         agent_executor=AsyncMock(),
         task_store=AsyncMock(),
         agent_card=agent_card,
@@ -1160,7 +1160,7 @@ async def test_validate_streaming_disabled(
 
     agent_card.capabilities.streaming = False
 
-    real_handler = DefaultRequestHandler(
+    real_handler = LegacyRequestHandler(
         agent_executor=AsyncMock(),
         task_store=AsyncMock(),
         agent_card=agent_card,

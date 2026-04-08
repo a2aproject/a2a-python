@@ -18,11 +18,14 @@ from a2a.server.agent_execution.active_task import (
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
+    validate,
     validate_request_params,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -37,12 +40,14 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.helpers import maybe_await
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -52,7 +57,7 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 if TYPE_CHECKING:
-    from collections.abc import AsyncGenerator
+    from collections.abc import AsyncGenerator, Awaitable, Callable
 
     from a2a.server.agent_execution.active_task import ActiveTask
     from a2a.server.context import ServerCallContext
@@ -80,16 +85,25 @@ class DefaultRequestHandlerV2(RequestHandler):
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
+        agent_card: AgentCard,
         queue_manager: Any
         | None = None,  # Kept for backward compat in signature
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
+        extended_agent_card: AgentCard | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
+        ]
+        | None = None,
     ) -> None:
         self.agent_executor = agent_executor
         self.task_store = task_store
+        self._agent_card = agent_card
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self.extended_agent_card = extended_agent_card
+        self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -411,3 +425,28 @@ class DefaultRequestHandlerV2(RequestHandler):
             raise TaskNotFoundError
 
         await self._push_config_store.delete_info(task_id, context, config_id)
+
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.extended_agent_card,
+        error_message='The agent does not support authenticated extended cards',
+    )
+    async def on_get_extended_agent_card(
+        self,
+        params: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> AgentCard:
+        """Default handler for 'GetExtendedAgentCard'.
+
+        Requires `capabilities.extended_agent_card` to be true.
+        """
+        extended_card = self.extended_agent_card
+        if not extended_card:
+            raise ExtendedAgentCardNotConfiguredError
+
+        if self.extended_card_modifier:
+            return await maybe_await(
+                self.extended_card_modifier(extended_card, context)
+            )
+
+        return extended_card
