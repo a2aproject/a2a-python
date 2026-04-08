@@ -66,7 +66,7 @@ class BaseClient(Client):
         Yields:
             An async iterator of `StreamResponse`
         """
-        self._apply_client_config(request)
+        request = self._apply_client_config(request)
         if not self._config.streaming or not self._card.capabilities.streaming:
             response = await self._execute_with_interceptors(
                 input_data=request,
@@ -100,22 +100,29 @@ class BaseClient(Client):
         ):
             yield event
 
-    def _apply_client_config(self, request: SendMessageRequest) -> None:
-        request.configuration.return_immediately |= self._config.polling
-        if (
-            not request.configuration.HasField('task_push_notification_config')
-            and self._config.push_notification_configs
+    def _apply_client_config(
+        self, request: SendMessageRequest
+    ) -> SendMessageRequest:
+        modified_request = SendMessageRequest()
+        modified_request.CopyFrom(request)
+        if self._config.polling:
+            modified_request.configuration.return_immediately = True
+        if self._config.push_notification_configs and (
+            not modified_request.configuration.HasField(
+                'task_push_notification_config'
+            )
         ):
-            request.configuration.task_push_notification_config.CopyFrom(
+            modified_request.configuration.task_push_notification_config.CopyFrom(
                 self._config.push_notification_configs[0]
             )
         if (
-            not request.configuration.accepted_output_modes
-            and self._config.accepted_output_modes
+            self._config.accepted_output_modes
+            and not modified_request.configuration.accepted_output_modes
         ):
-            request.configuration.accepted_output_modes.extend(
+            modified_request.configuration.accepted_output_modes.extend(
                 self._config.accepted_output_modes
             )
+        return modified_request
 
     async def _process_stream(
         self,
