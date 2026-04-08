@@ -34,6 +34,9 @@ class AgentExecutor(ABC):
         - Explain how cancelation work (executor task will be canceled, cancel() is called, order of calls, etc)
         - Explain if execute can wait for cancel and if cancel can wait for execute.
         - Explain behaviour of streaming / not-immediate when execute() returns in active state.
+        - Possible workflows:
+            - Enqueue a SINGLE Message object
+            - Enqueue TaskStatusUpdateEvent (TASK_STATE_SUBMITTED or TASK_STATE_REJECTED) and continue with TaskStatusUpdateEvent / TaskArtifactUpdateEvent.
 
         Args:
             context: The request context containing the message, task ID, etc.
