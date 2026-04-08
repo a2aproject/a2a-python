@@ -177,6 +177,7 @@ def test_append_artifact_to_task():
         artifact_id='artifact-123',
         name='updated name',
         parts=[Part(text='Updated')],
+        metadata={'existing_key': 'existing_value'},
     )
     append_event_2 = TaskArtifactUpdateEvent(
         artifact=artifact_2, append=False, task_id='123', context_id='123'
@@ -187,10 +188,13 @@ def test_append_artifact_to_task():
     assert task.artifacts[0].name == 'updated name'
     assert len(task.artifacts[0].parts) == 1
     assert task.artifacts[0].parts[0].text == 'Updated'
+    assert task.artifacts[0].metadata['existing_key'] == 'existing_value'
 
     # Test appending parts to an existing artifact
     artifact_with_parts = Artifact(
-        artifact_id='artifact-123', parts=[Part(text='Part 2')]
+        artifact_id='artifact-123',
+        parts=[Part(text='Part 2')],
+        metadata={'new_key': 'new_value'},
     )
     append_event_3 = TaskArtifactUpdateEvent(
         artifact=artifact_with_parts,
@@ -202,6 +206,8 @@ def test_append_artifact_to_task():
     assert len(task.artifacts[0].parts) == 2
     assert task.artifacts[0].parts[0].text == 'Updated'
     assert task.artifacts[0].parts[1].text == 'Part 2'
+    assert task.artifacts[0].metadata['existing_key'] == 'existing_value'
+    assert task.artifacts[0].metadata['new_key'] == 'new_value'
 
     # Test adding another new artifact
     another_artifact_with_parts = Artifact(
