@@ -193,19 +193,29 @@ class EventQueueSource(EventQueue):
             return
 
     async def dequeue_event(self) -> Event:
-        """Dequeues an event from the default internal sink queue."""
+        """Pulls an event from the default internal sink queue."""
         if self._default_sink is None:
             raise ValueError('No default sink available.')
         return await self._default_sink.dequeue_event()
 
     def task_done(self) -> None:
-        """Signals that a formerly enqueued task is complete via the default internal sink queue."""
+        """Signals that a work on dequeued event is complete via the default internal sink queue."""
         if self._default_sink is None:
             raise ValueError('No default sink available.')
         self._default_sink.task_done()
 
     async def close(self, immediate: bool = False) -> None:
-        """Closes the queue for future push events and also closes all child sinks."""
+        """Closes the queue and all its child sinks.
+
+        It is safe to call it multiple times.
+        If immediate is True, the queue will be closed without waiting for all events to be processed.
+        If immediate is False, the queue will be closed after all events are processed (and confirmed with task_done() calls).
+
+        WARNING: Closing the parent queue with immediate=False is a deadlock risk if there are unconsumed events
+        in any of the child sinks and the consumer has crashed without draining its queue.
+        It is highly recommended to wrap graceful shutdowns with a timeout, e.g.,
+        `asyncio.wait_for(queue.close(immediate=False), timeout=...)`.
+        """
         logger.debug('Closing EventQueueSource: immediate=%s', immediate)
         async with self._lock:
             # No more tap() allowed.
@@ -230,7 +240,12 @@ class EventQueueSource(EventQueue):
             )
 
     def is_closed(self) -> bool:
-        """Checks if the queue is closed."""
+        """[DEPRECATED] Checks if the queue is closed.
+
+        NOTE: Relying on this for enqueue logic introduces race conditions.
+        It is maintained primarily for backwards compatibility, workarounds for
+        Python 3.10/3.12 async queues in consumers, and for the test suite.
+        """
         return self._is_closed
 
     async def test_only_join_incoming_queue(self) -> None:
@@ -238,7 +253,11 @@ class EventQueueSource(EventQueue):
         await self._join_incoming_queue()
 
     async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the queue itself."""
+        """Enters the async context manager, returning the queue itself.
+
+        WARNING: See `__aexit__` for important deadlock risks associated with
+        exiting this context manager if unconsumed events remain.
+        """
         return self
 
     async def __aexit__(
@@ -247,7 +266,13 @@ class EventQueueSource(EventQueue):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exits the async context manager, ensuring close() is called."""
+        """Exits the async context manager, ensuring close() is called.
+
+        WARNING: The context manager calls `close(immediate=False)` by default.
+        If a consumer exits the `async with` block early (e.g., due to an exception
+        or an explicit `break`) while unconsumed events remain in the queue,
+        `__aexit__` will deadlock waiting for `task_done()` to be called on those events.
+        """
         await self.close()
 
 
@@ -290,26 +315,35 @@ class EventQueueSink(EventQueue):
         raise RuntimeError('Cannot enqueue to a sink-only queue')
 
     async def dequeue_event(self) -> Event:
-        """Dequeues an event from the sink queue."""
+        """Pulls an event from the sink queue."""
         logger.debug('Attempting to dequeue event (waiting).')
         event = await self._queue.get()
         logger.debug('Dequeued event: %s', event)
         return event
 
     def task_done(self) -> None:
-        """Signals that a formerly enqueued task is complete in this sink queue."""
+        """Signals that a work on dequeued event is complete in this sink queue."""
         logger.debug('Marking task as done in EventQueueSink.')
         self._queue.task_done()
 
     async def tap(
         self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
     ) -> 'EventQueueSink':
-        """Taps the event queue to create a new child queue that receives future events."""
+        """Creates a child queue that receives future events.
+
+        Note: The tapped queue may receive some old events if the incoming event
+        queue is lagging behind and hasn't dispatched them yet.
+        """
         # Delegate tap to the parent source so all sinks are flat under the source
         return await self._parent.tap(max_queue_size=max_queue_size)
 
     async def close(self, immediate: bool = False) -> None:
-        """Closes the child sink queue."""
+        """Closes the child sink queue.
+
+        It is safe to call it multiple times.
+        If immediate is True, the queue will be closed without waiting for all events to be processed.
+        If immediate is False, the queue will be closed after all events are processed (and confirmed with task_done() calls).
+        """
         logger.debug('Closing EventQueueSink.')
         async with self._lock:
             self._is_closed = True
@@ -323,11 +357,20 @@ class EventQueueSink(EventQueue):
             await self._queue.join()
 
     def is_closed(self) -> bool:
-        """Checks if the sink queue is closed."""
+        """[DEPRECATED] Checks if the queue is closed.
+
+        NOTE: Relying on this for enqueue logic introduces race conditions.
+        It is maintained primarily for backwards compatibility, workarounds for
+        Python 3.10/3.12 async queues in consumers, and for the test suite.
+        """
         return self._is_closed
 
     async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the queue itself."""
+        """Enters the async context manager, returning the queue itself.
+
+        WARNING: See `__aexit__` for important deadlock risks associated with
+        exiting this context manager if unconsumed events remain.
+        """
         return self
 
     async def __aexit__(
@@ -336,5 +379,11 @@ class EventQueueSink(EventQueue):
         exc_val: BaseException | None,
         exc_tb: TracebackType | None,
     ) -> None:
-        """Exits the async context manager, ensuring close() is called."""
+        """Exits the async context manager, ensuring close() is called.
+
+        WARNING: The context manager calls `close(immediate=False)` by default.
+        If a consumer exits the `async with` block early (e.g., due to an exception
+        or an explicit `break`) while unconsumed events remain in the queue,
+        `__aexit__` will deadlock waiting for `task_done()` to be called on those events.
+        """
         await self.close()

@@ -14,7 +14,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import (
     Event,
     EventConsumer,
-    EventQueue,
     EventQueueLegacy,
     InMemoryQueueManager,
     QueueManager,
@@ -241,7 +240,7 @@ class LegacyRequestHandler(RequestHandler):
         return result
 
     async def _run_event_stream(
-        self, request: RequestContext, queue: EventQueue
+        self, request: RequestContext, queue: EventQueueLegacy
     ) -> None:
         """Runs the agent's `execute` method and closes the queue afterwards.
 
@@ -256,7 +255,9 @@ class LegacyRequestHandler(RequestHandler):
         self,
         params: SendMessageRequest,
         context: ServerCallContext,
-    ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
+    ) -> tuple[
+        TaskManager, str, EventQueueLegacy, ResultAggregator, asyncio.Task
+    ]:
         """Common setup logic for both streaming and non-streaming message handling.
 
         Returns:

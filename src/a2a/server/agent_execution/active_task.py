@@ -374,30 +374,33 @@ class ActiveTask:
                                 await self._task_manager.process(event)
 
                                 # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
-                                res = await self._task_manager.get_task()
+                                new_task = await self._task_manager.get_task()
+                                if new_task is None:
+                                    raise RuntimeError(
+                                        f'Task {self.task_id} not found'
+                                    )
                                 is_interrupted = (
-                                    res
-                                    and res.status.state
+                                    new_task.status.state
                                     in INTERRUPTED_TASK_STATES
                                 )
                                 is_terminal = (
-                                    res
-                                    and res.status.state in TERMINAL_TASK_STATES
+                                    new_task.status.state
+                                    in TERMINAL_TASK_STATES
                                 )
 
                                 # If we hit a breakpoint or terminal state, lock in the result.
-                                if (is_interrupted or is_terminal) and res:
+                                if is_interrupted or is_terminal:
                                     logger.debug(
                                         'Consumer[%s]: Setting first result as Task (state=%s)',
                                         self._task_id,
-                                        res.status.state,
+                                        new_task.status.state,
                                     )
 
                                 if is_terminal:
                                     logger.debug(
                                         'Consumer[%s]: Reached terminal state %s',
                                         self._task_id,
-                                        res.status.state if res else 'unknown',
+                                        new_task.status.state,
                                     )
                                     if not self._is_finished.is_set():
                                         async with self._lock:
@@ -413,7 +416,7 @@ class ActiveTask:
                                     logger.debug(
                                         'Consumer[%s]: Interrupted with state %s',
                                         self._task_id,
-                                        res.status.state if res else 'unknown',
+                                        new_task.status.state,
                                     )
 
                                 if (
