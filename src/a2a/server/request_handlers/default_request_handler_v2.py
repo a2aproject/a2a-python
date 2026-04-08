@@ -43,6 +43,7 @@ from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -300,6 +301,10 @@ class DefaultRequestHandlerV2(RequestHandler):
 
     # TODO: Unify with on_message_send
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_message_send_stream(  # noqa: D102
         self,
         params: SendMessageRequest,
@@ -324,6 +329,11 @@ class DefaultRequestHandlerV2(RequestHandler):
             yield event
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_create_task_push_notification_config(  # noqa: D102
         self,
         params: TaskPushNotificationConfig,
@@ -346,6 +356,11 @@ class DefaultRequestHandlerV2(RequestHandler):
         return params
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_get_task_push_notification_config(  # noqa: D102
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -371,6 +386,10 @@ class DefaultRequestHandlerV2(RequestHandler):
         raise InternalError(message='Push notification config not found')
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_subscribe_to_task(  # noqa: D102
         self,
         params: SubscribeToTaskRequest,
@@ -388,6 +407,11 @@ class DefaultRequestHandlerV2(RequestHandler):
             yield event
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_list_task_push_notification_configs(  # noqa: D102
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -410,6 +434,11 @@ class DefaultRequestHandlerV2(RequestHandler):
         )
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_delete_task_push_notification_config(  # noqa: D102
         self,
         params: DeleteTaskPushNotificationConfigRequest,
