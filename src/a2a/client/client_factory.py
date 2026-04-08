@@ -75,8 +75,9 @@ class ClientFactory:
 
     def __init__(
         self,
-        config: ClientConfig,
+        config: ClientConfig | None = None,
     ):
+        config = config or ClientConfig()
         httpx_client = config.httpx_client or httpx.AsyncClient()
         httpx_client.headers.setdefault(
             VERSION_HEADER, PROTOCOL_VERSION_CURRENT
@@ -393,7 +394,7 @@ async def create_client(  # noqa: PLR0913
     Returns:
       A `Client` object.
     """
-    factory = ClientFactory(client_config or ClientConfig())
+    factory = ClientFactory(client_config)
     if isinstance(agent, str):
         return await factory.create_from_url(
             agent,

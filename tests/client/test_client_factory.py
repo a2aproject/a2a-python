@@ -129,7 +129,7 @@ def test_client_factory_create_with_default_config(
     base_agent_card: AgentCard,
 ):
     """Verify that create works correctly with a default ClientConfig."""
-    factory = ClientFactory(ClientConfig())
+    factory = ClientFactory()
     client = factory.create(base_agent_card)
     assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
@@ -144,7 +144,7 @@ async def test_client_factory_create_from_url(base_agent_card: AgentCard):
         )
 
         agent_url = 'http://example.com'
-        factory = ClientFactory(ClientConfig())
+        factory = ClientFactory()
         client = await factory.create_from_url(agent_url)
 
         mock_resolver.assert_called_once()
@@ -223,7 +223,7 @@ async def test_client_factory_create_from_url_with_default_config(
         relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
-        factory = ClientFactory(ClientConfig())
+        factory = ClientFactory()
 
         await factory.create_from_url(
             agent_url,
@@ -311,7 +311,7 @@ def test_client_factory_create_with_interceptors(
     interceptor1 = MagicMock()
 
     with patch('a2a.client.client_factory.BaseClient') as mock_base_client:
-        factory = ClientFactory(ClientConfig())
+        factory = ClientFactory()
         factory.create(
             base_agent_card,
             interceptors=[interceptor1],
