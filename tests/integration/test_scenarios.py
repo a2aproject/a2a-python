@@ -141,7 +141,7 @@ async def create_client(handler, agent_card, streaming=False):
     agent_card.supported_interfaces[0].protocol_binding = TransportProtocol.GRPC
 
     servicer = GrpcHandler(
-        agent_card, handler, context_builder=MockCallContextBuilder()
+        request_handler=handler, context_builder=MockCallContextBuilder()
     )
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
@@ -165,9 +165,19 @@ def create_handler(
     task_store = task_store or InMemoryTaskStore()
     queue_manager = queue_manager or InMemoryQueueManager()
     return (
-        LegacyRequestHandler(agent_executor, task_store, queue_manager)
+        LegacyRequestHandler(
+            agent_executor,
+            task_store,
+            agent_card(),
+            queue_manager,
+        )
         if use_legacy
-        else DefaultRequestHandlerV2(agent_executor, task_store, queue_manager)
+        else DefaultRequestHandlerV2(
+            agent_executor,
+            task_store,
+            agent_card(),
+            queue_manager,
+        )
     )
 
 

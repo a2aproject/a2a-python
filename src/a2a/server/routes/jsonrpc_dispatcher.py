@@ -4,7 +4,7 @@ import json
 import logging
 import traceback
 
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
@@ -32,7 +32,6 @@ from a2a.server.routes.common import (
     ServerCallContextBuilder,
 )
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
@@ -49,11 +48,10 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import constants, proto_utils
 from a2a.utils.errors import (
     A2AError,
-    ExtendedAgentCardNotConfiguredError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.helpers import maybe_await, validate, validate_version
+from a2a.utils.helpers import validate_version
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -130,36 +128,20 @@ class JsonRpcDispatcher:
         'GetExtendedAgentCard': GetExtendedAgentCardRequest,
     }
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
-        extended_agent_card: AgentCard | None = None,
         context_builder: ServerCallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
-        extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
-        ]
-        | None = None,
         enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the JsonRpcDispatcher.
 
         Args:
-            agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The handler instance responsible for processing A2A
               requests via http.
-            extended_agent_card: An optional, distinct AgentCard to be served
-              at the authenticated extended card endpoint.
             context_builder: The ServerCallContextBuilder used to construct the
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
-            extended_card_modifier: An optional callback to dynamically modify
-              the extended agent card before it is served. It receives the
-              call context.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
@@ -169,11 +151,7 @@ class JsonRpcDispatcher:
                 ' optional dependencies, `a2a-sdk[http-server]`.'
             )
 
-        self.agent_card = agent_card
         self.request_handler = request_handler
-        self.extended_agent_card = extended_agent_card
-        self.card_modifier = card_modifier
-        self.extended_card_modifier = extended_card_modifier
         self._context_builder = (
             context_builder or DefaultServerCallContextBuilder()
         )
@@ -182,12 +160,8 @@ class JsonRpcDispatcher:
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
-                agent_card=agent_card,
                 http_handler=request_handler,
-                extended_agent_card=extended_agent_card,
                 context_builder=self._context_builder,
-                card_modifier=card_modifier,
-                extended_card_modifier=extended_card_modifier,
             )
 
     def _generate_error_response(
@@ -333,6 +307,9 @@ class JsonRpcDispatcher:
             call_context.state['request_id'] = request_id
 
             # Route streaming requests by method name
+            handler_result: (
+                AsyncGenerator[dict[str, Any], None] | dict[str, Any]
+            )
             if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 handler_result = await self._process_streaming_request(
                     request_id, specific_request, call_context
@@ -369,10 +346,6 @@ class JsonRpcDispatcher:
             )
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
@@ -456,10 +429,6 @@ class JsonRpcDispatcher:
             always_print_fields_with_no_presence=True,
         )
 
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
     async def _handle_create_task_push_notification_config(
         self,
         request_obj: TaskPushNotificationConfig,
@@ -512,20 +481,10 @@ class JsonRpcDispatcher:
         request_obj: GetExtendedAgentCardRequest,
         context: ServerCallContext,
     ) -> dict[str, Any]:
-        if not self.agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='The agent does not have an extended agent card configured'
-            )
-        base_card = self.extended_agent_card or self.agent_card
-        card_to_serve = base_card
-        if self.extended_card_modifier and context:
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(base_card, context)
-            )
-        elif self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(base_card))
-
-        return MessageToDict(card_to_serve, preserving_proto_field_name=False)
+        card = await self.request_handler.on_get_extended_agent_card(
+            request_obj, context
+        )
+        return MessageToDict(card, preserving_proto_field_name=False)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def _process_non_streaming_request(  # noqa: PLR0911

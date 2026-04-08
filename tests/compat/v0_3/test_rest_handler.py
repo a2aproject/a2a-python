@@ -27,9 +27,7 @@ def agent_card():
 
 @pytest.fixture
 def rest_handler(agent_card, mock_core_handler):
-    handler = REST03Handler(
-        agent_card=agent_card, request_handler=mock_core_handler
-    )
+    handler = REST03Handler(request_handler=mock_core_handler)
     # Mock the internal handler03 for easier testing of translations
     handler.handler03 = AsyncMock()
     return handler
@@ -363,3 +361,39 @@ async def test_list_push_notifications(
 async def test_list_tasks(rest_handler, mock_request, mock_context):
     with pytest.raises(NotImplementedError):
         await rest_handler.list_tasks(mock_request, mock_context)
+
+
+# Add our new translation method test
+@pytest.mark.anyio
+async def test_on_get_extended_agent_card_success(
+    rest_handler, mock_request, mock_context
+):
+    rest_handler.handler03.on_get_extended_agent_card.return_value = (
+        types_v03.AgentCard(
+            name='Extended Agent',
+            description='An extended test agent',
+            version='1.0.0',
+            url='http://jsonrpc.v03.com',
+            preferred_transport='JSONRPC',
+            protocol_version='0.3',
+            default_input_modes=[],
+            default_output_modes=[],
+            skills=[],
+            capabilities=types_v03.AgentCapabilities(
+                streaming=True,
+                push_notifications=True,
+            ),
+        )
+    )
+
+    result = await rest_handler.on_get_extended_agent_card(
+        mock_request, mock_context
+    )
+
+    # on_get_extended_agent_card returns a JSON-friendly dict via model_dump
+    assert isinstance(result, dict)
+    assert result['name'] == 'Extended Agent'
+    assert result['capabilities']['streaming'] is True
+    assert result['capabilities']['pushNotifications'] is True
+
+    rest_handler.handler03.on_get_extended_agent_card.assert_called_once()
