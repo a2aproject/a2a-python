@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import constants, proto_utils
 from a2a.utils.error_handlers import (
+    build_rest_error_payload,
     rest_error_handler,
     rest_stream_error_handler,
 )
@@ -32,6 +33,7 @@ from a2a.utils.telemetry import SpanKind, trace_class
 
 
 if TYPE_CHECKING:
+    from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -39,6 +41,7 @@ if TYPE_CHECKING:
     _package_starlette_installed = True
 else:
     try:
+        from sse_starlette.event import ServerSentEvent
         from sse_starlette.sse import EventSourceResponse
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -46,6 +49,7 @@ else:
         _package_starlette_installed = True
     except ImportError:
         EventSourceResponse = Any
+        ServerSentEvent = Any
         Request = Any
         JSONResponse = Any
         Response = Any
@@ -135,10 +139,17 @@ class RestDispatcher:
         except StopAsyncIteration:
             return EventSourceResponse(iter([]))
 
-        async def event_generator() -> AsyncIterator[str]:
+        async def event_generator() -> AsyncIterator[str | ServerSentEvent]:
             yield json.dumps(first_item)
-            async for item in stream:
-                yield json.dumps(item)
+            try:
+                async for item in stream:
+                    yield json.dumps(item)
+            except Exception as e:
+                logger.exception('Error during REST SSE stream')
+                yield ServerSentEvent(
+                    data=json.dumps(build_rest_error_payload(e)),
+                    event='error',
+                )
 
         return EventSourceResponse(event_generator())
 

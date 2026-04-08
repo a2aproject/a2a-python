@@ -12,7 +12,6 @@ from starlette.testclient import TestClient
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
-    AgentCapabilities,
     AgentCard,
     ListTasksResponse,
     Message,
@@ -108,16 +107,9 @@ def test_rest_list_tasks(agent_card, mock_handler):
 
 
 @pytest.fixture
-def streaming_agent_card():
-    return AgentCard(
-        capabilities=AgentCapabilities(streaming=True),
-    )
-
-
-@pytest.fixture
-def streaming_app(streaming_agent_card, mock_handler):
+def streaming_app(mock_handler):
     routes = create_rest_routes(
-        agent_card=streaming_agent_card, request_handler=mock_handler
+        request_handler=mock_handler,
     )
     return Starlette(routes=routes)
 
