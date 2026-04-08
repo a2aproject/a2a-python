@@ -103,25 +103,28 @@ class BaseClient(Client):
     def _apply_client_config(
         self, request: SendMessageRequest
     ) -> SendMessageRequest:
-        request_copy = SendMessageRequest()
-        request_copy.CopyFrom(request)
-        request = request_copy
-        request.configuration.return_immediately |= self._config.polling
+        modified_request = SendMessageRequest()
+        modified_request.CopyFrom(request)
+        modified_request.configuration.return_immediately |= (
+            self._config.polling
+        )
         if (
-            not request.configuration.HasField('task_push_notification_config')
+            not modified_request.configuration.HasField(
+                'task_push_notification_config'
+            )
             and self._config.push_notification_configs
         ):
-            request.configuration.task_push_notification_config.CopyFrom(
+            modified_request.configuration.task_push_notification_config.CopyFrom(
                 self._config.push_notification_configs[0]
             )
         if (
-            not request.configuration.accepted_output_modes
+            not modified_request.configuration.accepted_output_modes
             and self._config.accepted_output_modes
         ):
-            request.configuration.accepted_output_modes.extend(
+            modified_request.configuration.accepted_output_modes.extend(
                 self._config.accepted_output_modes
             )
-        return request
+        return modified_request
 
     async def _process_stream(
         self,
