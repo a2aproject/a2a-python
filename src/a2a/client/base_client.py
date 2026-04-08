@@ -105,21 +105,19 @@ class BaseClient(Client):
     ) -> SendMessageRequest:
         modified_request = SendMessageRequest()
         modified_request.CopyFrom(request)
-        modified_request.configuration.return_immediately |= (
-            self._config.polling
-        )
-        if (
+        if self._config.polling:
+            modified_request.configuration.return_immediately = True
+        if self._config.push_notification_configs and (
             not modified_request.configuration.HasField(
                 'task_push_notification_config'
             )
-            and self._config.push_notification_configs
         ):
             modified_request.configuration.task_push_notification_config.CopyFrom(
                 self._config.push_notification_configs[0]
             )
         if (
-            not modified_request.configuration.accepted_output_modes
-            and self._config.accepted_output_modes
+            self._config.accepted_output_modes
+            and not modified_request.configuration.accepted_output_modes
         ):
             modified_request.configuration.accepted_output_modes.extend(
                 self._config.accepted_output_modes
