@@ -7,9 +7,11 @@ from a2a.types import (
     Artifact,
     DataPart,
     Part,
+    TaskArtifactUpdateEvent,
     TextPart,
 )
 from a2a.utils.artifact import (
+    ArtifactStreamer,
     get_artifact_text,
     new_artifact,
     new_data_artifact,
@@ -153,6 +155,132 @@ class TestGetArtifactText(unittest.TestCase):
 
         # Verify
         assert result == ''
+
+
+class TestArtifactStreamer(unittest.TestCase):
+    def setUp(self):
+        self.context_id = 'ctx-123'
+        self.task_id = 'task-456'
+        self.name = 'response'
+
+    def test_stable_artifact_id_across_appends(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event1 = streamer.append('Hello ')
+        event2 = streamer.append('world')
+        self.assertEqual(
+            event1.artifact.artifact_id, event2.artifact.artifact_id
+        )
+
+    def test_append_returns_correct_event_type(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.append('chunk')
+        self.assertIsInstance(event, TaskArtifactUpdateEvent)
+
+    def test_append_sets_append_true_last_chunk_false(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.append('chunk')
+        self.assertTrue(event.append)
+        self.assertFalse(event.last_chunk)
+
+    def test_append_sets_context_and_task_ids(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.append('chunk')
+        self.assertEqual(event.context_id, self.context_id)
+        self.assertEqual(event.task_id, self.task_id)
+
+    def test_append_sets_text_content(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.append('Hello world')
+        self.assertEqual(len(event.artifact.parts), 1)
+        self.assertEqual(event.artifact.parts[0].root.text, 'Hello world')
+
+    def test_append_sets_artifact_name_and_description(self):
+        streamer = ArtifactStreamer(
+            self.context_id,
+            self.task_id,
+            name='my-artifact',
+            description='A streamed response',
+        )
+        event = streamer.append('chunk')
+        self.assertEqual(event.artifact.name, 'my-artifact')
+        self.assertEqual(event.artifact.description, 'A streamed response')
+
+    def test_finalize_sets_last_chunk_true(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.finalize('done')
+        self.assertTrue(event.append)
+        self.assertTrue(event.last_chunk)
+
+    def test_finalize_with_empty_text(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.finalize()
+        self.assertEqual(event.artifact.parts[0].root.text, '')
+        self.assertTrue(event.last_chunk)
+
+    def test_finalize_uses_same_artifact_id(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        append_event = streamer.append('chunk')
+        finalize_event = streamer.finalize()
+        self.assertEqual(
+            append_event.artifact.artifact_id,
+            finalize_event.artifact.artifact_id,
+        )
+
+    def test_append_after_finalize_raises(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        streamer.finalize()
+        with self.assertRaises(RuntimeError):
+            streamer.append('too late')
+
+    def test_double_finalize_raises(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        streamer.finalize()
+        with self.assertRaises(RuntimeError):
+            streamer.finalize()
+
+    def test_artifact_id_property(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        artifact_id = streamer.artifact_id
+        self.assertIsInstance(artifact_id, str)
+        self.assertTrue(len(artifact_id) > 0)
+
+    @patch('uuid.uuid4')
+    def test_artifact_id_from_uuid(self, mock_uuid4):
+        mock_uuid = uuid.UUID('12345678-1234-5678-1234-567812345678')
+        mock_uuid4.return_value = mock_uuid
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        self.assertEqual(streamer.artifact_id, str(mock_uuid))
+
+    def test_description_defaults_to_none(self):
+        streamer = ArtifactStreamer(
+            self.context_id, self.task_id, name=self.name
+        )
+        event = streamer.append('chunk')
+        self.assertIsNone(event.artifact.description)
 
 
 if __name__ == '__main__':
