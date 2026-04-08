@@ -287,7 +287,7 @@ class DefaultRequestHandler(RequestHandler):
             if isinstance(latest_task, Task):
                 await self._push_sender.send_notification(latest_task)
 
-    async def _consume_and_notify_in_background(  # noqa: PLR0913
+    async def _consume_and_notify_in_background(
         self,
         task_id: str,
         result_aggregator: ResultAggregator,
