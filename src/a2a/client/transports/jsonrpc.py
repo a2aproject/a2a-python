@@ -318,9 +318,10 @@ class JsonRpcTransport(ClientTransport):
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
         code = error_dict.get('code')
         message = error_dict.get('message', str(error_dict))
+        data = error_dict.get('data')
 
         if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
-            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message)
+            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message, data=data)
 
         # Fallback to general A2AClientError
         return A2AClientError(f'JSON-RPC Error {code}: {message}')

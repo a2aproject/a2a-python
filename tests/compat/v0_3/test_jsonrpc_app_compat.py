@@ -6,10 +6,13 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from starlette.testclient import TestClient
 
-from a2a.server.apps.jsonrpc.starlette_app import A2AStarletteApplication
+from starlette.applications import Starlette
+from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types.a2a_pb2 import (
     AgentCard,
+    AgentCapabilities,
+    AgentInterface,
     Message as Message10,
     Part as Part10,
     Role as Role10,
@@ -17,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus as TaskStatus10,
     TaskState as TaskState10,
 )
+
 from a2a.compat.v0_3 import a2a_v0_3_pb2
 
 
@@ -43,23 +47,31 @@ def mock_handler():
 
 @pytest.fixture
 def test_app(mock_handler):
-    mock_agent_card = MagicMock(spec=AgentCard)
-    mock_agent_card.url = 'http://mockurl.com'
-    # Set up capabilities.streaming to avoid validation issues
-    mock_agent_card.capabilities = MagicMock()
-    mock_agent_card.capabilities.streaming = False
-    mock_agent_card.capabilities.push_notifications = True
-    mock_agent_card.capabilities.extended_agent_card = True
-    return A2AStarletteApplication(
-        agent_card=mock_agent_card,
-        http_handler=mock_handler,
-        enable_v0_3_compat=True,
+    agent_card = AgentCard(
+        name='TestAgent',
+        description='Test Description',
+        version='1.0.0',
+        capabilities=AgentCapabilities(
+            streaming=False, push_notifications=True, extended_agent_card=True
+        ),
     )
+    interface = agent_card.supported_interfaces.add()
+    interface.url = 'http://mockurl.com'
+    interface.protocol_binding = 'jsonrpc'
+    interface.protocol_version = '0.3'
+
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_handler,
+        enable_v0_3_compat=True,
+        rpc_url='/',
+    )
+    return Starlette(routes=jsonrpc_routes)
 
 
 @pytest.fixture
 def client(test_app):
-    return TestClient(test_app.build())
+    return TestClient(test_app)
 
 
 def test_send_message_v03_compat(
@@ -108,3 +120,25 @@ def test_get_task_v03_compat(
     assert 'result' in data
     assert data['result']['id'] == 'test_task_id'
     assert data['result']['status']['state'] == 'completed'
+
+
+def test_get_extended_agent_card_v03_compat(
+    client: TestClient,
+) -> None:
+    """Test that the v0.3 method name 'agent/getAuthenticatedExtendedCard' is correctly routed."""
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '3',
+        'method': 'agent/getAuthenticatedExtendedCard',
+        'params': {},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data['jsonrpc'] == '2.0'
+    assert data['id'] == '3'
+    assert 'result' in data
+    # The result should be a v0.3 AgentCard
+    assert 'supportsAuthenticatedExtendedCard' in data['result']

@@ -12,19 +12,28 @@ import pytest_asyncio
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
 from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.applications import Starlette
 
 from a2a.client import Client, ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
-from a2a.client.client_factory import ClientFactory
 from a2a.client.client import ClientCallContext
+from a2a.client.client_factory import ClientFactory
 from a2a.client.service_parameters import (
     ServiceParametersFactory,
     with_a2a_extensions,
 )
 from a2a.client.transports import JsonRpcTransport, RestTransport
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+
+# Compat v0.3 imports for dedicated tests
+from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
+from a2a.server.routes import (
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -51,17 +60,15 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.constants import (
+    PROTOCOL_VERSION_CURRENT,
+    VERSION_HEADER,
     TransportProtocol,
 )
 from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
     ContentTypeNotSupportedError,
+    ExtendedAgentCardNotConfiguredError,
     ExtensionSupportRequiredError,
-    InternalError,
     InvalidAgentResponseError,
-    InvalidParamsError,
-    InvalidRequestError,
-    MethodNotFoundError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -220,10 +227,16 @@ def http_base_setup(mock_request_handler: AsyncMock, agent_card: AgentCard):
 def jsonrpc_setup(http_base_setup) -> TransportSetup:
     """Sets up the JsonRpcTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    app_builder = A2AFastAPIApplication(
-        agent_card, mock_request_handler, extended_agent_card=agent_card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     factory = ClientFactory(
         config=ClientConfig(
@@ -239,10 +252,13 @@ def jsonrpc_setup(http_base_setup) -> TransportSetup:
 def rest_setup(http_base_setup) -> TransportSetup:
     """Sets up the RestTransport and in-memory server."""
     mock_request_handler, agent_card = http_base_setup
-    app_builder = A2ARESTFastAPIApplication(
+    rest_routes = create_rest_routes(
         agent_card, mock_request_handler, extended_agent_card=agent_card
     )
-    app = app_builder.build()
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
+    app = Starlette(routes=[*rest_routes, *agent_card_routes])
     httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
     factory = ClientFactory(
         config=ClientConfig(
@@ -292,6 +308,30 @@ def transport_setups(request) -> TransportSetup:
     return request.getfixturevalue(request.param)
 
 
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+        pytest.param('grpc_setup', id='gRPC'),
+        pytest.param('grpc_03_setup', id='gRPC-0.3'),
+    ]
+)
+def error_handling_setups(request) -> TransportSetup:
+    """Parametrized fixture for error tests including compat 0.3 endpoint verification."""
+    return request.getfixturevalue(request.param)
+
+
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('rest_setup', id='REST'),
+    ]
+)
+def http_transport_setups(request) -> TransportSetup:
+    """Parametrized fixture that runs tests against HTTP-based transports only."""
+    return request.getfixturevalue(request.param)
+
+
 # --- gRPC Setup ---
 
 
@@ -306,8 +346,49 @@ async def grpc_server_and_handler(
     servicer = GrpcHandler(agent_card, mock_request_handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
-    yield server_address, mock_request_handler
-    await server.stop(0)
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
+
+
+@pytest_asyncio.fixture
+async def grpc_03_server_and_handler(
+    mock_request_handler: AsyncMock, agent_card: AgentCard
+) -> AsyncGenerator[tuple[str, AsyncMock], None]:
+    """Creates and manages an in-process v0.3 compat gRPC test server."""
+    server = grpc.aio.server()
+    port = server.add_insecure_port('[::]:0')
+    server_address = f'localhost:{port}'
+    servicer = CompatGrpcHandler(agent_card, mock_request_handler)
+    a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+    await server.start()
+    try:
+        yield server_address, mock_request_handler
+    finally:
+        await server.stop(None)
+
+
+@pytest.fixture
+def grpc_03_setup(
+    grpc_03_server_and_handler, agent_card: AgentCard
+) -> TransportSetup:
+    """Sets up the CompatGrpcTransport and in-process 0.3 server."""
+    server_address, handler = grpc_03_server_and_handler
+    from a2a.client.base_client import BaseClient
+    from a2a.client.client import ClientConfig
+    from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
+
+    channel = grpc.aio.insecure_channel(server_address)
+    transport = CompatGrpcTransport(channel=channel, agent_card=agent_card)
+
+    client = BaseClient(
+        card=agent_card,
+        config=ClientConfig(),
+        transport=transport,
+        interceptors=[],
+    )
+    return TransportSetup(client=client, handler=handler)
 
 
 # --- The Integration Tests ---
@@ -330,7 +411,8 @@ async def test_client_sends_message_streaming(transport_setups) -> None:
     events = [event async for event in stream]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_STREAM.id
 
@@ -359,7 +441,8 @@ async def test_client_sends_message_blocking(transport_setups) -> None:
     events = [event async for event in client.send_message(request=params)]
 
     assert len(events) == 1
-    _, task = events[0]
+    event = events[0]
+    task = event.task
     assert task is not None
     assert task.id == TASK_FROM_BLOCKING.id
     handler.on_message_send.assert_awaited_once_with(params, ANY)
@@ -508,8 +591,7 @@ async def test_client_subscribe(transport_setups) -> None:
     stream = client.subscribe(request=params)
     first_event = await stream.__anext__()
 
-    _, task = first_event
-    assert task.id == RESUBSCRIBE_EVENT.task_id
+    assert first_event.status_update.task_id == RESUBSCRIBE_EVENT.task_id
     handler.on_subscribe_to_task.assert_called_once()
 
     await client.close()
@@ -544,7 +626,6 @@ async def test_json_transport_base_client_send_message_with_extensions(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -619,13 +700,20 @@ async def test_json_transport_get_signed_base_card(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        card_modifier=signer,  # Sign the base card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    app = app_builder.build()
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
@@ -639,7 +727,8 @@ async def test_json_transport_get_signed_base_card(
 
     # Verification happens here
     result = await resolver.get_agent_card(
-        signature_verifier=signature_verifier
+        relative_card_path='/',
+        signature_verifier=signature_verifier,
     )
 
     # Create transport with the verified card
@@ -684,16 +773,21 @@ async def test_client_get_signed_extended_card(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        extended_card_modifier=lambda card, ctx: signer(
-            card
-        ),  # Sign the extended card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(card),
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     transport = JsonRpcTransport(
         httpx_client=httpx_client,
@@ -704,7 +798,6 @@ async def test_client_get_signed_extended_card(
         card=agent_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -753,17 +846,21 @@ async def test_client_get_signed_base_and_extended_cards(
         },
     )
 
-    app_builder = A2AFastAPIApplication(
-        agent_card,
-        mock_request_handler,
-        extended_agent_card=extended_agent_card,
-        card_modifier=signer,  # Sign the base card
-        extended_card_modifier=lambda card, ctx: signer(
-            card
-        ),  # Sign the extended card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/', card_modifier=signer
     )
-    app = app_builder.build()
-    httpx_client = httpx.AsyncClient(transport=httpx.ASGITransport(app=app))
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=mock_request_handler,
+        extended_agent_card=extended_agent_card,
+        extended_card_modifier=lambda card, ctx: signer(card),
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
+    httpx_client = httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app),
+        headers={VERSION_HEADER: PROTOCOL_VERSION_CURRENT},
+    )
 
     agent_url = agent_card.supported_interfaces[0].url
     signature_verifier = create_signature_verifier(
@@ -777,7 +874,8 @@ async def test_client_get_signed_base_and_extended_cards(
 
     # 1. Fetch base card
     base_card = await resolver.get_agent_card(
-        signature_verifier=signature_verifier
+        relative_card_path='/',
+        signature_verifier=signature_verifier,
     )
 
     # 2. Create transport with base card
@@ -790,7 +888,6 @@ async def test_client_get_signed_base_and_extended_cards(
         card=base_card,
         config=ClientConfig(streaming=False),
         transport=transport,
-        consumers=[],
         interceptors=[],
     )
 
@@ -838,6 +935,73 @@ async def test_client_handles_a2a_errors(transport_setups, error_cls) -> None:
 
     # Reset side_effect for other tests
     handler.on_get_task.side_effect = None
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'error_cls',
+    [
+        TaskNotFoundError,
+        TaskNotCancelableError,
+        PushNotificationNotSupportedError,
+        UnsupportedOperationError,
+        ContentTypeNotSupportedError,
+        InvalidAgentResponseError,
+        ExtendedAgentCardNotConfiguredError,
+        ExtensionSupportRequiredError,
+        VersionNotSupportedError,
+    ],
+)
+@pytest.mark.parametrize(
+    'handler_attr, client_method, request_params',
+    [
+        pytest.param(
+            'on_message_send_stream',
+            'send_message',
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='msg-integration-test',
+                    parts=[Part(text='Hello, integration test!')],
+                )
+            ),
+            id='stream',
+        ),
+        pytest.param(
+            'on_subscribe_to_task',
+            'subscribe',
+            SubscribeToTaskRequest(id='some-id'),
+            id='subscribe',
+        ),
+    ],
+)
+async def test_client_handles_a2a_errors_streaming(
+    transport_setups, error_cls, handler_attr, client_method, request_params
+) -> None:
+    """Integration test to verify error propagation from streaming handlers to client.
+
+    The handler raises an A2AError before yielding any events. All transports
+    must propagate this as the exact error_cls, not wrapped in an ExceptionGroup
+    or converted to a generic client error.
+    """
+    client = transport_setups.client
+    handler = transport_setups.handler
+
+    async def mock_generator(*args, **kwargs):
+        raise error_cls('Test error message')
+        yield
+
+    getattr(handler, handler_attr).side_effect = mock_generator
+
+    with pytest.raises(error_cls) as exc_info:
+        async for _ in getattr(client, client_method)(request=request_params):
+            pass
+
+    assert 'Test error message' in str(exc_info.value)
+
+    getattr(handler, handler_attr).side_effect = None
 
     await client.close()
 
@@ -925,5 +1089,61 @@ async def test_rest_malformed_payload(
 
     response = await client.request(method, f'{url}{path}', **request_kwargs)
     assert response.status_code == 400
+
+    await transport.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_version_unsupported(http_transport_setups) -> None:
+    """Integration test for @validate_version decorator."""
+    client = http_transport_setups.client
+
+    service_params = {'A2A-Version': '2.0.0'}
+    context = ClientCallContext(service_parameters=service_params)
+
+    params = GetTaskRequest(id=GET_TASK_RESPONSE.id)
+
+    with pytest.raises(VersionNotSupportedError):
+        await client.get_task(request=params, context=context)
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_decorator_push_notifications_disabled(
+    error_handling_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate decorator with push notifications disabled."""
+    client = error_handling_setups.client
+
+    agent_card.capabilities.push_notifications = False
+
+    params = TaskPushNotificationConfig(task_id='123')
+
+    with pytest.raises(UnsupportedOperationError):
+        await client.create_task_push_notification_config(request=params)
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_validate_streaming_disabled(
+    error_handling_setups, agent_card: AgentCard
+) -> None:
+    """Integration test for @validate decorator when streaming is disabled."""
+    client = error_handling_setups.client
+    transport = client._transport
+
+    agent_card.capabilities.streaming = False
+
+    params = SendMessageRequest(
+        message=Message(role=Role.ROLE_USER, parts=[Part(text='hi')])
+    )
+
+    stream = transport.send_message_streaming(request=params)
+
+    with pytest.raises(UnsupportedOperationError):
+        async for _ in stream:
+            pass
 
     await transport.close()

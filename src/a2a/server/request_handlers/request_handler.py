@@ -1,5 +1,11 @@
+import functools
+import inspect
+
 from abc import ABC, abstractmethod
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Callable
+from typing import Any
+
+from google.protobuf.message import Message as ProtoMessage
 
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
@@ -19,6 +25,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import UnsupportedOperationError
+from a2a.utils.proto_utils import validate_proto_required_fields
 
 
 class RequestHandler(ABC):
@@ -218,3 +225,46 @@ class RequestHandler(ABC):
         Returns:
             None
         """
+
+
+def validate_request_params(method: Callable) -> Callable:
+    """Decorator for RequestHandler methods to validate required fields on incoming requests."""
+    if inspect.isasyncgenfunction(method):
+
+        @functools.wraps(method)
+        async def async_gen_wrapper(
+            self: RequestHandler,
+            params: ProtoMessage,
+            context: ServerCallContext,
+            *args: Any,
+            **kwargs: Any,
+        ) -> Any:
+            if params is not None:
+                validate_proto_required_fields(params)
+            # Ensure the inner async generator is closed explicitly;
+            # bare async-for does not call aclose() on GeneratorExit,
+            # which on Python 3.12+ prevents the except/finally blocks
+            # in on_message_send_stream from running on client disconnect
+            # (background_consume and cleanup_producer tasks are never created).
+            inner = method(self, params, context, *args, **kwargs)
+            try:
+                async for item in inner:
+                    yield item
+            finally:
+                await inner.aclose()
+
+        return async_gen_wrapper
+
+    @functools.wraps(method)
+    async def async_wrapper(
+        self: RequestHandler,
+        params: ProtoMessage,
+        context: ServerCallContext,
+        *args: Any,
+        **kwargs: Any,
+    ) -> Any:
+        if params is not None:
+            validate_proto_required_fields(params)
+        return await method(self, params, context, *args, **kwargs)
+
+    return async_wrapper

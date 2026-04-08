@@ -37,7 +37,9 @@ def rest_handler(agent_card, mock_core_handler):
 
 @pytest.fixture
 def mock_context():
-    return MagicMock(spec=ServerCallContext)
+    m = MagicMock(spec=ServerCallContext)
+    m.state = {'headers': {'A2A-Version': '0.3'}}
+    return m
 
 
 @pytest.fixture

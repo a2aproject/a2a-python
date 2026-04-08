@@ -10,7 +10,9 @@ from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2AFastAPIApplication, A2ARESTFastAPIApplication
+from a2a.server.routes.rest_routes import create_rest_routes
+from starlette.applications import Starlette
+from a2a.server.routes import create_jsonrpc_routes, create_agent_card_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
@@ -20,17 +22,23 @@ from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     Message,
     Part,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
+    SubscribeToTaskRequest,
     TaskState,
     a2a_pb2_grpc,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.errors import InvalidParamsError
 
 
 def assert_message_matches(message, expected_role, expected_text):
@@ -57,7 +65,7 @@ def assert_artifacts_match(artifacts, expected_artifacts):
 
 def assert_events_match(events, expected_events):
     assert len(events) == len(expected_events)
-    for (event, _), (expected_type, expected_val) in zip(
+    for event, (expected_type, expected_val) in zip(
         events, expected_events, strict=True
     ):
         assert event.HasField(expected_type)
@@ -171,8 +179,13 @@ def base_e2e_setup():
 @pytest.fixture
 def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    app_builder = A2ARESTFastAPIApplication(agent_card, handler)
-    app = app_builder.build()
+    rest_routes = create_rest_routes(
+        agent_card=agent_card, request_handler=handler
+    )
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
+    )
+    app = Starlette(routes=[*rest_routes, *agent_card_routes])
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )
@@ -192,10 +205,16 @@ def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
 @pytest.fixture
 def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    app_builder = A2AFastAPIApplication(
-        agent_card, handler, extended_agent_card=agent_card
+    agent_card_routes = create_agent_card_routes(
+        agent_card=agent_card, card_url='/'
     )
-    app = app_builder.build()
+    jsonrpc_routes = create_jsonrpc_routes(
+        agent_card=agent_card,
+        request_handler=handler,
+        extended_agent_card=agent_card,
+        rpc_url='/',
+    )
+    app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
     httpx_client = httpx.AsyncClient(
         transport=httpx.ASGITransport(app=app), base_url='http://testserver'
     )
@@ -264,6 +283,22 @@ def transport_setups(request) -> ClientSetup:
     return request.getfixturevalue(request.param)
 
 
+@pytest.fixture(
+    params=[
+        pytest.param('jsonrpc_setup', id='JSON-RPC'),
+        pytest.param('grpc_setup', id='gRPC'),
+    ]
+)
+def rpc_transport_setups(request) -> ClientSetup:
+    """Parametrized fixture for RPC transports only (excludes REST).
+
+    REST encodes some required fields in URL paths, so empty-field validation
+    tests hit routing errors before reaching the handler. JSON-RPC and gRPC
+    send the full request message, allowing server-side validation to work.
+    """
+    return request.getfixturevalue(request.param)
+
+
 @pytest.mark.asyncio
 async def test_end_to_end_send_message_blocking(transport_setups):
     client = transport_setups.client
@@ -285,7 +320,7 @@ async def test_end_to_end_send_message_blocking(transport_setups):
         )
     ]
     assert len(events) == 1
-    response, _ = events[0]
+    response = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
     assert_artifacts_match(
@@ -323,7 +358,7 @@ async def test_end_to_end_send_message_non_blocking(transport_setups):
         )
     ]
     assert len(events) == 1
-    response, _ = events[0]
+    response = events[0]
     assert response.task.id
     assert response.task.status.state == TaskState.TASK_STATE_SUBMITTED
     assert_history_matches(
@@ -361,7 +396,8 @@ async def test_end_to_end_send_message_streaming(transport_setups):
         ],
     )
 
-    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+    task_id = events[0].status_update.task_id
+    task = await client.get_task(request=GetTaskRequest(id=task_id))
     assert_history_matches(
         task.history,
         [
@@ -389,8 +425,8 @@ async def test_end_to_end_get_task(transport_setups):
             request=SendMessageRequest(message=message_to_send)
         )
     ]
-    _, task = events[-1]
-    task_id = task.id
+    response = events[0]
+    task_id = response.status_update.task_id
 
     get_request = GetTaskRequest(id=task_id)
     retrieved_task = await client.get_task(request=get_request)
@@ -421,7 +457,7 @@ async def test_end_to_end_list_tasks(transport_setups):
     expected_task_ids = []
     for i in range(total_items):
         # One event is enough to get the task ID
-        _, task = await anext(
+        response = await anext(
             client.send_message(
                 request=SendMessageRequest(
                     message=Message(
@@ -432,7 +468,7 @@ async def test_end_to_end_list_tasks(transport_setups):
                 )
             )
         )
-        expected_task_ids.append(task.id)
+        expected_task_ids.append(response.status_update.task_id)
 
     list_request = ListTasksRequest(page_size=page_size)
 
@@ -487,7 +523,8 @@ async def test_end_to_end_input_required(transport_setups):
         ],
     )
 
-    task = await client.get_task(request=GetTaskRequest(id=events[0][1].id))
+    task_id = events[0].status_update.task_id
+    task = await client.get_task(request=GetTaskRequest(id=task_id))
 
     assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert_history_matches(
@@ -546,3 +583,104 @@ async def test_end_to_end_input_required(transport_setups):
         ],
     )
     assert_message_matches(task.status.message, Role.ROLE_AGENT, 'done')
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'empty_request, expected_fields',
+    [
+        (
+            SendMessageRequest(),
+            {'message'},
+        ),
+        (
+            SendMessageRequest(message=Message()),
+            {'message.message_id', 'message.role', 'message.parts'},
+        ),
+        (
+            SendMessageRequest(
+                message=Message(message_id='m1', role=Role.ROLE_USER)
+            ),
+            {'message.parts'},
+        ),
+    ],
+)
+async def test_end_to_end_send_message_validation_errors(
+    transport_setups,
+    empty_request: SendMessageRequest,
+    expected_fields: set[str],
+) -> None:
+    client = transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in client.send_message(request=empty_request):
+            pass
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == expected_fields
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'method, invalid_request, expected_fields',
+    [
+        (
+            'get_task',
+            GetTaskRequest(),
+            {'id'},
+        ),
+        (
+            'cancel_task',
+            CancelTaskRequest(),
+            {'id'},
+        ),
+        (
+            'get_task_push_notification_config',
+            GetTaskPushNotificationConfigRequest(),
+            {'task_id', 'id'},
+        ),
+        (
+            'list_task_push_notification_configs',
+            ListTaskPushNotificationConfigsRequest(),
+            {'task_id'},
+        ),
+        (
+            'delete_task_push_notification_config',
+            DeleteTaskPushNotificationConfigRequest(),
+            {'task_id', 'id'},
+        ),
+    ],
+)
+async def test_end_to_end_unary_validation_errors(
+    rpc_transport_setups,
+    method: str,
+    invalid_request,
+    expected_fields: set[str],
+) -> None:
+    client = rpc_transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await getattr(client, method)(request=invalid_request)
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == expected_fields
+
+    await client.close()
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_subscribe_validation_error(
+    rpc_transport_setups,
+) -> None:
+    client = rpc_transport_setups.client
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in client.subscribe(request=SubscribeToTaskRequest()):
+            pass
+
+    errors = exc_info.value.data.get('errors', [])
+    assert {e['field'] for e in errors} == {'id'}
+
+    await client.close()

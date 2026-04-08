@@ -57,7 +57,6 @@ def base_client(
         card=sample_agent_card,
         config=config,
         transport=mock_transport,
-        consumers=[],
         interceptors=[mock_interceptor],
     )
 

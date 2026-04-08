@@ -28,7 +28,11 @@ from a2a.compat.v0_3 import proto_utils
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
-from a2a.utils.helpers import validate, validate_async_generator
+from a2a.utils import constants
+from a2a.utils.helpers import (
+    validate,
+    validate_version,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -53,6 +57,7 @@ class REST03Handler:
         self.agent_card = agent_card
         self.handler03 = RequestHandler03(request_handler=request_handler)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def on_message_send(
         self,
         request: Request,
@@ -78,7 +83,8 @@ class REST03Handler:
         pb2_v03_resp = proto_utils.ToProto.task_or_message(v03_resp)
         return MessageToDict(pb2_v03_resp)
 
-    @validate_async_generator(
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -110,6 +116,7 @@ class REST03Handler:
             )
             yield MessageToDict(v03_pb_resp)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def on_cancel_task(
         self,
         request: Request,
@@ -134,7 +141,8 @@ class REST03Handler:
         pb2_v03_task = proto_utils.ToProto.task(v03_resp)
         return MessageToDict(pb2_v03_task)
 
-    @validate_async_generator(
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
+    @validate(
         lambda self: self.agent_card.capabilities.streaming,
         'Streaming is not supported by the agent',
     )
@@ -166,6 +174,7 @@ class REST03Handler:
             )
             yield MessageToDict(v03_pb_resp)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def get_push_notification(
         self,
         request: Request,
@@ -198,6 +207,7 @@ class REST03Handler:
         )
         return MessageToDict(pb2_v03_config)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     @validate(
         lambda self: self.agent_card.capabilities.push_notifications,
         'Push notifications are not supported by the agent',
@@ -242,6 +252,7 @@ class REST03Handler:
         )
         return MessageToDict(pb2_v03_config)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def on_get_task(
         self,
         request: Request,
@@ -271,6 +282,7 @@ class REST03Handler:
         pb2_v03_task = proto_utils.ToProto.task(v03_resp)
         return MessageToDict(pb2_v03_task)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def list_push_notifications(
         self,
         request: Request,
@@ -297,6 +309,7 @@ class REST03Handler:
 
         return MessageToDict(pb2_v03_resp)
 
+    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def list_tasks(
         self,
         request: Request,

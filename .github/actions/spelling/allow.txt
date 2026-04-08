@@ -35,7 +35,9 @@ cls
 coc
 codegen
 coro
+culsans
 datamodel
+datapart
 deepwiki
 drivername
 DSNs
@@ -62,7 +64,10 @@ initdb
 inmemory
 INR
 isready
+itk
+ITK
 jcs
+jit
 jku
 JOSE
 JPY
@@ -106,11 +111,13 @@ protoc
 pydantic
 pyi
 pypistats
+pyproto
 pyupgrade
 pyversions
 redef
 respx
 resub
+rmi
 RS256
 RUF
 SECP256R1
@@ -127,7 +134,7 @@ taskupdate
 testuuid
 Tful
 tiangolo
+TResponse
 typ
 typeerror
 vulnz
-TResponse

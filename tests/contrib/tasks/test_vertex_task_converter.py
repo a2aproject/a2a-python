@@ -7,13 +7,16 @@ pytest.importorskip(
     'vertexai', reason='Vertex Task Converter tests require vertexai'
 )
 from vertexai import types as vertexai_types
-
+from google.genai import types as genai_types
 from a2a.contrib.tasks.vertex_task_converter import (
+    _DATA_PART_MIME_TYPE,
     to_sdk_artifact,
+    to_sdk_message,
     to_sdk_part,
     to_sdk_task,
     to_sdk_task_state,
     to_stored_artifact,
+    to_stored_message,
     to_stored_part,
     to_stored_task,
     to_stored_task_state,
@@ -24,7 +27,9 @@ from a2a.compat.v0_3.types import (
     FilePart,
     FileWithBytes,
     FileWithUri,
+    Message,
     Part,
+    Role,
     Task,
     TaskState,
     TaskStatus,
@@ -34,29 +39,39 @@ from a2a.compat.v0_3.types import (
 
 def test_to_sdk_task_state() -> None:
     assert (
-        to_sdk_task_state(vertexai_types.State.STATE_UNSPECIFIED)
+        to_sdk_task_state(vertexai_types.A2aTaskState.STATE_UNSPECIFIED)
         == TaskState.unknown
     )
     assert (
-        to_sdk_task_state(vertexai_types.State.SUBMITTED) == TaskState.submitted
-    )
-    assert to_sdk_task_state(vertexai_types.State.WORKING) == TaskState.working
-    assert (
-        to_sdk_task_state(vertexai_types.State.COMPLETED) == TaskState.completed
+        to_sdk_task_state(vertexai_types.A2aTaskState.SUBMITTED)
+        == TaskState.submitted
     )
     assert (
-        to_sdk_task_state(vertexai_types.State.CANCELLED) == TaskState.canceled
-    )
-    assert to_sdk_task_state(vertexai_types.State.FAILED) == TaskState.failed
-    assert (
-        to_sdk_task_state(vertexai_types.State.REJECTED) == TaskState.rejected
+        to_sdk_task_state(vertexai_types.A2aTaskState.WORKING)
+        == TaskState.working
     )
     assert (
-        to_sdk_task_state(vertexai_types.State.INPUT_REQUIRED)
+        to_sdk_task_state(vertexai_types.A2aTaskState.COMPLETED)
+        == TaskState.completed
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.CANCELLED)
+        == TaskState.canceled
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.FAILED)
+        == TaskState.failed
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.REJECTED)
+        == TaskState.rejected
+    )
+    assert (
+        to_sdk_task_state(vertexai_types.A2aTaskState.INPUT_REQUIRED)
         == TaskState.input_required
     )
     assert (
-        to_sdk_task_state(vertexai_types.State.AUTH_REQUIRED)
+        to_sdk_task_state(vertexai_types.A2aTaskState.AUTH_REQUIRED)
         == TaskState.auth_required
     )
     assert to_sdk_task_state(999) == TaskState.unknown  # type: ignore
@@ -65,35 +80,39 @@ def test_to_sdk_task_state() -> None:
 def test_to_stored_task_state() -> None:
     assert (
         to_stored_task_state(TaskState.unknown)
-        == vertexai_types.State.STATE_UNSPECIFIED
+        == vertexai_types.A2aTaskState.STATE_UNSPECIFIED
     )
     assert (
         to_stored_task_state(TaskState.submitted)
-        == vertexai_types.State.SUBMITTED
+        == vertexai_types.A2aTaskState.SUBMITTED
     )
     assert (
-        to_stored_task_state(TaskState.working) == vertexai_types.State.WORKING
+        to_stored_task_state(TaskState.working)
+        == vertexai_types.A2aTaskState.WORKING
     )
     assert (
         to_stored_task_state(TaskState.completed)
-        == vertexai_types.State.COMPLETED
+        == vertexai_types.A2aTaskState.COMPLETED
     )
     assert (
         to_stored_task_state(TaskState.canceled)
-        == vertexai_types.State.CANCELLED
+        == vertexai_types.A2aTaskState.CANCELLED
     )
-    assert to_stored_task_state(TaskState.failed) == vertexai_types.State.FAILED
+    assert (
+        to_stored_task_state(TaskState.failed)
+        == vertexai_types.A2aTaskState.FAILED
+    )
     assert (
         to_stored_task_state(TaskState.rejected)
-        == vertexai_types.State.REJECTED
+        == vertexai_types.A2aTaskState.REJECTED
     )
     assert (
         to_stored_task_state(TaskState.input_required)
-        == vertexai_types.State.INPUT_REQUIRED
+        == vertexai_types.A2aTaskState.INPUT_REQUIRED
     )
     assert (
         to_stored_task_state(TaskState.auth_required)
-        == vertexai_types.State.AUTH_REQUIRED
+        == vertexai_types.A2aTaskState.AUTH_REQUIRED
     )
 
 
@@ -109,7 +128,7 @@ def test_to_stored_part_data() -> None:
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
     assert stored_part.inline_data is not None
-    assert stored_part.inline_data.mime_type == 'application/json'
+    assert stored_part.inline_data.mime_type == _DATA_PART_MIME_TYPE
     assert stored_part.inline_data.data == b'{"key": "value"}'
 
 
@@ -155,15 +174,15 @@ def test_to_stored_part_unsupported() -> None:
 
 
 def test_to_sdk_part_text() -> None:
-    stored_part = vertexai_types.Part(text='hello back')
+    stored_part = genai_types.Part(text='hello back')
     sdk_part = to_sdk_part(stored_part)
     assert isinstance(sdk_part.root, TextPart)
     assert sdk_part.root.text == 'hello back'
 
 
 def test_to_sdk_part_inline_data() -> None:
-    stored_part = vertexai_types.Part(
-        inline_data=vertexai_types.Blob(
+    stored_part = genai_types.Part(
+        inline_data=genai_types.Blob(
             mime_type='application/json',
             data=b'{"key": "val"}',
         )
@@ -176,9 +195,21 @@ def test_to_sdk_part_inline_data() -> None:
     assert sdk_part.root.file.bytes == expected_b64
 
 
+def test_to_sdk_part_inline_data_datapart() -> None:
+    stored_part = genai_types.Part(
+        inline_data=genai_types.Blob(
+            mime_type=_DATA_PART_MIME_TYPE,
+            data=b'{"key": "val"}',
+        )
+    )
+    sdk_part = to_sdk_part(stored_part)
+    assert isinstance(sdk_part.root, DataPart)
+    assert sdk_part.root.data == {'key': 'val'}
+
+
 def test_to_sdk_part_file_data() -> None:
-    stored_part = vertexai_types.Part(
-        file_data=vertexai_types.FileData(
+    stored_part = genai_types.Part(
+        file_data=genai_types.FileData(
             mime_type='image/jpeg',
             file_uri='gs://bucket/image.jpg',
         )
@@ -191,7 +222,7 @@ def test_to_sdk_part_file_data() -> None:
 
 
 def test_to_sdk_part_unsupported() -> None:
-    stored_part = vertexai_types.Part()
+    stored_part = genai_types.Part()
     with pytest.raises(ValueError, match='Unsupported part:'):
         to_sdk_part(stored_part)
 
@@ -210,7 +241,7 @@ def test_to_stored_artifact() -> None:
 def test_to_sdk_artifact() -> None:
     stored_artifact = vertexai_types.TaskArtifact(
         artifact_id='art-456',
-        parts=[vertexai_types.Part(text='part_2')],
+        parts=[genai_types.Part(text='part_2')],
     )
     sdk_artifact = to_sdk_artifact(stored_artifact)
     assert sdk_artifact.artifact_id == 'art-456'
@@ -236,7 +267,7 @@ def test_to_stored_task() -> None:
     stored_task = to_stored_task(sdk_task)
     assert stored_task.context_id == 'ctx-1'
     assert stored_task.metadata == {'foo': 'bar'}
-    assert stored_task.state == vertexai_types.State.WORKING
+    assert stored_task.state == vertexai_types.A2aTaskState.WORKING
     assert stored_task.output is not None
     assert stored_task.output.artifacts is not None
     assert len(stored_task.output.artifacts) == 1
@@ -247,13 +278,13 @@ def test_to_sdk_task() -> None:
     stored_task = vertexai_types.A2aTask(
         name='projects/123/locations/us-central1/agentEngines/456/tasks/task-2',
         context_id='ctx-2',
-        state=vertexai_types.State.COMPLETED,
+        state=vertexai_types.A2aTaskState.COMPLETED,
         metadata={'a': 'b'},
         output=vertexai_types.TaskOutput(
             artifacts=[
                 vertexai_types.TaskArtifact(
                     artifact_id='art-2',
-                    parts=[vertexai_types.Part(text='result')],
+                    parts=[genai_types.Part(text='result')],
                 )
             ]
         ),
@@ -275,7 +306,7 @@ def test_to_sdk_task_no_output() -> None:
     stored_task = vertexai_types.A2aTask(
         name='tasks/task-3',
         context_id='ctx-3',
-        state=vertexai_types.State.SUBMITTED,
+        state=vertexai_types.A2aTaskState.SUBMITTED,
         metadata=None,
     )
     sdk_task = to_sdk_task(stored_task)
@@ -299,23 +330,11 @@ def test_sdk_part_text_conversion_round_trip() -> None:
 
 
 def test_sdk_part_data_conversion_round_trip() -> None:
-    # A DataPart is converted to `inline_data` in Vertex AI, which lacks the original
-    # `DataPart` vs `FilePart` distinction. When reading it back from the stored
-    # protocol format, it becomes a `FilePart` with base64-encoded `FileWithBytes`
-    # and `mime_type="application/json"`.
     sdk_part = Part(root=DataPart(data={'key': 'value'}))
     stored_part = to_stored_part(sdk_part)
-    round_trip_sdk_part = to_sdk_part(stored_part)
+    round_trip_sdk_part = to_sdk_part(stored_part, part_metadata=None)
 
-    expected_b64 = base64.b64encode(b'{"key": "value"}').decode('utf-8')
-    assert round_trip_sdk_part == Part(
-        root=FilePart(
-            file=FileWithBytes(
-                bytes=expected_b64,
-                mime_type='application/json',
-            )
-        )
-    )
+    assert round_trip_sdk_part == sdk_part
 
 
 def test_sdk_part_file_bytes_conversion_round_trip() -> None:
@@ -345,16 +364,6 @@ def test_sdk_part_file_uri_conversion_round_trip() -> None:
     stored_part = to_stored_part(sdk_part)
     round_trip_sdk_part = to_sdk_part(stored_part)
     assert round_trip_sdk_part == sdk_part
-
-
-def test_sdk_artifact_conversion_round_trip() -> None:
-    sdk_artifact = Artifact(
-        artifact_id='art-123',
-        parts=[Part(root=TextPart(text='part_1'))],
-    )
-    stored_artifact = to_stored_artifact(sdk_artifact)
-    round_trip_sdk_artifact = to_sdk_artifact(stored_artifact)
-    assert round_trip_sdk_artifact == sdk_artifact
 
 
 def test_sdk_task_conversion_round_trip() -> None:
@@ -389,3 +398,88 @@ def test_sdk_task_conversion_round_trip() -> None:
     assert round_trip_sdk_task.metadata == sdk_task.metadata
     assert round_trip_sdk_task.artifacts == sdk_task.artifacts
     assert round_trip_sdk_task.history == []
+
+
+def test_stored_artifact_conversion_round_trip() -> None:
+    """Test converting an Artifact to TaskArtifact and back restores everything."""
+    original_artifact = Artifact(
+        artifact_id='art123',
+        name='My cool artifact',
+        description='A very interesting description',
+        extensions=['ext1', 'ext2'],
+        metadata={'custom': 'value'},
+        parts=[
+            Part(
+                root=TextPart(
+                    text='hello', metadata={'part_meta': 'hello_meta'}
+                )
+            ),
+            Part(root=DataPart(data={'foo': 'bar'})),  # no metadata
+        ],
+    )
+
+    stored = to_stored_artifact(original_artifact)
+    assert isinstance(stored, vertexai_types.TaskArtifact)
+
+    # ensure it was populated correctly
+    assert stored.display_name == 'My cool artifact'
+    assert stored.description == 'A very interesting description'
+    assert stored.metadata['__vertex_compat_v'] == 1.0
+
+    restored_artifact = to_sdk_artifact(stored)
+
+    assert restored_artifact.artifact_id == original_artifact.artifact_id
+    assert restored_artifact.name == original_artifact.name
+    assert restored_artifact.description == original_artifact.description
+    assert restored_artifact.extensions == original_artifact.extensions
+    assert restored_artifact.metadata == original_artifact.metadata
+
+    assert len(restored_artifact.parts) == 2
+    assert isinstance(restored_artifact.parts[0].root, TextPart)
+    assert restored_artifact.parts[0].root.text == 'hello'
+    assert restored_artifact.parts[0].root.metadata == {
+        'part_meta': 'hello_meta'
+    }
+
+    assert isinstance(restored_artifact.parts[1].root, DataPart)
+    assert restored_artifact.parts[1].root.data == {'foo': 'bar'}
+    assert restored_artifact.parts[1].root.metadata is None
+
+
+def test_stored_message_conversion_round_trip() -> None:
+    """Test converting a Message to TaskMessage and back restores everything."""
+    original_message = Message(
+        message_id='msg456',
+        role=Role.agent,
+        reference_task_ids=['tsk2', 'tsk3'],
+        extensions=['ext_msg'],
+        metadata={'msg_meta': 42},
+        parts=[
+            Part(root=TextPart(text='message text')),
+        ],
+    )
+
+    stored = to_stored_message(original_message)
+    assert stored is not None
+    assert isinstance(stored, vertexai_types.TaskMessage)
+
+    assert stored.message_id == 'msg456'
+    assert stored.role == 'agent'
+    assert stored.metadata['__vertex_compat_v'] == 1.0
+
+    restored_message = to_sdk_message(stored)
+    assert restored_message is not None
+
+    assert restored_message.message_id == original_message.message_id
+    assert restored_message.role == original_message.role
+    assert (
+        restored_message.reference_task_ids
+        == original_message.reference_task_ids
+    )
+    assert restored_message.extensions == original_message.extensions
+    assert restored_message.metadata == original_message.metadata
+
+    assert len(restored_message.parts) == 1
+    assert isinstance(restored_message.parts[0].root, TextPart)
+    assert restored_message.parts[0].root.text == 'message text'
+    assert restored_message.parts[0].root.metadata is None

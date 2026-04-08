@@ -44,9 +44,7 @@ class VertexTaskStore(TaskStore):
         self._client = client
         self._agent_engine_resource_id = agent_engine_resource_id
 
-    async def save(
-        self, task: Task, context: ServerCallContext | None = None
-    ) -> None:
+    async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the store."""
         compat_task = to_compat_task(task)
         previous_task = await self._get_stored_task(compat_task.id)
@@ -80,6 +78,32 @@ class VertexTaskStore(TaskStore):
                         new_state=vertex_task_converter.to_stored_task_state(
                             task.status.state
                         ),
+                    ),
+                ),
+                event_sequence_number=event_sequence_number,
+            )
+        return None
+
+    def _get_status_details_change_event(
+        self,
+        previous_task: CompatTask,
+        task: CompatTask,
+        event_sequence_number: int,
+    ) -> vertexai_types.TaskEvent | None:
+        if task.status.message != previous_task.status.message:
+            status_details = (
+                vertexai_types.TaskStatusDetails(
+                    task_message=vertex_task_converter.to_stored_message(
+                        task.status.message
+                    )
+                )
+                if task.status.message
+                else vertexai_types.TaskStatusDetails()
+            )
+            return vertexai_types.TaskEvent(
+                event_data=vertexai_types.TaskEventData(
+                    status_details_change=vertexai_types.TaskStatusDetailsChange(
+                        new_task_status=status_details,
                     ),
                 ),
                 event_sequence_number=event_sequence_number,
@@ -170,6 +194,13 @@ class VertexTaskStore(TaskStore):
             events.append(status_event)
             event_sequence_number += 1
 
+        status_details_event = self._get_status_details_change_event(
+            previous_task, task, event_sequence_number
+        )
+        if status_details_event:
+            events.append(status_details_event)
+            event_sequence_number += 1
+
         metadata_event = self._get_metadata_change_event(
             previous_task, task, event_sequence_number
         )
@@ -206,7 +237,7 @@ class VertexTaskStore(TaskStore):
         return a2a_task
 
     async def get(
-        self, task_id: str, context: ServerCallContext | None = None
+        self, task_id: str, context: ServerCallContext
     ) -> Task | None:
         """Retrieves a task from the database by ID."""
         a2a_task = await self._get_stored_task(task_id)
@@ -217,13 +248,11 @@ class VertexTaskStore(TaskStore):
     async def list(
         self,
         params: ListTasksRequest,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> ListTasksResponse:
         """Retrieves a list of tasks from the store."""
         raise NotImplementedError
 
-    async def delete(
-        self, task_id: str, context: ServerCallContext | None = None
-    ) -> None:
+    async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """The backend doesn't support deleting tasks, so this is not implemented."""
         raise NotImplementedError

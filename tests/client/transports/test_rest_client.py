@@ -70,7 +70,7 @@ def _assert_extensions_header(mock_kwargs: dict, expected_extensions: set[str]):
 
 class TestRestTransport:
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_timeout(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -87,6 +87,9 @@ class TestRestTransport:
         )
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.response.raise_for_status.return_value = None
         mock_event_source.aiter_sse.side_effect = httpx.TimeoutException(
             'Read timed out'
@@ -277,7 +280,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_with_new_extensions(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -295,6 +298,10 @@ class TestRestTransportExtensions:
         )
 
         mock_event_source = AsyncMock(spec=EventSource)
+        mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.aiter_sse.return_value = async_iterable_from_list([])
         mock_aconnect_sse.return_value.__aenter__.return_value = (
             mock_event_source
@@ -322,7 +329,7 @@ class TestRestTransportExtensions:
         )
 
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_send_message_streaming_server_error_propagates(
         self,
         mock_aconnect_sse: AsyncMock,
@@ -686,7 +693,7 @@ class TestRestTransportTenant:
         ],
     )
     @pytest.mark.asyncio
-    @patch('a2a.client.transports.http_helpers.aconnect_sse')
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
     async def test_rest_streaming_methods_prepend_tenant(  # noqa: PLR0913
         self,
         mock_aconnect_sse,
@@ -708,6 +715,9 @@ class TestRestTransportTenant:
         # 2. Setup mocks
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
+        mock_event_source.response.headers = {
+            'content-type': 'text/event-stream'
+        }
         mock_event_source.response.raise_for_status.return_value = None
 
         async def empty_aiter():

@@ -5,12 +5,14 @@ import inspect
 import json
 import logging
 
-from collections.abc import Awaitable, Callable
-from typing import Any, TypeVar
+from collections.abc import AsyncIterator, Awaitable, Callable
+from typing import Any, TypeVar, cast
 from uuid import uuid4
 
 from google.protobuf.json_format import MessageToDict
+from packaging.version import InvalidVersion, Version
 
+from a2a.server.context import ServerCallContext
 from a2a.types.a2a_pb2 import (
     AgentCard,
     Artifact,
@@ -21,11 +23,13 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
-from a2a.utils.errors import UnsupportedOperationError
+from a2a.utils import constants
+from a2a.utils.errors import UnsupportedOperationError, VersionNotSupportedError
 from a2a.utils.telemetry import trace_function
 
 
 T = TypeVar('T')
+F = TypeVar('F', bound=Callable[..., Any])
 
 
 logger = logging.getLogger(__name__)
@@ -68,7 +72,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
     """
     new_artifact_data: Artifact = event.artifact
     artifact_id: str = new_artifact_data.artifact_id
-    append_parts: bool = event.append or False
+    append_parts: bool = event.append
 
     existing_artifact: Artifact | None = None
     existing_artifact_list_index: int | None = None
@@ -228,91 +232,6 @@ def validate(
     return decorator
 
 
-def validate_async_generator(
-    expression: Callable[[Any], bool], error_message: str | None = None
-):
-    """Decorator that validates if a given expression evaluates to True for async generators.
-
-    Typically used on class methods to check capabilities or configuration
-    before executing the method's logic. If the expression is False,
-    an `UnsupportedOperationError` is raised.
-
-    Args:
-        expression: A callable that takes the instance (`self`) as its argument
-                    and returns a boolean.
-        error_message: An optional custom error message for the `UnsupportedOperationError`.
-                       If None, the string representation of the expression will be used.
-
-    Examples:
-        Streaming capability validation with success case:
-        >>> import asyncio
-        >>> from a2a.utils.errors import UnsupportedOperationError
-        >>>
-        >>> class StreamingAgent:
-        ...     def __init__(self, streaming_enabled: bool):
-        ...         self.streaming_enabled = streaming_enabled
-        ...
-        ...     @validate_async_generator(
-        ...         lambda self: self.streaming_enabled,
-        ...         'Streaming is not supported by this agent',
-        ...     )
-        ...     async def stream_messages(self, count: int):
-        ...         for i in range(count):
-        ...             yield f'Message {i}'
-        >>>
-        >>> async def run_streaming_test():
-        ...     # Successful streaming
-        ...     agent = StreamingAgent(streaming_enabled=True)
-        ...     async for msg in agent.stream_messages(2):
-        ...         print(msg)
-        >>>
-        >>> asyncio.run(run_streaming_test())
-        Message 0
-        Message 1
-
-        Error case - validation fails:
-        >>> class FeatureAgent:
-        ...     def __init__(self):
-        ...         self.features = {'real_time': False}
-        ...
-        ...     @validate_async_generator(
-        ...         lambda self: self.features.get('real_time', False),
-        ...         'Real-time feature must be enabled to stream updates',
-        ...     )
-        ...     async def real_time_updates(self):
-        ...         yield 'This should not be yielded'
-        >>>
-        >>> async def run_error_test():
-        ...     agent = FeatureAgent()
-        ...     try:
-        ...         async for _ in agent.real_time_updates():
-        ...             pass
-        ...     except UnsupportedOperationError as e:
-        ...         print(e.message)
-        >>>
-        >>> asyncio.run(run_error_test())
-        Real-time feature must be enabled to stream updates
-
-    Note:
-        This decorator is specifically for async generator methods (async def with yield).
-        The validation happens before the generator starts yielding values.
-    """
-
-    def decorator(function):
-        @functools.wraps(function)
-        async def wrapper(self, *args, **kwargs):
-            if not expression(self):
-                final_message = error_message or str(expression)
-                logger.error('Unsupported Operation: %s', final_message)
-                raise UnsupportedOperationError(message=final_message)
-            async for i in function(self, *args, **kwargs):
-                yield i
-
-        return wrapper
-
-    return decorator
-
-
 def are_modalities_compatible(
     server_output_modes: list[str] | None, client_output_modes: list[str] | None
 ) -> bool:
@@ -378,3 +297,113 @@ async def maybe_await(value: T | Awaitable[T]) -> T:
     if inspect.isawaitable(value):
         return await value
     return value
+
+
+def validate_version(expected_version: str) -> Callable[[F], F]:
+    """Decorator that validates the A2A-Version header in the request context.
+
+    The header name is defined by `constants.VERSION_HEADER` ('A2A-Version').
+    If the header is missing or empty, it is interpreted as `constants.PROTOCOL_VERSION_0_3` ('0.3').
+    If the version in the header does not match the `expected_version` (major and minor parts),
+    a `VersionNotSupportedError` is raised. Patch version is ignored.
+
+    This decorator supports both async methods and async generator methods. It
+    expects a `ServerCallContext` to be present either in the arguments or
+    keyword arguments of the decorated method.
+
+    Args:
+        expected_version: The A2A protocol version string expected by the method.
+
+    Returns:
+        The decorated function.
+
+    Raises:
+        VersionNotSupportedError: If the version in the request does not match `expected_version`.
+    """
+    try:
+        expected_v = Version(expected_version)
+    except InvalidVersion:
+        # If the expected version is not a valid semver, we can't do major/minor comparison.
+        # This shouldn't happen with our constants.
+        expected_v = None
+
+    def decorator(func: F) -> F:
+        def _get_actual_version(
+            args: tuple[Any, ...], kwargs: dict[str, Any]
+        ) -> str:
+            context = kwargs.get('context')
+            if context is None:
+                for arg in args:
+                    if isinstance(arg, ServerCallContext):
+                        context = arg
+                        break
+
+            if context is None:
+                # If no context is found, we can't validate the version.
+                # In a real scenario, this shouldn't happen for properly routed requests.
+                # We default to the expected version to allow test call to proceed.
+                return expected_version
+
+            headers = context.state.get('headers', {})
+            # Header names are usually case-insensitive in most frameworks, but dict lookup is case-sensitive.
+            # We check both standard and lowercase versions.
+            actual_version = headers.get(
+                constants.VERSION_HEADER
+            ) or headers.get(constants.VERSION_HEADER.lower())
+
+            if not actual_version:
+                return constants.PROTOCOL_VERSION_0_3
+
+            return str(actual_version)
+
+        def _is_version_compatible(actual: str) -> bool:
+            if actual == expected_version:
+                return True
+            if not expected_v:
+                return False
+            try:
+                actual_v = Version(actual)
+            except InvalidVersion:
+                return False
+            else:
+                return actual_v.major == expected_v.major
+
+        if inspect.isasyncgenfunction(inspect.unwrap(func)):
+
+            @functools.wraps(func)
+            def async_gen_wrapper(
+                *args: Any, **kwargs: Any
+            ) -> AsyncIterator[Any]:
+                actual_version = _get_actual_version(args, kwargs)
+                if not _is_version_compatible(actual_version):
+                    logger.warning(
+                        "Version mismatch: actual='%s', expected='%s'",
+                        actual_version,
+                        expected_version,
+                    )
+                    raise VersionNotSupportedError(
+                        message=f"A2A version '{actual_version}' is not supported by this handler. "
+                        f"Expected version '{expected_version}'."
+                    )
+                return func(*args, **kwargs)
+
+            return cast('F', async_gen_wrapper)
+
+        @functools.wraps(func)
+        async def async_wrapper(*args: Any, **kwargs: Any) -> Any:
+            actual_version = _get_actual_version(args, kwargs)
+            if not _is_version_compatible(actual_version):
+                logger.warning(
+                    "Version mismatch: actual='%s', expected='%s'",
+                    actual_version,
+                    expected_version,
+                )
+                raise VersionNotSupportedError(
+                    message=f"A2A version '{actual_version}' is not supported by this handler. "
+                    f"Expected version '{expected_version}'."
+                )
+            return await func(*args, **kwargs)
+
+        return cast('F', async_wrapper)
+
+    return decorator

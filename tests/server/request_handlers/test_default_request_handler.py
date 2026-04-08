@@ -1,11 +1,10 @@
 import asyncio
 import contextlib
 import logging
-import uuid
 import time
 import uuid
-from typing import cast
 
+from typing import cast
 from unittest.mock import (
     AsyncMock,
     MagicMock,
@@ -24,7 +23,9 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
-from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.request_handlers import (
+    LegacyRequestHandler as DefaultRequestHandler,
+)
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
     InMemoryTaskStore,
@@ -34,37 +35,34 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
-
 from a2a.types import (
     InternalError,
     InvalidParamsError,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-
 from a2a.types.a2a_pb2 import (
     Artifact,
+    CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     ListTasksResponse,
-    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
-    TaskPushNotificationConfig,
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    TaskPushNotificationConfig,
+    SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    CancelTaskRequest,
-    SubscribeToTaskRequest,
 )
 from a2a.utils import new_agent_text_message, new_task
 
@@ -451,7 +449,9 @@ async def test_on_cancel_task_invalid_result_type():
     # Mock ResultAggregator to return a Message
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
     mock_result_aggregator_instance.consume_all.return_value = Message(
-        message_id='unexpected_msg', role=Role.ROLE_AGENT, parts=[]
+        message_id='unexpected_msg',
+        role=Role.ROLE_AGENT,
+        parts=[Part(text='Test')],
     )
 
     request_handler = DefaultRequestHandler(
@@ -524,7 +524,7 @@ async def test_on_message_send_with_push_notification():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -630,7 +630,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_non_blocking',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -750,7 +750,11 @@ async def test_on_message_send_with_push_notification_no_existing_Task():
         accepted_output_modes=['text/plain'],  # Added required field
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg_push', parts=[]),
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push',
+            parts=[Part(text='Test')],
+        ),
         configuration=message_config,
     )
 
@@ -815,7 +819,11 @@ async def test_on_message_send_no_result_from_aggregator():
         request_context_builder=mock_request_context_builder,
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg_no_res', parts=[])
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_no_res',
+            parts=[Part(text='Test')],
+        )
     )
 
     mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
@@ -863,7 +871,9 @@ async def test_on_message_send_task_id_mismatch():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_id_mismatch', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_id_mismatch',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1067,7 +1077,9 @@ async def test_on_message_send_interrupted_flow():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_interrupt', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_interrupt',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1178,7 +1190,7 @@ async def test_on_message_send_stream_with_push_notification():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_stream_push',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         ),
@@ -1226,168 +1238,12 @@ async def test_on_message_send_stream_with_push_notification():
         side_effect=sync_get_event_stream_gen
     )
 
-    # Mock current_result property to return appropriate awaitables
-    # Coroutines that will be returned by successive accesses to current_result
-    async def current_result_coro1():
-        return event1_task_update
+    # Mock current_result as an async property returning events sequentially.
+    async def to_coro(val):
+        return val
 
-    async def current_result_coro2():
-        return event2_final_task
-
-    # Use unittest.mock.PropertyMock for async property
-    # We need to patch 'ResultAggregator.current_result' when this instance is used.
-    # This is complex because ResultAggregator is instantiated inside the handler.
-    # Easier: If mock_result_aggregator_instance is a MagicMock, we can assign a callable.
-    # This part is tricky. Let's assume current_result is an async method for easier mocking first.
-    # If it's truly a property, the mocking is harder with instance mocks.
-    # Let's adjust the mock_result_aggregator_instance.current_result to be an AsyncMock directly
-    # This means the code would call `await result_aggregator.current_result()`
-    # But the actual code is `await result_aggregator.current_result`
-    # This implies `result_aggregator.current_result` IS an awaitable.
-    # So, we can mock it with a side_effect that returns awaitables (coroutines).
-
-    # Create simple awaitables (coroutines) for side_effect
-    async def get_event1():
-        return event1_task_update
-
-    async def get_event2():
-        return event2_final_task
-
-    # Make the current_result attribute of the mock instance itself an awaitable
-    # This still means current_result is not callable.
-    # For an async property, the mock needs to have current_result as a non-AsyncMock attribute
-    # that is itself an awaitable.
-
-    # Let's try to mock the property at the type level for ResultAggregator temporarily
-    # This is not ideal as it affects all instances.
-
-    # Alternative: Configure the AsyncMock for current_result to return a coroutine
-    # when it's awaited. This is not directly supported by AsyncMock for property access.
-
-    # Simplest for now: Assume `current_result` attribute of the mocked `ResultAggregator` instance
-    # can be sequentially awaited if it's a list of awaitables that a test runner can handle.
-    # This is likely to fail again but will clarify the exact point of await.
-    # The error "TypeError: object AsyncMock can't be used in 'await' expression" means
-    # `mock_result_aggregator_instance.current_result` is an AsyncMock, and that's what's awaited.
-    # This AsyncMock needs to have a __await__ method.
-
-    # Let's make the side_effect of the AsyncMock `current_result` provide the values.
-    # This assumes that `await mock.property` somehow triggers a call to the mock.
-    # This is not how AsyncMock works.
-
-    # The code is `await result_aggregator.current_result`.
-    # `result_aggregator` is an instance of `ResultAggregator`.
-    # `current_result` is an async property.
-    # So `result_aggregator.current_result` evaluates to a coroutine.
-    # We need `mock_result_aggregator_instance.current_result` to be a coroutine,
-    # or a list of coroutines if accessed multiple times.
-    # This is best done by mocking the property itself.
-    # Let's assume it's called twice.
-
-    # We will patch ResultAggregator to be our mock_result_aggregator_instance
-    # Then, we need to control what its `current_result` property returns.
-    # We can use a PropertyMock for this, attached to the type of mock_result_aggregator_instance.
-
-    # For this specific test, let's make current_result a simple async def method on the mock instance
-    # This means we are slightly diverging from the "property" nature just for this mock.
-    # Mock current_result property to return appropriate awaitables (coroutines) sequentially.
-    async def get_event1_coro():
-        return event1_task_update
-
-    async def get_event2_coro():
-        return event2_final_task
-
-    # Configure the 'current_result' property on the type of the mock instance
-    # This makes accessing `instance.current_result` call the side_effect function,
-    # which then cycles through our list of coroutines.
-    # We need a new PropertyMock for each instance, or patch the class.
-    # Since mock_result_aggregator_instance is already created, we attach to its type.
-    # This can be tricky. A more direct way is to ensure the instance's attribute `current_result`
-    # behaves as desired. If `mock_result_aggregator_instance` is a `MagicMock`, its attributes are also mocks.
-
-    # Let's make `current_result` a MagicMock whose side_effect returns the coroutines.
-    # This means when `result_aggregator.current_result` is accessed, this mock is "called".
-    # This isn't quite right for a property. A property isn't "called" on access.
-
-    # Correct approach for mocking an async property on an instance mock:
-    # Set the attribute `current_result` on the instance `mock_result_aggregator_instance`
-    # to be a `PropertyMock` if we were patching the class.
-    # Since we have the instance, we can try to replace its `current_result` attribute.
-    # The instance `mock_result_aggregator_instance` is a `MagicMock`.
-    # We can make `mock_result_aggregator_instance.current_result` a `PropertyMock`
-    # that returns a coroutine. For multiple calls, `side_effect` on `PropertyMock` is a list of return_values.
-
-    # Create a PropertyMock that will cycle through coroutines
-    # This requires Python 3.8+ for PropertyMock to be directly usable with side_effect list for properties.
-    # For older versions or for clarity with async properties, directly mocking the attribute
-    # to be a series of awaitables is hard.
-    # The easiest is to ensure `current_result` is an AsyncMock that returns the values.
-    # The product code `await result_aggregator.current_result` means `current_result` must be an awaitable.
-
-    # Let's make current_result an AsyncMock whose __call__ returns the sequence.
-    # Mock current_result as an async property
-    # Create coroutines that will be the "result" of awaiting the property
-    async def get_current_result_coro1():
-        return event1_task_update
-
-    async def get_current_result_coro2():
-        return event2_final_task
-
-    # Configure the 'current_result' property on the mock_result_aggregator_instance
-    # using PropertyMock attached to its type. This makes instance.current_result return
-    # items from side_effect sequentially on each access.
-    # Since current_result is an async property, these items should be coroutines.
-    # We need to ensure that mock_result_aggregator_instance itself is the one patched.
-    # The patch for ResultAggregator returns this instance.
-    # So, we configure PropertyMock on the type of this specific mock instance.
-    # This is slightly unusual; typically PropertyMock is used when patching a class.
-    # A more straightforward approach for an instance is if its type is already a mock.
-    # As mock_result_aggregator_instance is a MagicMock, we can configure its 'current_result'
-    # attribute to be a PropertyMock.
-
-    # Let's directly assign a PropertyMock to the type of the instance for `current_result`
-    # This ensures that when `instance.current_result` is accessed, the PropertyMock's logic is triggered.
-    # However, PropertyMock is usually used with `patch.object` or by setting it on the class.
-    #
-    # A simpler way for MagicMock instance:
-    # `mock_result_aggregator_instance.current_result` is already a MagicMock (or AsyncMock if spec'd).
-    # We need to make it return a coroutine upon access.
-    # The most direct way to mock an async property on a MagicMock instance
-    # such that it returns a sequence of awaitables:
-    async def side_effect_current_result():
-        yield event1_task_update
-        yield event2_final_task
-
-    # Create an async generator from the side effect
-    current_result_gen = side_effect_current_result()
-
-    # Make current_result return the next item from this generator (wrapped in a coroutine)
-    # each time it's accessed.
-    async def get_next_current_result():
-        try:
-            return await current_result_gen.__anext__()
-        except StopAsyncIteration:
-            # Handle case where it's awaited more times than values provided
-            return None  # Or raise an error
-
-    # Since current_result is a property, accessing it should return a coroutine.
-    # We can achieve this by making mock_result_aggregator_instance.current_result
-    # a MagicMock whose side_effect returns these coroutines.
-    # This is still tricky because it's a property access.
-
-    # Let's use the PropertyMock on the class being mocked via the patch.
-    # Setup for consume_and_emit
-    def sync_get_event_stream_gen_for_prop_test(*args, **kwargs):
-        return event_stream_gen()
-
-    mock_result_aggregator_instance.consume_and_emit = MagicMock(
-        side_effect=sync_get_event_stream_gen_for_prop_test
-    )
-
-    # Configure current_result on the type of the mock_result_aggregator_instance
-    # This makes it behave like a property that returns items from side_effect on access.
     type(mock_result_aggregator_instance).current_result = PropertyMock(
-        side_effect=[get_current_result_coro1(), get_current_result_coro2()]
+        side_effect=[to_coro(event1_task_update), to_coro(event2_final_task)]
     )
 
     context = create_server_call_context()
@@ -1460,7 +1316,7 @@ async def test_stream_disconnect_then_resubscribe_receives_future_events():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_reconn',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1558,7 +1414,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
         message=Message(
             role=Role.ROLE_USER,
             message_id='mid',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1698,7 +1554,7 @@ async def test_disconnect_persists_final_task_to_store():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_persist',
-            parts=[],
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1785,7 +1641,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared():
         message=Message(
             role=Role.ROLE_USER,
             message_id='mid_track',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
             context_id=context_id,
         )
@@ -1890,7 +1746,9 @@ async def test_on_message_send_stream_task_id_mismatch():
     )
     params = SendMessageRequest(
         message=Message(
-            role=Role.ROLE_USER, message_id='msg_stream_mismatch', parts=[]
+            role=Role.ROLE_USER,
+            message_id='msg_stream_mismatch',
+            parts=[Part(text='Test')],
         )
     )
 
@@ -1975,7 +1833,7 @@ async def test_set_task_push_notification_config_no_notifier():
         url='http://example.com',
     )
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_create_task_push_notification_config(
             params, create_server_call_context()
         )
@@ -2022,7 +1880,7 @@ async def test_get_task_push_notification_config_no_store():
         id='task_push_notification_config',
     )
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_get_task_push_notification_config(
             params, create_server_call_context()
         )
@@ -2253,7 +2111,7 @@ async def test_list_task_push_notification_config_no_store():
     )
     params = ListTaskPushNotificationConfigsRequest(task_id='task1')
 
-    with pytest.raises(UnsupportedOperationError):
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_list_task_push_notification_configs(
             params, create_server_call_context()
         )
@@ -2398,11 +2256,10 @@ async def test_delete_task_push_notification_config_no_store():
         task_id='task1', id='config1'
     )
 
-    with pytest.raises(UnsupportedOperationError) as exc_info:
+    with pytest.raises(PushNotificationNotSupportedError):
         await request_handler.on_delete_task_push_notification_config(
             params, create_server_call_context()
         )
-    assert isinstance(exc_info.value, UnsupportedOperationError)
 
 
 @pytest.mark.asyncio
@@ -2586,7 +2443,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
         )
     )
@@ -2627,7 +2484,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_terminal_stream',
-            parts=[],
+            parts=[Part(text='Test')],
             task_id=task_id,
         )
     )
@@ -2869,7 +2726,9 @@ async def test_on_message_send_negative_history_length_error():
         accepted_output_modes=['text/plain'],
     )
     params = SendMessageRequest(
-        message=Message(role=Role.ROLE_USER, message_id='msg1', parts=[]),
+        message=Message(
+            role=Role.ROLE_USER, message_id='msg1', parts=[Part(text='Test')]
+        ),
         configuration=message_config,
     )
     context = create_server_call_context()

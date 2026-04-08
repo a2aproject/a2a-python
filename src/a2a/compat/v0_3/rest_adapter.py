@@ -33,12 +33,11 @@ else:
 
 from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3.rest_handler import REST03Handler
-from a2a.server.apps.jsonrpc.jsonrpc_app import (
-    CallContextBuilder,
-    DefaultCallContextBuilder,
-)
-from a2a.server.apps.rest.rest_adapter import RESTAdapterInterface
 from a2a.server.context import ServerCallContext
+from a2a.server.routes.common import (
+    DefaultServerCallContextBuilder,
+    ServerCallContextBuilder,
+)
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -53,7 +52,7 @@ from a2a.utils.helpers import maybe_await
 logger = logging.getLogger(__name__)
 
 
-class REST03Adapter(RESTAdapterInterface):
+class REST03Adapter:
     """Adapter to make RequestHandler work with v0.3 RESTful API.
 
     Defines v0.3 REST request processors and their routes, as well as managing response generation including Server-Sent Events (SSE).
@@ -64,7 +63,7 @@ class REST03Adapter(RESTAdapterInterface):
         agent_card: 'AgentCard',
         http_handler: 'RequestHandler',
         extended_agent_card: 'AgentCard | None' = None,
-        context_builder: 'CallContextBuilder | None' = None,
+        context_builder: 'ServerCallContextBuilder | None' = None,
         card_modifier: 'Callable[[AgentCard], Awaitable[AgentCard] | AgentCard] | None' = None,
         extended_card_modifier: 'Callable[[AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard] | None' = None,
     ):
@@ -75,7 +74,9 @@ class REST03Adapter(RESTAdapterInterface):
         self.handler = REST03Handler(
             agent_card=agent_card, request_handler=http_handler
         )
-        self._context_builder = context_builder or DefaultCallContextBuilder()
+        self._context_builder = (
+            context_builder or DefaultServerCallContextBuilder()
+        )
 
     @rest_error_handler
     async def _handle_request(
@@ -113,7 +114,7 @@ class REST03Adapter(RESTAdapterInterface):
         )
 
     async def handle_get_agent_card(
-        self, request: Request, call_context: ServerCallContext | None = None
+        self, request: Request, call_context: ServerCallContext
     ) -> dict[str, Any]:
         """Handles GET requests for the agent card endpoint."""
         card_to_serve = self.agent_card
@@ -123,7 +124,7 @@ class REST03Adapter(RESTAdapterInterface):
         return v03_card.model_dump(mode='json', exclude_none=True)
 
     async def handle_authenticated_agent_card(
-        self, request: Request, call_context: ServerCallContext | None = None
+        self, request: Request, call_context: ServerCallContext
     ) -> dict[str, Any]:
         """Hook for per credential agent card response."""
         if not self.agent_card.capabilities.extended_agent_card:
@@ -136,9 +137,8 @@ class REST03Adapter(RESTAdapterInterface):
             card_to_serve = self.agent_card
 
         if self.extended_card_modifier:
-            context = self._context_builder.build(request)
             card_to_serve = await maybe_await(
-                self.extended_card_modifier(card_to_serve, context)
+                self.extended_card_modifier(card_to_serve, call_context)
             )
         elif self.card_modifier:
             card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
