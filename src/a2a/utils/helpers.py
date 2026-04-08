@@ -110,9 +110,7 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             task.id,
         )
         existing_artifact.parts.extend(new_artifact_data.parts)
-        existing_artifact.metadata.update(
-            dict(new_artifact_data.metadata.items())
-        )
+        existing_artifact.metadata.update(dict(new_artifact_data.metadata))
     else:
         # We received a chunk to append, but we don't have an existing artifact.
         # we will ignore this chunk
