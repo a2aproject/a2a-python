@@ -138,3 +138,8 @@ TResponse
 typ
 typeerror
 vulnz
+Podman
+podman
+UIDs
+subuids
+subgids
