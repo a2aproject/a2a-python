@@ -292,7 +292,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         name='ITK v10 Agent',
         description='Python agent using SDK 1.0.',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
