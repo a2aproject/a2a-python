@@ -31,9 +31,6 @@ from a2a.utils.errors import UnsupportedOperationError
 from a2a.utils.proto_utils import validate_proto_required_fields
 
 
-logger = logging.getLogger(__name__)
-
-
 class RequestHandler(ABC):
     """A2A request handler interface.
 
