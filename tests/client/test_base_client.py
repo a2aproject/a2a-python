@@ -209,6 +209,41 @@ class TestClientTransport:
         assert response.task.id == 'task-789'
 
     @pytest.mark.asyncio
+    async def test_send_message_does_not_mutate_request(
+        self,
+        base_client: BaseClient,
+        mock_transport: MagicMock,
+        sample_message: Message,
+    ):
+        base_client._config.streaming = False
+        base_client._config.polling = True
+        base_client._config.accepted_output_modes = ['application/json']
+        base_client._config.push_notification_configs = [
+            TaskPushNotificationConfig(
+                task_id='task-1',
+            )
+        ]
+
+        task = Task(
+            id='task-no-mutate',
+            context_id='ctx-no-mutate',
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        )
+        response = SendMessageResponse()
+        response.task.CopyFrom(task)
+        mock_transport.send_message.return_value = response
+
+        request = SendMessageRequest(message=sample_message)
+
+        original = SendMessageRequest()
+        original.CopyFrom(request)
+
+        events = [event async for event in base_client.send_message(request)]
+        assert len(events) == 1
+
+        assert request == original
+
+    @pytest.mark.asyncio
     async def test_send_message_callsite_config_overrides_non_streaming(
         self,
         base_client: BaseClient,
