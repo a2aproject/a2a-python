@@ -1046,34 +1046,40 @@ async def test_server_rejects_stream_on_validation_error(
     getattr(handler, handler_attr).side_effect = mock_generator
 
     transport = client._transport
-    
+
     if isinstance(transport, (RestTransport, JsonRpcTransport)):
         # Spy on httpx client to check response headers
         original_send = transport.httpx_client.send
         response_headers = {}
-        
+
         async def mock_send(*args, **kwargs):
             resp = await original_send(*args, **kwargs)
             response_headers['Content-Type'] = resp.headers.get('Content-Type')
             return resp
-            
+
         transport.httpx_client.send = mock_send
-        
+
         try:
             with pytest.raises(error_cls):
-                async for _ in getattr(client, client_method)(request=request_params):
+                async for _ in getattr(client, client_method)(
+                    request=request_params
+                ):
                     pass
         finally:
             transport.httpx_client.send = original_send
-            
+
         # Verify that the response content type was NOT text/event-stream
-        assert not response_headers.get('Content-Type', '').startswith('text/event-stream')
+        assert not response_headers.get('Content-Type', '').startswith(
+            'text/event-stream'
+        )
     else:
         # For gRPC, we just verify it raises the error
         with pytest.raises(error_cls):
-            async for _ in getattr(client, client_method)(request=request_params):
+            async for _ in getattr(client, client_method)(
+                request=request_params
+            ):
                 pass
-                
+
     getattr(handler, handler_attr).side_effect = None
     await client.close()
 
