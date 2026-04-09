@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from pyproto import instruction_pb2
 
-from a2a.client import ClientConfig, ClientFactory
+from a2a.client import ClientConfig, create_client
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -128,10 +128,7 @@ async def handle_call_agent(call: instruction_pb2.CallAgent) -> list[str]:
     )
 
     try:
-        client = await ClientFactory.connect(
-            call.agent_card_uri,
-            client_config=config,
-        )
+        client = await create_client(call.agent_card_uri, client_config=config)
 
         # Wrap nested instruction
         async with client:
