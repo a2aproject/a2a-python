@@ -5,7 +5,6 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
-
 from starlette.applications import Starlette
 
 from a2a.client.base_client import BaseClient
@@ -175,6 +174,7 @@ class ClientSetup(NamedTuple):
 @pytest.fixture
 def base_e2e_setup(agent_card):
     task_store = InMemoryTaskStore()
+    # TODO(https://github.com/a2aproject/a2a-python/issues/869): Use DefaultRequestHandler once it's fixed
     handler = LegacyRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
