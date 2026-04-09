@@ -92,73 +92,6 @@ class EventQueue(ABC):
         Only main queue can enqueue events. Child queues can only dequeue events.
         """
 
-    @abstractmethod
-    async def dequeue_event(self) -> Event:
-        """Pulls an event from the queue."""
-
-    @abstractmethod
-    def task_done(self) -> None:
-        """Signals that a work on dequeued event is complete."""
-
-    @abstractmethod
-    async def tap(
-        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
-    ) -> 'EventQueue':
-        """Creates a child queue that receives future events.
-
-        Note: The tapped queue may receive some old events if the incoming event
-        queue is lagging behind and hasn't dispatched them yet.
-        """
-
-    @abstractmethod
-    async def close(self, immediate: bool = False) -> None:
-        """Closes the queue.
-
-        For parent queue: it closes the main queue and all its child queues.
-        For child queue: it closes only child queue.
-
-        It is safe to call it multiple times.
-        If immediate is True, the queue will be closed without waiting for all events to be processed.
-        If immediate is False, the queue will be closed after all events are processed (and confirmed with task_done() calls).
-
-        WARNING: Closing the parent queue with immediate=False is a deadlock risk if there are unconsumed events
-        in any of the child sinks and the consumer has crashed without draining its queue.
-        It is highly recommended to wrap graceful shutdowns with a timeout, e.g.,
-        `asyncio.wait_for(queue.close(immediate=False), timeout=...)`.
-        """
-
-    @abstractmethod
-    def is_closed(self) -> bool:
-        """[DEPRECATED] Checks if the queue is closed.
-
-        NOTE: Relying on this for enqueue logic introduces race conditions.
-        It is maintained primarily for backwards compatibility, workarounds for
-        Python 3.10/3.12 async queues in consumers, and for the test suite.
-        """
-
-    @abstractmethod
-    async def __aenter__(self) -> Self:
-        """Enters the async context manager, returning the queue itself.
-
-        WARNING: See `__aexit__` for important deadlock risks associated with
-        exiting this context manager if unconsumed events remain.
-        """
-
-    @abstractmethod
-    async def __aexit__(
-        self,
-        exc_type: type[BaseException] | None,
-        exc_val: BaseException | None,
-        exc_tb: TracebackType | None,
-    ) -> None:
-        """Exits the async context manager, ensuring close() is called.
-
-        WARNING: The context manager calls `close(immediate=False)` by default.
-        If a consumer exits the `async with` block early (e.g., due to an exception
-        or an explicit `break`) while unconsumed events remain in the queue,
-        `__aexit__` will deadlock waiting for `task_done()` to be called on those events.
-        """
-
 
 @trace_class(kind=SpanKind.SERVER)
 class EventQueueLegacy(EventQueue):
@@ -180,7 +113,7 @@ class EventQueueLegacy(EventQueue):
         self._queue: AsyncQueue[Event] = _create_async_queue(
             maxsize=max_queue_size
         )
-        self._children: list[EventQueue] = []
+        self._children: list[EventQueueLegacy] = []
         self._is_closed = False
         self._lock = asyncio.Lock()
         logger.debug('EventQueue initialized.')

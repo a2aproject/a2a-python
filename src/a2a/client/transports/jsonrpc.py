@@ -1,7 +1,7 @@
 import logging
 
 from collections.abc import AsyncGenerator
-from typing import Any
+from typing import Any, NoReturn
 from uuid import uuid4
 
 import httpx
@@ -350,6 +350,7 @@ class JsonRpcTransport(ClientTransport):
             'POST',
             self.url,
             None,
+            self._handle_sse_error,
             json=rpc_request_payload,
             **http_kwargs,
         ):
@@ -360,3 +361,10 @@ class JsonRpcTransport(ClientTransport):
                 json_rpc_response.result, StreamResponse()
             )
             yield response
+
+    def _handle_sse_error(self, sse_data: str) -> NoReturn:
+        """Handles SSE error events by parsing JSON-RPC error payload and raising the appropriate domain error."""
+        json_rpc_response = JSONRPC20Response.from_json(sse_data)
+        if json_rpc_response.error:
+            raise self._create_jsonrpc_error(json_rpc_response.error)
+        raise A2AClientError(f'SSE stream error: {sse_data}')
