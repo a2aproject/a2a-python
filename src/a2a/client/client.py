@@ -71,10 +71,8 @@ class ClientConfig:
     accepted_output_modes: list[str] = dataclasses.field(default_factory=list)
     """The set of accepted output modes for the client."""
 
-    push_notification_configs: list[TaskPushNotificationConfig] = (
-        dataclasses.field(default_factory=list)
-    )
-    """Push notification configurations to use for every request."""
+    push_notification_config: TaskPushNotificationConfig | None = None
+    """Push notification configuration to use for every request."""
 
 
 class ClientCallContext(BaseModel):
