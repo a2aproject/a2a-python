@@ -686,14 +686,21 @@ async def test_end_to_end_subscribe_validation_error(
 
 
 @pytest.mark.asyncio
-async def test_end_to_end_direct_message_blocking(transport_setups):
+@pytest.mark.parametrize(
+    'streaming',
+    [
+        pytest.param(False, id='blocking'),
+        pytest.param(True, id='streaming'),
+    ],
+)
+async def test_end_to_end_direct_message(transport_setups, streaming):
     """Test that an executor can return a direct Message without creating a Task."""
     client = transport_setups.client
-    client._config.streaming = False
+    client._config.streaming = streaming
 
     message_to_send = Message(
         role=Role.ROLE_USER,
-        message_id='msg-direct-blocking',
+        message_id='msg-direct',
         parts=[Part(text='Message: Hello agent')],
     )
 
@@ -750,33 +757,4 @@ async def test_end_to_end_direct_message_return_immediately(transport_setups):
         response.message,
         Role.ROLE_AGENT,
         'Direct reply to: Message: Quick question',
-    )
-
-
-@pytest.mark.asyncio
-async def test_end_to_end_direct_message_streaming(transport_setups):
-    """Test that streaming returns a direct Message and terminates the stream."""
-    client = transport_setups.client
-
-    message_to_send = Message(
-        role=Role.ROLE_USER,
-        message_id='msg-direct-streaming',
-        parts=[Part(text='Message: Hello streaming')],
-    )
-
-    events = [
-        event
-        async for event in client.send_message(
-            request=SendMessageRequest(message=message_to_send)
-        )
-    ]
-
-    assert len(events) == 1
-    response = events[0]
-    assert response.HasField('message')
-    assert not response.HasField('task')
-    assert_message_matches(
-        response.message,
-        Role.ROLE_AGENT,
-        'Direct reply to: Message: Hello streaming',
     )
