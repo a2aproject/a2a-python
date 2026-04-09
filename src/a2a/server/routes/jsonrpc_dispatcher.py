@@ -565,8 +565,30 @@ class JsonRpcDispatcher:
             async def event_generator(
                 stream: AsyncGenerator[dict[str, Any]],
             ) -> AsyncGenerator[dict[str, str]]:
-                async for item in stream:
-                    yield {'data': json.dumps(item)}
+                try:
+                    async for item in stream:
+                        event: dict[str, str] = {
+                            'data': json.dumps(item),
+                        }
+                        if 'error' in item:
+                            event['event'] = 'error'
+                        yield event
+                except Exception as e:
+                    logger.exception(
+                        'Unhandled error during JSON-RPC SSE stream'
+                    )
+                    rpc_error: A2AError | JSONRPCError = (
+                        e
+                        if isinstance(e, A2AError | JSONRPCError)
+                        else InternalError(message=str(e))
+                    )
+                    error_response = build_error_response(
+                        context.state.get('request_id'), rpc_error
+                    )
+                    yield {
+                        'event': 'error',
+                        'data': json.dumps(error_response),
+                    }
 
             return EventSourceResponse(
                 event_generator(handler_result), headers=headers
