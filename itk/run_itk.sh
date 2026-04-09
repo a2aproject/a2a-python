@@ -70,8 +70,9 @@ docker run -d --name itk-service \
   itk_service
 
 # 5.1. Fix dubious ownership for git (needed for uv-dynamic-versioning)
-docker exec itk-service git config --global --add safe.directory /app/agents/repo
-docker exec itk-service git config --global --add safe.directory /app/agents/repo/itk
+docker exec -u root itk-service git config --system --add safe.directory /app/agents/repo
+docker exec -u root itk-service git config --system --add safe.directory /app/agents/repo/itk
+docker exec -u root itk-service git config --system core.multiPackIndex false
 
 # 6. Verify service is up and send post request
 MAX_RETRIES=30
