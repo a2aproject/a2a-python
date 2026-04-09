@@ -384,11 +384,9 @@ class JsonRpcDispatcher:
         try:
             first_event = await anext(stream)
         except StopAsyncIteration:
-
             async def _empty_gen() -> AsyncGenerator[dict[str, Any], None]:
-                if False:
-                    yield {}
-
+                return
+                yield
             return _empty_gen()
 
         async def _wrap_stream(
