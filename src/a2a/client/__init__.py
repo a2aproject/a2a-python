@@ -12,7 +12,11 @@ from a2a.client.client import (
     ClientCallContext,
     ClientConfig,
 )
-from a2a.client.client_factory import ClientFactory, minimal_agent_card
+from a2a.client.client_factory import (
+    ClientFactory,
+    create_client,
+    minimal_agent_card,
+)
 from a2a.client.errors import (
     A2AClientError,
     A2AClientTimeoutError,
@@ -36,6 +40,7 @@ __all__ = [
     'ClientFactory',
     'CredentialService',
     'InMemoryContextCredentialStore',
+    'create_client',
     'create_text_message_object',
     'minimal_agent_card',
 ]

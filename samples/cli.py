@@ -9,7 +9,7 @@ from typing import Any
 import grpc
 import httpx
 
-from a2a.client import A2ACardResolver, ClientConfig, ClientFactory
+from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
 
 
@@ -79,7 +79,7 @@ async def main() -> None:
         print('\n✓ Agent Card Found:')
         print(f'  Name: {card.name}')
 
-    client = await ClientFactory.connect(card, client_config=config)
+    client = await create_client(card, client_config=config)
 
     actual_transport = getattr(client, '_transport', client)
     print(f'  Picked Transport: {actual_transport.__class__.__name__}')

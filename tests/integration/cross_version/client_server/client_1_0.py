@@ -5,7 +5,7 @@ import httpx
 import sys
 from uuid import uuid4
 
-from a2a.client import ClientFactory, ClientConfig
+from a2a.client import ClientConfig, create_client
 from a2a.utils import TransportProtocol
 from a2a.types import (
     Message,
@@ -80,7 +80,7 @@ async def test_send_message_sync(url, protocol_enum):
     config.supported_protocol_bindings = [protocol_enum]
     config.streaming = False
 
-    client = await ClientFactory.connect(url, client_config=config)
+    client = await create_client(url, client_config=config)
     msg = Message(
         role=Role.ROLE_USER,
         message_id=f'sync-{uuid4()}',
@@ -296,7 +296,7 @@ async def run_client(url: str, protocol: str):
     config.supported_protocol_bindings = [protocol_enum]
     config.streaming = True
 
-    client = await ClientFactory.connect(url, client_config=config)
+    client = await create_client(url, client_config=config)
 
     # 1. Get Extended Agent Card
     server_name = await test_get_extended_agent_card(client)
