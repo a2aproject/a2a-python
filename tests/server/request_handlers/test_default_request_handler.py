@@ -22,7 +22,12 @@ from a2a.server.agent_execution import (
     SimpleRequestContextBuilder,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
+from a2a.server.events import (
+    EventQueue,
+    EventQueueLegacy,
+    InMemoryQueueManager,
+    QueueManager,
+)
 from a2a.server.request_handlers import (
     LegacyRequestHandler as DefaultRequestHandler,
 )
@@ -380,7 +385,7 @@ async def test_on_cancel_task_cancels_running_agent(agent_card):
     mock_task_store.get.return_value = sample_task
 
     mock_queue_manager = AsyncMock(spec=QueueManager)
-    mock_event_queue = AsyncMock(spec=EventQueue)
+    mock_event_queue = AsyncMock(spec=EventQueueLegacy)
     mock_queue_manager.tap.return_value = mock_event_queue
 
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -425,7 +430,7 @@ async def test_on_cancel_task_completes_during_cancellation(agent_card):
     mock_task_store.get.return_value = sample_task
 
     mock_queue_manager = AsyncMock(spec=QueueManager)
-    mock_event_queue = AsyncMock(spec=EventQueue)
+    mock_event_queue = AsyncMock(spec=EventQueueLegacy)
     mock_queue_manager.tap.return_value = mock_event_queue
 
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -472,7 +477,7 @@ async def test_on_cancel_task_invalid_result_type(agent_card):
     mock_task_store.get.return_value = sample_task
 
     mock_queue_manager = AsyncMock(spec=QueueManager)
-    mock_event_queue = AsyncMock(spec=EventQueue)
+    mock_event_queue = AsyncMock(spec=EventQueueLegacy)
     mock_queue_manager.tap.return_value = mock_event_queue
 
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1452,7 +1457,7 @@ async def test_on_message_send_stream_client_disconnect_triggers_background_clea
     mock_request_context_builder.build.return_value = mock_request_context
 
     # Queue used by _run_event_stream; must support close()
-    mock_queue = AsyncMock(spec=EventQueue)
+    mock_queue = AsyncMock(spec=EventQueueLegacy)
     mock_queue_manager.create_or_tap.return_value = mock_queue
 
     request_handler = DefaultRequestHandler(
@@ -1683,7 +1688,7 @@ async def test_background_cleanup_task_is_tracked_and_cleared(agent_card):
     mock_request_context.context_id = context_id
     mock_request_context_builder.build.return_value = mock_request_context
 
-    mock_queue = AsyncMock(spec=EventQueue)
+    mock_queue = AsyncMock(spec=EventQueueLegacy)
     mock_queue_manager.create_or_tap.return_value = mock_queue
 
     request_handler = DefaultRequestHandler(

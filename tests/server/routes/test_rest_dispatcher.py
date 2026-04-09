@@ -264,9 +264,8 @@ class TestRestDispatcherStreaming:
             chunks.append(chunk)
 
         assert len(chunks) == 2
-        # sse-starlette yields strings or bytes formatted as Server-Sent Events
-        assert 'chunk1' in str(chunks[0])
-        assert 'chunk2' in str(chunks[1])
+        assert 'chunk1' in chunks[0].data
+        assert 'chunk2' in chunks[1].data
 
     async def test_on_subscribe_to_task_success(self, rest_dispatcher_instance):
         req = make_mock_request(method='GET', path_params={'id': 'test_task'})
@@ -279,8 +278,8 @@ class TestRestDispatcherStreaming:
             chunks.append(chunk)
 
         assert len(chunks) == 2
-        assert 'chunk1' in str(chunks[0])
-        assert 'chunk2' in str(chunks[1])
+        assert 'chunk1' in chunks[0].data
+        assert 'chunk2' in chunks[1].data
 
     async def test_on_message_send_stream_handler_error(self, mock_handler):
         from a2a.utils.errors import UnsupportedOperationError

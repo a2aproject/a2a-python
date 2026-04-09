@@ -49,11 +49,11 @@ def create_sample_task(
 
 @pytest.fixture
 def mock_event_queue():
-    return AsyncMock(spec=EventQueue)
+    return AsyncMock(spec=EventQueueLegacy)
 
 
 @pytest.fixture
-def event_consumer(mock_event_queue: EventQueue):
+def event_consumer(mock_event_queue: EventQueueLegacy):
     return EventConsumer(queue=mock_event_queue)
 
 
