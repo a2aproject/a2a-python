@@ -383,7 +383,7 @@ class JsonRpcDispatcher:
             first_event = None
 
         async def _wrap_stream(
-            st: AsyncGenerator, event: Any | None
+            st: AsyncGenerator, first_evt: Any | None
         ) -> AsyncGenerator[dict[str, Any], None]:
             def _map_event(evt: Any) -> dict[str, Any]:
                 stream_response = proto_utils.to_stream_response(evt)
@@ -393,8 +393,8 @@ class JsonRpcDispatcher:
                 return JSONRPC20Response(result=result, _id=request_id).data
 
             try:
-                if event is not None:
-                    yield _map_event(event)
+                if first_evt is not None:
+                    yield _map_event(first_evt)
 
                 async for event in st:
                     yield _map_event(event)
