@@ -41,6 +41,7 @@ from a2a.types import (
     TaskPushNotificationConfig,
     TaskQueryParams,
     TaskState,
+    TaskStatus,
     UnsupportedOperationError,
 )
 from a2a.utils.errors import ServerError
@@ -286,6 +287,27 @@ class DefaultRequestHandler(RequestHandler):
             if isinstance(latest_task, Task):
                 await self._push_sender.send_notification(latest_task)
 
+    async def _consume_and_notify_in_background(
+        self,
+        task_id: str,
+        result_aggregator: ResultAggregator,
+        consumer: EventConsumer,
+        producer_task: asyncio.Task,
+    ) -> None:
+        """Consume executor events and send push notifications in background."""
+        try:
+            async for _event in result_aggregator.consume_and_emit(consumer):
+                await self._send_push_notification_if_needed(
+                    task_id, result_aggregator
+                )
+        except Exception:
+            logger.exception(
+                'Background event consumption failed for task %s',
+                task_id,
+            )
+        finally:
+            await self._cleanup_producer(producer_task, task_id)
+
     async def on_message_send(
         self,
         params: MessageSendParams,
@@ -295,6 +317,11 @@ class DefaultRequestHandler(RequestHandler):
 
         Starts the agent execution for the message and waits for the final
         result (Task or Message).
+
+        When ``blocking`` is ``False``, the handler returns the task
+        immediately without waiting for executor events and processes
+        everything in the background. Results are delivered via push
+        notifications.
         """
         (
             _task_manager,
@@ -311,6 +338,34 @@ class DefaultRequestHandler(RequestHandler):
         if params.configuration and params.configuration.blocking is False:
             blocking = False
 
+        # Non-blocking fast path: return the task immediately and process
+        # events entirely in the background via push notifications.
+        if not blocking:
+            task = await _task_manager.get_task()
+            if not task:
+                task = Task(
+                    id=task_id,
+                    context_id=params.message.context_id,
+                    status=TaskStatus(state=TaskState.submitted),
+                    history=[params.message],
+                )
+
+            bg_task = asyncio.create_task(
+                self._consume_and_notify_in_background(
+                    task_id, result_aggregator, consumer, producer_task
+                )
+            )
+            bg_task.set_name(f'non_blocking_consume:{task_id}')
+            self._track_background_task(bg_task)
+
+            if params.configuration:
+                task = apply_history_length(
+                    task, params.configuration.history_length
+                )
+
+            return task
+
+        # Blocking path: wait for completion or interruption.
         interrupted_or_non_blocking = False
         try:
             # Create async callback for push notifications
@@ -325,7 +380,7 @@ class DefaultRequestHandler(RequestHandler):
                 bg_consume_task,
             ) = await result_aggregator.consume_and_break_on_interrupt(
                 consumer,
-                blocking=blocking,
+                blocking=True,
                 event_callback=push_notification_callback,
             )
 
