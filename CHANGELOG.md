@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.3.26](https://github.com/a2aproject/a2a-python/compare/v0.3.25...v0.3.26) (2026-04-09)
+
+
+### Features
+
+* Add support for more Task Message and Artifact fields in the Vertex Task Store ([#908](https://github.com/a2aproject/a2a-python/issues/908)) ([5e0dcd7](https://github.com/a2aproject/a2a-python/commit/5e0dcd798fcba16a8092b0b4c2d3d8026ca287de))
+
+
+### Bug Fixes
+
+* remove the use of deprecated types from VertexTaskStore ([#889](https://github.com/a2aproject/a2a-python/issues/889)) ([6d49122](https://github.com/a2aproject/a2a-python/commit/6d49122238a5e7d497c5d002792732446071dcb2))
+
 ## [0.3.25](https://github.com/a2aproject/a2a-python/compare/v0.3.24...v0.3.25) (2026-03-10)
 
 
