@@ -1,6 +1,6 @@
 import asyncio
 
-from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
+from a2a.server.events.event_queue import EventQueueLegacy
 from a2a.server.events.queue_manager import (
     NoTaskQueue,
     QueueManager,
@@ -23,10 +23,10 @@ class InMemoryQueueManager(QueueManager):
 
     def __init__(self) -> None:
         """Initializes the InMemoryQueueManager."""
-        self._task_queue: dict[str, EventQueue] = {}
+        self._task_queue: dict[str, EventQueueLegacy] = {}
         self._lock = asyncio.Lock()
 
-    async def add(self, task_id: str, queue: EventQueue) -> None:
+    async def add(self, task_id: str, queue: EventQueueLegacy) -> None:
         """Adds a new event queue for a task ID.
 
         Raises:
@@ -37,22 +37,22 @@ class InMemoryQueueManager(QueueManager):
                 raise TaskQueueExists
             self._task_queue[task_id] = queue
 
-    async def get(self, task_id: str) -> EventQueue | None:
+    async def get(self, task_id: str) -> EventQueueLegacy | None:
         """Retrieves the event queue for a task ID.
 
         Returns:
-            The `EventQueue` instance for the `task_id`, or `None` if not found.
+            The `EventQueueLegacy` instance for the `task_id`, or `None` if not found.
         """
         async with self._lock:
             if task_id not in self._task_queue:
                 return None
             return self._task_queue[task_id]
 
-    async def tap(self, task_id: str) -> EventQueue | None:
+    async def tap(self, task_id: str) -> EventQueueLegacy | None:
         """Taps the event queue for a task ID to create a child queue.
 
         Returns:
-            A new child `EventQueue` instance, or `None` if the task ID is not found.
+            A new child `EventQueueLegacy` instance, or `None` if the task ID is not found.
         """
         async with self._lock:
             if task_id not in self._task_queue:
@@ -71,11 +71,11 @@ class InMemoryQueueManager(QueueManager):
             queue = self._task_queue.pop(task_id)
             await queue.close()
 
-    async def create_or_tap(self, task_id: str) -> EventQueue:
+    async def create_or_tap(self, task_id: str) -> EventQueueLegacy:
         """Creates a new event queue for a task ID if one doesn't exist, otherwise taps the existing one.
 
         Returns:
-            A new or child `EventQueue` instance for the `task_id`.
+            A new or child `EventQueueLegacy` instance for the `task_id`.
         """
         async with self._lock:
             if task_id not in self._task_queue:

@@ -1,21 +1,21 @@
 from abc import ABC, abstractmethod
 
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.event_queue import EventQueueLegacy
 
 
 class QueueManager(ABC):
     """Interface for managing the event queue lifecycles per task."""
 
     @abstractmethod
-    async def add(self, task_id: str, queue: EventQueue) -> None:
+    async def add(self, task_id: str, queue: EventQueueLegacy) -> None:
         """Adds a new event queue associated with a task ID."""
 
     @abstractmethod
-    async def get(self, task_id: str) -> EventQueue | None:
+    async def get(self, task_id: str) -> EventQueueLegacy | None:
         """Retrieves the event queue for a task ID."""
 
     @abstractmethod
-    async def tap(self, task_id: str) -> EventQueue | None:
+    async def tap(self, task_id: str) -> EventQueueLegacy | None:
         """Creates a child event queue (tap) for an existing task ID."""
 
     @abstractmethod
@@ -23,7 +23,7 @@ class QueueManager(ABC):
         """Closes and removes the event queue for a task ID."""
 
     @abstractmethod
-    async def create_or_tap(self, task_id: str) -> EventQueue:
+    async def create_or_tap(self, task_id: str) -> EventQueueLegacy:
         """Creates a queue if one doesn't exist, otherwise taps the existing one."""
 
 

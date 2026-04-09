@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 
 from pydantic import ValidationError
 
-from a2a.server.events.event_queue import Event, EventQueue, QueueShutDown
+from a2a.server.events.event_queue import Event, EventQueueLegacy, QueueShutDown
 from a2a.types.a2a_pb2 import (
     Message,
     Task,
@@ -22,7 +22,7 @@ logger = logging.getLogger(__name__)
 class EventConsumer:
     """Consumer to read events from the agent event queue."""
 
-    def __init__(self, queue: EventQueue):
+    def __init__(self, queue: EventQueueLegacy):
         """Initializes the EventConsumer.
 
         Args:

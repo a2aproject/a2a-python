@@ -5,7 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from a2a.server.events import InMemoryQueueManager
-from a2a.server.events.event_queue import EventQueue
+from a2a.server.events.event_queue import EventQueueLegacy
 from a2a.server.events.queue_manager import (
     NoTaskQueue,
     TaskQueueExists,
@@ -21,7 +21,7 @@ class TestInMemoryQueueManager:
     @pytest.fixture
     def event_queue(self) -> MagicMock:
         """Fixture to create a mock EventQueue."""
-        queue = MagicMock(spec=EventQueue)
+        queue = MagicMock(spec=EventQueueLegacy)
 
         # Mock the tap method to return itself
         queue.tap.return_value = queue
@@ -119,7 +119,7 @@ class TestInMemoryQueueManager:
         task_id = 'test_task_id'
 
         result = await queue_manager.create_or_tap(task_id)
-        assert isinstance(result, EventQueue)
+        assert isinstance(result, EventQueueLegacy)
         assert queue_manager._task_queue[task_id] == result
 
     @pytest.mark.asyncio
@@ -142,7 +142,7 @@ class TestInMemoryQueueManager:
         """Test concurrent access to the queue manager."""
 
         async def add_task(task_id):
-            queue = EventQueue()
+            queue = EventQueueLegacy()
             await queue_manager.add(task_id, queue)
             return task_id
 
