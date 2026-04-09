@@ -376,42 +376,32 @@ class JsonRpcDispatcher:
         if stream is None:
             raise UnsupportedOperationError(message='Stream not supported')
 
-        # Eagerly fetch the first item from the stream so that errors raised
-        # before any event is yielded (e.g. task terminal state checks)
-        # propagate here and result in a standard JSON-RPC error response
-        # instead of establishing a broken SSE stream.
-        stream = aiter(stream)
+        # Eagerly fetch the first event to trigger validation/upfront errors
         try:
             first_event = await anext(stream)
         except StopAsyncIteration:
-            async def _empty_gen() -> AsyncGenerator[dict[str, Any], None]:
-                return
-                yield
-            return _empty_gen()
+            first_event = None
 
         async def _wrap_stream(
-            first_evt: Any,
-            st: AsyncGenerator,
+            st: AsyncGenerator, event: Any | None
         ) -> AsyncGenerator[dict[str, Any], None]:
-            try:
-                # Yield the first event
-                stream_response = proto_utils.to_stream_response(first_evt)
+            def _map_event(evt: Any) -> dict[str, Any]:
+                stream_response = proto_utils.to_stream_response(evt)
                 result = MessageToDict(
                     stream_response, preserving_proto_field_name=False
                 )
-                yield JSONRPC20Response(result=result, _id=request_id).data
+                return JSONRPC20Response(result=result, _id=request_id).data
 
-                # Yield the rest of the events
+            try:
+                if event is not None:
+                    yield _map_event(event)
+
                 async for event in st:
-                    stream_response = proto_utils.to_stream_response(event)
-                    result = MessageToDict(
-                        stream_response, preserving_proto_field_name=False
-                    )
-                    yield JSONRPC20Response(result=result, _id=request_id).data
+                    yield _map_event(event)
             except A2AError as e:
                 yield build_error_response(request_id, e)
 
-        return _wrap_stream(first_event, stream)
+        return _wrap_stream(stream, first_event)
 
     async def _handle_send_message(
         self, request_obj: SendMessageRequest, context: ServerCallContext
