@@ -36,7 +36,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import TransportProtocol
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 

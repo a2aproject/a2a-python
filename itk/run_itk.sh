@@ -8,6 +8,9 @@ RESULT=1
 cleanup() {
   set +x
   echo "Cleaning up artifacts..."
+  echo "=== ITK Service Logs ==="
+  docker logs itk-service || true
+  echo "========================"
   docker stop itk-service > /dev/null 2>&1 || true
   docker rm itk-service > /dev/null 2>&1 || true
   docker rmi itk_service > /dev/null 2>&1 || true
@@ -67,6 +70,7 @@ docker run -d --name itk-service \
   -v "$A2A_PYTHON_ROOT:/app/agents/repo" \
   -v "$ITK_DIR:/app/agents/repo/itk" \
   -p 8000:8000 \
+  -e A2A_LOG_LEVEL=DEBUG \
   itk_service
 
 # 5.1. Fix dubious ownership for git (needed for uv-dynamic-versioning)
@@ -156,10 +160,11 @@ except Exception as e:
 RESULT=$?
 set -e
 
-if [ $RESULT -ne 0 ]; then
-  echo "Tests failed. Container logs:"
-  docker logs itk-service
+if [ $RESULT -eq 0 ]; then
+  echo "=== ITK SUCCESS: All tests passed! ==="
 fi
+
+# Logs are always printed in cleanup()
 echo "--------------------------------------------------------"
 
 # Final exit result will be captured by trap cleanup

@@ -256,10 +256,14 @@ class ActiveTask:
         try:
             active = True
             while active:
-                (
-                    request_context,
-                    request_id,
-                ) = await self._request_queue.get()
+                try:
+                    (
+                        request_context,
+                        request_id,
+                    ) = await self._request_queue.get()
+                except QueueShutDown:
+                    logger.debug('Producer[%s]: Request queue shut down during get', self._task_id)
+                    break
                 await self._request_lock.acquire()
                 # TODO: Should we create task manager every time?
                 self._task_manager._call_context = request_context.call_context
@@ -283,7 +287,7 @@ class ActiveTask:
                     'Producer[%s]: Executing agent task %s',
                     self._task_id,
                     request_context.current_task,
-                )
+                ) 
 
                 try:
                     await self._agent_executor.execute(
@@ -295,9 +299,9 @@ class ActiveTask:
                     )
                 except QueueShutDown:
                     logger.debug(
-                        'Producer[%s]: Request queue shut down', self._task_id
+                        'Producer[%s]: Request queue shut down during execution', self._task_id
                     )
-                    raise
+                    break
                 except asyncio.CancelledError:
                     logger.debug('Producer[%s]: Cancelled', self._task_id)
                     raise
@@ -410,7 +414,7 @@ class ActiveTask:
 
                                     # Terminate the ActiveTask globally.
                                     self._is_finished.set()
-                                    self._request_queue.shutdown(immediate=True)
+                                    self._request_queue.shutdown(immediate=False)
 
                                 if is_interrupted:
                                     logger.debug(
@@ -447,7 +451,7 @@ class ActiveTask:
             finally:
                 # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
-                self._request_queue.shutdown(immediate=True)
+                self._request_queue.shutdown(immediate=False)
 
                 logger.debug('Consumer[%s]: Finishing', self._task_id)
                 await self._maybe_cleanup()
@@ -526,6 +530,37 @@ class ActiveTask:
                         if self._is_finished.is_set():
                             if self._exception:
                                 raise self._exception from None
+                            
+                            logger.debug('Subscriber[%s]: Entering draining loop', self._task_id)
+                            # Drain remaining events before breaking
+                            while True:
+                                try:
+                                    event = await asyncio.wait_for(
+                                        tapped_queue.dequeue_event(), timeout=0.1
+                                    )
+                                    logger.debug(
+                                        'Subscriber[%s]: Race condition handled! Drained event after timeout: %s',
+                                        self._task_id,
+                                        event,
+                                    )
+                                except (asyncio.TimeoutError, TimeoutError):
+                                    break
+                                
+                                try:
+                                    if isinstance(event, _RequestCompleted):
+                                        if (
+                                            request_id is not None
+                                            and event.request_id == request_id
+                                        ):
+                                            logger.debug(
+                                                'Subscriber[%s]: Request completed (drained)',
+                                                self._task_id,
+                                            )
+                                            return
+                                        continue
+                                    yield event
+                                finally:
+                                    tapped_queue.task_done()
                             break
                         continue
 
