@@ -15,6 +15,7 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
@@ -376,20 +377,32 @@ class JsonRpcDispatcher:
         if stream is None:
             raise UnsupportedOperationError(message='Stream not supported')
 
+        # Eagerly fetch the first event to trigger validation/upfront errors
+        try:
+            first_event = await anext(stream)
+        except StopAsyncIteration:
+            first_event = None
+
         async def _wrap_stream(
-            st: AsyncGenerator,
+            st: AsyncGenerator, first_evt: Event | None
         ) -> AsyncGenerator[dict[str, Any], None]:
+            def _map_event(evt: Event) -> dict[str, Any]:
+                stream_response = proto_utils.to_stream_response(evt)
+                result = MessageToDict(
+                    stream_response, preserving_proto_field_name=False
+                )
+                return JSONRPC20Response(result=result, _id=request_id).data
+
             try:
+                if first_evt is not None:
+                    yield _map_event(first_evt)
+
                 async for event in st:
-                    stream_response = proto_utils.to_stream_response(event)
-                    result = MessageToDict(
-                        stream_response, preserving_proto_field_name=False
-                    )
-                    yield JSONRPC20Response(result=result, _id=request_id).data
+                    yield _map_event(event)
             except A2AError as e:
                 yield build_error_response(request_id, e)
 
-        return _wrap_stream(stream)
+        return _wrap_stream(stream, first_event)
 
     async def _handle_send_message(
         self, request_obj: SendMessageRequest, context: ServerCallContext

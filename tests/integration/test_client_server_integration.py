@@ -1021,6 +1021,71 @@ async def test_client_handles_a2a_errors_streaming(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    'error_cls,handler_attr,client_method,request_params',
+    [
+        pytest.param(
+            UnsupportedOperationError,
+            'on_subscribe_to_task',
+            'subscribe',
+            SubscribeToTaskRequest(id='some-id'),
+            id='subscribe',
+        ),
+    ],
+)
+async def test_server_rejects_stream_on_validation_error(
+    transport_setups, error_cls, handler_attr, client_method, request_params
+) -> None:
+    """Verify that the server returns an error directly and doesn't open a stream on validation error."""
+    client = transport_setups.client
+    handler = transport_setups.handler
+
+    async def mock_generator(*args, **kwargs):
+        raise error_cls('Validation failed')
+        yield
+
+    getattr(handler, handler_attr).side_effect = mock_generator
+
+    transport = client._transport
+
+    if isinstance(transport, (RestTransport, JsonRpcTransport)):
+        # Spy on httpx client to check response headers
+        original_send = transport.httpx_client.send
+        response_headers = {}
+
+        async def mock_send(*args, **kwargs):
+            resp = await original_send(*args, **kwargs)
+            response_headers['Content-Type'] = resp.headers.get('Content-Type')
+            return resp
+
+        transport.httpx_client.send = mock_send
+
+        try:
+            with pytest.raises(error_cls):
+                async for _ in getattr(client, client_method)(
+                    request=request_params
+                ):
+                    pass
+        finally:
+            transport.httpx_client.send = original_send
+
+        # Verify that the response content type was NOT text/event-stream
+        assert not response_headers.get('Content-Type', '').startswith(
+            'text/event-stream'
+        )
+    else:
+        # For gRPC, we just verify it raises the error
+        with pytest.raises(error_cls):
+            async for _ in getattr(client, client_method)(
+                request=request_params
+            ):
+                pass
+
+    getattr(handler, handler_attr).side_effect = None
+    await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     'request_kwargs, expected_error_code',
     [
         pytest.param(
