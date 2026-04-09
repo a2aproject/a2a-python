@@ -15,6 +15,7 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
@@ -383,9 +384,9 @@ class JsonRpcDispatcher:
             first_event = None
 
         async def _wrap_stream(
-            st: AsyncGenerator, first_evt: Any | None
+            st: AsyncGenerator, first_evt: Event | None
         ) -> AsyncGenerator[dict[str, Any], None]:
-            def _map_event(evt: Any) -> dict[str, Any]:
+            def _map_event(evt: Event) -> dict[str, Any]:
                 stream_response = proto_utils.to_stream_response(evt)
                 result = MessageToDict(
                     stream_response, preserving_proto_field_name=False
