@@ -45,6 +45,7 @@ dunders
 ES256
 euo
 EUR
+evt
 excinfo
 FastAPI
 fernet
