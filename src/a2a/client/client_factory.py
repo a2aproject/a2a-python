@@ -88,114 +88,6 @@ class ClientFactory:
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
-    def register(self, label: str, generator: TransportProducer) -> None:
-        """Register a new transport producer for a given transport label."""
-        self._registry[label] = generator
-
-    def create(
-        self,
-        card: AgentCard,
-        interceptors: list[ClientCallInterceptor] | None = None,
-    ) -> Client:
-        """Create a new `Client` for the provided `AgentCard`.
-
-        Args:
-          card: An `AgentCard` defining the characteristics of the agent.
-          interceptors: A list of interceptors to use for each request. These
-            are used for things like attaching credentials or http headers
-            to all outbound requests.
-
-        Returns:
-          A `Client` object.
-
-        Raises:
-          If there is no valid matching of the client configuration with the
-          server configuration, a `ValueError` is raised.
-        """
-        client_set = self._config.supported_protocol_bindings or [
-            TransportProtocol.JSONRPC
-        ]
-        transport_protocol = None
-        selected_interface = None
-        if self._config.use_client_preference:
-            for protocol_binding in client_set:
-                selected_interface = ClientFactory._find_best_interface(
-                    list(card.supported_interfaces),
-                    protocol_bindings=[protocol_binding],
-                )
-                if selected_interface:
-                    transport_protocol = protocol_binding
-                    break
-        else:
-            for supported_interface in card.supported_interfaces:
-                if supported_interface.protocol_binding in client_set:
-                    transport_protocol = supported_interface.protocol_binding
-                    selected_interface = ClientFactory._find_best_interface(
-                        list(card.supported_interfaces),
-                        protocol_bindings=[transport_protocol],
-                    )
-                    break
-        if not transport_protocol or not selected_interface:
-            raise ValueError('no compatible transports found.')
-        if transport_protocol not in self._registry:
-            raise ValueError(f'no client available for {transport_protocol}')
-
-        transport = self._registry[transport_protocol](
-            card, selected_interface.url, self._config
-        )
-
-        if selected_interface.tenant:
-            transport = TenantTransportDecorator(
-                transport, selected_interface.tenant
-            )
-
-        return BaseClient(
-            card,
-            self._config,
-            transport,
-            interceptors or [],
-        )
-
-    async def create_from_url(
-        self,
-        url: str,
-        interceptors: list[ClientCallInterceptor] | None = None,
-        relative_card_path: str | None = None,
-        resolver_http_kwargs: dict[str, Any] | None = None,
-        signature_verifier: Callable[[AgentCard], None] | None = None,
-    ) -> Client:
-        """Create a `Client` by resolving an `AgentCard` from a URL.
-
-        Resolves the agent card from the given URL using the factory's
-        configured httpx client, then creates a client via `create`.
-
-        If the agent card is already available, use `create` directly
-        instead.
-
-        Args:
-          url: The base URL of the agent. The agent card will be fetched
-            from `<url>/.well-known/agent-card.json` by default.
-          interceptors: A list of interceptors to use for each request.
-            These are used for things like attaching credentials or http
-            headers to all outbound requests.
-          relative_card_path: The relative path when resolving the agent
-            card. See `A2ACardResolver.get_agent_card` for details.
-          resolver_http_kwargs: Dictionary of arguments to provide to the
-            httpx client when resolving the agent card.
-          signature_verifier: A callable used to verify the agent card's
-            signatures.
-
-        Returns:
-          A `Client` object.
-        """
-        resolver = A2ACardResolver(self._httpx_client, url)
-        card = await resolver.get_agent_card(
-            relative_card_path=relative_card_path,
-            http_kwargs=resolver_http_kwargs,
-            signature_verifier=signature_verifier,
-        )
-        return self.create(card, interceptors)
-
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
 
@@ -362,6 +254,114 @@ class ClientFactory:
                 pass
 
         return best_gt_1_0 or best_ge_0_3 or best_no_version
+
+    async def create_from_url(
+        self,
+        url: str,
+        interceptors: list[ClientCallInterceptor] | None = None,
+        relative_card_path: str | None = None,
+        resolver_http_kwargs: dict[str, Any] | None = None,
+        signature_verifier: Callable[[AgentCard], None] | None = None,
+    ) -> Client:
+        """Create a `Client` by resolving an `AgentCard` from a URL.
+
+        Resolves the agent card from the given URL using the factory's
+        configured httpx client, then creates a client via `create`.
+
+        If the agent card is already available, use `create` directly
+        instead.
+
+        Args:
+          url: The base URL of the agent. The agent card will be fetched
+            from `<url>/.well-known/agent-card.json` by default.
+          interceptors: A list of interceptors to use for each request.
+            These are used for things like attaching credentials or http
+            headers to all outbound requests.
+          relative_card_path: The relative path when resolving the agent
+            card. See `A2ACardResolver.get_agent_card` for details.
+          resolver_http_kwargs: Dictionary of arguments to provide to the
+            httpx client when resolving the agent card.
+          signature_verifier: A callable used to verify the agent card's
+            signatures.
+
+        Returns:
+          A `Client` object.
+        """
+        resolver = A2ACardResolver(self._httpx_client, url)
+        card = await resolver.get_agent_card(
+            relative_card_path=relative_card_path,
+            http_kwargs=resolver_http_kwargs,
+            signature_verifier=signature_verifier,
+        )
+        return self.create(card, interceptors)
+
+    def register(self, label: str, generator: TransportProducer) -> None:
+        """Register a new transport producer for a given transport label."""
+        self._registry[label] = generator
+
+    def create(
+        self,
+        card: AgentCard,
+        interceptors: list[ClientCallInterceptor] | None = None,
+    ) -> Client:
+        """Create a new `Client` for the provided `AgentCard`.
+
+        Args:
+          card: An `AgentCard` defining the characteristics of the agent.
+          interceptors: A list of interceptors to use for each request. These
+            are used for things like attaching credentials or http headers
+            to all outbound requests.
+
+        Returns:
+          A `Client` object.
+
+        Raises:
+          If there is no valid matching of the client configuration with the
+          server configuration, a `ValueError` is raised.
+        """
+        client_set = self._config.supported_protocol_bindings or [
+            TransportProtocol.JSONRPC
+        ]
+        transport_protocol = None
+        selected_interface = None
+        if self._config.use_client_preference:
+            for protocol_binding in client_set:
+                selected_interface = ClientFactory._find_best_interface(
+                    list(card.supported_interfaces),
+                    protocol_bindings=[protocol_binding],
+                )
+                if selected_interface:
+                    transport_protocol = protocol_binding
+                    break
+        else:
+            for supported_interface in card.supported_interfaces:
+                if supported_interface.protocol_binding in client_set:
+                    transport_protocol = supported_interface.protocol_binding
+                    selected_interface = ClientFactory._find_best_interface(
+                        list(card.supported_interfaces),
+                        protocol_bindings=[transport_protocol],
+                    )
+                    break
+        if not transport_protocol or not selected_interface:
+            raise ValueError('no compatible transports found.')
+        if transport_protocol not in self._registry:
+            raise ValueError(f'no client available for {transport_protocol}')
+
+        transport = self._registry[transport_protocol](
+            card, selected_interface.url, self._config
+        )
+
+        if selected_interface.tenant:
+            transport = TenantTransportDecorator(
+                transport, selected_interface.tenant
+            )
+
+        return BaseClient(
+            card,
+            self._config,
+            transport,
+            interceptors or [],
+        )
 
 
 async def create_client(  # noqa: PLR0913
