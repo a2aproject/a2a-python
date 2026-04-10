@@ -13,7 +13,7 @@ from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
-from a2a.server.request_handlers import GrpcHandler, LegacyRequestHandler
+from a2a.server.request_handlers import GrpcHandler, DefaultRequestHandler
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks import TaskUpdater
@@ -174,8 +174,7 @@ class ClientSetup(NamedTuple):
 @pytest.fixture
 def base_e2e_setup(agent_card):
     task_store = InMemoryTaskStore()
-    # TODO(https://github.com/a2aproject/a2a-python/issues/869): Use DefaultRequestHandler once it's fixed
-    handler = LegacyRequestHandler(
+    handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
         agent_card=agent_card,
