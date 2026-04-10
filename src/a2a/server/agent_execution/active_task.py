@@ -511,12 +511,14 @@ class ActiveTask:
                     )
             except Exception as e:
                 logger.exception('Consumer[%s]: Failed', self._task_id)
+                # TODO: Make the task in database as failed.
                 async with self._lock:
                     await self._mark_task_as_failed(e)
             finally:
                 # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
                 self._request_queue.shutdown(immediate=True)
+                await self._event_queue_agent.close(immediate=True)
 
                 logger.debug('Consumer[%s]: Finishing', self._task_id)
                 await self._maybe_cleanup()
@@ -574,53 +576,42 @@ class ActiveTask:
                     if self._exception:
                         raise self._exception
 
-                    # Wait for next event or task completion
-                    try:
-                        dequeued = await asyncio.wait_for(
-                            tapped_queue.dequeue_event(), timeout=0.1
-                        )
-                        event, updated_task = cast('Any', dequeued)
+                    dequeued = await tapped_queue.dequeue_event()
+                    event, updated_task = cast('Any', dequeued)
+                    logger.debug(
+                        'Subscriber[%s]\nDequeued event %s\nUpdated task %s\n',
+                        self._task_id,
+                        event,
+                        updated_task,
+                    )
+                    if replace_status_update_with_task and isinstance(
+                        event, TaskStatusUpdateEvent
+                    ):
                         logger.debug(
-                            'Subscriber[%s]\nDequeued event %s\nUpdated task %s\n',
+                            'Subscriber[%s]: Replacing TaskStatusUpdateEvent with Task: %s',
                             self._task_id,
-                            event,
                             updated_task,
                         )
-                        if replace_status_update_with_task and isinstance(
-                            event, TaskStatusUpdateEvent
+                        event = updated_task
+                    if self._exception:
+                        raise self._exception from None
+                    if isinstance(event, _RequestCompleted):
+                        if (
+                            request_id is not None
+                            and event.request_id == request_id
                         ):
                             logger.debug(
-                                'Subscriber[%s]: Replacing TaskStatusUpdateEvent with Task: %s',
-                                self._task_id,
-                                updated_task,
-                            )
-                            event = updated_task
-                        if self._exception:
-                            raise self._exception from None
-                        if isinstance(event, _RequestCompleted):
-                            if (
-                                request_id is not None
-                                and event.request_id == request_id
-                            ):
-                                logger.debug(
-                                    'Subscriber[%s]: Request completed',
-                                    self._task_id,
-                                )
-                                return
-                            continue
-                        elif isinstance(event, _RequestStarted):
-                            logger.debug(
-                                'Subscriber[%s]: Request started',
+                                'Subscriber[%s]: Request completed',
                                 self._task_id,
                             )
-                            continue
-                    except (asyncio.TimeoutError, TimeoutError):
-                        if self._is_finished.is_set():
-                            if self._exception:
-                                raise self._exception from None
-                            break
+                            return
                         continue
-
+                    elif isinstance(event, _RequestStarted):
+                        logger.debug(
+                            'Subscriber[%s]: Request started',
+                            self._task_id,
+                        )
+                        continue
                     try:
                         yield event
                     finally:
@@ -715,17 +706,20 @@ class ActiveTask:
         if self._exception is None:
             self._exception = exception
         if self._task_created.is_set():
-            task = await self._task_manager.get_task()
-            if task is not None:
-                await self._event_queue_agent.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        task_id=task.id,
-                        context_id=task.context_id,
-                        status=TaskStatus(
-                            state=TaskState.TASK_STATE_FAILED,
-                        ),
+            try:
+                task = await self._task_manager.get_task()
+                if task is not None:
+                    await self._event_queue_agent.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            task_id=task.id,
+                            context_id=task.context_id,
+                            status=TaskStatus(
+                                state=TaskState.TASK_STATE_FAILED,
+                            ),
+                        )
                     )
-                )
+            except QueueShutDown:
+                pass
 
     async def get_task(self) -> Task:
         """Get task from db."""
