@@ -147,13 +147,12 @@ class TaskManager:
         await self._save_task(task)
         return task
 
-    async def ensure_task(
-        self, event: TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ) -> Task:
+    async def ensure_task_id(self, task_id: str, context_id: str) -> Task:
         """Ensures a Task object exists in memory, loading from store or creating new if needed.
 
         Args:
-            event: The task-related event triggering the need for a Task object.
+            task_id: The ID for the new task.
+            context_id: The context ID for the new task.
 
         Returns:
             An existing or newly created `Task` object.
@@ -168,15 +167,28 @@ class TaskManager:
         if not task:
             logger.info(
                 'Task not found or task_id not set. Creating new task for event (task_id: %s, context_id: %s).',
-                event.task_id,
-                event.context_id,
+                task_id,
+                context_id,
             )
             # streaming agent did not previously stream task object.
             # Create a task object with the available information and persist the event
-            task = self._init_task_obj(event.task_id, event.context_id)
+            task = self._init_task_obj(task_id, context_id)
             await self._save_task(task)
 
         return task
+
+    async def ensure_task(
+        self, event: TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+    ) -> Task:
+        """Ensures a Task object exists in memory, loading from store or creating new if needed.
+
+        Args:
+            event: The task-related event triggering the need for a Task object.
+
+        Returns:
+            An existing or newly created `Task` object.
+        """
+        return await self.ensure_task_id(event.task_id, event.context_id)
 
     async def process(self, event: Event) -> Event:
         """Processes an event, updates the task state if applicable, stores it, and returns the event.

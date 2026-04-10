@@ -1105,55 +1105,6 @@ async def test_on_message_send_limit_history():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_task_id_mismatch():
-    mock_task_store = AsyncMock(spec=TaskStore)
-    mock_agent_executor = AsyncMock(spec=AgentExecutor)
-    mock_request_context_builder = AsyncMock(spec=RequestContextBuilder)
-
-    context_task_id = 'context_task_id_1'
-    result_task_id = 'DIFFERENT_task_id_1'
-
-    mock_request_context = MagicMock()
-    mock_request_context.task_id = context_task_id
-    mock_request_context_builder.build.return_value = mock_request_context
-
-    request_handler = DefaultRequestHandlerV2(
-        agent_executor=mock_agent_executor,
-        task_store=mock_task_store,
-        request_context_builder=mock_request_context_builder,
-        agent_card=create_default_agent_card(),
-    )
-    params = SendMessageRequest(
-        message=Message(
-            role=Role.ROLE_USER,
-            message_id='msg_id_mismatch',
-            parts=[Part(text='hello')],
-        )
-    )
-
-    mock_active_task = MagicMock()
-    mismatched_task = create_sample_task(task_id=result_task_id)
-    mock_active_task.wait = AsyncMock(return_value=mismatched_task)
-    mock_active_task.start = AsyncMock()
-    mock_active_task.enqueue_request = AsyncMock()
-    mock_active_task.get_task = AsyncMock(return_value=mismatched_task)
-    with (
-        patch.object(
-            request_handler._active_task_registry,
-            'get_or_create',
-            return_value=mock_active_task,
-        ),
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=None,
-        ),
-    ):
-        with pytest.raises(InternalError) as exc_info:
-            await request_handler.on_message_send(params, context=MagicMock())
-        assert 'Task ID mismatch' in exc_info.value.message
-
-
-@pytest.mark.asyncio
 async def test_on_message_send_stream_task_id_mismatch():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)

@@ -242,63 +242,56 @@ class DefaultRequestHandlerV2(RequestHandler):
         active_task, request_context = await self._setup_active_task(
             params, context
         )
+        task_id = cast('str', request_context.task_id)
 
-        if params.configuration and params.configuration.return_immediately:
-            await active_task.enqueue_request(request_context)
+        result: Message | Task | None = None
 
-            task = await active_task.get_task()
-            if params.configuration:
-                task = apply_history_length(task, params.configuration)
-            return task
-
-        try:
-            result_states = TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES
-
-            result = None
-            async for event in active_task.subscribe(request=request_context):
-                logger.debug(
-                    'Processing[%s] event [%s] %s',
-                    request_context.task_id,
-                    type(event).__name__,
-                    event,
-                )
-                if isinstance(event, Message) or (
-                    isinstance(event, Task)
-                    and event.status.state in result_states
-                ):
-                    result = event
-                    break
-                if (
-                    isinstance(event, TaskStatusUpdateEvent)
-                    and event.status.state in result_states
-                ):
-                    result = await self.task_store.get(event.task_id, context)
-                    break
-
-            if result is None:
-                logger.debug(
-                    'Missing result for task %s', request_context.task_id
-                )
-                result = await active_task.get_task()
-
+        async for raw_event in active_task.subscribe(
+            request=request_context,
+            include_initial_task=False,
+            replace_status_update_with_task=True,
+        ):
+            event = raw_event
             logger.debug(
-                'Processing[%s] result: %s', request_context.task_id, result
+                'Processing[%s] event [%s] %s',
+                params.message.task_id,
+                type(event).__name__,
+                event,
             )
+            if isinstance(event, TaskStatusUpdateEvent):
+                self._validate_task_id_match(task_id, event.task_id)
+                event = await active_task.get_task()
+                logger.debug(
+                    'Replaced TaskStatusUpdateEvent with Task: %s', event
+                )
 
-        except Exception:
-            logger.exception('Agent execution failed')
-            raise
+            if isinstance(event, Task) and (
+                params.configuration.return_immediately
+                or event.status.state
+                in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
+            ):
+                self._validate_task_id_match(task_id, event.id)
+                result = event
+                break
+
+            if isinstance(event, Message):
+                result = event
+                break
+
+        if result is None:
+            logger.debug('Missing result for task %s', request_context.task_id)
+            result = await active_task.get_task()
 
         if isinstance(result, Task):
-            self._validate_task_id_match(
-                cast('str', request_context.task_id), result.id
-            )
-            if params.configuration:
-                result = apply_history_length(result, params.configuration)
+            result = apply_history_length(result, params.configuration)
 
+        logger.debug(
+            'Returning result for task %s: %s',
+            request_context.task_id,
+            result,
+        )
         return result
 
-    # TODO: Unify with on_message_send
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -313,19 +306,20 @@ class DefaultRequestHandlerV2(RequestHandler):
             params, context
         )
 
-        include_initial_task = bool(
-            params.configuration and params.configuration.return_immediately
-        )
-
         task_id = cast('str', request_context.task_id)
 
         async for event in active_task.subscribe(
-            request=request_context, include_initial_task=include_initial_task
+            request=request_context,
+            include_initial_task=False,
         ):
             if isinstance(event, Task):
                 self._validate_task_id_match(task_id, event.id)
-            logger.debug('Sending event [%s] %s', type(event).__name__, event)
-            yield event
+                yield apply_history_length(event, params.configuration)
+            else:
+                yield event
+
+            if isinstance(event, Message):
+                break
 
     @validate_request_params
     @validate(

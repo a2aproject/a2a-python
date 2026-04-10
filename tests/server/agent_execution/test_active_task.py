@@ -1047,6 +1047,7 @@ async def test_active_task_subscribe_include_initial_task():
     assert events[0] == initial_task
 
 
+@pytest.mark.timeout(1)
 @pytest.mark.asyncio
 async def test_active_task_subscribe_request_parameter():
     agent_executor = Mock()

@@ -16,11 +16,14 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
-from a2a.server.request_handlers import DefaultRequestHandlerV2, GrpcHandler
+from a2a.server.request_handlers import (
+    DefaultRequestHandlerV2,
+    GrpcHandler,
+    GrpcServerCallContextBuilder,
+)
 from a2a.server.request_handlers.default_request_handler import (
     LegacyRequestHandler,
 )
-from a2a.server.request_handlers import GrpcServerCallContextBuilder
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
@@ -701,24 +704,12 @@ async def test_scenario_16_slow_execution(use_legacy, streaming):
         )
         return await asyncio.wait_for(it.__anext__(), timeout=0.1)
 
-    if use_legacy:
-        # Legacy client hangs forever.
-        with pytest.raises(asyncio.TimeoutError):
-            await send_message_and_get_first_response()
-    else:
-        event = await send_message_and_get_first_response()
-        task = event.task
-        assert task.status.state == TaskState.TASK_STATE_SUBMITTED
-        (message,) = task.history
-        assert message.message_id == 'test-msg'
+    # First response should not be there yet.
+    with pytest.raises(asyncio.TimeoutError):
+        await send_message_and_get_first_response()
 
     tasks = (await client.list_tasks(ListTasksRequest())).tasks
-    if use_legacy:
-        # Legacy didn't create a task
-        assert len(tasks) == 0
-    else:
-        (task,) = tasks
-        assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert len(tasks) == 0
 
 
 # Scenario 17: Cancellation of a working task.
@@ -1090,39 +1081,13 @@ async def test_scenario_return_immediately(use_legacy, streaming):
     )
     states = [get_state(event) async for event in it]
 
-    if use_legacy:
-        if streaming:
-            assert states == [
-                TaskState.TASK_STATE_WORKING,
-                TaskState.TASK_STATE_COMPLETED,
-            ]
-        else:
-            assert states == [TaskState.TASK_STATE_WORKING]
-    elif streaming:
-        assert states == [
-            TaskState.TASK_STATE_SUBMITTED,
-            TaskState.TASK_STATE_WORKING,
-            TaskState.TASK_STATE_COMPLETED,
-        ]
-    else:
-        assert states == [TaskState.TASK_STATE_SUBMITTED]
-
-    # Test blocking return.
-    it = client.send_message(
-        SendMessageRequest(
-            message=msg,
-            configuration=SendMessageConfiguration(return_immediately=False),
-        )
-    )
-    states = [get_state(event) async for event in it]
-
     if streaming:
         assert states == [
             TaskState.TASK_STATE_WORKING,
             TaskState.TASK_STATE_COMPLETED,
         ]
     else:
-        assert states == [TaskState.TASK_STATE_COMPLETED]
+        assert states == [TaskState.TASK_STATE_WORKING]
 
 
 # Scenario: Test TASK_STATE_INPUT_REQUIRED.
@@ -1305,7 +1270,7 @@ async def test_scenario_auth_required_side_channel(use_legacy, streaming):
 @pytest.mark.timeout(5.0)
 @pytest.mark.asyncio
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
-async def test_scenario_parallel_subscribe_attach_detach(use_legacy):
+async def test_scenario_parallel_subscribe_attach_detach(use_legacy):  # noqa: PLR0915
     events = collections.defaultdict(asyncio.Event)
 
     class EmitAgent(AgentExecutor):
@@ -1434,11 +1399,11 @@ async def test_scenario_parallel_subscribe_attach_detach(use_legacy):
     await events['emitted_phase_4'].wait()
 
     def get_artifact_updates(evs):
-        txts = []
-        for sr in evs:
-            if sr.HasField('artifact_update'):
-                txts.append([p.text for p in sr.artifact_update.artifact.parts])
-        return txts
+        return [
+            [p.text for p in sr.artifact_update.artifact.parts]
+            for sr in evs
+            if sr.HasField('artifact_update')
+        ]
 
     assert get_artifact_updates(await sub1_task) == [
         ['artifact_1'],
@@ -1459,3 +1424,137 @@ async def test_scenario_parallel_subscribe_attach_detach(use_legacy):
     ]
 
     monitor_task.cancel()
+
+
+# Return message directly.
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+@pytest.mark.parametrize(
+    'return_immediately',
+    [False, True],
+    ids=['no_return_immediately', 'return_immediately'],
+)
+async def test_scenario_publish_message(
+    use_legacy, streaming, return_immediately
+):
+    class MessageAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            await event_queue.enqueue_event(
+                Message(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    message_id='msg-1',
+                    role=Role.ROLE_AGENT,
+                    parts=[Part(text='response text')],
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(MessageAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg,
+            configuration=SendMessageConfiguration(
+                return_immediately=return_immediately
+            ),
+        )
+    )
+    events = [event async for event in it]
+
+    (event,) = events
+    assert event.HasField('message')
+    assert event.message.parts[0].text == 'response text'
+
+    tasks = (await client.list_tasks(ListTasksRequest())).tasks
+    assert len(tasks) == 0
+
+
+# Scenario: Publish ArtifactUpdateEvent
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+async def test_scenario_publish_artifact(use_legacy, streaming):
+    class ArtifactAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            await event_queue.enqueue_event(
+                TaskArtifactUpdateEvent(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    artifact=Artifact(
+                        artifact_id='art-1', parts=[Part(text='artifact data')]
+                    ),
+                )
+            )
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(ArtifactAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events = [event async for event in it]
+
+    if streaming:
+        last_event = events[-1]
+        assert get_state(last_event) == TaskState.TASK_STATE_COMPLETED
+
+        artifact_events = [e for e in events if e.HasField('artifact_update')]
+        assert len(artifact_events) > 0, (
+            'Bug: Streaming should return the artifact update event'
+        )
+        assert (
+            artifact_events[0].artifact_update.artifact.artifact_id == 'art-1'
+        )
+    else:
+        last_event = events[-1]
+        assert last_event.HasField('task')
+        assert last_event.task.status.state == TaskState.TASK_STATE_COMPLETED
+
+        assert len(last_event.task.artifacts) > 0, (
+            'Bug: Task should include the published artifact'
+        )
+        assert last_event.task.artifacts[0].artifact_id == 'art-1'
