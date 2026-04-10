@@ -1558,3 +1558,87 @@ async def test_scenario_publish_artifact(use_legacy, streaming):
             'Bug: Task should include the published artifact'
         )
         assert last_event.task.artifacts[0].artifact_id == 'art-1'
+
+
+# Scenario: Enqueue Task twice
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+async def test_scenario_enqueue_task_twice(caplog, use_legacy, streaming):
+    class DoubleTaskAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            task1 = Task(
+                id=context.task_id,
+                context_id=context.context_id,
+                status=TaskStatus(
+                    state=TaskState.TASK_STATE_WORKING,
+                    message=Message(parts=[Part(text='First task')]),
+                ),
+            )
+            await event_queue.enqueue_event(task1)
+
+            # This is undefined behavior, but it should not crash or hang.
+            task2 = Task(
+                id=context.task_id,
+                context_id=context.context_id,
+                status=TaskStatus(
+                    state=TaskState.TASK_STATE_WORKING,
+                    message=Message(parts=[Part(text='Second task')]),
+                ),
+            )
+            await event_queue.enqueue_event(task2)
+
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(DoubleTaskAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events = [event async for event in it]
+
+    (final_task,) = (await client.list_tasks(ListTasksRequest())).tasks
+
+    if use_legacy:
+        assert [part.text for part in final_task.history[0].parts] == [
+            'Second task'
+        ]
+    else:
+        assert [part.text for part in final_task.history[0].parts] == [
+            'First task'
+        ]
+
+        # Validate that new version logs with error exactly once 'Ignoring task replacement'
+        error_logs = [
+            record.message
+            for record in caplog.records
+            if record.levelname == 'ERROR'
+            and 'Ignoring task replacement' in record.message
+        ]
+        assert len(error_logs) == 1

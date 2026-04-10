@@ -391,11 +391,22 @@ class ActiveTask:
                                     )
 
                                 if isinstance(event, Task):
-                                    new_task = event
-                                    await self._task_manager.save_task_event(
-                                        new_task
+                                    existing_task = (
+                                        await self._task_manager.get_task()
                                     )
-                                    # TODO: Avoid duplicated messages
+                                    if existing_task:
+                                        logger.error(
+                                            'Task %s already exists. Ignoring task replacement.',
+                                            self._task_id,
+                                        )
+                                    else:
+                                        await (
+                                            self._task_manager.save_task_event(
+                                                event
+                                            )
+                                        )
+                                    # Initial task should already contain the message.
+                                    message_to_save = None
                                 else:
                                     new_task = (
                                         await self._task_manager.ensure_task_id(
