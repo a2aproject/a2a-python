@@ -9,7 +9,7 @@ This directory contains runnable examples demonstrating how to build and interac
 | `hello_world_agent.py` | **Server** | A2A agent server |
 | `cli.py` | **Client** | Interactive terminal client |
 
-All three samples are designed to work together out of the box: the agent listens on `http://127.0.0.1:41241`, which is the default URL used by both clients.
+The samples are designed to work together out of the box: the agent listens on `http://127.0.0.1:41241`, which is the default URL used by the client.
 ---
 
 ## `hello_world_agent.py` — Agent Server
@@ -53,21 +53,8 @@ uv run python samples/cli.py
 uv run python samples/cli.py --url http://192.168.1.10:41241 --transport GRPC
 ```
 
+Then type a message like `hello` and press Enter.
+
 Type `/quit` or `/exit` to stop, or press `Ctrl+C`.
 
----
 
-
-## Quick Start
-
-In two separate terminals:
-
-```bash
-# Terminal 1 — start the agent
-uv run python samples/hello_world_agent.py
-
-# Terminal 2 — start the client
-uv run python samples/cli.py
-```
-
-Then type a message like `hello` and press Enter.
