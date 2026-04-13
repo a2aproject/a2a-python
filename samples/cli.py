@@ -11,25 +11,22 @@ import httpx
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
+from a2a.utils import get_artifact_text, get_message_text
 
 
 async def _handle_stream(
     stream: Any, current_task_id: str | None
 ) -> str | None:
-    async for event, task in stream:
-        if not task:
-            continue
+    async for event in stream:
         if not current_task_id:
-            current_task_id = task.id
-
+            current_task_id = event.task.id
         if event:
             if event.HasField('status_update'):
                 state_name = TaskState.Name(event.status_update.status.state)
                 print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
                 if event.status_update.status.HasField('message'):
-                    for part in event.status_update.status.message.parts:
-                        if part.text:
-                            print(part.text, end=' ')
+                    message = event.status_update.status.message
+                    print(get_message_text(message, delimiter=' '))
                 print()
 
                 if (
@@ -44,9 +41,11 @@ async def _handle_stream(
                     f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
                     end=' ',
                 )
-                for part in event.artifact_update.artifact.parts:
-                    if part.text:
-                        print(part.text, end=' ')
+                print(
+                    get_artifact_text(
+                        event.artifact_update.artifact, delimiter=' '
+                    )
+                )
                 print()
 
     return current_task_id
@@ -68,6 +67,8 @@ async def main() -> None:
     config = ClientConfig()
     if args.transport:
         config.supported_protocol_bindings = [args.transport]
+    if args.transport == 'GRPC':
+        config.grpc_channel_factory = grpc.aio.insecure_channel
 
     print(
         f'Connecting to {args.url} (preferred transport: {args.transport or "Any"})'
