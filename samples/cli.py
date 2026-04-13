@@ -24,8 +24,8 @@ async def _handle_stream(
             continue
 
         if not current_task_id:
+            # V2 handler emits Task or Message first.
             if event.HasField('task'):
-                # V2 handler emits Task or Message first.
                 current_task_id = event.task.id
                 state_name = TaskState.Name(event.task.status.state)
                 print(f'Task [state={state_name}]')
