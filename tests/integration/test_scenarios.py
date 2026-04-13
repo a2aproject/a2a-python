@@ -261,10 +261,21 @@ async def test_scenario_4_simple_streaming(use_legacy):
         event
         async for event in client.send_message(SendMessageRequest(message=msg))
     ]
-    assert [event.status_update.status.state for event in events] == [
-        TaskState.TASK_STATE_WORKING,
-        TaskState.TASK_STATE_COMPLETED,
-    ]
+    if use_legacy:
+        # Legacy handler streams events as-is (no Task(SUBMITTED) injection).
+        assert [event.status_update.status.state for event in events] == [
+            TaskState.TASK_STATE_WORKING,
+            TaskState.TASK_STATE_COMPLETED,
+        ]
+    else:
+        # V2 handler injects Task(SUBMITTED) first per A2A spec §3.1.2.
+        assert events[0].HasField('task'), (
+            'First streaming event must be a Task or Message'
+        )
+        assert [event.status_update.status.state for event in events[1:]] == [
+            TaskState.TASK_STATE_WORKING,
+            TaskState.TASK_STATE_COMPLETED,
+        ]
 
 
 # Scenario 5: Re-subscribing to a finished task
@@ -374,15 +385,32 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
             configuration=SendMessageConfiguration(return_immediately=False),
         )
     )
-    (event,) = [event async for event in it]
+    events = [event async for event in it]
 
     if streaming:
-        assert event.HasField('status_update')
-        task_id = event.status_update.task_id
-        assert (
-            event.status_update.status.state == TaskState.TASK_STATE_COMPLETED
-        )
+        if use_legacy:
+            # Legacy streams events as-is: just the status_update(COMPLETED).
+            (event,) = events
+            assert event.HasField('status_update')
+            task_id = event.status_update.task_id
+            assert (
+                event.status_update.status.state
+                == TaskState.TASK_STATE_COMPLETED
+            )
+        else:
+            # V2 injects Task(SUBMITTED) first per A2A spec §3.1.2.
+            assert len(events) == 2
+            assert events[0].HasField('task'), (
+                'First streaming event must be a Task or Message'
+            )
+            task_id = events[0].task.id
+            assert events[1].HasField('status_update')
+            assert (
+                events[1].status_update.status.state
+                == TaskState.TASK_STATE_COMPLETED
+            )
     else:
+        (event,) = events
         assert event.HasField('task')
         task_id = event.task.id
         assert event.task.status.state == TaskState.TASK_STATE_COMPLETED
@@ -498,8 +526,23 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
     tasks = []
 
     if streaming:
-        res = await it.__anext__()
-        assert res.status_update.status.state == TaskState.TASK_STATE_WORKING
+        if use_legacy:
+            # Legacy streams events as-is; first event is the WORKING status update.
+            first = await it.__anext__()
+            assert (
+                first.status_update.status.state == TaskState.TASK_STATE_WORKING
+            )
+        else:
+            # V2 injects Task(SUBMITTED) first per A2A spec §3.1.2.
+            first = await it.__anext__()
+            assert first.HasField('task'), (
+                'First streaming event must be a Task or Message'
+            )
+            second = await it.__anext__()
+            assert (
+                second.status_update.status.state
+                == TaskState.TASK_STATE_WORKING
+            )
         continue_event.set()
     else:
 
@@ -1082,10 +1125,19 @@ async def test_scenario_return_immediately(use_legacy, streaming):
     states = [get_state(event) async for event in it]
 
     if streaming:
-        assert states == [
-            TaskState.TASK_STATE_WORKING,
-            TaskState.TASK_STATE_COMPLETED,
-        ]
+        if use_legacy:
+            # Legacy streams events as-is (no Task(SUBMITTED) injection).
+            assert states == [
+                TaskState.TASK_STATE_WORKING,
+                TaskState.TASK_STATE_COMPLETED,
+            ]
+        else:
+            # V2 injects Task(SUBMITTED) first per A2A spec §3.1.2.
+            assert states == [
+                TaskState.TASK_STATE_SUBMITTED,
+                TaskState.TASK_STATE_WORKING,
+                TaskState.TASK_STATE_COMPLETED,
+            ]
     else:
         assert states == [TaskState.TASK_STATE_WORKING]
 
@@ -1151,11 +1203,27 @@ async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
     )
 
     events1 = [event async for event in it]
-    assert [get_state(event) for event in events1] == [
-        TaskState.TASK_STATE_INPUT_REQUIRED,
-    ]
-    task_id = events1[0].status_update.task_id
-    context_id = events1[0].status_update.context_id
+    if streaming and not use_legacy:
+        # V2 injects Task(SUBMITTED) first per A2A spec §3.1.2.
+        assert [get_state(event) for event in events1] == [
+            TaskState.TASK_STATE_SUBMITTED,
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+        ]
+        task_id = events1[0].task.id
+        context_id = events1[0].task.context_id
+    elif streaming and use_legacy:
+        # Legacy streams events as-is; first event is the INPUT_REQUIRED status update.
+        assert [get_state(event) for event in events1] == [
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+        ]
+        task_id = events1[0].status_update.task_id
+        context_id = events1[0].status_update.context_id
+    else:
+        assert [get_state(event) for event in events1] == [
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+        ]
+        task_id = events1[0].task.id
+        context_id = events1[0].task.context_id
 
     # Now send another message to resume
     msg2 = Message(
@@ -1240,19 +1308,38 @@ async def test_scenario_auth_required_side_channel(use_legacy, streaming):
     )
 
     if streaming:
-        event1 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
-        assert get_state(event1) == TaskState.TASK_STATE_WORKING
+        if use_legacy:
+            # Legacy streams events as-is: WORKING → AUTH_REQUIRED → COMPLETED.
+            event1 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+            assert get_state(event1) == TaskState.TASK_STATE_WORKING
 
-        event2 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
-        assert get_state(event2) == TaskState.TASK_STATE_AUTH_REQUIRED
+            event2 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+            assert get_state(event2) == TaskState.TASK_STATE_AUTH_REQUIRED
 
-        task_id = event2.status_update.task_id
+            task_id = event2.status_update.task_id
 
-        side_channel_event.set()
+            side_channel_event.set()
 
-        # Remaining event.
-        (event3,) = [event async for event in it]
-        assert get_state(event3) == TaskState.TASK_STATE_COMPLETED
+            (event3,) = [event async for event in it]
+            assert get_state(event3) == TaskState.TASK_STATE_COMPLETED
+        else:
+            # V2 injects Task(SUBMITTED) first per A2A spec §3.1.2.
+            # Full sequence: Task(SUBMITTED) → WORKING → AUTH_REQUIRED → COMPLETED.
+            event1 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+            assert get_state(event1) == TaskState.TASK_STATE_SUBMITTED
+
+            event2 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+            assert get_state(event2) == TaskState.TASK_STATE_WORKING
+
+            event3 = await asyncio.wait_for(it.__anext__(), timeout=1.0)
+            assert get_state(event3) == TaskState.TASK_STATE_AUTH_REQUIRED
+
+            task_id = event3.status_update.task_id
+
+            side_channel_event.set()
+
+            (event4,) = [event async for event in it]
+            assert get_state(event4) == TaskState.TASK_STATE_COMPLETED
     else:
         (event,) = [event async for event in it]
         assert get_state(event) == TaskState.TASK_STATE_AUTH_REQUIRED

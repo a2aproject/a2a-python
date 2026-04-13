@@ -3,6 +3,7 @@ import asyncio
 import os
 import signal
 import uuid
+import warnings
 
 from typing import Any
 
@@ -18,35 +19,50 @@ async def _handle_stream(
     stream: Any, current_task_id: str | None
 ) -> str | None:
     async for event in stream:
+        if event.HasField('message'):
+            print(f'Message: {get_message_text(event.message, delimiter=" ")}')
+            continue
+
         if not current_task_id:
-            current_task_id = event.task.id
-        if event:
-            if event.HasField('status_update'):
-                state_name = TaskState.Name(event.status_update.status.state)
-                print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
-                if event.status_update.status.HasField('message'):
-                    message = event.status_update.status.message
-                    print(get_message_text(message, delimiter=' '))
-                print()
-
-                if (
-                    event.status_update.status.state
-                    == TaskState.TASK_STATE_COMPLETED
-                ):
-                    current_task_id = None
-                    print('--- Task Completed ---')
-
-            elif event.HasField('artifact_update'):
-                print(
-                    f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
-                    end=' ',
+            if event.HasField('task'):
+                # V2 handler emits Task(SUBMITTED) first per A2A spec §3.1.2.
+                current_task_id = event.task.id
+                state_name = TaskState.Name(event.task.status.state)
+                print(f'Task [state={state_name}]')
+            elif event.HasField('status_update'):
+                # Legacy handler streams status updates directly without a
+                # leading Task event; extract the task ID from the update.
+                current_task_id = event.status_update.task_id
+            else:
+                warnings.warn(
+                    'Unexpected first streaming event type. '
+                    'Cannot determine task ID.',
+                    stacklevel=2,
                 )
-                print(
-                    get_artifact_text(
-                        event.artifact_update.artifact, delimiter=' '
-                    )
-                )
+
+        if event.HasField('status_update'):
+            state_name = TaskState.Name(event.status_update.status.state)
+            print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
+            if event.status_update.status.HasField('message'):
+                message = event.status_update.status.message
+                print(get_message_text(message, delimiter=' '))
+            else:
                 print()
+            if (
+                event.status_update.status.state
+                == TaskState.TASK_STATE_COMPLETED
+            ):
+                current_task_id = None
+                print('--- Task Completed ---')
+
+        elif event.HasField('artifact_update'):
+            print(
+                f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
+                end=' ',
+            )
+            print(
+                get_artifact_text(event.artifact_update.artifact, delimiter=' ')
+            )
 
     return current_task_id
 

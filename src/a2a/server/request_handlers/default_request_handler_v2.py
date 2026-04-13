@@ -37,6 +37,8 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
+    TaskStatus,
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
@@ -302,16 +304,35 @@ class DefaultRequestHandlerV2(RequestHandler):
         params: SendMessageRequest,
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
+        is_new_task = not params.message.task_id
+
         active_task, request_context = await self._setup_active_task(
             params, context
         )
-
         task_id = cast('str', request_context.task_id)
+        context_id = cast('str', request_context.context_id)
+        first_event = True
 
         async for event in active_task.subscribe(
             request=request_context,
             include_initial_task=False,
         ):
+            if (
+                first_event
+                and is_new_task
+                and not isinstance(event, (Task, Message))
+            ):
+                # Agent didn't emit a Task/Message first.
+                # The stream MUST begin with a Task or Message.
+                submitted_task = Task(
+                    id=task_id,
+                    context_id=context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+                    history=[params.message],
+                )
+                yield apply_history_length(submitted_task, params.configuration)
+            first_event = False
+
             if isinstance(event, Task):
                 self._validate_task_id_match(task_id, event.id)
                 yield apply_history_length(event, params.configuration)

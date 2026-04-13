@@ -560,14 +560,14 @@ async def test_on_message_send_stream():
             message_params, create_server_call_context()
         ):
             events.append(event)
-            if len(events) >= 3:
+            if len(events) >= 4:
                 break
         return events
 
     start = time.perf_counter()
     events = await consume_stream()
     elapsed = time.perf_counter() - start
-    assert len(events) == 3
+    assert len(events) == 4
     assert elapsed < 0.5
     texts = [p.text for e in events for p in e.status.message.parts]
     assert texts == ['Event 0', 'Event 1', 'Event 2']
