@@ -72,8 +72,8 @@ class TextClient:
         Args:
             text: The plain-text message to send.
             delimiter: String used to join response parts. Defaults to a
-                single space. Use '' for token-streamed responses or '\\n'
-                for paragraph-separated chunks.
+                single space. Use '' for token-streamed responses or a
+                newline for paragraph-separated chunks.
             context: Optional call-level context.
         """
         request = SendMessageRequest(
