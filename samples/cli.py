@@ -65,6 +65,8 @@ async def main() -> None:
     config = ClientConfig()
     if args.transport:
         config.supported_protocol_bindings = [args.transport]
+    if args.transport == 'GRPC':
+        config.grpc_channel_factory = grpc.aio.insecure_channel
 
     print(
         f'Connecting to {args.url} (preferred transport: {args.transport or "Any"})'

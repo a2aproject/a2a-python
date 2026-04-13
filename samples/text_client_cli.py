@@ -4,7 +4,7 @@ import asyncio
 import grpc
 import httpx
 
-from a2a.client import A2ACardResolver, create_text_client
+from a2a.client import A2ACardResolver, ClientConfig, create_text_client
 
 
 async def main() -> None:
@@ -13,16 +13,35 @@ async def main() -> None:
     parser.add_argument(
         '--url', default='http://127.0.0.1:41241', help='Agent base URL'
     )
+    parser.add_argument(
+        '--transport',
+        default=None,
+        help='Preferred transport (JSONRPC, HTTP+JSON, GRPC)',
+    )
     args = parser.parse_args()
 
-    print(f'Connecting to {args.url}')
+    config = ClientConfig()
+    if args.transport:
+        config.supported_protocol_bindings = [args.transport]
+    if args.transport == 'GRPC':
+        config.grpc_channel_factory = grpc.aio.insecure_channel
+
+    print(
+        f'Connecting to {args.url} (preferred transport: {args.transport or "Any"})'
+    )
 
     async with httpx.AsyncClient() as httpx_client:
         resolver = A2ACardResolver(httpx_client, args.url)
         card = await resolver.get_agent_card()
-        print(f'\n✓ Agent Card Found: {card.name}')
+        print('\n✓ Agent Card Found:')
+        print(f'  Name: {card.name}')
 
-    text_client = await create_text_client(card)
+    text_client = await create_text_client(card, client_config=config)
+
+    actual_transport = getattr(
+        text_client.client, '_transport', text_client.client
+    )
+    print(f'  Picked Transport: {actual_transport.__class__.__name__}')
 
     print('\nConnected! Send a message or type /quit to exit.')
 
