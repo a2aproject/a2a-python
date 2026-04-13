@@ -12,6 +12,7 @@ from packaging.version import InvalidVersion, Version
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
 from a2a.client.client import Client, ClientConfig
+from a2a.client.text_client import TextClient
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.client.transports.rest import RestTransport
@@ -404,6 +405,47 @@ async def create_client(  # noqa: PLR0913
             signature_verifier=signature_verifier,
         )
     return factory.create(agent, interceptors)
+
+
+async def create_text_client(  # noqa: PLR0913
+    agent: str | AgentCard,
+    client_config: ClientConfig | None = None,
+    interceptors: list[ClientCallInterceptor] | None = None,
+    relative_card_path: str | None = None,
+    resolver_http_kwargs: dict[str, Any] | None = None,
+    signature_verifier: Callable[[AgentCard], None] | None = None,
+) -> TextClient:
+    """Create a `TextClient` for an agent from a URL or `AgentCard`.
+
+    Convenience function that constructs a `ClientFactory` internally.
+    For reusing a factory across multiple agents or registering custom
+    transports, use `ClientFactory` directly instead.
+
+    Args:
+      agent: The base URL of the agent, or an `AgentCard` to use
+        directly.
+      client_config: Optional `ClientConfig`. A default config is
+        created if not provided.
+      interceptors: A list of interceptors to use for each request.
+      relative_card_path: The relative path when resolving the agent
+        card. Only used when `agent` is a URL.
+      resolver_http_kwargs: Dictionary of arguments to provide to the
+        httpx client when resolving the agent card.
+      signature_verifier: A callable used to verify the agent card's
+        signatures.
+
+    Returns:
+      A `TextClient` wrapping the constructed `Client`.
+    """
+    client = await create_client(
+        agent=agent,
+        client_config=client_config,
+        interceptors=interceptors,
+        relative_card_path=relative_card_path,
+        resolver_http_kwargs=resolver_http_kwargs,
+        signature_verifier=signature_verifier,
+    )
+    return TextClient(client)
 
 
 def minimal_agent_card(

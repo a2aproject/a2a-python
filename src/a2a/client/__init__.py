@@ -15,6 +15,7 @@ from a2a.client.client import (
 from a2a.client.client_factory import (
     ClientFactory,
     create_client,
+    create_text_client,
     minimal_agent_card,
 )
 from a2a.client.errors import (
@@ -24,6 +25,7 @@ from a2a.client.errors import (
 )
 from a2a.client.helpers import create_text_message_object
 from a2a.client.interceptors import ClientCallInterceptor
+from a2a.client.text_client import TextClient
 
 
 __all__ = [
@@ -40,7 +42,9 @@ __all__ = [
     'ClientFactory',
     'CredentialService',
     'InMemoryContextCredentialStore',
+    'TextClient',
     'create_client',
+    'create_text_client',
     'create_text_message_object',
     'minimal_agent_card',
 ]
