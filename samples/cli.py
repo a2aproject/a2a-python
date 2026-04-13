@@ -25,20 +25,15 @@ async def _handle_stream(
 
         if not current_task_id:
             if event.HasField('task'):
-                # V2 handler emits Task(SUBMITTED) first per A2A spec §3.1.2.
+                # V2 handler emits Task or Message first.
                 current_task_id = event.task.id
                 state_name = TaskState.Name(event.task.status.state)
                 print(f'Task [state={state_name}]')
+            # Legacy handler might not send a leading Task event.
             elif event.HasField('status_update'):
-                # Legacy handler streams status updates directly without a
-                # leading Task event; extract the task ID from the update.
                 current_task_id = event.status_update.task_id
-            else:
-                warnings.warn(
-                    'Unexpected first streaming event type. '
-                    'Cannot determine task ID.',
-                    stacklevel=2,
-                )
+            elif event.HasField('artifact_update'):
+                current_task_id = event.artifact_update.artifact.task_id
 
         if event.HasField('status_update'):
             state_name = TaskState.Name(event.status_update.status.state)
