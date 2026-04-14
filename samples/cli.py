@@ -13,42 +13,51 @@ from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
 
 
-async def _handle_stream(
+async def _handle_stream(  # noqa: PLR0912
     stream: Any, current_task_id: str | None
 ) -> str | None:
-    async for event, task in stream:
-        if not task:
-            continue
+    async for event in stream:
+        if event.HasField('message'):
+            print('Message:', end=' ')
+            for part in event.message.parts:
+                if part.text:
+                    print(part.text, end=' ')
+            print()
+            return None
+
         if not current_task_id:
-            current_task_id = task.id
+            if event.HasField('task'):
+                current_task_id = event.task.id
+                print('--- Task Started ---')
+                print(f'Task [state={TaskState.Name(event.task.status.state)}]')
+            else:
+                raise ValueError(f'Unexpected first event: {event}')
 
-        if event:
-            if event.HasField('status_update'):
-                state_name = TaskState.Name(event.status_update.status.state)
-                print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
-                if event.status_update.status.HasField('message'):
-                    for part in event.status_update.status.message.parts:
-                        if part.text:
-                            print(part.text, end=' ')
-                print()
-
-                if (
-                    event.status_update.status.state
-                    == TaskState.TASK_STATE_COMPLETED
-                ):
-                    current_task_id = None
-                    print('--- Task Completed ---')
-
-            elif event.HasField('artifact_update'):
-                print(
-                    f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
-                    end=' ',
-                )
-                for part in event.artifact_update.artifact.parts:
+        if event.HasField('status_update'):
+            state_name = TaskState.Name(event.status_update.status.state)
+            print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
+            if event.status_update.status.HasField('message'):
+                for part in event.status_update.status.message.parts:
                     if part.text:
                         print(part.text, end=' ')
-                print()
-
+            print()
+            if state_name in (
+                'TASK_STATE_COMPLETED',
+                'TASK_STATE_FAILED',
+                'TASK_STATE_CANCELED',
+                'TASK_STATE_REJECTED',
+            ):
+                current_task_id = None
+                print('--- Task Finished ---')
+        elif event.HasField('artifact_update'):
+            print(
+                f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
+                end=' ',
+            )
+            for part in event.artifact_update.artifact.parts:
+                if part.text:
+                    print(part.text, end=' ')
+            print()
     return current_task_id
 
 
