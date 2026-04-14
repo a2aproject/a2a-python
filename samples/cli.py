@@ -13,7 +13,7 @@ from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
 
 
-async def _handle_stream(
+async def _handle_stream(  # noqa: PLR0912
     stream: Any, current_task_id: str | None
 ) -> str | None:
     async for event in stream:
@@ -40,12 +40,14 @@ async def _handle_stream(
                     if part.text:
                         print(part.text, end=' ')
             print()
-            if (
-                event.status_update.status.state
-                == TaskState.TASK_STATE_COMPLETED
+            if state_name in (
+                'TASK_STATE_COMPLETED',
+                'TASK_STATE_FAILED',
+                'TASK_STATE_CANCELED',
+                'TASK_STATE_REJECTED',
             ):
                 current_task_id = None
-                print('--- Task Completed ---')
+                print(f'--- Task Finished ---')
         elif event.HasField('artifact_update'):
             print(
                 f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
