@@ -47,7 +47,7 @@ async def _handle_stream(  # noqa: PLR0912
                 'TASK_STATE_REJECTED',
             ):
                 current_task_id = None
-                print(f'--- Task Finished ---')
+                print('--- Task Finished ---')
         elif event.HasField('artifact_update'):
             print(
                 f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
