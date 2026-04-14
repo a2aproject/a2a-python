@@ -16,39 +16,37 @@ from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
 async def _handle_stream(
     stream: Any, current_task_id: str | None
 ) -> str | None:
-    async for event, task in stream:
-        if not task:
-            continue
+    async for event in stream:
         if not current_task_id:
-            current_task_id = task.id
+            if event.HasField('task'):
+                current_task_id = event.task.id
+                print(f'Task [state={TaskState.Name(event.task.status.state)}]')
+            else:
+                raise ValueError('No task found in the first event')
 
-        if event:
-            if event.HasField('status_update'):
-                state_name = TaskState.Name(event.status_update.status.state)
-                print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
-                if event.status_update.status.HasField('message'):
-                    for part in event.status_update.status.message.parts:
-                        if part.text:
-                            print(part.text, end=' ')
-                print()
-
-                if (
-                    event.status_update.status.state
-                    == TaskState.TASK_STATE_COMPLETED
-                ):
-                    current_task_id = None
-                    print('--- Task Completed ---')
-
-            elif event.HasField('artifact_update'):
-                print(
-                    f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
-                    end=' ',
-                )
-                for part in event.artifact_update.artifact.parts:
+        if event.HasField('status_update'):
+            state_name = TaskState.Name(event.status_update.status.state)
+            print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
+            if event.status_update.status.HasField('message'):
+                for part in event.status_update.status.message.parts:
                     if part.text:
                         print(part.text, end=' ')
-                print()
-
+            print()
+            if (
+                event.status_update.status.state
+                == TaskState.TASK_STATE_COMPLETED
+            ):
+                current_task_id = None
+                print('--- Task Completed ---')
+        elif event.HasField('artifact_update'):
+            print(
+                f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
+                end=' ',
+            )
+            for part in event.artifact_update.artifact.parts:
+                if part.text:
+                    print(part.text, end=' ')
+            print()
     return current_task_id
 
 
