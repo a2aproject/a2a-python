@@ -23,7 +23,7 @@ async def _handle_stream(  # noqa: PLR0912
                 if part.text:
                     print(part.text, end=' ')
             print()
-            return current_task_id
+            return None
 
         if not current_task_id:
             if event.HasField('task'):
