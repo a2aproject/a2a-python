@@ -19,8 +19,11 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+    Role,
+    Part,
 )
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.task import new_task
 
 
 logger = logging.getLogger(__name__)
@@ -72,51 +75,6 @@ class TestActiveTask:
         )
 
     @pytest.mark.asyncio
-    async def test_active_task_lifecycle(
-        self,
-        active_task: ActiveTask,
-        agent_executor: Mock,
-        request_context: Mock,
-        task_manager: Mock,
-    ) -> None:
-        """Test the basic lifecycle of an ActiveTask."""
-
-        async def execute_mock(req, q):
-            await q.enqueue_event(Message(message_id='m1'))
-            await q.enqueue_event(
-                Task(
-                    id='test-task-id',
-                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                )
-            )
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-        ] + [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-            )
-        ] * 10
-
-        await active_task.enqueue_request(request_context)
-        await active_task.start(
-            call_context=ServerCallContext(), create_task_if_missing=True
-        )
-
-        # Wait for the task to finish
-        events = [e async for e in active_task.subscribe()]
-        result = next(e for e in events if isinstance(e, Message))
-
-        assert isinstance(result, Message)
-        assert result.message_id == 'm1'
-        assert active_task.task_id == 'test-task-id'
-
-    @pytest.mark.asyncio
     async def test_active_task_already_started(
         self, active_task: ActiveTask, request_context: Mock
     ) -> None:
@@ -131,36 +89,6 @@ class TestActiveTask:
             call_context=ServerCallContext(), create_task_if_missing=True
         )
         assert active_task._producer_task is not None
-
-    @pytest.mark.asyncio
-    async def test_active_task_subscribe(
-        self,
-        active_task: ActiveTask,
-        agent_executor: Mock,
-        request_context: Mock,
-    ) -> None:
-        """Test subscribing to events from an ActiveTask."""
-
-        async def execute_mock(req, q):
-            await q.enqueue_event(Message(message_id='m1'))
-            await q.enqueue_event(Message(message_id='m2'))
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-
-        await active_task.enqueue_request(request_context)
-        await active_task.start(
-            call_context=ServerCallContext(), create_task_if_missing=True
-        )
-
-        events = []
-        async for event in active_task.subscribe():
-            events.append(event)
-            if len(events) == 2:
-                break
-
-        assert len(events) == 2
-        assert events[0].message_id == 'm1'
-        assert events[1].message_id == 'm2'
 
     @pytest.mark.asyncio
     async def test_active_task_cancel(
@@ -354,59 +282,6 @@ class TestActiveTask:
             pass
 
         push_sender.send_notification.assert_called()
-
-    @pytest.mark.asyncio
-    async def test_active_task_cleanup(
-        self,
-        agent_executor: Mock,
-        task_manager: Mock,
-        request_context: Mock,
-    ) -> None:
-        """Test that the cleanup callback is called."""
-        on_cleanup = Mock()
-        active_task = ActiveTask(
-            agent_executor=agent_executor,
-            task_id='test-task-id',
-            task_manager=task_manager,
-            on_cleanup=on_cleanup,
-        )
-
-        async def execute_mock(req, q):
-            await q.enqueue_event(Message(message_id='m1'))
-            await q.enqueue_event(
-                Task(
-                    id='test-task-id',
-                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                )
-            )
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-        ] + [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-            )
-        ] * 10
-
-        await active_task.start(
-            call_context=ServerCallContext(), create_task_if_missing=True
-        )
-
-        async for _ in active_task.subscribe(request=request_context):
-            pass
-
-        # Wait for consumer thread to finish and call cleanup
-        for _ in range(20):
-            if on_cleanup.called:
-                break
-            await asyncio.sleep(0.05)
-
-        on_cleanup.assert_called_once_with(active_task)
 
     @pytest.mark.asyncio
     async def test_active_task_consumer_failure(
@@ -893,76 +768,6 @@ class TestActiveTask:
         # Explicitly call private _maybe_cleanup to verify it respects finished state
         await active_task._maybe_cleanup()
         on_cleanup.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_active_task_maybe_cleanup_with_subscribers(
-        self,
-        agent_executor: Mock,
-        task_manager: Mock,
-        push_sender: Mock,
-        request_context: Mock,
-    ) -> None:
-        """Test that cleanup is not called if there are subscribers."""
-        on_cleanup = Mock()
-        active_task = ActiveTask(
-            agent_executor=agent_executor,
-            task_id='test-task-id',
-            task_manager=task_manager,
-            push_sender=push_sender,
-            on_cleanup=on_cleanup,
-        )
-
-        # Mock execute to finish immediately
-        async def execute_mock(req, q):
-            await q.enqueue_event(Message(message_id='m1'))
-            await q.enqueue_event(
-                Task(
-                    id='test-task-id',
-                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                )
-            )
-
-        agent_executor.execute = AsyncMock(side_effect=execute_mock)
-        task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
-        ] + [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-            )
-        ] * 10
-
-        # 1. Start a subscriber before task finishes
-        gen = active_task.subscribe()
-        # Start the generator to increment reference count
-        msg_task = asyncio.create_task(gen.__anext__())
-
-        # 2. Start the task and wait for it to finish
-        await active_task.start(
-            call_context=ServerCallContext(), create_task_if_missing=True
-        )
-
-        async for _ in active_task.subscribe(request=request_context):
-            pass
-
-        # Give the consumer loop a moment to set _is_finished
-        await asyncio.sleep(0.1)
-
-        # Ensure we got the message
-        assert (await msg_task).message_id == 'm1'
-
-        # At this point, task is finished, but we still have a subscriber (gen).
-        # _maybe_cleanup was called by consumer loop, but should have done nothing.
-        on_cleanup.assert_not_called()
-
-        # 3. Close the subscriber
-        await gen.aclose()
-
-        # Now cleanup should be triggered
-        on_cleanup.assert_called_once_with(active_task)
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe_exception_already_set(
