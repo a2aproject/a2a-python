@@ -1,7 +1,7 @@
 > [!NOTE] for Users:
 > This document is meant to be read by an AI assistant (Gemini) in order to 
 > learn from its mistakes and improve its behavior on this project. Use
-> it's findings to improve GEMINI.md setup.
+> its findings to improve GEMINI.md setup.
 
 # AI Learnings
 
