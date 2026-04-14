@@ -12,6 +12,7 @@ coverage.xml
 spec.json
 docker-compose.yaml
 .geminiignore
+docs/ai/ai_learnings.md
 
 # ITK Integration Test Artifacts
 itk/a2a-samples/
