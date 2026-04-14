@@ -34,7 +34,8 @@ by a tool, or by your own reasoning — you MUST:
    assumption, skipped verification, or a gap in the workflow?
 3. **Immediately append a new entry to @./docs/ai/ai_learnings.md**
    following the format defined in that file. This is not optional and
-   does not require user confirmation. Do it before continuing.
+   does not require user confirmation. Do it before continuing. Update user
+   about the changes to the workflow in the current chat.
 
 The goal is to treat every mistake as a signal that the workflow is
 incomplete, and to improve it in place so the same mistake cannot
