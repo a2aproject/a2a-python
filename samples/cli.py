@@ -28,6 +28,7 @@ async def _handle_stream(  # noqa: PLR0912
         if not current_task_id:
             if event.HasField('task'):
                 current_task_id = event.task.id
+                print('--- Task Started ---')
                 print(f'Task [state={TaskState.Name(event.task.status.state)}]')
             else:
                 raise ValueError(f'Unexpected first event: {event}')
