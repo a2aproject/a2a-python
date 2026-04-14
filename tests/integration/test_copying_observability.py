@@ -26,6 +26,7 @@ from a2a.types import (
     TaskState,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.task import new_task
 
 
 class MockMutatingAgentExecutor(AgentExecutor):
@@ -42,6 +43,12 @@ class MockMutatingAgentExecutor(AgentExecutor):
 
         if user_input == 'Init task':
             # Explicitly save status change to ensure task exists with some state
+            task = new_task(context.message)
+            task.id = context.task_id
+            task.context_id = context.context_id
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
+
             await task_updater.update_status(
                 TaskState.TASK_STATE_WORKING,
                 message=task_updater.new_agent_message(
@@ -153,6 +160,7 @@ async def test_mutation_observability(agent_card: AgentCard, use_copying: bool):
     ]
 
     event = events[-1]
+    assert event.HasField('status_update')
     task_id = event.status_update.task_id
 
     # 2. Second message to mutate it
@@ -162,7 +170,6 @@ async def test_mutation_observability(agent_card: AgentCard, use_copying: bool):
         task_id=task_id,
         parts=[Part(text='Update task without saving it')],
     )
-
     _ = [
         event
         async for event in client.send_message(

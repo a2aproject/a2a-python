@@ -38,7 +38,7 @@ from a2a.grpc import a2a_pb2_grpc
 from starlette.requests import Request
 from starlette.concurrency import iterate_in_threadpool
 import time
-
+from a2a.utils.task import new_task
 from server_common import CustomLoggingMiddleware
 
 
@@ -48,12 +48,18 @@ class MockAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         print(f'SERVER: execute called for task {context.task_id}')
+
+        task = new_task(context.message)
+        task.id = context.task_id
+        task.context_id = context.context_id
+        task.status.state = TaskState.working
+        await event_queue.enqueue_event(task)
+
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
             context.context_id,
         )
-        await task_updater.update_status(TaskState.submitted)
         await task_updater.update_status(TaskState.working)
 
         text = ''

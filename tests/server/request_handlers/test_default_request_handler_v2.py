@@ -53,6 +53,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils import new_agent_text_message, new_task
 
@@ -68,11 +69,15 @@ def create_default_agent_card():
 
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
+        if context.message:
+            await event_queue.enqueue_event(new_task(context.message))
+
         task_updater = TaskUpdater(
             event_queue,
             str(context.task_id or ''),
             str(context.context_id or ''),
         )
+
         async for i in self._run():
             parts = [Part(text=f'Event {i}')]
             try:
@@ -569,8 +574,15 @@ async def test_on_message_send_stream():
     elapsed = time.perf_counter() - start
     assert len(events) == 3
     assert elapsed < 0.5
-    texts = [p.text for e in events for p in e.status.message.parts]
-    assert texts == ['Event 0', 'Event 1', 'Event 2']
+    task, event0, event1 = events
+    assert isinstance(task, Task)
+    assert task.history[0].parts[0].text == 'How are you?'
+
+    assert isinstance(event0, TaskStatusUpdateEvent)
+    assert event0.status.message.parts[0].text == 'Event 0'
+
+    assert isinstance(event1, TaskStatusUpdateEvent)
+    assert event1.status.message.parts[0].text == 'Event 1'
 
 
 @pytest.mark.asyncio
@@ -951,6 +963,8 @@ class HelloWorldAgentExecutor(AgentExecutor):
     async def execute(
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
+        if context.message:
+            await event_queue.enqueue_event(new_task(context.message))
         updater = TaskUpdater(
             event_queue,
             task_id=context.task_id or str(uuid.uuid4()),

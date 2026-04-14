@@ -1,5 +1,6 @@
 import asyncio
 import collections
+import contextlib
 import logging
 
 from typing import Any
@@ -47,10 +48,12 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.task import new_task
 from a2a.utils.errors import (
     InvalidParamsError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    InvalidAgentResponseError,
 )
 
 
@@ -246,13 +249,9 @@ async def test_scenario_4_simple_streaming(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=context.task_id,
@@ -277,7 +276,11 @@ async def test_scenario_4_simple_streaming(use_legacy):
         event
         async for event in client.send_message(SendMessageRequest(message=msg))
     ]
-    assert [event.status_update.status.state for event in events] == [
+    task, status_update = events
+    assert task.HasField('task')
+    assert status_update.HasField('status_update')
+
+    assert [get_state(event) for event in events] == [
         TaskState.TASK_STATE_WORKING,
         TaskState.TASK_STATE_COMPLETED,
     ]
@@ -291,13 +294,9 @@ async def test_scenario_5_resubscribe_to_finished(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=context.task_id,
@@ -350,13 +349,9 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_COMPLETED
+            await event_queue.enqueue_event(task)
 
         async def cancel(
             self, context: RequestContext, event_queue: EventQueue
@@ -393,11 +388,9 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
     (event,) = [event async for event in it]
 
     if streaming:
-        assert event.HasField('status_update')
-        task_id = event.status_update.task_id
-        assert (
-            event.status_update.status.state == TaskState.TASK_STATE_COMPLETED
-        )
+        assert event.HasField('task')
+        task_id = event.task.id
+        validate_state(event, TaskState.TASK_STATE_COMPLETED)
     else:
         assert event.HasField('task')
         task_id = event.task.id
@@ -485,13 +478,9 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await continue_event.wait()
             raise ValueError('TEST_ERROR_IN_EXECUTE')
@@ -515,7 +504,7 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
 
     if streaming:
         res = await it.__anext__()
-        assert res.status_update.status.state == TaskState.TASK_STATE_WORKING
+        validate_state(res, TaskState.TASK_STATE_WORKING)
         continue_event.set()
     else:
 
@@ -554,13 +543,9 @@ async def test_scenario_14_error_in_cancel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await hang_event.wait()
 
@@ -614,13 +599,9 @@ async def test_scenario_15_subscribe_error(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await continue_event.wait()
             raise ValueError('TEST_ERROR_IN_EXECUTE')
@@ -744,13 +725,9 @@ async def test_scenario_cancel_working_task_empty_cancel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await hang_event.wait()
 
@@ -812,13 +789,9 @@ async def test_scenario_18_streaming_subscribers(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await working_event.wait()
 
@@ -931,13 +904,9 @@ async def test_scenario_19_no_parallel_executions(use_legacy, streaming):
                 )
                 return
 
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             started_event.set()
             await continue_event.wait()
             await event_queue.enqueue_event(
@@ -1059,13 +1028,9 @@ async def test_scenario_return_immediately(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=context.task_id,
@@ -1120,27 +1085,17 @@ async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
         ):
             message = context.message
             if message and message.parts and message.parts[0].text == 'start':
-                await event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        task_id=context.task_id,
-                        context_id=context.context_id,
-                        status=TaskStatus(
-                            state=TaskState.TASK_STATE_INPUT_REQUIRED
-                        ),
-                    )
-                )
+                task = new_task(message)
+                task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
+                await event_queue.enqueue_event(task)
             elif (
                 message
                 and message.parts
                 and message.parts[0].text == 'here is input'
             ):
-                await event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        task_id=context.task_id,
-                        context_id=context.context_id,
-                        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
-                    )
-                )
+                task = new_task(message)
+                task.status.state = TaskState.TASK_STATE_COMPLETED
+                await event_queue.enqueue_event(task)
             else:
                 raise ValueError('Unexpected message')
 
@@ -1209,13 +1164,9 @@ async def test_scenario_auth_required_side_channel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
                 TaskStatusUpdateEvent(
                     task_id=context.task_id,
@@ -1295,15 +1246,9 @@ async def test_scenario_auth_required_in_channel(use_legacy, streaming):
         ):
             message = context.message
             if message and message.parts and message.parts[0].text == 'start':
-                await event_queue.enqueue_event(
-                    TaskStatusUpdateEvent(
-                        task_id=context.task_id,
-                        context_id=context.context_id,
-                        status=TaskStatus(
-                            state=TaskState.TASK_STATE_AUTH_REQUIRED
-                        ),
-                    )
-                )
+                task = new_task(message)
+                task.status.state = TaskState.TASK_STATE_AUTH_REQUIRED
+                await event_queue.enqueue_event(task)
             elif (
                 message
                 and message.parts
@@ -1316,6 +1261,7 @@ async def test_scenario_auth_required_in_channel(use_legacy, streaming):
                         status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
                     )
                 )
+
             else:
                 raise ValueError(f'Unexpected message {message}')
 
@@ -1380,13 +1326,9 @@ async def test_scenario_parallel_subscribe_attach_detach(use_legacy):  # noqa: P
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=context.task_id,
-                    context_id=context.context_id,
-                    status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-                )
-            )
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
 
             phases = [
                 ('trigger_phase_1', 'artifact_1'),
@@ -1602,6 +1544,9 @@ async def test_scenario_publish_artifact(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
                 TaskArtifactUpdateEvent(
                     task_id=context.task_id,
@@ -1724,7 +1669,7 @@ async def test_scenario_enqueue_task_twice(caplog, use_legacy, streaming):
             configuration=SendMessageConfiguration(return_immediately=False),
         )
     )
-    events = [event async for event in it]
+    _ = [event async for event in it]
 
     (final_task,) = (await client.list_tasks(ListTasksRequest())).tasks
 
@@ -1744,4 +1689,438 @@ async def test_scenario_enqueue_task_twice(caplog, use_legacy, streaming):
             if record.levelname == 'ERROR'
             and 'Ignoring task replacement' in record.message
         ]
+
         assert len(error_logs) == 1
+
+
+# Scenario: Task restoration - terminal state
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+@pytest.mark.parametrize(
+    'subscribe_first',
+    [False, True],
+    ids=['no_subscribe_first', 'subscribe_first'],
+)
+async def test_restore_task_terminal_state(
+    use_legacy, streaming, subscribe_first
+):
+    class TerminalAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            task = new_task(context.message)
+            task.status.state = TaskState.TASK_STATE_COMPLETED
+            await event_queue.enqueue_event(task)
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    task_store = InMemoryTaskStore()
+    handler1 = create_handler(
+        TerminalAgent(), use_legacy, task_store=task_store
+    )
+    client1 = await create_client(
+        handler1, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg-1', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    it1 = client1.send_message(
+        SendMessageRequest(
+            message=msg,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events1 = [event async for event in it1]
+    task_id = get_task_id(events1[-1])
+
+    await wait_for_state(
+        client1, task_id, expected_states={TaskState.TASK_STATE_COMPLETED}
+    )
+
+    # Restore task in a new handler (simulating server restart)
+    handler2 = create_handler(
+        TerminalAgent(), use_legacy, task_store=task_store
+    )
+    client2 = await create_client(
+        handler2, agent_card=agent_card(), streaming=streaming
+    )
+
+    restored_task = await client2.get_task(GetTaskRequest(id=task_id))
+    assert restored_task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    if subscribe_first and streaming:
+        with pytest.raises(
+            Exception,
+            match=r'terminal state',
+        ):
+            async for _ in client2.subscribe(
+                SubscribeToTaskRequest(id=task_id)
+            ):
+                pass
+
+    msg2 = Message(
+        task_id=task_id,
+        message_id='test-msg-2',
+        role=Role.ROLE_USER,
+        parts=[Part(text='message to completed task')],
+    )
+
+    with pytest.raises(Exception, match=r'terminal state'):
+        async for _ in client2.send_message(SendMessageRequest(message=msg2)):
+            pass
+
+    if streaming:
+        with pytest.raises(
+            Exception,
+            match=r'terminal state',
+        ):
+            async for _ in client2.subscribe(
+                SubscribeToTaskRequest(id=task_id)
+            ):
+                pass
+
+
+# Scenario: Task restoration - user input required state
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+@pytest.mark.parametrize(
+    'subscribe_mode',
+    ['none', 'drop', 'listen'],
+    ids=['no_sub', 'sub_drop', 'sub_listen'],
+)
+async def test_restore_task_input_required_state(
+    use_legacy, streaming, subscribe_mode
+):
+    class InputAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            message = context.message
+            if message and message.parts and message.parts[0].text == 'start':
+                task = new_task(message)
+                task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
+                await event_queue.enqueue_event(task)
+            elif message and message.parts and message.parts[0].text == 'input':
+                await event_queue.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+                    )
+                )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    task_store = InMemoryTaskStore()
+    handler1 = create_handler(InputAgent(), use_legacy, task_store=task_store)
+    client1 = await create_client(
+        handler1, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg1 = Message(
+        message_id='test-msg-1', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    it1 = client1.send_message(
+        SendMessageRequest(
+            message=msg1,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events1 = [event async for event in it1]
+
+    task_id = get_task_id(events1[-1])
+    context_id = get_task_context_id(events1[-1])
+
+    await wait_for_state(
+        client1, task_id, expected_states={TaskState.TASK_STATE_INPUT_REQUIRED}
+    )
+
+    # Restore task in a new handler (simulating server restart)
+    handler2 = create_handler(InputAgent(), use_legacy, task_store=task_store)
+    client2 = await create_client(
+        handler2, agent_card=agent_card(), streaming=streaming
+    )
+
+    restored_task = await client2.get_task(GetTaskRequest(id=task_id))
+    assert restored_task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    # Subscription logic based on mode
+    listen_task = None
+    if streaming:
+        if subscribe_mode == 'drop':
+            # Subscribing and dropping immediately (cancelling the generator)
+            async for _ in client2.subscribe(
+                SubscribeToTaskRequest(id=task_id)
+            ):
+                break
+        elif subscribe_mode == 'listen':
+            sub_started_event = asyncio.Event()
+
+            async def listen_to_end():
+                res = []
+                async for ev in client2.subscribe(
+                    SubscribeToTaskRequest(id=task_id)
+                ):
+                    res.append(ev)
+                    sub_started_event.set()
+                return res
+
+            listen_task = asyncio.create_task(listen_to_end())
+            # Wait for subscription to establish and yield the initial task event
+            await asyncio.wait_for(sub_started_event.wait(), timeout=1.0)
+
+    msg2 = Message(
+        task_id=task_id,
+        context_id=context_id,
+        message_id='test-msg-2',
+        role=Role.ROLE_USER,
+        parts=[Part(text='input')],
+    )
+
+    it2 = client2.send_message(
+        SendMessageRequest(
+            message=msg2,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events2 = [event async for event in it2]
+
+    if streaming:
+        assert (
+            events2[-1].status_update.status.state
+            == TaskState.TASK_STATE_COMPLETED
+        )
+    else:
+        assert events2[-1].task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    if listen_task:
+        if use_legacy and streaming:
+            # Error: Legacy handler does not properly manage subscriptions for restored tasks
+            with pytest.raises(TaskNotFoundError):
+                await listen_task
+        else:
+            listen_events = await listen_task
+            # The first event is the initial task state (INPUT_REQUIRED), the last should be COMPLETED
+            assert (
+                get_state(listen_events[-1]) == TaskState.TASK_STATE_COMPLETED
+            )
+
+    final_task = await client2.get_task(GetTaskRequest(id=task_id))
+    assert final_task.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+# Scenario 20: Create initial task with new_task
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+@pytest.mark.parametrize('initial_task_type', ['new_task', 'status_update'])
+async def test_scenario_initial_task_types(
+    use_legacy, streaming, initial_task_type
+):
+    started_event = asyncio.Event()
+    continue_event = asyncio.Event()
+
+    class InitialTaskAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            if initial_task_type == 'new_task':
+                # Create with new_task
+                task = new_task(context.message)
+                task.status.state = TaskState.TASK_STATE_WORKING
+                await event_queue.enqueue_event(task)
+            else:
+                # Create with status update (illegal in v2)
+                await event_queue.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+                    )
+                )
+
+            started_event.set()
+            await continue_event.wait()
+
+            await event_queue.enqueue_event(
+                TaskArtifactUpdateEvent(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    artifact=Artifact(
+                        artifact_id='art-1', parts=[Part(text='artifact data')]
+                    ),
+                )
+            )
+
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=context.task_id,
+                    context_id=context.context_id,
+                    status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(InitialTaskAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg,
+            configuration=SendMessageConfiguration(
+                return_immediately=streaming
+            ),
+        )
+    )
+
+    if streaming:
+        if initial_task_type == 'status_update' and not use_legacy:
+            with pytest.raises(
+                InvalidAgentResponseError,
+                match='Agent should enqueue Task before TaskStatusUpdateEvent event',
+            ):
+                await it.__anext__()
+
+            # End of the test.
+            return
+
+        res = await it.__anext__()
+        if initial_task_type == 'status_update' and use_legacy:
+            # First message has to be a Task.
+            assert res.HasField('status_update')
+
+            # End of the test.
+            return
+
+        assert res.HasField('task')
+        task_id = get_task_id(res)
+
+        await asyncio.wait_for(started_event.wait(), timeout=1.0)
+
+        # Start subscription
+        sub = client.subscribe(SubscribeToTaskRequest(id=task_id))
+
+        # first subscriber receives current task state (WORKING)
+        first_event = await sub.__anext__()
+        assert first_event.HasField('task')
+
+        continue_event.set()
+
+        events = [first_event] + [event async for event in sub]
+    else:
+        # blocking
+        async def release_agent():
+            await started_event.wait()
+            continue_event.set()
+
+        release_task = asyncio.create_task(release_agent())
+        if initial_task_type == 'status_update' and not use_legacy:
+            with pytest.raises(
+                InvalidAgentResponseError,
+                match='Agent should enqueue Task before TaskStatusUpdateEvent event',
+            ):
+                events = [event async for event in it]
+            # End of the test
+            return
+        else:
+            events = [event async for event in it]
+        await release_task
+
+    if streaming:
+        task, artifact_update, status_update = events
+        assert task.HasField('task')
+        validate_state(task, TaskState.TASK_STATE_WORKING)
+        assert artifact_update.artifact_update.artifact.artifact_id == 'art-1'
+        assert status_update.HasField('status_update')
+        validate_state(status_update, TaskState.TASK_STATE_COMPLETED)
+    else:
+        (task,) = events
+        assert task.HasField('task')
+        validate_state(task, TaskState.TASK_STATE_COMPLETED)
+        (artifact,) = task.task.artifacts
+        assert artifact.artifact_id == 'art-1'
+        task_id = task.task.id
+
+    (final_task_from_list,) = (
+        await client.list_tasks(ListTasksRequest(include_artifacts=True))
+    ).tasks
+    assert len(final_task_from_list.artifacts) > 0
+    assert final_task_from_list.artifacts[0].artifact_id == 'art-1'
+
+    final_task = await client.get_task(GetTaskRequest(id=task_id))
+    assert final_task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert len(final_task.artifacts) > 0
+    assert final_task.artifacts[0].artifact_id == 'art-1'
+
+
+# Scenario 23: Invalid Agent Response - Task followed by Message
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+async def test_scenario_23_invalid_response_task_message(use_legacy, streaming):
+    class TaskMessageAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            await event_queue.enqueue_event(new_task(context.message))
+            await event_queue.enqueue_event(
+                Message(message_id='m1', parts=[Part(text='m1')])
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(TaskMessageAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg = Message(
+        message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(SendMessageRequest(message=msg))
+
+    if use_legacy:
+        # Legacy: no error.
+        async for _ in it:
+            pass
+    else:
+        with pytest.raises(
+            InvalidAgentResponseError,
+            match='Received Message object in task mode',
+        ):
+            async for _ in it:
+                pass
