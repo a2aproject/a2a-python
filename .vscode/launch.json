@@ -5,37 +5,14 @@
       "name": "Debug HelloWorld Agent",
       "type": "debugpy",
       "request": "launch",
-      "program": "${workspaceFolder}/examples/helloworld/__main__.py",
+      "program": "${workspaceFolder}/samples/hello_world_agent.py",
       "console": "integratedTerminal",
       "justMyCode": false,
+      "python": "${workspaceFolder}/.venv/bin/python3",
+      "cwd": "${workspaceFolder}",
       "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      },
-      "cwd": "${workspaceFolder}/examples/helloworld",
-      "args": [
-        "--host",
-        "localhost",
-        "--port",
-        "9999"
-      ]
-    },
-    {
-      "name": "Debug Currency Agent",
-      "type": "debugpy",
-      "request": "launch",
-      "program": "${workspaceFolder}/examples/langgraph/__main__.py",
-      "console": "integratedTerminal",
-      "justMyCode": false,
-      "env": {
-        "PYTHONPATH": "${workspaceFolder}"
-      },
-      "cwd": "${workspaceFolder}/examples/langgraph",
-      "args": [
-        "--host",
-        "localhost",
-        "--port",
-        "10000"
-      ]
+        "PYTHONPATH": "${workspaceFolder}/src"
+      }
     },
     {
       "name": "Pytest All",
