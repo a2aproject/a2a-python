@@ -17,12 +17,20 @@ async def _handle_stream(
     stream: Any, current_task_id: str | None
 ) -> str | None:
     async for event in stream:
+        if event.HasField('message'):
+            print('Message:', end=' ')
+            for part in event.message.parts:
+                if part.text:
+                    print(part.text, end=' ')
+            print()
+            return current_task_id
+
         if not current_task_id:
             if event.HasField('task'):
                 current_task_id = event.task.id
                 print(f'Task [state={TaskState.Name(event.task.status.state)}]')
             else:
-                raise ValueError('No task found in the first event')
+                raise ValueError(f'Unexpected first event: {event}')
 
         if event.HasField('status_update'):
             state_name = TaskState.Name(event.status_update.status.state)
