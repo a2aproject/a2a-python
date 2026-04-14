@@ -27,6 +27,9 @@ from a2a.types import (
     AgentProvider,
     AgentSkill,
     Part,
+    Task,
+    TaskState,
+    TaskStatus,
     a2a_pb2_grpc,
 )
 
@@ -73,6 +76,15 @@ class SampleAgentExecutor(AgentExecutor):
             user_message.message_id,
             task_id,
             context_id,
+        )
+
+        await event_queue.enqueue_event(
+            Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+                history=[user_message],
+            )
         )
 
         updater = TaskUpdater(
