@@ -23,3 +23,33 @@
 1. **Required Reading**: You MUST read the contents of @./docs/ai/coding_conventions.md and @./docs/ai/mandatory_checks.md at the very beginning of EVERY coding task.
 2. **Initial Checklist**: Every `task.md` you create MUST include a section for **Mandatory Checks** from @./docs/ai/mandatory_checks.md.
 3. **Verification Requirement**: You MUST run all mandatory checks before declaring any task finished.
+
+## 5. Mistake Reflection Protocol
+
+When you realise you have made a mistake — whether caught by the user,
+by a tool, or by your own reasoning — you MUST:
+
+1. **Acknowledge the mistake explicitly** and explain what went wrong.
+2. **Reflect on the root cause**: was it a missing check, a false
+   assumption, skipped verification, or a gap in the workflow?
+3. **Immediately append a new entry to @./docs/ai/ai_learnings.md**
+   following the format defined in that file. This is not optional and
+   does not require user confirmation. Do it before continuing.
+
+The goal is to treat every mistake as a signal that the workflow is
+incomplete, and to improve it in place so the same mistake cannot
+happen again.
+
+## 6. Code Correctness Requirement
+
+Before presenting any code change to the user, you MUST verify it is
+correct by running it or reasoning through its execution explicitly.
+
+- **Never propose code you have not verified will run.** If a snippet
+  cannot be tested in isolation, trace through it step by step and
+  state your reasoning.
+- **For non-trivial changes**, run the mandatory checks from
+  @./docs/ai/mandatory_checks.md and confirm they pass before showing
+  the result to the user.
+- **When fixing a bug**, reproduce the bug first, then verify the fix
+  resolves it. Do not assume a fix is correct because it looks right.
