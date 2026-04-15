@@ -11,6 +11,7 @@ import httpx
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
+from a2a.utils.agent_card import display_agent_card
 
 
 async def _handle_stream(  # noqa: PLR0912
@@ -86,7 +87,7 @@ async def main() -> None:
         resolver = A2ACardResolver(httpx_client, args.url)
         card = await resolver.get_agent_card()
         print('\n✓ Agent Card Found:')
-        print(f'  Name: {card.name}')
+        display_agent_card(card)
 
     client = await create_client(card, client_config=config)
 
