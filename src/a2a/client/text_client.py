@@ -94,7 +94,7 @@ class TextClient:
             elif event.HasField('message'):
                 response_parts.append(get_message_text(event.message))
             elif event.HasField('status_update'):
-                if event.status_update.task_id:
+                if not self._task_id and event.status_update.task_id:
                     self._task_id = event.status_update.task_id
                 if event.status_update.status.state in _TERMINAL_STATES:
                     self._task_id = None

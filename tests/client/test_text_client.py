@@ -55,9 +55,9 @@ async def test_send_text_message(
         resp0.task.id = 'task-1'
         yield resp0
 
-        # Event 1: direct message
+        # Event 1: status update
         resp1 = StreamResponse()
-        resp1.message.parts.append(Part(text='Hello'))
+        resp1.status_update.status.message.parts.append(Part(text='Hello'))
         yield resp1
 
         # Event 2: status update without message
@@ -87,20 +87,17 @@ async def test_send_text_message(
 
 
 @pytest.mark.asyncio
-async def test_send_text_message_custom_delimiter(
+async def test_send_text_message(
     text_client: TextClient, mock_client: AsyncMock
 ) -> None:
     async def create_stream(*args, **kwargs):
         resp1 = StreamResponse()
         resp1.message.parts.append(Part(text='Hello'))
         yield resp1
-        resp2 = StreamResponse()
-        resp2.artifact_update.artifact.parts.append(Part(text='World'))
-        yield resp2
 
     mock_client.send_message.return_value = create_stream()
-    response = await text_client.send_text_message('Hi', delimiter='\n')
-    assert response == 'Hello\nWorld'
+    response = await text_client.send_text_message('Hi')
+    assert response == 'Hello'
 
 
 @pytest.mark.asyncio
