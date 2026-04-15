@@ -11,18 +11,16 @@ import httpx
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
+from a2a.utils import get_artifact_text, get_message_text
+from a2a.utils.agent_card import display_agent_card
 
 
-async def _handle_stream(  # noqa: PLR0912
+async def _handle_stream(
     stream: Any, current_task_id: str | None
 ) -> str | None:
     async for event in stream:
         if event.HasField('message'):
-            print('Message:', end=' ')
-            for part in event.message.parts:
-                if part.text:
-                    print(part.text, end=' ')
-            print()
+            print('Message:', get_message_text(event.message, delimiter=' '))
             return None
 
         if not current_task_id:
@@ -35,12 +33,15 @@ async def _handle_stream(  # noqa: PLR0912
 
         if event.HasField('status_update'):
             state_name = TaskState.Name(event.status_update.status.state)
-            print(f'TaskStatusUpdate [state={state_name}]:', end=' ')
-            if event.status_update.status.HasField('message'):
-                for part in event.status_update.status.message.parts:
-                    if part.text:
-                        print(part.text, end=' ')
-            print()
+            message_text = (
+                ': '
+                + get_message_text(
+                    event.status_update.status.message, delimiter=' '
+                )
+                if event.status_update.status.HasField('message')
+                else ''
+            )
+            print(f'TaskStatusUpdate [state={state_name}]{message_text}')
             if state_name in (
                 'TASK_STATE_COMPLETED',
                 'TASK_STATE_FAILED',
@@ -52,12 +53,10 @@ async def _handle_stream(  # noqa: PLR0912
         elif event.HasField('artifact_update'):
             print(
                 f'TaskArtifactUpdate [name={event.artifact_update.artifact.name}]:',
-                end=' ',
+                get_artifact_text(
+                    event.artifact_update.artifact, delimiter=' '
+                ),
             )
-            for part in event.artifact_update.artifact.parts:
-                if part.text:
-                    print(part.text, end=' ')
-            print()
     return current_task_id
 
 
@@ -86,7 +85,7 @@ async def main() -> None:
         resolver = A2ACardResolver(httpx_client, args.url)
         card = await resolver.get_agent_card()
         print('\n✓ Agent Card Found:')
-        print(f'  Name: {card.name}')
+        display_agent_card(card)
 
     client = await create_client(card, client_config=config)
 
