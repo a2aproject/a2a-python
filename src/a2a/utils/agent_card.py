@@ -26,9 +26,8 @@ def display_agent_card(card: AgentCard) -> None:
     if card.icon_url:
         lines.append(f'Icon URL    : {card.icon_url}')
     if card.HasField('provider'):
-        lines.append(
-            f'Provider    : {card.provider.organization} ({card.provider.url})'
-        )
+        url_suffix = f' ({card.provider.url})' if card.provider.url else ''
+        lines.append(f'Provider    : {card.provider.organization}{url_suffix}')
 
     lines += ['', '--- Interfaces ---']
     for i, iface in enumerate(card.supported_interfaces):

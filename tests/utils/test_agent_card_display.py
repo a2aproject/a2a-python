@@ -167,10 +167,10 @@ class TestDisplayAgentCard:
         display_agent_card(card)
         assert '  [0] 127.0.0.1:50051\n' in capsys.readouterr().out
 
-    def test_provider_both_fields_always_shown(
+    def test_provider_with_url(
         self, capsys: pytest.CaptureFixture[str]
     ) -> None:
-        """Both organization and url are shown when provider is set (both are required fields)."""
+        """Provider shows organization and URL in parentheses when both are set."""
         card = AgentCard(
             provider=AgentProvider(
                 organization='Example Org',
@@ -182,3 +182,13 @@ class TestDisplayAgentCard:
             'Provider    : Example Org (https://example.com)'
             in capsys.readouterr().out
         )
+
+    def test_provider_without_url_has_no_empty_parentheses(
+        self, capsys: pytest.CaptureFixture[str]
+    ) -> None:
+        """No empty parentheses when provider URL is not set."""
+        card = AgentCard(provider=AgentProvider(organization='Example Org'))
+        display_agent_card(card)
+        out = capsys.readouterr().out
+        assert 'Provider    : Example Org' in out
+        assert '()' not in out
