@@ -2,6 +2,7 @@ import argparse  # noqa: I001
 import asyncio
 import base64
 import logging
+import os
 import uuid
 
 import grpc
@@ -36,7 +37,8 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import TransportProtocol
 
 
-logging.basicConfig(level=logging.INFO)
+log_level = os.environ.get('ITK_LOG_LEVEL', 'INFO').upper()
+logging.basicConfig(level=log_level)
 logger = logging.getLogger(__name__)
 
 
@@ -352,8 +354,9 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         grpc_port,
     )
 
+    uvicorn_log_level = os.environ.get('ITK_LOG_LEVEL', 'INFO').lower()
     config = uvicorn.Config(
-        app, host='127.0.0.1', port=http_port, log_level='info'
+        app, host='127.0.0.1', port=http_port, log_level=uvicorn_log_level
     )
     uvicorn_server = uvicorn.Server(config)
 
