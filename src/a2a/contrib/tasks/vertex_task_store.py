@@ -116,7 +116,12 @@ class VertexTaskStore(TaskStore):
         task: CompatTask,
         event_sequence_number: int,
     ) -> vertexai_types.TaskEvent | None:
-        if task.metadata != previous_task.metadata:
+        # We generate metadata change events if the metadata was changed.
+        # We don't generate events if the metadata was changed from
+        # one empty value to another, e.g. {} to None.
+        if task.metadata != previous_task.metadata and (
+            task.metadata or previous_task.metadata
+        ):
             return vertexai_types.TaskEvent(
                 event_data=vertexai_types.TaskEventData(
                     metadata_change=vertexai_types.TaskMetadataChange(

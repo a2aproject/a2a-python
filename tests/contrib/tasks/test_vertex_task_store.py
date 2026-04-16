@@ -535,6 +535,53 @@ async def test_metadata_field_mapping(
 
 
 @pytest.mark.asyncio
+async def test_metadata_empty_transitions(
+    vertex_store: VertexTaskStore,
+) -> None:
+    """Test that updating metadata between {} and None does not generate events."""
+    task_id = 'task-metadata-empty-test'
+
+    # Step 1: Create task with metadata={}
+    task = Task(
+        id=task_id,
+        context_id='session-meta-empty',
+        status=TaskStatus(state=TaskState.submitted),
+        kind='task',
+        metadata={},
+    )
+    await vertex_store.save(task)
+
+    full_name = f'{vertex_store._agent_engine_resource_id}/a2aTasks/{task_id}'
+
+    # Get initial event sequence number
+    stored_task_before = (
+        await vertex_store._client.aio.agent_engines.a2a_tasks.get(full_name)
+    )
+    initial_seq = stored_task_before.next_event_sequence_number
+
+    # Step 2: Update metadata to None
+    updated_task = task.model_copy(deep=True)
+    updated_task.metadata = None
+    await vertex_store.save(updated_task)
+
+    # Step 3: Update back to {}
+    task_back = updated_task.model_copy(deep=True)
+    task_back.metadata = {}
+    await vertex_store.save(task_back)
+
+    # Verify that retrieved task still has {} (due to mapping)
+    retrieved = await vertex_store.get(task_id)
+    assert retrieved is not None
+    assert retrieved.metadata == {}
+
+    # Verify that next_event_sequence_number did NOT increase (no events generated)
+    stored_task_after = (
+        await vertex_store._client.aio.agent_engines.a2a_tasks.get(full_name)
+    )
+    assert stored_task_after.next_event_sequence_number == initial_seq
+
+
+@pytest.mark.asyncio
 async def test_update_task_status_details(
     vertex_store: VertexTaskStore,
 ) -> None:
