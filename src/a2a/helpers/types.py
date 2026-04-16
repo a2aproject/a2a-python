@@ -197,9 +197,8 @@ def get_stream_response_text(response: StreamResponse, delimiter: str = '\n') ->
     if response.HasField('message'):
         return get_message_text(response.message, delimiter)
     elif response.HasField('task'):
-        if response.task.status.HasField('message'):
-            return get_message_text(response.task.status.message, delimiter)
-        return ''
+        texts = [get_artifact_text(a, delimiter) for a in response.task.artifacts]
+        return delimiter.join(t for t in texts if t)
     elif response.HasField('status_update'):
         if response.status_update.status.HasField('message'):
             return get_message_text(response.status_update.status.message, delimiter)

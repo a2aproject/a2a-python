@@ -12,7 +12,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     Task,
 )
-from a2a.utils import get_message_text
+from a2a.helpers.types import get_message_text
 from a2a.utils.errors import InvalidParamsError
 
 
