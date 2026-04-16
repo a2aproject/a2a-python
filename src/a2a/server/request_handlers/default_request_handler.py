@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -14,13 +14,13 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import (
     Event,
     EventConsumer,
-    EventQueue,
     EventQueueLegacy,
     InMemoryQueueManager,
     QueueManager,
 )
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
+    validate,
     validate_request_params,
 )
 from a2a.server.tasks import (
@@ -32,8 +32,10 @@ from a2a.server.tasks import (
     TaskStore,
 )
 from a2a.types.a2a_pb2 import (
+    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
@@ -48,6 +50,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -55,6 +58,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.helpers import maybe_await
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -89,27 +93,39 @@ class LegacyRequestHandler(RequestHandler):
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
+        agent_card: AgentCard,
         queue_manager: QueueManager | None = None,
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
+        extended_agent_card: AgentCard | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
+        ]
+        | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
         Args:
             agent_executor: The `AgentExecutor` instance to run agent logic.
             task_store: The `TaskStore` instance to manage task persistence.
+            agent_card: The `AgentCard` describing the agent's capabilities.
             queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
             push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
             push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
             request_context_builder: The `RequestContextBuilder` instance used
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
+            extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
+            extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
+        self._agent_card = agent_card
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self.extended_agent_card = extended_agent_card
+        self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -224,7 +240,7 @@ class LegacyRequestHandler(RequestHandler):
         return result
 
     async def _run_event_stream(
-        self, request: RequestContext, queue: EventQueue
+        self, request: RequestContext, queue: EventQueueLegacy
     ) -> None:
         """Runs the agent's `execute` method and closes the queue afterwards.
 
@@ -239,7 +255,9 @@ class LegacyRequestHandler(RequestHandler):
         self,
         params: SendMessageRequest,
         context: ServerCallContext,
-    ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
+    ) -> tuple[
+        TaskManager, str, EventQueueLegacy, ResultAggregator, asyncio.Task
+    ]:
         """Common setup logic for both streaming and non-streaming message handling.
 
         Returns:
@@ -397,6 +415,10 @@ class LegacyRequestHandler(RequestHandler):
         return result
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_message_send_stream(
         self,
         params: SendMessageRequest,
@@ -486,6 +508,11 @@ class LegacyRequestHandler(RequestHandler):
             self._running_agents.pop(task_id, None)
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
@@ -512,6 +539,11 @@ class LegacyRequestHandler(RequestHandler):
         return params
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_get_task_push_notification_config(
         self,
         params: GetTaskPushNotificationConfigRequest,
@@ -538,9 +570,13 @@ class LegacyRequestHandler(RequestHandler):
             if config.id == config_id:
                 return config
 
-        raise InternalError(message='Push notification config not found')
+        raise TaskNotFoundError
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_subscribe_to_task(
         self,
         params: SubscribeToTaskRequest,
@@ -584,6 +620,11 @@ class LegacyRequestHandler(RequestHandler):
             yield event
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_list_task_push_notification_configs(
         self,
         params: ListTaskPushNotificationConfigsRequest,
@@ -610,6 +651,11 @@ class LegacyRequestHandler(RequestHandler):
         )
 
     @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_delete_task_push_notification_config(
         self,
         params: DeleteTaskPushNotificationConfigRequest,
@@ -629,3 +675,28 @@ class LegacyRequestHandler(RequestHandler):
             raise TaskNotFoundError
 
         await self._push_config_store.delete_info(task_id, context, config_id)
+
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.extended_agent_card,
+        error_message='The agent does not support authenticated extended cards',
+    )
+    async def on_get_extended_agent_card(
+        self,
+        params: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> AgentCard:
+        """Default handler for 'GetExtendedAgentCard'.
+
+        Requires `capabilities.extended_agent_card` to be true.
+        """
+        extended_card = self.extended_agent_card
+        if not extended_card:
+            raise ExtendedAgentCardNotConfiguredError
+
+        if self.extended_card_modifier:
+            return await maybe_await(
+                self.extended_card_modifier(extended_card, context)
+            )
+
+        return extended_card

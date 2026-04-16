@@ -14,26 +14,26 @@ from a2a.server.routes.common import (
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     CancelTaskRequest,
     GetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
 )
 from a2a.utils import constants, proto_utils
 from a2a.utils.error_handlers import (
+    build_rest_error_payload,
     rest_error_handler,
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
     InvalidRequestError,
     TaskNotFoundError,
 )
-from a2a.utils.helpers import maybe_await, validate, validate_version
+from a2a.utils.helpers import validate_version
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 if TYPE_CHECKING:
+    from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
@@ -41,6 +41,7 @@ if TYPE_CHECKING:
     _package_starlette_installed = True
 else:
     try:
+        from sse_starlette.event import ServerSentEvent
         from sse_starlette.sse import EventSourceResponse
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
@@ -48,6 +49,7 @@ else:
         _package_starlette_installed = True
     except ImportError:
         EventSourceResponse = Any
+        ServerSentEvent = Any
         Request = Any
         JSONResponse = Any
         Response = Any
@@ -66,34 +68,18 @@ class RestDispatcher:
     Handles context building, routing to RequestHandler directly, and response formatting (JSON/SSE).
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
-        extended_agent_card: AgentCard | None = None,
         context_builder: ServerCallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
-        extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
-        ]
-        | None = None,
     ) -> None:
         """Initializes the RestDispatcher.
 
         Args:
-            agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The underlying `RequestHandler` instance to delegate requests to.
-            extended_agent_card: An optional, distinct AgentCard to be served
-              at the authenticated extended card endpoint.
             context_builder: The ServerCallContextBuilder used to construct the
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
-            extended_card_modifier: An optional callback to dynamically modify
-              the extended agent card before it is served. It receives the
-              call context.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -102,10 +88,6 @@ class RestDispatcher:
                 'optional dependencies, `a2a-sdk[http-server]`.'
             )
 
-        self.agent_card = agent_card
-        self.extended_agent_card = extended_agent_card
-        self.card_modifier = card_modifier
-        self.extended_card_modifier = extended_card_modifier
         self._context_builder = (
             context_builder or DefaultServerCallContextBuilder()
         )
@@ -157,10 +139,17 @@ class RestDispatcher:
         except StopAsyncIteration:
             return EventSourceResponse(iter([]))
 
-        async def event_generator() -> AsyncIterator[str]:
-            yield json.dumps(first_item)
-            async for item in stream:
-                yield json.dumps(item)
+        async def event_generator() -> AsyncIterator[ServerSentEvent]:
+            yield ServerSentEvent(data=json.dumps(first_item))
+            try:
+                async for item in stream:
+                    yield ServerSentEvent(data=json.dumps(item))
+            except Exception as e:
+                logger.exception('Error during REST SSE stream')
+                yield ServerSentEvent(
+                    data=json.dumps(build_rest_error_payload(e)),
+                    event='error',
+                )
 
         return EventSourceResponse(event_generator())
 
@@ -192,10 +181,6 @@ class RestDispatcher:
         """Handles the 'message/stream' REST method."""
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             context: ServerCallContext,
         ) -> AsyncIterator[dict[str, Any]]:
@@ -235,10 +220,6 @@ class RestDispatcher:
         task_id = request.path_params['id']
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
-        @validate(
-            lambda _: self.agent_card.capabilities.streaming,
-            'Streaming is not supported by the agent',
-        )
         async def _handler(
             context: ServerCallContext,
         ) -> AsyncIterator[dict[str, Any]]:
@@ -312,10 +293,6 @@ class RestDispatcher:
         """Handles the 'tasks/pushNotificationConfig/set' REST method."""
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
-        @validate(
-            lambda _: self.agent_card.capabilities.push_notifications,
-            'Push notifications are not supported by the agent',
-        )
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.TaskPushNotificationConfig:
@@ -371,23 +348,16 @@ class RestDispatcher:
     async def handle_authenticated_agent_card(
         self, request: Request
     ) -> Response:
-        """Handles the 'extendedAgentCard' REST method."""
-        if not self.agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='Authenticated card not supported'
-            )
-        card_to_serve = self.extended_agent_card or self.agent_card
+        """Handles the 'agentCard' REST method."""
 
-        if self.extended_card_modifier:
-            context = self._build_call_context(request)
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(card_to_serve, context)
+        @validate_version(constants.PROTOCOL_VERSION_1_0)
+        async def _handler(
+            context: ServerCallContext,
+        ) -> a2a_pb2.AgentCard:
+            params = a2a_pb2.GetExtendedAgentCardRequest()
+            return await self.request_handler.on_get_extended_agent_card(
+                params, context
             )
-        elif self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(card_to_serve))
 
-        return JSONResponse(
-            content=MessageToDict(
-                card_to_serve, preserving_proto_field_name=True
-            )
-        )
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))

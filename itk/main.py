@@ -12,7 +12,7 @@ from fastapi import FastAPI
 
 from pyproto import instruction_pb2
 
-from a2a.client import ClientConfig, ClientFactory
+from a2a.client import ClientConfig, create_client
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -128,10 +128,7 @@ async def handle_call_agent(call: instruction_pb2.CallAgent) -> list[str]:
     )
 
     try:
-        client = await ClientFactory.connect(
-            call.agent_card_uri,
-            client_config=config,
-        )
+        client = await create_client(call.agent_card_uri, client_config=config)
 
         # Wrap nested instruction
         async with client:
@@ -292,7 +289,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         name='ITK v10 Agent',
         description='Python agent using SDK 1.0.',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
@@ -302,7 +303,16 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     handler = DefaultRequestHandler(
         agent_executor=V10AgentExecutor(),
         task_store=task_store,
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
+    )
+
+    handler_extended = DefaultRequestHandler(
+        agent_executor=V10AgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
+        queue_manager=InMemoryQueueManager(),
+        extended_agent_card=agent_card,
     )
 
     app = FastAPI()
@@ -311,9 +321,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
-        request_handler=handler,
-        extended_agent_card=agent_card,
+        request_handler=handler_extended,
         rpc_url='/',
         enable_v0_3_compat=True,
     )
@@ -323,7 +331,6 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     )
 
     rest_routes = create_rest_routes(
-        agent_card=agent_card,
         request_handler=handler,
         enable_v0_3_compat=True,
     )
@@ -331,9 +338,9 @@ async def main_async(http_port: int, grpc_port: int) -> None:
 
     server = grpc.aio.server()
 
-    compat_servicer = CompatGrpcHandler(agent_card, handler)
+    compat_servicer = CompatGrpcHandler(handler)
     a2a_v0_3_pb2_grpc.add_A2AServiceServicer_to_server(compat_servicer, server)
-    servicer = GrpcHandler(agent_card, handler)
+    servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
 
     server.add_insecure_port(f'127.0.0.1:{grpc_port}')

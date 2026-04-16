@@ -46,8 +46,8 @@ def mock_handler():
 
 
 @pytest.fixture
-def test_app(mock_handler):
-    agent_card = AgentCard(
+def agent_card():
+    card = AgentCard(
         name='TestAgent',
         description='Test Description',
         version='1.0.0',
@@ -55,13 +55,17 @@ def test_app(mock_handler):
             streaming=False, push_notifications=True, extended_agent_card=True
         ),
     )
-    interface = agent_card.supported_interfaces.add()
+    interface = card.supported_interfaces.add()
     interface.url = 'http://mockurl.com'
     interface.protocol_binding = 'jsonrpc'
     interface.protocol_version = '0.3'
+    return card
 
+
+@pytest.fixture
+def test_app(mock_handler, agent_card):
+    mock_handler._agent_card = agent_card
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=mock_handler,
         enable_v0_3_compat=True,
         rpc_url='/',
@@ -123,9 +127,10 @@ def test_get_task_v03_compat(
 
 
 def test_get_extended_agent_card_v03_compat(
-    client: TestClient,
+    client: TestClient, mock_handler: AsyncMock, agent_card: AgentCard
 ) -> None:
     """Test that the v0.3 method name 'agent/getAuthenticatedExtendedCard' is correctly routed."""
+    mock_handler.on_get_extended_agent_card.return_value = agent_card
     request_payload = {
         'jsonrpc': '2.0',
         'id': '3',

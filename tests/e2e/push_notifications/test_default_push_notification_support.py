@@ -75,7 +75,9 @@ def agent_server(notifications_client: httpx.AsyncClient):
     )
     process.start()
     try:
-        wait_for_server_ready(f'{url}/extendedAgentCard')
+        wait_for_server_ready(
+            f'{url}/extendedAgentCard', headers={'A2A-Version': '1.0'}
+        )
     except TimeoutError as e:
         process.terminate()
         raise e
@@ -107,13 +109,11 @@ async def test_notification_triggering_with_in_message_config_e2e(
     a2a_client = ClientFactory(
         ClientConfig(
             supported_protocol_bindings=[TransportProtocol.HTTP_JSON],
-            push_notification_configs=[
-                TaskPushNotificationConfig(
-                    id='in-message-config',
-                    url=f'{notifications_server}/notifications',
-                    token=token,
-                )
-            ],
+            push_notification_config=TaskPushNotificationConfig(
+                id='in-message-config',
+                url=f'{notifications_server}/notifications',
+                token=token,
+            ),
         )
     ).create(minimal_agent_card(agent_server, [TransportProtocol.HTTP_JSON]))
 

@@ -45,6 +45,7 @@ dunders
 ES256
 euo
 EUR
+evt
 excinfo
 FastAPI
 fernet
@@ -138,3 +139,8 @@ TResponse
 typ
 typeerror
 vulnz
+Podman
+podman
+UIDs
+subuids
+subgids

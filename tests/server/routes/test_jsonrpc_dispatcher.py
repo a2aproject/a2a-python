@@ -61,7 +61,7 @@ def test_app(mock_handler):
     mock_agent_card.capabilities.streaming = False
 
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=mock_agent_card, request_handler=mock_handler, rpc_url='/'
+        request_handler=mock_handler, rpc_url='/'
     )
 
     from starlette.applications import Starlette
@@ -101,7 +101,8 @@ class TestJsonRpcDispatcherOptionalDependencies:
         mock_handler = MagicMock(spec=RequestHandler)
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://example.com'
-        return {'agent_card': mock_agent_card, 'request_handler': mock_handler}
+        mock_handler._agent_card = mock_agent_card
+        return {'request_handler': mock_handler}
 
     @pytest.fixture(scope='class')
     def mark_pkg_starlette_not_installed(self):
@@ -228,13 +229,12 @@ class TestJsonRpcDispatcherV03Compat:
         mock_agent_card.capabilities = MagicMock()
         mock_agent_card.capabilities.streaming = False
 
+        mock_handler._agent_card = mock_agent_card
+
         from starlette.applications import Starlette
 
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=mock_agent_card,
-            request_handler=mock_handler,
-            enable_v0_3_compat=True,
-            rpc_url='/',
+            request_handler=mock_handler, enable_v0_3_compat=True, rpc_url='/'
         )
         app = Starlette(routes=jsonrpc_routes)
         client = TestClient(app)
@@ -328,9 +328,7 @@ class TestJsonRpcDispatcherMethodRouting:
     @pytest.fixture
     def client(self, handler, agent_card):
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=agent_card,
             request_handler=handler,
-            extended_agent_card=agent_card,
             rpc_url='/',
         )
         from starlette.applications import Starlette
@@ -480,11 +478,9 @@ class TestJsonRpcDispatcherMethodRouting:
             captured['method'] = context.state.get('method')
             return card
 
+        handler.on_get_extended_agent_card.return_value = agent_card
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=agent_card,
             request_handler=handler,
-            extended_agent_card=agent_card,
-            extended_card_modifier=capture_modifier,
             rpc_url='/',
         )
         from starlette.applications import Starlette
@@ -500,7 +496,7 @@ class TestJsonRpcDispatcherMethodRouting:
         data = response.json()
         assert 'result' in data
         assert data['result']['name'] == 'TestAgent'
-        assert captured['method'] == 'GetExtendedAgentCard'
+        handler.on_get_extended_agent_card.assert_called_once()
 
     # --- Streaming method routing tests ---
 
@@ -526,7 +522,6 @@ class TestJsonRpcDispatcherMethodRouting:
         )
 
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=agent_card,
             request_handler=handler,
             rpc_url='/',
         )
@@ -588,7 +583,6 @@ class TestJsonRpcDispatcherMethodRouting:
         )
 
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=agent_card,
             request_handler=handler,
             rpc_url='/',
         )

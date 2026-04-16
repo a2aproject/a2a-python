@@ -142,9 +142,13 @@ def create_agent_app(
     """Creates a new HTTP+REST Starlette application for the test agent."""
     push_config_store = InMemoryPushNotificationConfigStore()
     card = test_agent_card(url)
+    extended_card = test_agent_card(url)
+    extended_card.name = 'Test Agent Extended'
     handler = DefaultRequestHandler(
         agent_executor=TestAgentExecutor(),
         task_store=InMemoryTaskStore(),
+        agent_card=card,
+        extended_agent_card=extended_card,
         push_config_store=push_config_store,
         push_sender=BasePushNotificationSender(
             httpx_client=notification_client,
@@ -152,7 +156,7 @@ def create_agent_app(
             context=ServerCallContext(),
         ),
     )
-    rest_routes = create_rest_routes(agent_card=card, request_handler=handler)
+    rest_routes = create_rest_routes(request_handler=handler)
     agent_card_routes = create_agent_card_routes(
         agent_card=card, card_url='/.well-known/agent-card.json'
     )

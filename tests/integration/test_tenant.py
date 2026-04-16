@@ -202,9 +202,7 @@ class TestJSONRPCTenantIntegration:
             agent_card=jsonrpc_agent_card, card_url='/'
         )
         jsonrpc_routes = create_jsonrpc_routes(
-            agent_card=jsonrpc_agent_card,
             request_handler=mock_handler,
-            extended_agent_card=jsonrpc_agent_card,
             rpc_url='/jsonrpc',
         )
         app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])

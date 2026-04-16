@@ -165,9 +165,7 @@ class AppBuilder:
         app_instance.routes.extend(card_routes)
 
         # JSON-RPC router
-        rpc_routes = create_jsonrpc_routes(
-            self.agent_card, self.handler, rpc_url=rpc_url
-        )
+        rpc_routes = create_jsonrpc_routes(self.handler, rpc_url=rpc_url)
         app_instance.routes.extend(rpc_routes)
 
         return app_instance

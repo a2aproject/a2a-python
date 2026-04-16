@@ -1,6 +1,7 @@
 """Utility functions for the A2A Python SDK."""
 
 from a2a.utils import proto_utils
+from a2a.utils.agent_card import display_agent_card
 from a2a.utils.artifact import (
     ArtifactStreamer,
     get_artifact_text,
@@ -46,6 +47,7 @@ __all__ = [
     'build_text_artifact',
     'completed_task',
     'create_task_obj',
+    'display_agent_card',
     'get_artifact_text',
     'get_data_parts',
     'get_file_parts',

@@ -5,17 +5,17 @@ import grpc
 import httpx
 import pytest
 import pytest_asyncio
+from starlette.applications import Starlette
 
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.routes.rest_routes import create_rest_routes
-from starlette.applications import Starlette
-from a2a.server.routes import create_jsonrpc_routes, create_agent_card_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
-from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
+from a2a.server.request_handlers import GrpcHandler, DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks import TaskUpdater
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
@@ -37,7 +37,7 @@ from a2a.types import (
     TaskState,
     a2a_pb2_grpc,
 )
-from a2a.utils import TransportProtocol
+from a2a.utils import TransportProtocol, new_task
 from a2a.utils.errors import InvalidParamsError
 
 
@@ -69,7 +69,9 @@ def assert_events_match(events, expected_events):
         events, expected_events, strict=True
     ):
         assert event.HasField(expected_type)
-        if expected_type == 'status_update':
+        if expected_type == 'task':
+            assert event.task.status.state == expected_val
+        elif expected_type == 'status_update':
             assert event.status_update.status.state == expected_val
         elif expected_type == 'artifact_update':
             if expected_val is not None:
@@ -83,26 +85,30 @@ def assert_events_match(events, expected_events):
 
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
-        task_updater = TaskUpdater(
-            event_queue,
-            context.task_id,
-            context.context_id,
-        )
         user_input = context.get_user_input()
 
-        is_input_required_resumption = (
-            context.current_task is not None
-            and context.current_task.status.state
-            == TaskState.TASK_STATE_INPUT_REQUIRED
-        )
-
-        if not is_input_required_resumption:
-            await task_updater.update_status(
-                TaskState.TASK_STATE_SUBMITTED,
-                message=task_updater.new_agent_message(
-                    [Part(text='task submitted')]
-                ),
+        # Direct message response (no task created).
+        if user_input.startswith('Message:'):
+            await event_queue.enqueue_event(
+                Message(
+                    role=Role.ROLE_AGENT,
+                    message_id='direct-reply-1',
+                    parts=[Part(text=f'Direct reply to: {user_input}')],
+                )
             )
+            return
+
+        # Task-based response.
+        task = context.current_task
+        if not task:
+            task = new_task(context.message)
+            await event_queue.enqueue_event(task)
+
+        task_updater = TaskUpdater(
+            event_queue,
+            task.id,
+            task.context_id,
+        )
 
         await task_updater.update_status(
             TaskState.TASK_STATE_WORKING,
@@ -166,11 +172,12 @@ class ClientSetup(NamedTuple):
 
 
 @pytest.fixture
-def base_e2e_setup():
+def base_e2e_setup(agent_card):
     task_store = InMemoryTaskStore()
     handler = DefaultRequestHandler(
         agent_executor=MockAgentExecutor(),
         task_store=task_store,
+        agent_card=agent_card,
         queue_manager=InMemoryQueueManager(),
     )
     return task_store, handler
@@ -179,9 +186,7 @@ def base_e2e_setup():
 @pytest.fixture
 def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
     task_store, handler = base_e2e_setup
-    rest_routes = create_rest_routes(
-        agent_card=agent_card, request_handler=handler
-    )
+    rest_routes = create_rest_routes(request_handler=handler)
     agent_card_routes = create_agent_card_routes(
         agent_card=agent_card, card_url='/'
     )
@@ -209,9 +214,7 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
         agent_card=agent_card, card_url='/'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        agent_card=agent_card,
         request_handler=handler,
-        extended_agent_card=agent_card,
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
@@ -250,8 +253,8 @@ async def grpc_setup(
             break
     else:
         raise ValueError('No gRPC interface found in agent card')
-
-    servicer = GrpcHandler(grpc_agent_card, handler)
+    handler._agent_card = grpc_agent_card
+    servicer = GrpcHandler(handler)
     a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
     await server.start()
 
@@ -331,7 +334,6 @@ async def test_end_to_end_send_message_blocking(transport_setups):
         response.task.history,
         [
             (Role.ROLE_USER, 'Run dummy agent!'),
-            (Role.ROLE_AGENT, 'task submitted'),
             (Role.ROLE_AGENT, 'task working'),
         ],
     )
@@ -389,20 +391,19 @@ async def test_end_to_end_send_message_streaming(transport_setups):
     assert_events_match(
         events,
         [
-            ('status_update', TaskState.TASK_STATE_SUBMITTED),
+            ('task', TaskState.TASK_STATE_SUBMITTED),
             ('status_update', TaskState.TASK_STATE_WORKING),
             ('artifact_update', [('test-artifact', 'artifact content')]),
             ('status_update', TaskState.TASK_STATE_COMPLETED),
         ],
     )
 
-    task_id = events[0].status_update.task_id
+    task_id = events[0].task.id
     task = await client.get_task(request=GetTaskRequest(id=task_id))
     assert_history_matches(
         task.history,
         [
             (Role.ROLE_USER, 'Run dummy agent!'),
-            (Role.ROLE_AGENT, 'task submitted'),
             (Role.ROLE_AGENT, 'task working'),
         ],
     )
@@ -426,7 +427,7 @@ async def test_end_to_end_get_task(transport_setups):
         )
     ]
     response = events[0]
-    task_id = response.status_update.task_id
+    task_id = response.task.id
 
     get_request = GetTaskRequest(id=task_id)
     retrieved_task = await client.get_task(request=get_request)
@@ -441,7 +442,6 @@ async def test_end_to_end_get_task(transport_setups):
         retrieved_task.history,
         [
             (Role.ROLE_USER, 'Test Get Task'),
-            (Role.ROLE_AGENT, 'task submitted'),
             (Role.ROLE_AGENT, 'task working'),
         ],
     )
@@ -468,7 +468,7 @@ async def test_end_to_end_list_tasks(transport_setups):
                 )
             )
         )
-        expected_task_ids.append(response.status_update.task_id)
+        expected_task_ids.append(response.task.id)
 
     list_request = ListTasksRequest(page_size=page_size)
 
@@ -517,13 +517,13 @@ async def test_end_to_end_input_required(transport_setups):
     assert_events_match(
         events,
         [
-            ('status_update', TaskState.TASK_STATE_SUBMITTED),
+            ('task', TaskState.TASK_STATE_SUBMITTED),
             ('status_update', TaskState.TASK_STATE_WORKING),
             ('status_update', TaskState.TASK_STATE_INPUT_REQUIRED),
         ],
     )
 
-    task_id = events[0].status_update.task_id
+    task_id = events[0].task.id
     task = await client.get_task(request=GetTaskRequest(id=task_id))
 
     assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
@@ -531,7 +531,6 @@ async def test_end_to_end_input_required(transport_setups):
         task.history,
         [
             (Role.ROLE_USER, 'Need input'),
-            (Role.ROLE_AGENT, 'task submitted'),
             (Role.ROLE_AGENT, 'task working'),
         ],
     )
@@ -575,7 +574,6 @@ async def test_end_to_end_input_required(transport_setups):
         task.history,
         [
             (Role.ROLE_USER, 'Need input'),
-            (Role.ROLE_AGENT, 'task submitted'),
             (Role.ROLE_AGENT, 'task working'),
             (Role.ROLE_AGENT, 'Please provide input'),
             (Role.ROLE_USER, 'Here is the input'),
@@ -684,3 +682,78 @@ async def test_end_to_end_subscribe_validation_error(
     assert {e['field'] for e in errors} == {'id'}
 
     await client.close()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'streaming',
+    [
+        pytest.param(False, id='blocking'),
+        pytest.param(True, id='streaming'),
+    ],
+)
+async def test_end_to_end_direct_message(transport_setups, streaming):
+    """Test that an executor can return a direct Message without creating a Task."""
+    client = transport_setups.client
+    client._config.streaming = streaming
+
+    message_to_send = Message(
+        role=Role.ROLE_USER,
+        message_id='msg-direct',
+        parts=[Part(text='Message: Hello agent')],
+    )
+
+    events = [
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(message=message_to_send)
+        )
+    ]
+
+    assert len(events) == 1
+    response = events[0]
+    assert response.HasField('message')
+    assert not response.HasField('task')
+    assert_message_matches(
+        response.message,
+        Role.ROLE_AGENT,
+        'Direct reply to: Message: Hello agent',
+    )
+
+
+@pytest.mark.asyncio
+async def test_end_to_end_direct_message_return_immediately(transport_setups):
+    """Test that return_immediately still returns the Message for direct replies.
+
+    When the executor responds with a direct Message, the response is
+    inherently immediate -- there is no async task to defer to. The client
+    should receive the Message regardless of the return_immediately flag.
+    """
+    client = transport_setups.client
+    client._config.streaming = False
+
+    message_to_send = Message(
+        role=Role.ROLE_USER,
+        message_id='msg-direct-return-immediately',
+        parts=[Part(text='Message: Quick question')],
+    )
+    configuration = SendMessageConfiguration(return_immediately=True)
+
+    events = [
+        event
+        async for event in client.send_message(
+            request=SendMessageRequest(
+                message=message_to_send, configuration=configuration
+            )
+        )
+    ]
+
+    assert len(events) == 1
+    response = events[0]
+    assert response.HasField('message')
+    assert not response.HasField('task')
+    assert_message_matches(
+        response.message,
+        Role.ROLE_AGENT,
+        'Direct reply to: Message: Quick question',
+    )

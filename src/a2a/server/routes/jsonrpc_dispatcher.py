@@ -4,7 +4,7 @@ import json
 import logging
 import traceback
 
-from collections.abc import AsyncGenerator, Awaitable, Callable
+from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict, ParseDict
@@ -15,6 +15,7 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
 )
 from a2a.server.context import ServerCallContext
+from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
@@ -32,7 +33,6 @@ from a2a.server.routes.common import (
     ServerCallContextBuilder,
 )
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
@@ -49,11 +49,10 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import constants, proto_utils
 from a2a.utils.errors import (
     A2AError,
-    ExtendedAgentCardNotConfiguredError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.helpers import maybe_await, validate, validate_version
+from a2a.utils.helpers import validate_version
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -130,36 +129,20 @@ class JsonRpcDispatcher:
         'GetExtendedAgentCard': GetExtendedAgentCardRequest,
     }
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
-        agent_card: AgentCard,
         request_handler: RequestHandler,
-        extended_agent_card: AgentCard | None = None,
         context_builder: ServerCallContextBuilder | None = None,
-        card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-        | None = None,
-        extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
-        ]
-        | None = None,
         enable_v0_3_compat: bool = False,
     ) -> None:
         """Initializes the JsonRpcDispatcher.
 
         Args:
-            agent_card: The AgentCard describing the agent's capabilities.
             request_handler: The handler instance responsible for processing A2A
               requests via http.
-            extended_agent_card: An optional, distinct AgentCard to be served
-              at the authenticated extended card endpoint.
             context_builder: The ServerCallContextBuilder used to construct the
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
-            card_modifier: An optional callback to dynamically modify the public
-              agent card before it is served.
-            extended_card_modifier: An optional callback to dynamically modify
-              the extended agent card before it is served. It receives the
-              call context.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
         """
         if not _package_starlette_installed:
@@ -169,11 +152,7 @@ class JsonRpcDispatcher:
                 ' optional dependencies, `a2a-sdk[http-server]`.'
             )
 
-        self.agent_card = agent_card
         self.request_handler = request_handler
-        self.extended_agent_card = extended_agent_card
-        self.card_modifier = card_modifier
-        self.extended_card_modifier = extended_card_modifier
         self._context_builder = (
             context_builder or DefaultServerCallContextBuilder()
         )
@@ -182,12 +161,8 @@ class JsonRpcDispatcher:
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
-                agent_card=agent_card,
                 http_handler=request_handler,
-                extended_agent_card=extended_agent_card,
                 context_builder=self._context_builder,
-                card_modifier=card_modifier,
-                extended_card_modifier=extended_card_modifier,
             )
 
     def _generate_error_response(
@@ -333,6 +308,9 @@ class JsonRpcDispatcher:
             call_context.state['request_id'] = request_id
 
             # Route streaming requests by method name
+            handler_result: (
+                AsyncGenerator[dict[str, Any], None] | dict[str, Any]
+            )
             if method in ('SendStreamingMessage', 'SubscribeToTask'):
                 handler_result = await self._process_streaming_request(
                     request_id, specific_request, call_context
@@ -369,10 +347,6 @@ class JsonRpcDispatcher:
             )
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
-    @validate(
-        lambda self: self.agent_card.capabilities.streaming,
-        'Streaming is not supported by the agent',
-    )
     async def _process_streaming_request(
         self,
         request_id: str | int | None,
@@ -403,20 +377,32 @@ class JsonRpcDispatcher:
         if stream is None:
             raise UnsupportedOperationError(message='Stream not supported')
 
+        # Eagerly fetch the first event to trigger validation/upfront errors
+        try:
+            first_event = await anext(stream)
+        except StopAsyncIteration:
+            first_event = None
+
         async def _wrap_stream(
-            st: AsyncGenerator,
+            st: AsyncGenerator, first_evt: Event | None
         ) -> AsyncGenerator[dict[str, Any], None]:
+            def _map_event(evt: Event) -> dict[str, Any]:
+                stream_response = proto_utils.to_stream_response(evt)
+                result = MessageToDict(
+                    stream_response, preserving_proto_field_name=False
+                )
+                return JSONRPC20Response(result=result, _id=request_id).data
+
             try:
+                if first_evt is not None:
+                    yield _map_event(first_evt)
+
                 async for event in st:
-                    stream_response = proto_utils.to_stream_response(event)
-                    result = MessageToDict(
-                        stream_response, preserving_proto_field_name=False
-                    )
-                    yield JSONRPC20Response(result=result, _id=request_id).data
+                    yield _map_event(event)
             except A2AError as e:
                 yield build_error_response(request_id, e)
 
-        return _wrap_stream(stream)
+        return _wrap_stream(stream, first_event)
 
     async def _handle_send_message(
         self, request_obj: SendMessageRequest, context: ServerCallContext
@@ -456,10 +442,6 @@ class JsonRpcDispatcher:
             always_print_fields_with_no_presence=True,
         )
 
-    @validate(
-        lambda self: self.agent_card.capabilities.push_notifications,
-        'Push notifications are not supported by the agent',
-    )
     async def _handle_create_task_push_notification_config(
         self,
         request_obj: TaskPushNotificationConfig,
@@ -512,20 +494,10 @@ class JsonRpcDispatcher:
         request_obj: GetExtendedAgentCardRequest,
         context: ServerCallContext,
     ) -> dict[str, Any]:
-        if not self.agent_card.capabilities.extended_agent_card:
-            raise ExtendedAgentCardNotConfiguredError(
-                message='The agent does not have an extended agent card configured'
-            )
-        base_card = self.extended_agent_card or self.agent_card
-        card_to_serve = base_card
-        if self.extended_card_modifier and context:
-            card_to_serve = await maybe_await(
-                self.extended_card_modifier(base_card, context)
-            )
-        elif self.card_modifier:
-            card_to_serve = await maybe_await(self.card_modifier(base_card))
-
-        return MessageToDict(card_to_serve, preserving_proto_field_name=False)
+        card = await self.request_handler.on_get_extended_agent_card(
+            request_obj, context
+        )
+        return MessageToDict(card, preserving_proto_field_name=False)
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def _process_non_streaming_request(  # noqa: PLR0911
@@ -606,8 +578,30 @@ class JsonRpcDispatcher:
             async def event_generator(
                 stream: AsyncGenerator[dict[str, Any]],
             ) -> AsyncGenerator[dict[str, str]]:
-                async for item in stream:
-                    yield {'data': json.dumps(item)}
+                try:
+                    async for item in stream:
+                        event: dict[str, str] = {
+                            'data': json.dumps(item),
+                        }
+                        if 'error' in item:
+                            event['event'] = 'error'
+                        yield event
+                except Exception as e:
+                    logger.exception(
+                        'Unhandled error during JSON-RPC SSE stream'
+                    )
+                    rpc_error: A2AError | JSONRPCError = (
+                        e
+                        if isinstance(e, A2AError | JSONRPCError)
+                        else InternalError(message=str(e))
+                    )
+                    error_response = build_error_response(
+                        context.state.get('request_id'), rpc_error
+                    )
+                    yield {
+                        'event': 'error',
+                        'data': json.dumps(error_response),
+                    }
 
             return EventSourceResponse(
                 event_generator(handler_result), headers=headers

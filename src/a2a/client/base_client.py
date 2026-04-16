@@ -104,10 +104,10 @@ class BaseClient(Client):
         request.configuration.return_immediately |= self._config.polling
         if (
             not request.configuration.HasField('task_push_notification_config')
-            and self._config.push_notification_configs
+            and self._config.push_notification_config
         ):
             request.configuration.task_push_notification_config.CopyFrom(
-                self._config.push_notification_configs[0]
+                self._config.push_notification_config
             )
         if (
             not request.configuration.accepted_output_modes

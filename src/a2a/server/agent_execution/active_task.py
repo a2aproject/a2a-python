@@ -5,7 +5,7 @@ import asyncio
 import logging
 import uuid
 
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 from a2a.server.agent_execution.context import RequestContext
 
@@ -32,6 +32,8 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
     InvalidParamsError,
@@ -52,6 +54,12 @@ INTERRUPTED_TASK_STATES = {
     TaskState.TASK_STATE_AUTH_REQUIRED,
     TaskState.TASK_STATE_INPUT_REQUIRED,
 }
+
+
+class _RequestStarted:
+    def __init__(self, request_id: uuid.UUID, request_context: RequestContext):
+        self.request_id = request_id
+        self.request_context = request_context
 
 
 class _RequestCompleted:
@@ -197,25 +205,13 @@ class ActiveTask:
                 logger.debug('TASK (start): %s', task)
 
                 if task:
+                    self._task_created.set()
                     if task.status.state in TERMINAL_TASK_STATES:
                         raise InvalidParamsError(
                             message=f'Task {task.id} is in terminal state: {task.status.state}'
                         )
-                else:
-                    if not create_task_if_missing:
-                        raise TaskNotFoundError
-
-                    # New task. Create and save it so it's not "missing" if queried immediately
-                    # (especially important for return_immediately=True)
-                    if self._task_manager.context_id is None:
-                        raise ValueError('Context ID is required for new tasks')
-                    task = self._task_manager._init_task_obj(
-                        self._task_id,
-                        self._task_manager.context_id,
-                    )
-                    await self._task_manager.save_task_event(task)
-                    if self._push_sender:
-                        await self._push_sender.send_notification(task.id, task)
+                elif not create_task_if_missing:
+                    raise TaskNotFoundError
 
             except Exception:
                 logger.debug(
@@ -251,81 +247,76 @@ class ActiveTask:
         Runs as a detached asyncio.Task. Safe to cancel.
         """
         logger.debug('Producer[%s]: Started', self._task_id)
+        request_context = None
         try:
-            try:
+            while True:
+                (
+                    request_context,
+                    request_id,
+                ) = await self._request_queue.get()
+                await self._request_lock.acquire()
+                # TODO: Should we create task manager every time?
+                self._task_manager._call_context = request_context.call_context
+
+                request_context.current_task = (
+                    await self._task_manager.get_task()
+                )
+
+                logger.debug(
+                    'Producer[%s]: Executing agent task %s',
+                    self._task_id,
+                    request_context.current_task,
+                )
+
                 try:
-                    while True:
-                        (
-                            request_context,
-                            request_id,
-                        ) = await self._request_queue.get()
-                        await self._request_lock.acquire()
-                        # TODO: Should we create task manager every time?
-                        self._task_manager._call_context = (
-                            request_context.call_context
+                    await self._event_queue_agent.enqueue_event(
+                        cast(
+                            'Event',
+                            _RequestStarted(request_id, request_context),
                         )
-                        request_context.current_task = (
-                            await self._task_manager.get_task()
-                        )
-
-                        message = request_context.message
-                        if message:
-                            request_context.current_task = (
-                                self._task_manager.update_with_message(
-                                    message,
-                                    cast('Task', request_context.current_task),
-                                )
-                            )
-                            await self._task_manager.save_task_event(
-                                request_context.current_task
-                            )
-                        self._task_created.set()
-                        logger.debug(
-                            'Producer[%s]: Executing agent task %s',
-                            self._task_id,
-                            request_context.current_task,
-                        )
-
-                        try:
-                            await self._agent_executor.execute(
-                                request_context, self._event_queue_agent
-                            )
-                            logger.debug(
-                                'Producer[%s]: Execution finished successfully',
-                                self._task_id,
-                            )
-                        except Exception as e:
-                            async with self._lock:
-                                if self._exception is None:
-                                    self._exception = e
-                            raise
-                        finally:
-                            logger.debug(
-                                'Producer[%s]: Enqueuing request completed event',
-                                self._task_id,
-                            )
-                            # TODO: Hide from external consumers
-                            await self._event_queue_agent.enqueue_event(
-                                cast('Event', _RequestCompleted(request_id))
-                            )
-                            self._request_queue.task_done()
-                except QueueShutDown:
-                    logger.debug(
-                        'Producer[%s]: Request queue shut down', self._task_id
                     )
-            except asyncio.CancelledError:
-                logger.debug('Producer[%s]: Cancelled', self._task_id)
-                raise
-            except Exception as e:
-                logger.exception('Producer[%s]: Failed', self._task_id)
-                async with self._lock:
-                    if self._exception is None:
-                        self._exception = e
-            finally:
-                self._request_queue.shutdown(immediate=True)
-                await self._event_queue_agent.close(immediate=False)
-                await self._event_queue_subscribers.close(immediate=False)
+
+                    await self._agent_executor.execute(
+                        request_context, self._event_queue_agent
+                    )
+                    logger.debug(
+                        'Producer[%s]: Execution finished successfully',
+                        self._task_id,
+                    )
+                finally:
+                    logger.debug(
+                        'Producer[%s]: Enqueuing request completed event',
+                        self._task_id,
+                    )
+                    await self._event_queue_agent.enqueue_event(
+                        cast('Event', _RequestCompleted(request_id))
+                    )
+                    self._request_queue.task_done()
+        except asyncio.CancelledError:
+            logger.debug('Producer[%s]: Cancelled', self._task_id)
+
+        except QueueShutDown:
+            logger.debug('Producer[%s]: Queue shut down', self._task_id)
+
+        except Exception as e:
+            logger.exception(
+                'Producer[%s]: Execution failed',
+                self._task_id,
+            )
+            # Create task and mark as failed.
+            if request_context:
+                await self._task_manager.ensure_task_id(
+                    self._task_id,
+                    request_context.context_id or '',
+                )
+                self._task_created.set()
+            async with self._lock:
+                await self._mark_task_as_failed(e)
+
         finally:
+            self._request_queue.shutdown(immediate=True)
+            await self._event_queue_agent.close(immediate=False)
+            await self._event_queue_subscribers.close(immediate=False)
             logger.debug('Producer[%s]: Completed', self._task_id)
 
     async def _run_consumer(self) -> None:  # noqa: PLR0915, PLR0912
@@ -341,6 +332,10 @@ class ActiveTask:
         `_is_finished`, unblocking all global subscribers and wait() calls.
         """
         logger.debug('Consumer[%s]: Started', self._task_id)
+        task_mode = None
+        message_to_save = None
+        # TODO: Make helper methods
+        # TODO: Support Task enqueue
         try:
             try:
                 try:
@@ -350,6 +345,7 @@ class ActiveTask:
                             'Consumer[%s]: Waiting for event',
                             self._task_id,
                         )
+                        new_task = None
                         event = await self._event_queue_agent.dequeue_event()
                         logger.debug(
                             'Consumer[%s]: Dequeued event %s',
@@ -364,43 +360,112 @@ class ActiveTask:
                                     self._task_id,
                                 )
                                 self._request_lock.release()
+                            elif isinstance(event, _RequestStarted):
+                                logger.debug(
+                                    'Consumer[%s]: Request started',
+                                    self._task_id,
+                                )
+                                message_to_save = event.request_context.message
+
                             elif isinstance(event, Message):
+                                if task_mode is not None:
+                                    if task_mode:
+                                        logger.error(
+                                            'Received Message() object in task mode.'
+                                        )
+                                    else:
+                                        logger.error(
+                                            'Multiple Message() objects received.'
+                                        )
+                                task_mode = False
                                 logger.debug(
                                     'Consumer[%s]: Setting result to Message: %s',
                                     self._task_id,
                                     event,
                                 )
                             else:
+                                if task_mode is False:
+                                    logger.error(
+                                        'Received %s in message mode.',
+                                        type(event).__name__,
+                                    )
+
+                                if isinstance(event, Task):
+                                    existing_task = (
+                                        await self._task_manager.get_task()
+                                    )
+                                    if existing_task:
+                                        logger.error(
+                                            'Task %s already exists. Ignoring task replacement.',
+                                            self._task_id,
+                                        )
+                                    else:
+                                        await (
+                                            self._task_manager.save_task_event(
+                                                event
+                                            )
+                                        )
+                                    # Initial task should already contain the message.
+                                    message_to_save = None
+                                else:
+                                    new_task = (
+                                        await self._task_manager.ensure_task_id(
+                                            self._task_id,
+                                            event.context_id,
+                                        )
+                                    )
+
+                                    if message_to_save is not None:
+                                        new_task = self._task_manager.update_with_message(
+                                            message_to_save,
+                                            new_task,
+                                        )
+                                        await (
+                                            self._task_manager.save_task_event(
+                                                new_task
+                                            )
+                                        )
+                                        message_to_save = None
+
+                                task_mode = True
                                 # Save structural events (like TaskStatusUpdate) to DB.
-                                # TODO: Create task manager every time ?
+
                                 self._task_manager.context_id = event.context_id
-                                await self._task_manager.process(event)
+                                if not isinstance(event, Task):
+                                    await self._task_manager.process(event)
+
+                                self._task_created.set()
 
                                 # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
-                                res = await self._task_manager.get_task()
+                                new_task = await self._task_manager.get_task()
+                                if new_task is None:
+                                    raise RuntimeError(
+                                        f'Task {self.task_id} not found'
+                                    )
+                                if isinstance(event, Task):
+                                    event = new_task
                                 is_interrupted = (
-                                    res
-                                    and res.status.state
+                                    new_task.status.state
                                     in INTERRUPTED_TASK_STATES
                                 )
                                 is_terminal = (
-                                    res
-                                    and res.status.state in TERMINAL_TASK_STATES
+                                    new_task.status.state
+                                    in TERMINAL_TASK_STATES
                                 )
 
                                 # If we hit a breakpoint or terminal state, lock in the result.
-                                if (is_interrupted or is_terminal) and res:
+                                if is_interrupted or is_terminal:
                                     logger.debug(
                                         'Consumer[%s]: Setting first result as Task (state=%s)',
                                         self._task_id,
-                                        res.status.state,
+                                        new_task.status.state,
                                     )
 
                                 if is_terminal:
                                     logger.debug(
                                         'Consumer[%s]: Reached terminal state %s',
                                         self._task_id,
-                                        res.status.state if res else 'unknown',
+                                        new_task.status.state,
                                     )
                                     if not self._is_finished.is_set():
                                         async with self._lock:
@@ -416,7 +481,7 @@ class ActiveTask:
                                     logger.debug(
                                         'Consumer[%s]: Interrupted with state %s',
                                         self._task_id,
-                                        res.status.state if res else 'unknown',
+                                        new_task.status.state,
                                     )
 
                                 if (
@@ -432,8 +497,23 @@ class ActiveTask:
                                         self._task_id, event
                                     )
                         finally:
+                            if new_task is not None:
+                                new_task_copy = Task()
+                                new_task_copy.CopyFrom(new_task)
+                                new_task = new_task_copy
+                            if isinstance(event, Task):
+                                new_task_copy = Task()
+                                new_task_copy.CopyFrom(event)
+                                event = new_task_copy
+
+                            logger.debug(
+                                'Consumer[%s]: Enqueuing\nEvent: %s\nNew Task: %s\n',
+                                self._task_id,
+                                event,
+                                new_task,
+                            )
                             await self._event_queue_subscribers.enqueue_event(
-                                event
+                                cast('Any', (event, new_task))
                             )
                             self._event_queue_agent.task_done()
                 except QueueShutDown:
@@ -442,13 +522,14 @@ class ActiveTask:
                     )
             except Exception as e:
                 logger.exception('Consumer[%s]: Failed', self._task_id)
+                # TODO: Make the task in database as failed.
                 async with self._lock:
-                    if self._exception is None:
-                        self._exception = e
+                    await self._mark_task_as_failed(e)
             finally:
                 # The consumer is dead. The ActiveTask is permanently finished.
                 self._is_finished.set()
                 self._request_queue.shutdown(immediate=True)
+                await self._event_queue_agent.close(immediate=True)
 
                 logger.debug('Consumer[%s]: Finishing', self._task_id)
                 await self._maybe_cleanup()
@@ -460,6 +541,7 @@ class ActiveTask:
         *,
         request: RequestContext | None = None,
         include_initial_task: bool = False,
+        replace_status_update_with_task: bool = False,
     ) -> AsyncGenerator[Event, None]:
         """Creates a queue tap and yields events as they are produced.
 
@@ -505,31 +587,42 @@ class ActiveTask:
                     if self._exception:
                         raise self._exception
 
-                    # Wait for next event or task completion
-                    try:
-                        event = await asyncio.wait_for(
-                            tapped_queue.dequeue_event(), timeout=0.1
+                    dequeued = await tapped_queue.dequeue_event()
+                    event, updated_task = cast('Any', dequeued)
+                    logger.debug(
+                        'Subscriber[%s]\nDequeued event %s\nUpdated task %s\n',
+                        self._task_id,
+                        event,
+                        updated_task,
+                    )
+                    if replace_status_update_with_task and isinstance(
+                        event, TaskStatusUpdateEvent
+                    ):
+                        logger.debug(
+                            'Subscriber[%s]: Replacing TaskStatusUpdateEvent with Task: %s',
+                            self._task_id,
+                            updated_task,
                         )
-                        if self._exception:
-                            raise self._exception from None
-                        if isinstance(event, _RequestCompleted):
-                            if (
-                                request_id is not None
-                                and event.request_id == request_id
-                            ):
-                                logger.debug(
-                                    'Subscriber[%s]: Request completed',
-                                    self._task_id,
-                                )
-                                return
-                            continue
-                    except (asyncio.TimeoutError, TimeoutError):
-                        if self._is_finished.is_set():
-                            if self._exception:
-                                raise self._exception from None
-                            break
+                        event = updated_task
+                    if self._exception:
+                        raise self._exception from None
+                    if isinstance(event, _RequestCompleted):
+                        if (
+                            request_id is not None
+                            and event.request_id == request_id
+                        ):
+                            logger.debug(
+                                'Subscriber[%s]: Request completed',
+                                self._task_id,
+                            )
+                            return
                         continue
-
+                    elif isinstance(event, _RequestStarted):
+                        logger.debug(
+                            'Subscriber[%s]: Request started',
+                            self._task_id,
+                        )
+                        continue
                     try:
                         yield event
                     finally:
@@ -546,7 +639,7 @@ class ActiveTask:
             # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
 
-    async def cancel(self, call_context: ServerCallContext) -> Task | Message:
+    async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
 
         Concurrency Guarantee:
@@ -559,11 +652,11 @@ class ActiveTask:
         # TODO: Conflicts with call_context on the pending request.
         self._task_manager._call_context = call_context
 
-        task = await self.get_task()
+        task = await self._task_manager.get_task()
         request_context = RequestContext(
             call_context=call_context,
             task_id=self._task_id,
-            context_id=task.context_id,
+            context_id=task.context_id if task else None,
             task=task,
         )
 
@@ -581,9 +674,7 @@ class ActiveTask:
                     logger.exception(
                         'Cancel[%s]: Agent cancel failed', self._task_id
                     )
-                    if not self._exception:
-                        self._exception = e
-
+                    await self._mark_task_as_failed(e)
                     raise
             else:
                 logger.debug(
@@ -594,7 +685,10 @@ class ActiveTask:
                 )
 
         await self._is_finished.wait()
-        return await self.get_task()
+        task = await self._task_manager.get_task()
+        if not task:
+            raise RuntimeError('Task should have been created')
+        return task
 
     async def _maybe_cleanup(self) -> None:
         """Triggers cleanup if task is finished and has no subscribers.
@@ -618,6 +712,25 @@ class ActiveTask:
             ):
                 logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
                 self._on_cleanup(self)
+
+    async def _mark_task_as_failed(self, exception: Exception) -> None:
+        if self._exception is None:
+            self._exception = exception
+        if self._task_created.is_set():
+            try:
+                task = await self._task_manager.get_task()
+                if task is not None:
+                    await self._event_queue_agent.enqueue_event(
+                        TaskStatusUpdateEvent(
+                            task_id=task.id,
+                            context_id=task.context_id,
+                            status=TaskStatus(
+                                state=TaskState.TASK_STATE_FAILED,
+                            ),
+                        )
+                    )
+            except QueueShutDown:
+                pass
 
     async def get_task(self) -> Task:
         """Get task from db."""
