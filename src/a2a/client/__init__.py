@@ -22,7 +22,6 @@ from a2a.client.errors import (
     A2AClientTimeoutError,
     AgentCardResolutionError,
 )
-from a2a.client.helpers import create_text_message_object
 from a2a.client.interceptors import ClientCallInterceptor
 
 
@@ -41,6 +40,5 @@ __all__ = [
     'CredentialService',
     'InMemoryContextCredentialStore',
     'create_client',
-    'create_text_message_object',
     'minimal_agent_card',
 ]

@@ -24,9 +24,9 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
 )
-from a2a.utils import (
-    new_agent_text_message,
-    new_task,
+from a2a.helpers.types import (
+    new_text_message,
+    new_task_from_request,
 )
 
 
@@ -74,7 +74,7 @@ class TestAgent:
             or not msg.parts[0].HasField('text')
         ):
             await updater.failed(
-                new_agent_text_message(
+                new_text_message(
                     'Unsupported message.', task.context_id, task.id
                 )
             )
@@ -84,25 +84,25 @@ class TestAgent:
         # Simple request-response flow.
         if text_message == 'Hello Agent!':
             await updater.complete(
-                new_agent_text_message('Hello User!', task.context_id, task.id)
+                new_text_message('Hello User!', task.context_id, task.id)
             )
 
         # Flow with user input required: "How are you?" -> "Good! How are you?" -> "Good" -> "Amazing".
         elif text_message == 'How are you?':
             await updater.requires_input(
-                new_agent_text_message(
+                new_text_message(
                     'Good! How are you?', task.context_id, task.id
                 )
             )
         elif text_message == 'Good':
             await updater.complete(
-                new_agent_text_message('Amazing', task.context_id, task.id)
+                new_text_message('Amazing', task.context_id, task.id)
             )
 
         # Fail for unsupported messages.
         else:
             await updater.failed(
-                new_agent_text_message(
+                new_text_message(
                     'Unsupported message.', task.context_id, task.id
                 )
             )
@@ -124,7 +124,7 @@ class TestAgentExecutor(AgentExecutor):
 
         task = context.current_task
         if not task:
-            task = new_task(context.message)
+            task = new_task_from_request(context.message)
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 

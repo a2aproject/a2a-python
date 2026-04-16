@@ -3,7 +3,7 @@ import json
 from collections.abc import Callable
 from typing import Any, TypedDict
 
-from a2a.utils.helpers import canonicalize_agent_card
+from google.protobuf.json_format import MessageToDict
 
 
 try:
@@ -68,7 +68,7 @@ def create_agent_card_signer(
 
     def agent_card_signer(agent_card: AgentCard) -> AgentCard:
         """Signs agent card."""
-        canonical_payload = canonicalize_agent_card(agent_card)
+        canonical_payload = _canonicalize_agent_card(agent_card)
         payload_dict = json.loads(canonical_payload)
 
         jws_string = jwt.encode(
@@ -128,7 +128,7 @@ def create_signature_verifier(
                 jku = protected_header.get('jku')
                 verification_key = key_provider(kid, jku)
 
-                canonical_payload = canonicalize_agent_card(agent_card)
+                canonical_payload = _canonicalize_agent_card(agent_card)
                 encoded_payload = base64url_encode(
                     canonical_payload.encode('utf-8')
                 ).decode('utf-8')
@@ -148,3 +148,35 @@ def create_signature_verifier(
             raise InvalidSignaturesError('No valid signature found')
 
     return signature_verifier
+
+
+def _clean_empty(d: Any) -> Any:
+    """Recursively remove empty strings, lists and dicts from a dictionary."""
+    if isinstance(d, dict):
+        cleaned_dict = {
+            k: cleaned_v
+            for k, v in d.items()
+            if (cleaned_v := _clean_empty(v)) is not None
+        }
+        return cleaned_dict or None
+    if isinstance(d, list):
+        cleaned_list = [
+            cleaned_v for v in d if (cleaned_v := _clean_empty(v)) is not None
+        ]
+        return cleaned_list or None
+    if isinstance(d, str) and not d:
+        return None
+    return d
+
+
+def _canonicalize_agent_card(agent_card: AgentCard) -> str:
+    """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
+    card_dict = MessageToDict(
+        agent_card,
+    )
+    # Remove signatures field if present
+    card_dict.pop('signatures', None)
+
+    # Recursively remove empty values
+    cleaned_dict = _clean_empty(card_dict)
+    return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)

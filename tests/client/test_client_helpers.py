@@ -3,7 +3,8 @@ import difflib
 import json
 from google.protobuf.json_format import MessageToDict
 
-from a2a.client.helpers import create_text_message_object, parse_agent_card
+from a2a.client.helpers import parse_agent_card
+from a2a.helpers.types import new_text_message
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
@@ -263,7 +264,7 @@ def test_parse_agent_card_security_scheme_unknown_type() -> None:
 
 
 def test_create_text_message_object() -> None:
-    msg = create_text_message_object(role=Role.ROLE_AGENT, content='Hello')
+    msg = new_text_message(text='Hello', role=Role.ROLE_AGENT)
     assert msg.role == Role.ROLE_AGENT
     assert len(msg.parts) == 1
     assert msg.parts[0].text == 'Hello'
