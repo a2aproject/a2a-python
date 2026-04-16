@@ -97,21 +97,19 @@ def get_artifact_text(artifact: Artifact, delimiter: str = '\n') -> str:
 # --- Task Helpers ---
 
 
-def new_task_from_request(request: Message) -> Task:
+def new_task_from_user_message(user_message: Message) -> Task:
     """Creates a new Task object from an initial user message."""
-    if not request.role:
-        raise TypeError('Message role cannot be None')
-    if not request.parts:
+    if not user_message.parts:
         raise ValueError('Message parts cannot be empty')
-    for part in request.parts:
+    for part in user_message.parts:
         if part.HasField('text') and not part.text:
             raise ValueError('Message.text cannot be empty')
 
     return Task(
         status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
-        id=request.task_id or str(uuid.uuid4()),
-        context_id=request.context_id or str(uuid.uuid4()),
-        history=[request],
+        id=user_message.task_id or str(uuid.uuid4()),
+        context_id=user_message.context_id or str(uuid.uuid4()),
+        history=[user_message],
     )
 
 
@@ -123,13 +121,12 @@ def new_task(
     history: list[Message] | None = None,
 ) -> Task:
     """Creates a Task object with a specified status."""
-    if not artifacts or not all(isinstance(a, Artifact) for a in artifacts):
-        raise ValueError(
-            'artifacts must be a non-empty list of Artifact objects'
-        )
 
     if history is None:
         history = []
+    if artifacts is None:
+        artifacts = []
+
     return Task(
         status=TaskStatus(state=state),
         id=task_id,

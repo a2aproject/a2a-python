@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.helpers.types import (
     new_text_message,
-    new_task_from_request,
+    new_task_from_user_message,
 )
 
 
@@ -124,7 +124,7 @@ class TestAgentExecutor(AgentExecutor):
 
         task = context.current_task
         if not task:
-            task = new_task_from_request(context.message)
+            task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 

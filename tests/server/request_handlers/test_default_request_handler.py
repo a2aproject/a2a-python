@@ -73,7 +73,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.helpers.types import new_text_message, new_task_from_request
+from a2a.helpers.types import new_text_message, new_task_from_user_message
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -957,7 +957,7 @@ class HelloAgentExecutor(AgentExecutor):
             assert context.message is not None, (
                 'A message is required to create a new task'
             )
-            task = new_task_from_request(context.message)  # type: ignore
+            task = new_task_from_user_message(context.message)  # type: ignore
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
