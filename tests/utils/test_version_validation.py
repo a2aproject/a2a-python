@@ -6,7 +6,7 @@ from unittest.mock import MagicMock
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
 from a2a.utils.errors import VersionNotSupportedError
-from a2a.utils.helpers import validate_version
+from a2a.utils.version_validator import validate_version
 
 
 class TestHandler:

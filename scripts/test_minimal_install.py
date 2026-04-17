@@ -52,7 +52,7 @@ CORE_MODULES = [
     'a2a.utils',
     'a2a.utils.constants',
     'a2a.utils.error_handlers',
-    'a2a.utils.helpers',
+    'a2a.utils.version_validator',
     'a2a.utils.proto_utils',
     'a2a.utils.task',
     'a2a.helpers.agent_card',

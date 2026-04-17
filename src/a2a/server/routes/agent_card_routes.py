@@ -26,13 +26,11 @@ else:
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
-from a2a.utils.helpers import maybe_await
 
 
 def create_agent_card_routes(
     agent_card: AgentCard,
-    card_modifier: Callable[[AgentCard], Awaitable[AgentCard] | AgentCard]
-    | None = None,
+    card_modifier: Callable[[AgentCard], Awaitable[AgentCard]] | None = None,
     card_url: str = AGENT_CARD_WELL_KNOWN_PATH,
 ) -> list['Route']:
     """Creates the Starlette Route for the A2A protocol agent card endpoint."""
@@ -45,7 +43,7 @@ def create_agent_card_routes(
     async def _get_agent_card(request: Request) -> Response:
         card_to_serve = agent_card
         if card_modifier:
-            card_to_serve = await maybe_await(card_modifier(card_to_serve))
+            card_to_serve = await card_modifier(card_to_serve)
         return JSONResponse(agent_card_to_dict(card_to_serve))
 
     return [

@@ -58,7 +58,6 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.helpers import maybe_await
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -100,7 +99,7 @@ class LegacyRequestHandler(RequestHandler):
         request_context_builder: RequestContextBuilder | None = None,
         extended_agent_card: AgentCard | None = None,
         extended_card_modifier: Callable[
-            [AgentCard, ServerCallContext], Awaitable[AgentCard] | AgentCard
+            [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
     ) -> None:
@@ -695,8 +694,8 @@ class LegacyRequestHandler(RequestHandler):
             raise ExtendedAgentCardNotConfiguredError
 
         if self.extended_card_modifier:
-            return await maybe_await(
-                self.extended_card_modifier(extended_card, context)
+            extended_card = await self.extended_card_modifier(
+                extended_card, context
             )
 
         return extended_card

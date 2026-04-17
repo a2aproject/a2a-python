@@ -4,7 +4,7 @@ import functools
 import inspect
 import logging
 
-from collections.abc import AsyncIterator, Awaitable, Callable
+from collections.abc import AsyncIterator, Callable
 from typing import Any, TypeVar, cast
 
 from packaging.version import InvalidVersion, Version
@@ -14,18 +14,10 @@ from a2a.utils import constants
 from a2a.utils.errors import VersionNotSupportedError
 
 
-T = TypeVar('T')
 F = TypeVar('F', bound=Callable[..., Any])
 
 
 logger = logging.getLogger(__name__)
-
-
-async def maybe_await(value: T | Awaitable[T]) -> T:
-    """Awaits a value if it's awaitable, otherwise simply provides it back."""
-    if inspect.isawaitable(value):
-        return await value
-    return value
 
 
 def validate_version(expected_version: str) -> Callable[[F], F]:

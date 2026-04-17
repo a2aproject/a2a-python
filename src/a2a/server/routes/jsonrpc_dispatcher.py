@@ -52,8 +52,8 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
-from a2a.utils.helpers import validate_version
 from a2a.utils.telemetry import SpanKind, trace_class
+from a2a.utils.version_validator import validate_version
 
 
 INTERNAL_ERROR_CODE = -32603

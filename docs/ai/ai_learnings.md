@@ -15,5 +15,3 @@ derived from them. Every entry must follow the format below.
 **Mistake**: What went wrong.
 **Root cause**: Why it happened.
 **Rule**: The concrete rule added to prevent recurrence.
-
----
