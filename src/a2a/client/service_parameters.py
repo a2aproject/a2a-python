@@ -47,28 +47,18 @@ class ServiceParametersFactory:
 
 
 def with_a2a_extensions(extensions: list[str]) -> ServiceParametersUpdate:
-    """Create a ServiceParametersUpdate that adds A2A extensions.
+    """Create a ServiceParametersUpdate that merges A2A extension URIs.
 
-    Merges the supplied URIs with any extensions already present in the
-    A2A-Extensions service parameter, deduplicating and producing a stable
-    (sorted) order. Calling this multiple times in a chain accumulates the
-    requested extensions instead of overwriting prior values.
-
-    Args:
-        extensions: List of extension URIs to advertise.
-
-    Returns:
-        A function that updates ServiceParameters with the extensions header.
+    Unions the supplied URIs with any already present in the A2A-Extensions
+    parameter, deduplicating and emitting them in sorted order. Repeated
+    calls accumulate rather than overwrite.
     """
 
     def update(parameters: ServiceParameters) -> None:
         if not extensions:
             return
-        existing = parameters.get(HTTP_EXTENSION_HEADER)
-        merged = sorted(
-            get_requested_extensions([existing] if existing else [])
-            | set(extensions)
-        )
+        existing = parameters.get(HTTP_EXTENSION_HEADER, '')
+        merged = sorted(get_requested_extensions([existing, *extensions]))
         parameters[HTTP_EXTENSION_HEADER] = ','.join(merged)
 
     return update
