@@ -6,7 +6,6 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from google.protobuf.struct_pb2 import Struct, Value
 from starlette.applications import Starlette
 
 from a2a.client.base_client import BaseClient
@@ -93,25 +92,19 @@ class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         user_input = context.get_user_input()
 
-        # Extensions echo: report requested extensions and activate them.
+        # Extensions echo: activate all requested extensions and report them
+        # back via the Message.extensions field.
         if user_input.startswith('Extensions:'):
-            requested = sorted(context.requested_extensions)
-            for ext_uri in requested:
+            for ext_uri in context.requested_extensions:
                 context.add_activated_extension(ext_uri)
-            activated = sorted(context.call_context.activated_extensions)
-
-            payload = Struct()
-            payload.update(
-                {
-                    'requested_extensions': requested,
-                    'activated_extensions': activated,
-                }
-            )
             await event_queue.enqueue_event(
                 Message(
                     role=Role.ROLE_AGENT,
                     message_id='ext-reply-1',
-                    parts=[Part(data=Value(struct_value=payload))],
+                    parts=[Part(text='extensions echoed')],
+                    extensions=sorted(
+                        context.call_context.activated_extensions
+                    ),
                 )
             )
             return
@@ -827,12 +820,7 @@ async def test_end_to_end_extensions_propagation(transport_setups, streaming):
     assert len(events) == 1
     response = events[0]
     assert response.HasField('message')
-    part = response.message.parts[0]
-    assert part.HasField('data')
-
-    payload = part.data.struct_value
-    requested = set(payload['requested_extensions'])
-    activated = set(payload['activated_extensions'])
-
-    assert requested == set(extensions)
-    assert activated == set(extensions)
+    assert_message_matches(
+        response.message, Role.ROLE_AGENT, 'extensions echoed'
+    )
+    assert set(response.message.extensions) == set(extensions)
