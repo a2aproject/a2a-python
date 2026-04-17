@@ -113,6 +113,22 @@ def agent_card():
     )
 
 
+def get_task_id(event):
+    if event.HasField('task'):
+        return event.task.id
+    if event.HasField('status_update'):
+        return event.status_update.task_id
+    assert False, f'Event {event} has no task_id'
+
+
+def get_task_context_id(event):
+    if event.HasField('task'):
+        return event.task.context_id
+    if event.HasField('status_update'):
+        return event.status_update.context_id
+    assert False, f'Event {event} has no context_id'
+
+
 def get_state(event):
     if event.HasField('task'):
         return event.task.status.state
@@ -1263,6 +1279,93 @@ async def test_scenario_auth_required_side_channel(use_legacy, streaming):
         await wait_for_state(
             client, task_id, expected_states={TaskState.TASK_STATE_COMPLETED}
         )
+
+
+# Scenario: Auth required and in channel unblocking
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
+@pytest.mark.parametrize(
+    'streaming', [False, True], ids=['blocking', 'streaming']
+)
+async def test_scenario_auth_required_in_channel(use_legacy, streaming):
+    class AuthAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            message = context.message
+            if message and message.parts and message.parts[0].text == 'start':
+                await event_queue.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        status=TaskStatus(
+                            state=TaskState.TASK_STATE_AUTH_REQUIRED
+                        ),
+                    )
+                )
+            elif (
+                message
+                and message.parts
+                and message.parts[0].text == 'credentials'
+            ):
+                await event_queue.enqueue_event(
+                    TaskStatusUpdateEvent(
+                        task_id=context.task_id,
+                        context_id=context.context_id,
+                        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+                    )
+                )
+            else:
+                raise ValueError(f'Unexpected message {message}')
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(AuthAgent(), use_legacy)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=streaming
+    )
+
+    msg1 = Message(
+        message_id='msg-start', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg1,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+
+    events1 = [event async for event in it]
+    assert [get_state(event) for event in events1] == [
+        TaskState.TASK_STATE_AUTH_REQUIRED,
+    ]
+    task_id = get_task_id(events1[0])
+    context_id = get_task_context_id(events1[0])
+
+    # Now send another message with credentials
+    msg2 = Message(
+        task_id=task_id,
+        context_id=context_id,
+        message_id='msg-creds',
+        role=Role.ROLE_USER,
+        parts=[Part(text='credentials')],
+    )
+
+    it2 = client.send_message(
+        SendMessageRequest(
+            message=msg2,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+
+    assert [get_state(event) async for event in it2] == [
+        TaskState.TASK_STATE_COMPLETED,
+    ]
 
 
 # Scenario: Parallel subscribe attach detach
