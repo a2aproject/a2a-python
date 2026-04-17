@@ -23,7 +23,6 @@ from a2a.types.a2a_pb2 import (
     Part,
 )
 from a2a.utils.errors import InvalidParamsError
-from a2a.utils.task import new_task
 
 
 logger = logging.getLogger(__name__)

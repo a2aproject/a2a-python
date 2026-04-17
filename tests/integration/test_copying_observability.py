@@ -25,8 +25,8 @@ from a2a.types import (
     SendMessageRequest,
     TaskState,
 )
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils import TransportProtocol
-from a2a.utils.task import new_task
 
 
 class MockMutatingAgentExecutor(AgentExecutor):
@@ -43,7 +43,7 @@ class MockMutatingAgentExecutor(AgentExecutor):
 
         if user_input == 'Init task':
             # Explicitly save status change to ensure task exists with some state
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.id = context.task_id
             task.context_id = context.context_id
             task.status.state = TaskState.TASK_STATE_WORKING

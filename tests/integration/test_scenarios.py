@@ -47,8 +47,8 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils import TransportProtocol
-from a2a.utils.task import new_task
 from a2a.utils.errors import (
     InvalidParamsError,
     TaskNotCancelableError,
@@ -249,7 +249,7 @@ async def test_scenario_4_simple_streaming(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
@@ -294,7 +294,7 @@ async def test_scenario_5_resubscribe_to_finished(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
@@ -349,7 +349,7 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_COMPLETED
             await event_queue.enqueue_event(task)
 
@@ -478,7 +478,7 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -543,7 +543,7 @@ async def test_scenario_14_error_in_cancel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -599,7 +599,7 @@ async def test_scenario_15_subscribe_error(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -725,7 +725,7 @@ async def test_scenario_cancel_working_task_empty_cancel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -789,7 +789,7 @@ async def test_scenario_18_streaming_subscribers(use_legacy):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -904,7 +904,7 @@ async def test_scenario_19_no_parallel_executions(use_legacy, streaming):
                 )
                 return
 
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             started_event.set()
@@ -1028,7 +1028,7 @@ async def test_scenario_return_immediately(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
@@ -1085,7 +1085,7 @@ async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
         ):
             message = context.message
             if message and message.parts and message.parts[0].text == 'start':
-                task = new_task(message)
+                task = new_task_from_user_message(message)
                 task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
                 await event_queue.enqueue_event(task)
             elif (
@@ -1093,7 +1093,7 @@ async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
                 and message.parts
                 and message.parts[0].text == 'here is input'
             ):
-                task = new_task(message)
+                task = new_task_from_user_message(message)
                 task.status.state = TaskState.TASK_STATE_COMPLETED
                 await event_queue.enqueue_event(task)
             else:
@@ -1164,7 +1164,7 @@ async def test_scenario_auth_required_side_channel(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
@@ -1246,7 +1246,7 @@ async def test_scenario_auth_required_in_channel(use_legacy, streaming):
         ):
             message = context.message
             if message and message.parts and message.parts[0].text == 'start':
-                task = new_task(message)
+                task = new_task_from_user_message(message)
                 task.status.state = TaskState.TASK_STATE_AUTH_REQUIRED
                 await event_queue.enqueue_event(task)
             elif (
@@ -1326,7 +1326,7 @@ async def test_scenario_parallel_subscribe_attach_detach(use_legacy):  # noqa: P
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
 
@@ -1544,7 +1544,7 @@ async def test_scenario_publish_artifact(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
             await event_queue.enqueue_event(
@@ -1712,7 +1712,7 @@ async def test_restore_task_terminal_state(
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_COMPLETED
             await event_queue.enqueue_event(task)
 
@@ -1809,7 +1809,7 @@ async def test_restore_task_input_required_state(
         ):
             message = context.message
             if message and message.parts and message.parts[0].text == 'start':
-                task = new_task(message)
+                task = new_task_from_user_message(message)
                 task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
                 await event_queue.enqueue_event(task)
             elif message and message.parts and message.parts[0].text == 'input':
@@ -1944,7 +1944,7 @@ async def test_scenario_initial_task_types(
         ):
             if initial_task_type == 'new_task':
                 # Create with new_task
-                task = new_task(context.message)
+                task = new_task_from_user_message(context.message)
                 task.status.state = TaskState.TASK_STATE_WORKING
                 await event_queue.enqueue_event(task)
             else:
@@ -2092,7 +2092,9 @@ async def test_scenario_23_invalid_response_task_message(use_legacy, streaming):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-            await event_queue.enqueue_event(new_task(context.message))
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
             await event_queue.enqueue_event(
                 Message(message_id='m1', parts=[Part(text='m1')])
             )
