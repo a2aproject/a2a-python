@@ -120,8 +120,7 @@ class JSONRPC03Adapter:
                     CoreInvalidRequestError(data=str(e)),
                 )
 
-            call_context = self._context_builder.bui
-            ld(request)
+            call_context = self._context_builder.build(request)
             call_context.tenant = (
                 getattr(specific_request.params, 'tenant', '')
                 if hasattr(specific_request, 'params')

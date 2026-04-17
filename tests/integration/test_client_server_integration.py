@@ -866,6 +866,7 @@ async def test_client_get_signed_base_and_extended_cards(
     mock_request_handler.on_get_extended_agent_card.side_effect = (
         get_extended_agent_card_mock_3  # type: ignore[union-attr]
     )
+
     async def async_signer(card: AgentCard) -> AgentCard:
         return signer(card)
 
