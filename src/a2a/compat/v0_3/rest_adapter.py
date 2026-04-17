@@ -31,6 +31,7 @@ else:
         _package_starlette_installed = False
 
 
+from a2a.compat.v0_3.context_builders import V03ServerCallContextBuilder
 from a2a.compat.v0_3.rest_handler import REST03Handler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
@@ -60,7 +61,7 @@ class REST03Adapter:
         context_builder: 'ServerCallContextBuilder | None' = None,
     ):
         self.handler = REST03Handler(request_handler=http_handler)
-        self._context_builder = (
+        self._context_builder = V03ServerCallContextBuilder(
             context_builder or DefaultServerCallContextBuilder()
         )
 

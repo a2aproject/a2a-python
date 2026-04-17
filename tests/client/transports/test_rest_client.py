@@ -257,7 +257,7 @@ class TestRestTransportExtensions:
 
         context = ClientCallContext(
             service_parameters={
-                'X-A2A-Extensions': 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
+                'A2A-Extensions': 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
             }
         )
         await client.send_message(request=params, context=context)
@@ -281,7 +281,7 @@ class TestRestTransportExtensions:
         mock_httpx_client: AsyncMock,
         mock_agent_card: MagicMock,
     ):
-        """Test X-A2A-Extensions header in send_message_streaming."""
+        """Test A2A-Extensions header in send_message_streaming."""
         client = RestTransport(
             httpx_client=mock_httpx_client,
             agent_card=mock_agent_card,
@@ -303,7 +303,7 @@ class TestRestTransportExtensions:
 
         context = ClientCallContext(
             service_parameters={
-                'X-A2A-Extensions': 'https://example.com/test-ext/v2'
+                'A2A-Extensions': 'https://example.com/test-ext/v2'
             }
         )
 

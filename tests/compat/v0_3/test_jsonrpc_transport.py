@@ -539,3 +539,29 @@ async def test_compat_jsonrpc_transport_send_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+@pytest.mark.asyncio
+@patch('a2a.compat.v0_3.jsonrpc_transport.send_http_request')
+async def test_compat_jsonrpc_transport_mirrors_extension_header(
+    mock_send_http_request, transport
+):
+    """Compat client must also emit the legacy X-A2A-Extensions header so
+    that v0.3 servers (which only know that name) understand the request."""
+    from a2a.client.client import ClientCallContext
+
+    mock_send_http_request.return_value = {'result': {'ok': True}}
+    transport.httpx_client.build_request.return_value = httpx.Request(
+        'POST', 'http://example.com'
+    )
+
+    context = ClientCallContext(
+        service_parameters={'A2A-Extensions': 'foo,bar'}
+    )
+
+    await transport._send_request({'some': 'data'}, context=context)
+
+    _, kwargs = transport.httpx_client.build_request.call_args
+    headers = kwargs['headers']
+    assert headers['A2A-Extensions'] == 'foo,bar'
+    assert headers['X-A2A-Extensions'] == 'foo,bar'

@@ -1,7 +1,7 @@
 from a2a.types.a2a_pb2 import AgentCard, AgentExtension
 
 
-HTTP_EXTENSION_HEADER = 'X-A2A-Extensions'
+HTTP_EXTENSION_HEADER = 'A2A-Extensions'
 
 
 def get_requested_extensions(values: list[str]) -> set[str]:

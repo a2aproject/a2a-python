@@ -30,6 +30,7 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3 import (
     types as types_v03,
 )
+from a2a.compat.v0_3.extension_headers import add_legacy_extension_header
 from a2a.types import a2a_pb2
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.telemetry import SpanKind, trace_class
@@ -361,7 +362,9 @@ class CompatGrpcTransport(ClientTransport):
         metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)]
 
         if context and context.service_parameters:
-            for key, value in context.service_parameters.items():
+            params = dict(context.service_parameters)
+            add_legacy_extension_header(params)
+            for key, value in params.items():
                 metadata.append((key.lower(), value))
 
         return metadata
