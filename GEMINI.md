@@ -26,16 +26,22 @@
 
 ## 5. Mistake Reflection Protocol
 
+> [!NOTE] for Users:
+> `docs/ai/ai_learnings.md` is a local-only file (excluded from git) meant to be
+> read by the developer to improve AI assistant behavior on this project. Use its
+> findings to improve the GEMINI.md setup.
+
 When you realise you have made a mistake — whether caught by the user,
 by a tool, or by your own reasoning — you MUST:
 
 1. **Acknowledge the mistake explicitly** and explain what went wrong.
-2. **Reflect on the root cause**: was it a missing check, a false
-   assumption, skipped verification, or a gap in the workflow?
-3. **Immediately append a new entry to @./docs/ai/ai_learnings.md**
-   following the format defined in that file. This is not optional and
-   does not require user confirmation. Do it before continuing. Update user
-   about the changes to the workflow in the current chat.
+2. **Reflect on the root cause**: was it a missing check, a false assumption, skipped verification, or a gap in the workflow?
+3. **Immediately append a new entry to `docs/ai/ai_learnings.md`** — this is not optional and does not require user confirmation. Do it before continuing, then update the user about the workflow change.
+
+   **Entry format:**
+   - **Mistake**: What went wrong.
+   - **Root cause**: Why it happened.
+   - **Rule**: The concrete rule added to prevent recurrence.
 
 The goal is to treat every mistake as a signal that the workflow is
 incomplete, and to improve it in place so the same mistake cannot
