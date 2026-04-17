@@ -32,7 +32,9 @@ from a2a.types.a2a_pb2 import (
     Message,
     Part,
     SendMessageRequest,
+    Task,
     TaskState,
+    TaskStatus,
 )
 from a2a.utils import TransportProtocol
 
@@ -198,7 +200,16 @@ class V10AgentExecutor(AgentExecutor):
             context.context_id,
         )
 
-        await task_updater.update_status(TaskState.TASK_STATE_SUBMITTED)
+        # Explicitly create the task by sending it to the queue
+        task = Task(
+            id=context.task_id,
+            context_id=context.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+            history=[context.message] if context.message else [],
+        )
+        async with task_updater._lock:  # noqa: SLF001
+            await event_queue.enqueue_event(task)
+
         await task_updater.update_status(TaskState.TASK_STATE_WORKING)
 
         instruction = extract_instruction(context.message)
