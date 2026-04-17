@@ -22,14 +22,9 @@ from a2a.types import (
     TaskStatus,
 )
 from a2a.utils.errors import UnsupportedOperationError
-from a2a.utils.helpers import (
-    _clean_empty,
-    append_artifact_to_task,
-    are_modalities_compatible,
-    build_text_artifact,
-    canonicalize_agent_card,
-    create_task_obj,
-)
+
+from a2a.utils.signing import _clean_empty, _canonicalize_agent_card
+from a2a.server.tasks.task_manager import append_artifact_to_task
 
 
 # --- Helper Functions ---
@@ -88,62 +83,6 @@ SAMPLE_AGENT_CARD: dict[str, Any] = {
         )
     ],
 }
-
-
-# Test create_task_obj
-def test_create_task_obj():
-    message = create_test_message()
-    message.context_id = 'test-context'  # Set context_id to test it's preserved
-    send_params = SendMessageRequest(message=message)
-
-    task = create_task_obj(send_params)
-    assert task.id is not None
-    assert task.context_id == message.context_id
-    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
-    assert len(task.history) == 1
-    assert task.history[0] == message
-
-
-def test_create_task_obj_generates_context_id():
-    """Test that create_task_obj generates context_id if not present and uses it for the task."""
-    # Message without context_id
-    message_no_context_id = Message(
-        role=Role.ROLE_USER,
-        parts=[Part(text='test')],
-        message_id='msg-no-ctx',
-        task_id='task-from-msg',  # Provide a task_id to differentiate from generated task.id
-    )
-    send_params = SendMessageRequest(message=message_no_context_id)
-
-    # Ensure message.context_id is empty initially (proto default is empty string)
-    assert send_params.message.context_id == ''
-
-    known_task_uuid = uuid.UUID('11111111-1111-1111-1111-111111111111')
-    known_context_uuid = uuid.UUID('22222222-2222-2222-2222-222222222222')
-
-    # Patch uuid.uuid4 to return specific UUIDs in sequence
-    # The first call will be for message.context_id (if empty), the second for task.id.
-    with patch(
-        'a2a.utils.helpers.uuid4',
-        side_effect=[known_context_uuid, known_task_uuid],
-    ) as mock_uuid4:
-        task = create_task_obj(send_params)
-
-    # Assert that uuid4 was called twice (once for context_id, once for task.id)
-    assert mock_uuid4.call_count == 2
-
-    # Assert that message.context_id was set to the first generated UUID
-    assert send_params.message.context_id == str(known_context_uuid)
-
-    # Assert that task.context_id is the same generated UUID
-    assert task.context_id == str(known_context_uuid)
-
-    # Assert that task.id is the second generated UUID
-    assert task.id == str(known_task_uuid)
-
-    # Ensure the original message in history also has the updated context_id
-    assert len(task.history) == 1
-    assert task.history[0].context_id == str(known_context_uuid)
 
 
 # Test append_artifact_to_task
@@ -243,6 +182,10 @@ def test_append_artifact_to_task():
     assert len(task.artifacts[1].parts) == 1
 
 
+def build_text_artifact(text: str, artifact_id: str) -> Artifact:
+    return Artifact(artifact_id=artifact_id, parts=[Part(text=text)])
+
+
 # Test build_text_artifact
 def test_build_text_artifact():
     artifact_id = 'text_artifact'
@@ -252,111 +195,6 @@ def test_build_text_artifact():
     assert artifact.artifact_id == artifact_id
     assert len(artifact.parts) == 1
     assert artifact.parts[0].text == text
-
-
-# Tests for are_modalities_compatible
-def test_are_modalities_compatible_client_none():
-    assert (
-        are_modalities_compatible(
-            client_output_modes=None, server_output_modes=['text/plain']
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_client_empty():
-    assert (
-        are_modalities_compatible(
-            client_output_modes=[], server_output_modes=['text/plain']
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_server_none():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=None, client_output_modes=['text/plain']
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_server_empty():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=[], client_output_modes=['text/plain']
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_common_mode():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=['text/plain', 'application/json'],
-            client_output_modes=['application/json', 'image/png'],
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_no_common_modes():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=['text/plain'],
-            client_output_modes=['application/json'],
-        )
-        is False
-    )
-
-
-def test_are_modalities_compatible_exact_match():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=['text/plain'],
-            client_output_modes=['text/plain'],
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_server_more_but_common():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=['text/plain', 'image/jpeg'],
-            client_output_modes=['text/plain'],
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_client_more_but_common():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=['text/plain'],
-            client_output_modes=['text/plain', 'image/jpeg'],
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_both_none():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=None, client_output_modes=None
-        )
-        is True
-    )
-
-
-def test_are_modalities_compatible_both_empty():
-    assert (
-        are_modalities_compatible(
-            server_output_modes=[], client_output_modes=[]
-        )
-        is True
-    )
 
 
 def test_canonicalize_agent_card():
@@ -375,7 +213,7 @@ def test_canonicalize_agent_card():
         '"supportedInterfaces":[{"protocolBinding":"HTTP+JSON","url":"http://localhost"}],'
         '"version":"1.0.0"}'
     )
-    result = canonicalize_agent_card(agent_card)
+    result = _canonicalize_agent_card(agent_card)
     assert result == expected_jcs
 
 
@@ -390,7 +228,7 @@ def test_canonicalize_agent_card_preserves_false_capability():
             ),
         }
     )
-    result = canonicalize_agent_card(card)
+    result = _canonicalize_agent_card(card)
     assert '"streaming":false' in result
 
 

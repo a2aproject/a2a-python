@@ -8,7 +8,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 from httpx_sse import EventSource, ServerSentEvent
 
-from a2a.client import create_text_message_object
+from a2a.helpers.proto_helpers import new_text_message
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
@@ -83,7 +83,7 @@ class TestRestTransport:
             url='http://agent.example.com/api',
         )
         params = SendMessageRequest(
-            message=create_text_message_object(content='Hello stream')
+            message=new_text_message(text='Hello stream')
         )
         mock_event_source = AsyncMock(spec=EventSource)
         mock_event_source.response = MagicMock(spec=httpx.Response)
@@ -120,9 +120,7 @@ class TestRestTransport:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=create_text_message_object(content='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
 
         mock_build_request = MagicMock(
             return_value=AsyncMock(spec=httpx.Request)
@@ -172,9 +170,7 @@ class TestRestTransport:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=create_text_message_object(content='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
         context = ClientCallContext(timeout=10.0)
 
         mock_build_request = MagicMock(
@@ -246,9 +242,7 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=create_text_message_object(content='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
 
         # Mock the build_request method to capture its inputs
         mock_build_request = MagicMock(
@@ -294,7 +288,7 @@ class TestRestTransportExtensions:
             url='http://agent.example.com/api',
         )
         params = SendMessageRequest(
-            message=create_text_message_object(content='Hello stream')
+            message=new_text_message(text='Hello stream')
         )
 
         mock_event_source = AsyncMock(spec=EventSource)
@@ -343,7 +337,7 @@ class TestRestTransportExtensions:
             url='http://agent.example.com/api',
         )
         request = SendMessageRequest(
-            message=create_text_message_object(content='Error stream')
+            message=new_text_message(text='Error stream')
         )
 
         mock_event_source = AsyncMock(spec=EventSource)
@@ -524,7 +518,7 @@ class TestRestTransportTenant:
                 'send_message',
                 SendMessageRequest(
                     tenant='my-tenant',
-                    message=create_text_message_object(content='hi'),
+                    message=new_text_message(text='hi'),
                 ),
                 '/my-tenant/message:send',
             ),
@@ -686,7 +680,7 @@ class TestRestTransportTenant:
                 'send_message_streaming',
                 SendMessageRequest(
                     tenant='my-tenant',
-                    message=create_text_message_object(content='hi'),
+                    message=new_text_message(text='hi'),
                 ),
                 '/my-tenant/message:stream',
             ),

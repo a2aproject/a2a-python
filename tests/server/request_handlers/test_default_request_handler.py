@@ -73,7 +73,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import new_agent_text_message, new_task
+from a2a.helpers.proto_helpers import (
+    new_text_message,
+    new_task_from_user_message,
+)
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -254,8 +257,8 @@ async def test_on_list_tasks_applies_history_length(agent_card):
     """Test on_list_tasks applies history length filter."""
     mock_task_store = AsyncMock(spec=TaskStore)
     history = [
-        new_agent_text_message('Hello 1!'),
-        new_agent_text_message('Hello 2!'),
+        new_text_message('Hello 1!'),
+        new_text_message('Hello 2!'),
     ]
     task2 = create_sample_task(task_id='task2')
     task2.history.extend(history)
@@ -957,7 +960,7 @@ class HelloAgentExecutor(AgentExecutor):
             assert context.message is not None, (
                 'A message is required to create a new task'
             )
-            task = new_task(context.message)  # type: ignore
+            task = new_task_from_user_message(context.message)  # type: ignore
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
