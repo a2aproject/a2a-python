@@ -80,7 +80,9 @@ def test_new_text_artifact() -> None:
 
 
 def test_new_text_artifact_with_id() -> None:
-    art = new_text_artifact(name='test', text='content', description='desc', artifact_id='art1')
+    art = new_text_artifact(
+        name='test', text='content', description='desc', artifact_id='art1'
+    )
     assert art.name == 'test'
     assert art.description == 'desc'
     assert len(art.parts) == 1
