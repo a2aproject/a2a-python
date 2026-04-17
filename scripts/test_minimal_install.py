@@ -50,14 +50,13 @@ CORE_MODULES = [
     'a2a.server.tasks',
     'a2a.types',
     'a2a.utils',
-    'a2a.utils.artifact',
     'a2a.utils.constants',
     'a2a.utils.error_handlers',
     'a2a.utils.helpers',
-    'a2a.utils.message',
-    'a2a.utils.parts',
     'a2a.utils.proto_utils',
     'a2a.utils.task',
+    'a2a.helpers.agent_card',
+    'a2a.helpers.proto_helpers',
 ]
 
 

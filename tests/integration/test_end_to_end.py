@@ -43,7 +43,8 @@ from a2a.types import (
     TaskState,
     a2a_pb2_grpc,
 )
-from a2a.utils import TransportProtocol, new_task
+from a2a.utils import TransportProtocol
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils.errors import InvalidParamsError
 
 
@@ -126,7 +127,7 @@ class MockAgentExecutor(AgentExecutor):
         # Task-based response.
         task = context.current_task
         if not task:
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
 
         task_updater = TaskUpdater(

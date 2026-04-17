@@ -4,6 +4,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.server.tasks.task_store import TaskStore
 from a2a.types.a2a_pb2 import (
+    Artifact,
     Message,
     Task,
     TaskArtifactUpdateEvent,
@@ -11,11 +12,75 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import append_artifact_to_task
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.telemetry import trace_function
 
 
 logger = logging.getLogger(__name__)
+
+
+@trace_function()
+def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
+    """Helper method for updating a Task object with new artifact data from an event.
+
+    Handles creating the artifacts list if it doesn't exist, adding new artifacts,
+    and appending parts to existing artifacts based on the `append` flag in the event.
+
+    Args:
+        task: The `Task` object to modify.
+        event: The `TaskArtifactUpdateEvent` containing the artifact data.
+    """
+    new_artifact_data: Artifact = event.artifact
+    artifact_id: str = new_artifact_data.artifact_id
+    append_parts: bool = event.append
+
+    existing_artifact: Artifact | None = None
+    existing_artifact_list_index: int | None = None
+
+    # Find existing artifact by its id
+    for i, art in enumerate(task.artifacts):
+        if art.artifact_id == artifact_id:
+            existing_artifact = art
+            existing_artifact_list_index = i
+            break
+
+    if not append_parts:
+        # This represents the first chunk for this artifact index.
+        if existing_artifact_list_index is not None:
+            # Replace the existing artifact entirely with the new data
+            logger.debug(
+                'Replacing artifact at id %s for task %s', artifact_id, task.id
+            )
+            task.artifacts[existing_artifact_list_index].CopyFrom(
+                new_artifact_data
+            )
+        else:
+            # Append the new artifact since no artifact with this index exists yet
+            logger.debug(
+                'Adding new artifact with id %s for task %s',
+                artifact_id,
+                task.id,
+            )
+            task.artifacts.append(new_artifact_data)
+    elif existing_artifact:
+        # Append new parts to the existing artifact's part list
+        logger.debug(
+            'Appending parts to artifact id %s for task %s',
+            artifact_id,
+            task.id,
+        )
+        existing_artifact.parts.extend(new_artifact_data.parts)
+        existing_artifact.metadata.update(
+            dict(new_artifact_data.metadata.items())
+        )
+    else:
+        # We received a chunk to append, but we don't have an existing artifact.
+        # we will ignore this chunk
+        logger.warning(
+            'Received append=True for nonexistent artifact index %s in task %s. Ignoring chunk.',
+            artifact_id,
+            task.id,
+        )
 
 
 class TaskManager:

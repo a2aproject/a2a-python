@@ -1,11 +1,10 @@
 """Helper functions for the A2A client."""
 
 from typing import Any
-from uuid import uuid4
 
 from google.protobuf.json_format import ParseDict
 
-from a2a.types.a2a_pb2 import AgentCard, Message, Part, Role
+from a2a.types.a2a_pb2 import AgentCard
 
 
 def parse_agent_card(agent_card_data: dict[str, Any]) -> AgentCard:
@@ -111,20 +110,3 @@ def _handle_security_compatibility(agent_card_data: dict[str, Any]) -> None:
                 new_scheme_wrapper = {mapped_name: scheme.copy()}
                 scheme.clear()
                 scheme.update(new_scheme_wrapper)
-
-
-def create_text_message_object(
-    role: Role = Role.ROLE_USER, content: str = ''
-) -> Message:
-    """Create a Message object containing a single text Part.
-
-    Args:
-        role: The role of the message sender (user or agent). Defaults to Role.ROLE_USER.
-        content: The text content of the message. Defaults to an empty string.
-
-    Returns:
-        A `Message` object with a new UUID message_id.
-    """
-    return Message(
-        role=role, parts=[Part(text=content)], message_id=str(uuid4())
-    )

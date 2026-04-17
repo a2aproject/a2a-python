@@ -10,9 +10,9 @@ import grpc
 import httpx
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
+from a2a.helpers import get_artifact_text, get_message_text
+from a2a.helpers.agent_card import display_agent_card
 from a2a.types import Message, Part, Role, SendMessageRequest, TaskState
-from a2a.utils import get_artifact_text, get_message_text
-from a2a.utils.agent_card import display_agent_card
 
 
 async def _handle_stream(
