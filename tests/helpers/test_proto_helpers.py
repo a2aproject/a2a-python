@@ -52,6 +52,14 @@ def test_new_text_message() -> None:
     assert msg.message_id != ''
 
 
+def test_create_text_message_object() -> None:
+    msg = new_text_message(text='Hello', role=Role.ROLE_AGENT)
+    assert msg.role == Role.ROLE_AGENT
+    assert len(msg.parts) == 1
+    assert msg.parts[0].text == 'Hello'
+    assert msg.message_id != ''
+
+
 def test_get_message_text() -> None:
     msg = Message(parts=[Part(text='hello'), Part(text='world')])
     assert get_message_text(msg) == 'hello\nworld'
