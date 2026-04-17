@@ -4,7 +4,7 @@ import json
 from google.protobuf.json_format import MessageToDict
 
 from a2a.client.helpers import parse_agent_card
-from a2a.helpers.types import new_text_message
+from a2a.helpers.proto_helpers import new_text_message
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,

@@ -24,7 +24,7 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
 )
-from a2a.helpers.types import (
+from a2a.helpers.proto_helpers import (
     new_text_message,
     new_task_from_user_message,
 )
@@ -90,9 +90,7 @@ class TestAgent:
         # Flow with user input required: "How are you?" -> "Good! How are you?" -> "Good" -> "Amazing".
         elif text_message == 'How are you?':
             await updater.requires_input(
-                new_text_message(
-                    'Good! How are you?', task.context_id, task.id
-                )
+                new_text_message('Good! How are you?', task.context_id, task.id)
             )
         elif text_message == 'Good':
             await updater.complete(

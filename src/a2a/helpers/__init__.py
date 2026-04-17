@@ -1,7 +1,7 @@
 """Helper functions for the A2A Python SDK."""
 
 from a2a.helpers.agent_card import display_agent_card
-from a2a.helpers.types import (
+from a2a.helpers.proto_helpers import (
     get_artifact_text,
     get_message_text,
     get_stream_response_text,
@@ -15,6 +15,7 @@ from a2a.helpers.types import (
     new_text_message,
     new_text_status_update_event,
 )
+
 
 __all__ = [
     'display_agent_card',

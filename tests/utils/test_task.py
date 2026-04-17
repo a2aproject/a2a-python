@@ -14,7 +14,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskRequest,
     SendMessageConfiguration,
 )
-from a2a.helpers.types import new_task
+from a2a.helpers.proto_helpers import new_task
 from a2a.utils.task import (
     apply_history_length,
     decode_page_token,

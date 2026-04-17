@@ -1,10 +1,8 @@
 """Unified helper functions for creating and handling A2A types."""
 
 import uuid
-from collections.abc import Sequence
-from typing import Any
 
-from google.protobuf.json_format import MessageToDict
+from collections.abc import Sequence
 
 from a2a.types.a2a_pb2 import (
     Artifact,
@@ -121,7 +119,6 @@ def new_task(
     history: list[Message] | None = None,
 ) -> Task:
     """Creates a Task object with a specified status."""
-
     if history is None:
         history = []
     if artifacts is None:
@@ -169,7 +166,7 @@ def new_text_status_update_event(
     )
 
 
-def new_text_artifact_update_event(
+def new_text_artifact_update_event(  # noqa: PLR0913
     task_id: str,
     context_id: str,
     name: str,
@@ -189,17 +186,23 @@ def new_text_artifact_update_event(
     )
 
 
-def get_stream_response_text(response: StreamResponse, delimiter: str = '\n') -> str:
+def get_stream_response_text(
+    response: StreamResponse, delimiter: str = '\n'
+) -> str:
     """Extracts text content from a StreamResponse."""
     if response.HasField('message'):
         return get_message_text(response.message, delimiter)
-    elif response.HasField('task'):
-        texts = [get_artifact_text(a, delimiter) for a in response.task.artifacts]
+    if response.HasField('task'):
+        texts = [
+            get_artifact_text(a, delimiter) for a in response.task.artifacts
+        ]
         return delimiter.join(t for t in texts if t)
-    elif response.HasField('status_update'):
+    if response.HasField('status_update'):
         if response.status_update.status.HasField('message'):
-            return get_message_text(response.status_update.status.message, delimiter)
+            return get_message_text(
+                response.status_update.status.message, delimiter
+            )
         return ''
-    elif response.HasField('artifact_update'):
+    if response.HasField('artifact_update'):
         return get_artifact_text(response.artifact_update.artifact, delimiter)
     return ''

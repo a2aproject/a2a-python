@@ -197,9 +197,6 @@ def test_build_text_artifact():
     assert artifact.parts[0].text == text
 
 
-
-
-
 def test_canonicalize_agent_card():
     """Test canonicalize_agent_card with defaults, optionals, and exceptions.
 

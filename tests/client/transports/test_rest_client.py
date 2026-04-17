@@ -8,7 +8,7 @@ from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 from httpx_sse import EventSource, ServerSentEvent
 
-from a2a.helpers.types import new_text_message
+from a2a.helpers.proto_helpers import new_text_message
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
@@ -120,9 +120,7 @@ class TestRestTransport:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=new_text_message(text='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
 
         mock_build_request = MagicMock(
             return_value=AsyncMock(spec=httpx.Request)
@@ -172,9 +170,7 @@ class TestRestTransport:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=new_text_message(text='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
         context = ClientCallContext(timeout=10.0)
 
         mock_build_request = MagicMock(
@@ -246,9 +242,7 @@ class TestRestTransportExtensions:
             agent_card=mock_agent_card,
             url='http://agent.example.com/api',
         )
-        params = SendMessageRequest(
-            message=new_text_message(text='Hello')
-        )
+        params = SendMessageRequest(message=new_text_message(text='Hello'))
 
         # Mock the build_request method to capture its inputs
         mock_build_request = MagicMock(

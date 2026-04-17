@@ -38,7 +38,7 @@ from a2a.types import (
     a2a_pb2_grpc,
 )
 from a2a.utils import TransportProtocol
-from a2a.helpers.types import new_task_from_user_message
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils.errors import InvalidParamsError
 
 

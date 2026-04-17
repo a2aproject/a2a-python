@@ -54,7 +54,10 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
-from a2a.helpers.types import new_text_message, new_task_from_user_message
+from a2a.helpers.proto_helpers import (
+    new_text_message,
+    new_task_from_user_message,
+)
 
 
 def create_default_agent_card():

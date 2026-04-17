@@ -6,7 +6,6 @@ from a2a.utils.constants import (
     DEFAULT_RPC_URL,
     TransportProtocol,
 )
-
 from a2a.utils.proto_utils import to_stream_response
 
 

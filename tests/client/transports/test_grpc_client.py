@@ -35,7 +35,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.helpers.types import get_text_parts
+from a2a.helpers.proto_helpers import get_text_parts
 
 
 @pytest.fixture
