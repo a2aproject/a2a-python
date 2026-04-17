@@ -169,31 +169,6 @@ class TestJsonRpcDispatcherExtensions:
         call_context = mock_handler.on_message_send.call_args[0][1]
         assert call_context.state['method'] == 'SendMessage'
 
-    def test_response_with_activated_extensions(self, client, mock_handler):
-        def side_effect(request, context: ServerCallContext):
-            context.activated_extensions.add('foo')
-            context.activated_extensions.add('baz')
-            return Message(
-                message_id='test',
-                role=Role.ROLE_AGENT,
-                parts=[Part(text='response message')],
-            )
-
-        mock_handler.on_message_send.side_effect = side_effect
-
-        response = client.post(
-            '/',
-            json=_make_send_message_request(),
-        )
-        response.raise_for_status()
-
-        assert response.status_code == 200
-        assert HTTP_EXTENSION_HEADER in response.headers
-        assert set(response.headers[HTTP_EXTENSION_HEADER].split(', ')) == {
-            'foo',
-            'baz',
-        }
-
 
 class TestJsonRpcDispatcherTenant:
     def test_tenant_extraction_from_params(self, client, mock_handler):

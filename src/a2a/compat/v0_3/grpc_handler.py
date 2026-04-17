@@ -17,8 +17,8 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3 import (
     types as types_v03,
 )
+from a2a.compat.v0_3.context_builders import V03GrpcServerCallContextBuilder
 from a2a.compat.v0_3.request_handler import RequestHandler03
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.grpc_handler import (
     _ERROR_CODE_MAP,
@@ -51,7 +51,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
                              DefaultCallContextBuilder is used.
         """
         self.handler03 = RequestHandler03(request_handler=request_handler)
-        self._context_builder = (
+        self._context_builder = V03GrpcServerCallContextBuilder(
             context_builder or DefaultGrpcServerCallContextBuilder()
         )
 
@@ -65,7 +65,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         try:
             server_context = self._context_builder.build(context)
             result = await handler_func(server_context)
-            self._set_extension_metadata(context, server_context)
         except A2AError as e:
             await self.abort_context(e, context)
         else:
@@ -82,7 +81,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             server_context = self._context_builder.build(context)
             async for item in handler_func(server_context):
                 yield item
-            self._set_extension_metadata(context, server_context)
         except A2AError as e:
             await self.abort_context(e, context)
 
@@ -118,19 +116,6 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
             await context.abort(
                 grpc.StatusCode.UNKNOWN,
                 f'Unknown error type: {error}',
-            )
-
-    def _set_extension_metadata(
-        self,
-        context: grpc.aio.ServicerContext,
-        server_context: ServerCallContext,
-    ) -> None:
-        if server_context.activated_extensions:
-            context.set_trailing_metadata(
-                [
-                    (HTTP_EXTENSION_HEADER.lower(), e)
-                    for e in sorted(server_context.activated_extensions)
-                ]
             )
 
     async def SendMessage(

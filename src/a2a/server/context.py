@@ -23,4 +23,3 @@ class ServerCallContext(BaseModel):
     user: User = Field(default_factory=UnauthenticatedUser)
     tenant: str = Field(default='')
     requested_extensions: set[str] = Field(default_factory=set)
-    activated_extensions: set[str] = Field(default_factory=set)

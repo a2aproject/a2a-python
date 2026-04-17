@@ -25,6 +25,7 @@ from a2a.compat.v0_3 import (
 from a2a.compat.v0_3 import (
     types as types_v03,
 )
+from a2a.compat.v0_3.extension_headers import add_legacy_extension_header
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -380,6 +381,7 @@ class CompatRestTransport(ClientTransport):
         http_kwargs = get_http_args(context)
         http_kwargs.setdefault('headers', {})
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
+        add_legacy_extension_header(http_kwargs['headers'])
 
         async for sse_data in send_http_stream_request(
             self.httpx_client,
@@ -414,6 +416,7 @@ class CompatRestTransport(ClientTransport):
         http_kwargs = get_http_args(context)
         http_kwargs.setdefault('headers', {})
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
+        add_legacy_extension_header(http_kwargs['headers'])
 
         request = self.httpx_client.build_request(
             method,

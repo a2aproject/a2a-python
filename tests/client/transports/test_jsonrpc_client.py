@@ -545,7 +545,7 @@ class TestExtensions:
         from a2a.client.client import ClientCallContext
 
         context = ClientCallContext(
-            service_parameters={'X-A2A-Extensions': 'https://example.com/ext1'}
+            service_parameters={'A2A-Extensions': 'https://example.com/ext1'}
         )
 
         await transport.send_message(request, context=context)
@@ -555,7 +555,7 @@ class TestExtensions:
         call_args = mock_httpx_client.build_request.call_args
         # Extensions should be in the kwargs
         assert (
-            call_args[1].get('headers', {}).get('X-A2A-Extensions')
+            call_args[1].get('headers', {}).get('A2A-Extensions')
             == 'https://example.com/ext1'
         )
 
