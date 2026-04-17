@@ -28,6 +28,7 @@ from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.utils import TransportProtocol
 from server_common import CustomLoggingMiddleware
 from google.protobuf.struct_pb2 import Struct, Value
+from a2a.helpers.proto_helpers import new_task_from_user_message
 
 
 class MockAgentExecutor(AgentExecutor):
@@ -36,12 +37,17 @@ class MockAgentExecutor(AgentExecutor):
 
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         print(f'SERVER: execute called for task {context.task_id}')
+        task = new_task_from_user_message(context.message)
+        task.id = context.task_id
+        task.context_id = context.context_id
+        task.status.state = TaskState.TASK_STATE_WORKING
+        await event_queue.enqueue_event(task)
+
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
             context.context_id,
         )
-        await task_updater.update_status(TaskState.TASK_STATE_SUBMITTED)
         await task_updater.update_status(TaskState.TASK_STATE_WORKING)
 
         text = ''

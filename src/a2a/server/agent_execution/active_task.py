@@ -36,6 +36,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
+    InvalidAgentResponseError,
     InvalidParamsError,
     TaskNotFoundError,
 )
@@ -370,13 +371,12 @@ class ActiveTask:
                             elif isinstance(event, Message):
                                 if task_mode is not None:
                                     if task_mode:
-                                        logger.error(
-                                            'Received Message() object in task mode.'
+                                        raise InvalidAgentResponseError(
+                                            'Received Message object in task mode. Use TaskStatusUpdateEvent or TaskArtifactUpdateEvent instead.'
                                         )
-                                    else:
-                                        logger.error(
-                                            'Multiple Message() objects received.'
-                                        )
+                                    raise InvalidAgentResponseError(
+                                        'Multiple Message objects received.'
+                                    )
                                 task_mode = False
                                 logger.debug(
                                     'Consumer[%s]: Setting result to Message: %s',
@@ -385,9 +385,8 @@ class ActiveTask:
                                 )
                             else:
                                 if task_mode is False:
-                                    logger.error(
-                                        'Received %s in message mode.',
-                                        type(event).__name__,
+                                    raise InvalidAgentResponseError(
+                                        f'Received {type(event).__name__} in message mode. Use Task with TaskStatusUpdateEvent and TaskArtifactUpdateEvent instead.'
                                     )
 
                                 if isinstance(event, Task):
@@ -408,6 +407,18 @@ class ActiveTask:
                                     # Initial task should already contain the message.
                                     message_to_save = None
                                 else:
+                                    if (
+                                        isinstance(event, TaskStatusUpdateEvent)
+                                        and not self._task_created.is_set()
+                                    ):
+                                        task = (
+                                            await self._task_manager.get_task()
+                                        )
+                                        if task is None:
+                                            raise InvalidAgentResponseError(
+                                                f'Agent should enqueue Task before {type(event).__name__} event'
+                                            )
+
                                     new_task = (
                                         await self._task_manager.ensure_task_id(
                                             self._task_id,
@@ -433,8 +444,6 @@ class ActiveTask:
                                 self._task_manager.context_id = event.context_id
                                 if not isinstance(event, Task):
                                     await self._task_manager.process(event)
-
-                                self._task_created.set()
 
                                 # Check for AUTH_REQUIRED or INPUT_REQUIRED or TERMINAL states
                                 new_task = await self._task_manager.get_task()
@@ -496,6 +505,9 @@ class ActiveTask:
                                     await self._push_sender.send_notification(
                                         self._task_id, event
                                     )
+
+                                self._task_created.set()
+
                         finally:
                             if new_task is not None:
                                 new_task_copy = Task()
