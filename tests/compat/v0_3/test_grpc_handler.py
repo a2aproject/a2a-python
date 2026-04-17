@@ -7,8 +7,6 @@ from a2a.compat.v0_3 import (
     a2a_v0_3_pb2,
     grpc_handler as compat_grpc_handler,
 )
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.utils.errors import TaskNotFoundError, InvalidParamsError
@@ -506,21 +504,3 @@ async def test_extract_task_and_config_id_invalid(
 ):
     with pytest.raises(InvalidParamsError):
         handler._extract_task_and_config_id('invalid-name')
-
-
-@pytest.mark.asyncio
-async def test_handle_unary_extension_metadata(
-    handler: compat_grpc_handler.CompatGrpcHandler,
-    mock_request_handler: AsyncMock,
-    mock_grpc_context: AsyncMock,
-) -> None:
-    async def mock_func(server_context: ServerCallContext):
-        server_context.activated_extensions.add('ext-1')
-        return a2a_pb2.Task()
-
-    await handler._handle_unary(mock_grpc_context, mock_func, a2a_pb2.Task())
-
-    expected_metadata = [(HTTP_EXTENSION_HEADER.lower(), 'ext-1')]
-    mock_grpc_context.set_trailing_metadata.assert_called_once_with(
-        expected_metadata
-    )

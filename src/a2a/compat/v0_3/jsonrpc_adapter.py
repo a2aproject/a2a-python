@@ -24,6 +24,7 @@ else:
         _package_starlette_installed = False
 
 from a2a.compat.v0_3 import types as types_v03
+from a2a.compat.v0_3.context_builders import V03ServerCallContextBuilder
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
@@ -70,7 +71,7 @@ class JSONRPC03Adapter:
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
-        self._context_builder = (
+        self._context_builder = V03ServerCallContextBuilder(
             context_builder or DefaultServerCallContextBuilder()
         )
 

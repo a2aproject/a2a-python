@@ -100,19 +100,15 @@ class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         user_input = context.get_user_input()
 
-        # Extensions echo: activate all requested extensions and report them
-        # back via the Message.extensions field.
+        # Extensions echo: report the requested extensions back to the client
+        # via the Message.extensions field.
         if user_input.startswith('Extensions:'):
-            for ext_uri in context.requested_extensions:
-                context.add_activated_extension(ext_uri)
             await event_queue.enqueue_event(
                 Message(
                     role=Role.ROLE_AGENT,
                     message_id='ext-reply-1',
                     parts=[Part(text='extensions echoed')],
-                    extensions=sorted(
-                        context.call_context.activated_extensions
-                    ),
+                    extensions=sorted(context.requested_extensions),
                 )
             )
             return

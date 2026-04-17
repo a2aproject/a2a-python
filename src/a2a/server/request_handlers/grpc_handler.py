@@ -135,7 +135,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         try:
             server_context = self._build_call_context(context, request)
             result = await handler_func(server_context)
-            self._set_extension_metadata(context, server_context)
         except A2AError as e:
             await self.abort_context(e, context)
         else:
@@ -153,7 +152,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             server_context = self._build_call_context(context, request)
             async for item in handler_func(server_context):
                 yield item
-            self._set_extension_metadata(context, server_context)
         except A2AError as e:
             await self.abort_context(e, context)
 
@@ -420,19 +418,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             await context.abort(
                 grpc.StatusCode.UNKNOWN,
                 f'Unknown error type: {error}',
-            )
-
-    def _set_extension_metadata(
-        self,
-        context: grpc.aio.ServicerContext,
-        server_context: ServerCallContext,
-    ) -> None:
-        if server_context.activated_extensions:
-            context.set_trailing_metadata(
-                [
-                    (HTTP_EXTENSION_HEADER.lower(), e)
-                    for e in sorted(server_context.activated_extensions)
-                ]
             )
 
     def _build_call_context(

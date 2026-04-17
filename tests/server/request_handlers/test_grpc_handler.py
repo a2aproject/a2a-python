@@ -421,19 +421,11 @@ class TestGrpcExtensions:
             (HTTP_EXTENSION_HEADER.lower(), 'foo'),
             (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
-
-        def side_effect(request, context: ServerCallContext):
-            context.activated_extensions.add('foo')
-            context.activated_extensions.add('baz')
-            return types.Task(
-                id='task-1',
-                context_id='ctx-1',
-                status=types.TaskStatus(
-                    state=types.TaskState.TASK_STATE_COMPLETED
-                ),
-            )
-
-        mock_request_handler.on_message_send.side_effect = side_effect
+        mock_request_handler.on_message_send.return_value = types.Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
+        )
 
         await grpc_handler.SendMessage(
             a2a_pb2.SendMessageRequest(), mock_grpc_context
@@ -443,15 +435,6 @@ class TestGrpcExtensions:
         call_context = mock_request_handler.on_message_send.call_args[0][1]
         assert isinstance(call_context, ServerCallContext)
         assert call_context.requested_extensions == {'foo', 'bar'}
-
-        mock_grpc_context.set_trailing_metadata.assert_called_once()
-        called_metadata = (
-            mock_grpc_context.set_trailing_metadata.call_args.args[0]
-        )
-        assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
-            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
-        }
 
     async def test_send_message_with_comma_separated_extensions(
         self,
@@ -490,8 +473,6 @@ class TestGrpcExtensions:
         )
 
         async def side_effect(request, context: ServerCallContext):
-            context.activated_extensions.add('foo')
-            context.activated_extensions.add('baz')
             yield types.Task(
                 id='task-1',
                 context_id='ctx-1',
@@ -516,15 +497,6 @@ class TestGrpcExtensions:
         ]
         assert isinstance(call_context, ServerCallContext)
         assert call_context.requested_extensions == {'foo', 'bar'}
-
-        mock_grpc_context.set_trailing_metadata.assert_called_once()
-        called_metadata = (
-            mock_grpc_context.set_trailing_metadata.call_args.args[0]
-        )
-        assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
-            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
-        }
 
 
 @pytest.mark.asyncio
