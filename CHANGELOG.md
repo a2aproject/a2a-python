@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.0.0-alpha.2](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2026-04-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* clean helpers and utils folders structure ([#983](https://github.com/a2aproject/a2a-python/issues/983))
+* Raise errors on invalid AgentExecutor behavior. ([#979](https://github.com/a2aproject/a2a-python/issues/979))
+* extract developer helpers in helpers folder ([#978](https://github.com/a2aproject/a2a-python/issues/978))
+
+### Features
+
+* Raise errors on invalid AgentExecutor behavior. ([#979](https://github.com/a2aproject/a2a-python/issues/979)) ([f4a0bcd](https://github.com/a2aproject/a2a-python/commit/f4a0bcdf68107c95e6c0a5e6696e4a7d6e01a03f))
+* **utils:** add `display_agent_card()` utility for human-readable AgentCard inspection ([#972](https://github.com/a2aproject/a2a-python/issues/972)) ([3468180](https://github.com/a2aproject/a2a-python/commit/3468180ac7396d453d99ce3e74cdd7f5a0afb5ab))
+
+
+### Bug Fixes
+
+* Don't generate empty metadata change events in VertexTaskStore ([#974](https://github.com/a2aproject/a2a-python/issues/974)) ([b58b03e](https://github.com/a2aproject/a2a-python/commit/b58b03ef58bd806db3accbe6dca8fc444a43bc18)), closes [#802](https://github.com/a2aproject/a2a-python/issues/802)
+* **extensions:** support both header names and remove "activation" concept ([#984](https://github.com/a2aproject/a2a-python/issues/984)) ([b8df210](https://github.com/a2aproject/a2a-python/commit/b8df210b00d0f249ca68f0d814191c4205e18b35))
+
+
+### Documentation
+
+* AgentExecutor interface documentation ([#976](https://github.com/a2aproject/a2a-python/issues/976)) ([d667e4f](https://github.com/a2aproject/a2a-python/commit/d667e4fa55e99225eb3c02e009b426a3bc2d449d))
+* move `ai_learnings.md` to local-only and update `GEMINI.md` ([#982](https://github.com/a2aproject/a2a-python/issues/982)) ([f6610fa](https://github.com/a2aproject/a2a-python/commit/f6610fa35e1f5fbc3e7e6cd9e29a5177a538eb4e))
+
+
+### Code Refactoring
+
+* clean helpers and utils folders structure ([#983](https://github.com/a2aproject/a2a-python/issues/983)) ([c87e87c](https://github.com/a2aproject/a2a-python/commit/c87e87c76c004c73c9d6b9bd8cacfd4e590598e6))
+* extract developer helpers in helpers folder ([#978](https://github.com/a2aproject/a2a-python/issues/978)) ([5f3ea29](https://github.com/a2aproject/a2a-python/commit/5f3ea292389cf72a25a7cf2792caceb4af45f6da))
+
 ## [1.0.0-alpha.1](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.0...v1.0.0-alpha.1) (2026-04-10)
 
 
