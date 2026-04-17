@@ -79,6 +79,15 @@ def test_new_text_artifact() -> None:
     assert art.artifact_id != ''
 
 
+def test_new_text_artifact_with_id() -> None:
+    art = new_text_artifact(name='test', text='content', description='desc', artifact_id='art1')
+    assert art.name == 'test'
+    assert art.description == 'desc'
+    assert len(art.parts) == 1
+    assert art.parts[0].text == 'content'
+    assert art.artifact_id == 'art1'
+
+
 def test_get_artifact_text() -> None:
     art = Artifact(parts=[Part(text='hello'), Part(text='world')])
     assert get_artifact_text(art) == 'hello\nworld'
@@ -169,6 +178,21 @@ def test_new_text_artifact_update_event() -> None:
     assert event.artifact.parts[0].text == 'content'
     assert event.append is True
     assert event.last_chunk is True
+
+
+def test_new_text_artifact_update_event_with_id() -> None:
+    event = new_text_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='test',
+        text='content',
+        artifact_id='art1',
+    )
+    assert event.task_id == 'task1'
+    assert event.context_id == 'ctx1'
+    assert event.artifact.name == 'test'
+    assert event.artifact.parts[0].text == 'content'
+    assert event.artifact.artifact_id == 'art1'
 
 
 def test_get_stream_response_text_message() -> None:

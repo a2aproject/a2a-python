@@ -64,10 +64,11 @@ def new_artifact(
     parts: list[Part],
     name: str,
     description: str | None = None,
+    artifact_id: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object."""
     return Artifact(
-        artifact_id=str(uuid.uuid4()),
+        artifact_id=artifact_id or str(uuid.uuid4()),
         parts=parts,
         name=name,
         description=description,
@@ -78,12 +79,14 @@ def new_text_artifact(
     name: str,
     text: str,
     description: str | None = None,
+    artifact_id: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object containing only a single text Part."""
     return new_artifact(
         [Part(text=text)],
         name,
         description,
+        artifact_id=artifact_id,
     )
 
 
@@ -97,6 +100,8 @@ def get_artifact_text(artifact: Artifact, delimiter: str = '\n') -> str:
 
 def new_task_from_user_message(user_message: Message) -> Task:
     """Creates a new Task object from an initial user message."""
+    if user_message.role != Role.ROLE_USER:
+        raise ValueError('Message must be from a user')
     if not user_message.parts:
         raise ValueError('Message parts cannot be empty')
     for part in user_message.parts:
@@ -173,13 +178,14 @@ def new_text_artifact_update_event(  # noqa: PLR0913
     text: str,
     append: bool = False,
     last_chunk: bool = False,
+    artifact_id: str | None = None,
 ) -> TaskArtifactUpdateEvent:
     """Creates a TaskArtifactUpdateEvent with a single text artifact."""
     return TaskArtifactUpdateEvent(
         task_id=task_id,
         context_id=context_id,
-        artifact=Artifact(
-            artifact_id=str(uuid.uuid4()), name=name, parts=[Part(text=text)]
+        artifact=new_text_artifact(
+            name=name, text=text, artifact_id=artifact_id
         ),
         append=append,
         last_chunk=last_chunk,
