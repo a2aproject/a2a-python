@@ -36,7 +36,7 @@ You must set the `A2A_SAMPLES_REVISION` environment variable to specify which re
 
 Example:
 ```bash
-export A2A_SAMPLES_REVISION=itk-v.0.11-alpha
+export A2A_SAMPLES_REVISION=itk-v.015-alpha
 ```
 
 ### 2. Execute Tests
@@ -52,3 +52,22 @@ The script will:
 - Checkout the specified revision.
 - Build the ITK service Docker image.
 - Run the tests and output results.
+
+## Debugging
+
+To enable debug logging and persist logs for inspection:
+
+1.  Set the `ITK_LOG_LEVEL` environment variable to `DEBUG`:
+    ```bash
+    export ITK_LOG_LEVEL=DEBUG
+    ```
+2.  Run the test script:
+    ```bash
+    ./run_itk.sh
+    ```
+
+When run in `DEBUG` mode:
+- The `logs/` directory will be created in this directory (if it doesn't exist).
+- The `logs/` directory will be mounted to the container.
+- The test execution will produce detailed logs in `logs/` (e.g., `agent_current.log`).
+- The `logs/` directory will **not** be removed during cleanup.
