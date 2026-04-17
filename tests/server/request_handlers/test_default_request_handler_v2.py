@@ -73,7 +73,9 @@ def create_default_agent_card():
 class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         if context.message:
-            await event_queue.enqueue_event(new_task(context.message))
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
 
         task_updater = TaskUpdater(
             event_queue,
@@ -967,7 +969,9 @@ class HelloWorldAgentExecutor(AgentExecutor):
         self, context: RequestContext, event_queue: EventQueue
     ) -> None:
         if context.message:
-            await event_queue.enqueue_event(new_task(context.message))
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
         updater = TaskUpdater(
             event_queue,
             task_id=context.task_id or str(uuid.uuid4()),
