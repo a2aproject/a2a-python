@@ -103,16 +103,10 @@ class RestDispatcher:
         self,
         request: Request,
         handler_func: Callable[[ServerCallContext], Awaitable[TResponse]],
-        serializer: Callable[[TResponse], Any] = MessageToDict,
-    ) -> JSONResponse:
-        """Centralized error handling and context management for unary calls.
-
-        Builds the call context, invokes the handler, and wraps the serialized
-        result in a `JSONResponse`.
-        """
+    ) -> TResponse:
+        """Centralized error handling and context management for unary calls."""
         context = self._build_call_context(request)
-        response = await handler_func(context)
-        return JSONResponse(content=serializer(response))
+        return await handler_func(context)
 
     async def _handle_streaming(
         self,
@@ -177,7 +171,8 @@ class RestDispatcher:
                 return a2a_pb2.SendMessageResponse(task=task_or_message)
             return a2a_pb2.SendMessageResponse(message=task_or_message)
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_message_send_stream(
@@ -214,7 +209,8 @@ class RestDispatcher:
                 return task
             raise TaskNotFoundError
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_subscribe_to_task(
@@ -249,7 +245,8 @@ class RestDispatcher:
                 return task
             raise TaskNotFoundError
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def get_push_notification(self, request: Request) -> Response:
@@ -270,7 +267,8 @@ class RestDispatcher:
                 )
             )
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def delete_push_notification(self, request: Request) -> Response:
@@ -287,9 +285,8 @@ class RestDispatcher:
                 params, context
             )
 
-        return await self._handle_non_streaming(
-            request, _handler, serializer=lambda _: {}
-        )
+        await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content={})
 
     @rest_error_handler
     async def set_push_notification(self, request: Request) -> Response:
@@ -307,7 +304,8 @@ class RestDispatcher:
                 params, context
             )
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_push_notifications(self, request: Request) -> Response:
@@ -324,7 +322,8 @@ class RestDispatcher:
                 params, context
             )
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_tasks(self, request: Request) -> Response:
@@ -338,12 +337,11 @@ class RestDispatcher:
             proto_utils.parse_params(request.query_params, params)
             return await self.request_handler.on_list_tasks(params, context)
 
-        return await self._handle_non_streaming(
-            request,
-            _handler,
-            serializer=lambda r: MessageToDict(
-                r, always_print_fields_with_no_presence=True
-            ),
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(
+            content=MessageToDict(
+                response, always_print_fields_with_no_presence=True
+            )
         )
 
     @rest_error_handler
@@ -361,4 +359,5 @@ class RestDispatcher:
                 params, context
             )
 
-        return await self._handle_non_streaming(request, _handler)
+        response = await self._handle_non_streaming(request, _handler)
+        return JSONResponse(content=MessageToDict(response))
