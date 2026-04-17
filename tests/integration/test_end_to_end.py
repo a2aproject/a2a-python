@@ -26,6 +26,7 @@ from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
+    AgentExtension,
     AgentInterface,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -44,6 +45,12 @@ from a2a.types import (
 )
 from a2a.utils import TransportProtocol, new_task
 from a2a.utils.errors import InvalidParamsError
+
+
+SUPPORTED_EXTENSION_URIS = [
+    'https://example.com/ext/v1',
+    'https://example.com/ext/v2',
+]
 
 
 def assert_message_matches(message, expected_role, expected_text):
@@ -164,7 +171,15 @@ def agent_card() -> AgentCard:
         description='Real in-memory integration testing.',
         version='1.0.0',
         capabilities=AgentCapabilities(
-            streaming=True, push_notifications=False
+            streaming=True,
+            push_notifications=False,
+            extensions=[
+                AgentExtension(
+                    uri=uri,
+                    description=f'Test extension {uri}',
+                )
+                for uri in SUPPORTED_EXTENSION_URIS
+            ],
         ),
         skills=[],
         default_input_modes=['text/plain'],
@@ -794,12 +809,8 @@ async def test_end_to_end_extensions_propagation(transport_setups, streaming):
     client = transport_setups.client
     client._config.streaming = streaming
 
-    extensions = [
-        'https://example.com/ext/v1',
-        'https://example.com/ext/v2',
-    ]
     service_params = ServiceParametersFactory.create(
-        [with_a2a_extensions(extensions)]
+        [with_a2a_extensions(SUPPORTED_EXTENSION_URIS)]
     )
     context = ClientCallContext(service_parameters=service_params)
 
@@ -823,4 +834,4 @@ async def test_end_to_end_extensions_propagation(transport_setups, streaming):
     assert_message_matches(
         response.message, Role.ROLE_AGENT, 'extensions echoed'
     )
-    assert set(response.message.extensions) == set(extensions)
+    assert set(response.message.extensions) == set(SUPPORTED_EXTENSION_URIS)
