@@ -35,7 +35,7 @@ podman system migrate
 You must set the `A2A_SAMPLES_REVISION` environment variable to specify which revision of the `a2a-samples` repository to use for testing. This can be a branch name, tag, or commit hash.
 
 Example:
-```bash
+```
 export A2A_SAMPLES_REVISION=itk-v.015-alpha
 ```
 
@@ -58,6 +58,7 @@ The script will:
 To enable debug logging and persist logs for inspection:
 
 1.  Set the `ITK_LOG_LEVEL` environment variable to `DEBUG`:
+
     ```bash
     export ITK_LOG_LEVEL=DEBUG
     ```
