@@ -13,11 +13,13 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.telemetry import trace_function
 
 
 logger = logging.getLogger(__name__)
 
 
+@trace_function()
 def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
     """Helper method for updating a Task object with new artifact data from an event.
 
