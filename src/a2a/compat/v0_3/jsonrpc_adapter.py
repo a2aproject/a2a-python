@@ -41,7 +41,7 @@ from a2a.server.routes.common import (
     ServerCallContextBuilder,
 )
 from a2a.utils import constants
-from a2a.utils.helpers import validate_version
+from a2a.utils.version_validator import validate_version
 
 
 logger = logging.getLogger(__name__)

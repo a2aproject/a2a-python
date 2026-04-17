@@ -28,10 +28,8 @@ from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
-from a2a.utils.helpers import (
-    validate_version,
-)
 from a2a.utils.telemetry import SpanKind, trace_class
+from a2a.utils.version_validator import validate_version
 
 
 logger = logging.getLogger(__name__)

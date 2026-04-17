@@ -775,7 +775,7 @@ def test_dynamic_agent_card_modifier_sync(
 ):
     """Test that a synchronous card_modifier dynamically alters the public agent card."""
 
-    def modifier(card: AgentCard) -> AgentCard:
+    async def modifier(card: AgentCard) -> AgentCard:
         modified_card = AgentCard()
         modified_card.CopyFrom(card)
         modified_card.name = 'Dynamically Modified Agent'
@@ -818,7 +818,7 @@ def test_fastapi_dynamic_agent_card_modifier_sync(
 ):
     """Test that a synchronous card_modifier dynamically alters the public agent card for FastAPI."""
 
-    def modifier(card: AgentCard) -> AgentCard:
+    async def modifier(card: AgentCard) -> AgentCard:
         modified_card = AgentCard()
         modified_card.CopyFrom(card)
         modified_card.name = 'Dynamically Modified Agent'

@@ -28,8 +28,8 @@ from a2a.utils.errors import (
     InvalidRequestError,
     TaskNotFoundError,
 )
-from a2a.utils.helpers import validate_version
 from a2a.utils.telemetry import SpanKind, trace_class
+from a2a.utils.version_validator import validate_version
 
 
 if TYPE_CHECKING:

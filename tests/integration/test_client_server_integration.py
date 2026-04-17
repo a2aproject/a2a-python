@@ -709,8 +709,11 @@ async def test_json_transport_get_signed_base_card(
         },
     )
 
+    async def async_signer(card: AgentCard) -> AgentCard:
+        return signer(card)
+
     agent_card_routes = create_agent_card_routes(
-        agent_card=agent_card, card_url='/', card_modifier=signer
+        agent_card=agent_card, card_url='/', card_modifier=async_signer
     )
     jsonrpc_routes = create_jsonrpc_routes(
         request_handler=mock_request_handler, rpc_url='/'
@@ -863,8 +866,12 @@ async def test_client_get_signed_base_and_extended_cards(
     mock_request_handler.on_get_extended_agent_card.side_effect = (
         get_extended_agent_card_mock_3  # type: ignore[union-attr]
     )
+
+    async def async_signer(card: AgentCard) -> AgentCard:
+        return signer(card)
+
     agent_card_routes = create_agent_card_routes(
-        agent_card=agent_card, card_url='/', card_modifier=signer
+        agent_card=agent_card, card_url='/', card_modifier=async_signer
     )
     jsonrpc_routes = create_jsonrpc_routes(
         request_handler=mock_request_handler, rpc_url='/'

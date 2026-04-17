@@ -6,6 +6,7 @@ import pytest
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks import TaskManager
+from a2a.server.tasks.task_manager import append_artifact_to_task
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
@@ -345,3 +346,99 @@ async def test_save_task_event_no_task_existing(
     assert saved_task.status.state == TaskState.TASK_STATE_COMPLETED
     assert task_manager_without_id.task_id == 'event-task-id'
     assert task_manager_without_id.context_id == 'some-context'
+
+
+def test_append_artifact_to_task():
+    # Prepare base task
+    task = create_minimal_task()
+    assert task.id == 'task-abc'
+    assert task.context_id == 'session-xyz'
+    assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+    assert len(task.history) == 0  # proto repeated fields are empty, not None
+    assert len(task.artifacts) == 0
+
+    # Prepare appending artifact and event
+    artifact_1 = Artifact(
+        artifact_id='artifact-123', parts=[Part(text='Hello')]
+    )
+    append_event_1 = TaskArtifactUpdateEvent(
+        artifact=artifact_1, append=False, task_id='123', context_id='123'
+    )
+
+    # Test adding a new artifact (not appending)
+    append_artifact_to_task(task, append_event_1)
+    assert len(task.artifacts) == 1
+    assert task.artifacts[0].artifact_id == 'artifact-123'
+    assert task.artifacts[0].name == ''  # proto default for string
+    assert len(task.artifacts[0].parts) == 1
+    assert task.artifacts[0].parts[0].text == 'Hello'
+
+    # Test replacing the artifact
+    artifact_2 = Artifact(
+        artifact_id='artifact-123',
+        name='updated name',
+        parts=[Part(text='Updated')],
+        metadata={'existing_key': 'existing_value'},
+    )
+    append_event_2 = TaskArtifactUpdateEvent(
+        artifact=artifact_2, append=False, task_id='123', context_id='123'
+    )
+    append_artifact_to_task(task, append_event_2)
+    assert len(task.artifacts) == 1  # Should still have one artifact
+    assert task.artifacts[0].artifact_id == 'artifact-123'
+    assert task.artifacts[0].name == 'updated name'
+    assert len(task.artifacts[0].parts) == 1
+    assert task.artifacts[0].parts[0].text == 'Updated'
+    assert task.artifacts[0].metadata['existing_key'] == 'existing_value'
+
+    # Test appending parts to an existing artifact
+    artifact_with_parts = Artifact(
+        artifact_id='artifact-123',
+        parts=[Part(text='Part 2')],
+        metadata={'new_key': 'new_value'},
+    )
+    append_event_3 = TaskArtifactUpdateEvent(
+        artifact=artifact_with_parts,
+        append=True,
+        task_id='123',
+        context_id='123',
+    )
+    append_artifact_to_task(task, append_event_3)
+    assert len(task.artifacts[0].parts) == 2
+    assert task.artifacts[0].parts[0].text == 'Updated'
+    assert task.artifacts[0].parts[1].text == 'Part 2'
+    assert task.artifacts[0].metadata['existing_key'] == 'existing_value'
+    assert task.artifacts[0].metadata['new_key'] == 'new_value'
+
+    # Test adding another new artifact
+    another_artifact_with_parts = Artifact(
+        artifact_id='new_artifact',
+        parts=[Part(text='new artifact Part 1')],
+    )
+    append_event_4 = TaskArtifactUpdateEvent(
+        artifact=another_artifact_with_parts,
+        append=False,
+        task_id='123',
+        context_id='123',
+    )
+    append_artifact_to_task(task, append_event_4)
+    assert len(task.artifacts) == 2
+    assert task.artifacts[0].artifact_id == 'artifact-123'
+    assert task.artifacts[1].artifact_id == 'new_artifact'
+    assert len(task.artifacts[0].parts) == 2
+    assert len(task.artifacts[1].parts) == 1
+
+    # Test appending part to a task that does not have a matching artifact
+    non_existing_artifact_with_parts = Artifact(
+        artifact_id='artifact-456', parts=[Part(text='Part 1')]
+    )
+    append_event_5 = TaskArtifactUpdateEvent(
+        artifact=non_existing_artifact_with_parts,
+        append=True,
+        task_id='123',
+        context_id='123',
+    )
+    append_artifact_to_task(task, append_event_5)
+    assert len(task.artifacts) == 2
+    assert len(task.artifacts[0].parts) == 2
+    assert len(task.artifacts[1].parts) == 1
