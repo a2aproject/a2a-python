@@ -151,14 +151,6 @@ class RequestContext:
             return dict(self._params.metadata)
         return {}
 
-    def add_activated_extension(self, uri: str) -> None:
-        """Add an extension to the set of activated extensions for this request.
-
-        This causes the extension to be indicated back to the client in the
-        response.
-        """
-        self._call_context.activated_extensions.add(uri)
-
     @property
     def tenant(self) -> str:
         """The tenant associated with this request."""
@@ -166,7 +158,7 @@ class RequestContext:
 
     @property
     def requested_extensions(self) -> set[str]:
-        """Extensions that the client requested to activate."""
+        """Extensions that the client requested for this interaction."""
         return self._call_context.requested_extensions
 
     def _check_or_generate_task_id(self) -> None:

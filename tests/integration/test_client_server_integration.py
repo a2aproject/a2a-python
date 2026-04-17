@@ -675,9 +675,9 @@ async def test_json_transport_base_client_send_message_with_extensions(
             call_args[1] if len(call_args) > 1 else call_kwargs.get('context')
         )
         service_params = getattr(called_context, 'service_parameters', {})
-        assert 'X-A2A-Extensions' in service_params
+        assert 'A2A-Extensions' in service_params
         assert (
-            service_params['X-A2A-Extensions']
+            service_params['A2A-Extensions']
             == 'https://example.com/test-ext/v1,https://example.com/test-ext/v2'
         )
 

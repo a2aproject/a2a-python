@@ -322,14 +322,8 @@ class TestRequestContext:
         assert context.current_task == mock_task
 
     def test_extension_handling(self) -> None:
-        """Test extension handling in RequestContext."""
+        """Test that requested_extensions is exposed via RequestContext."""
         call_context = ServerCallContext(requested_extensions={'foo', 'bar'})
         context = RequestContext(call_context=call_context)
 
         assert context.requested_extensions == {'foo', 'bar'}
-
-        context.add_activated_extension('foo')
-        assert call_context.activated_extensions == {'foo'}
-
-        context.add_activated_extension('baz')
-        assert call_context.activated_extensions == {'foo', 'baz'}

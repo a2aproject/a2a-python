@@ -15,7 +15,6 @@ from a2a.client.service_parameters import (
     ServiceParametersFactory,
     with_a2a_extensions,
 )
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -100,19 +99,15 @@ class MockAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         user_input = context.get_user_input()
 
-        # Extensions echo: activate all requested extensions and report them
-        # back via the Message.extensions field.
+        # Extensions echo: report the requested extensions back to the client
+        # via the Message.extensions field.
         if user_input.startswith('Extensions:'):
-            for ext_uri in context.requested_extensions:
-                context.add_activated_extension(ext_uri)
             await event_queue.enqueue_event(
                 Message(
                     role=Role.ROLE_AGENT,
                     message_id='ext-reply-1',
                     parts=[Part(text='extensions echoed')],
-                    extensions=sorted(
-                        context.call_context.activated_extensions
-                    ),
+                    extensions=sorted(context.requested_extensions),
                 )
             )
             return
@@ -836,56 +831,3 @@ async def test_end_to_end_extensions_propagation(transport_setups, streaming):
         response.message, Role.ROLE_AGENT, 'extensions echoed'
     )
     assert set(response.message.extensions) == set(SUPPORTED_EXTENSION_URIS)
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    'transport_fixture',
-    [
-        pytest.param('rest_setup', id='REST'),
-        pytest.param('jsonrpc_setup', id='JSON-RPC'),
-    ],
-)
-async def test_end_to_end_extensions_response_header(
-    request, transport_fixture
-):
-    """Test that activated extensions are returned in the X-A2A-Extensions
-    response header for HTTP-based transports."""
-    setup = request.getfixturevalue(transport_fixture)
-    client = setup.client
-    client._config.streaming = False
-
-    captured_headers: list[httpx.Headers] = []
-
-    async def capture_response(response: httpx.Response) -> None:
-        captured_headers.append(response.headers)
-
-    client._transport.httpx_client.event_hooks['response'].append(
-        capture_response
-    )
-
-    service_params = ServiceParametersFactory.create(
-        [with_a2a_extensions(SUPPORTED_EXTENSION_URIS)]
-    )
-    context = ClientCallContext(service_parameters=service_params)
-
-    message_to_send = Message(
-        role=Role.ROLE_USER,
-        message_id='msg-ext-header',
-        parts=[Part(text='Extensions: echo')],
-    )
-
-    async for _ in client.send_message(
-        request=SendMessageRequest(message=message_to_send),
-        context=context,
-    ):
-        pass
-
-    assert captured_headers, 'No HTTP response was captured'
-    response_headers = captured_headers[-1]
-    assert HTTP_EXTENSION_HEADER in response_headers
-    returned = {
-        ext.strip()
-        for ext in response_headers[HTTP_EXTENSION_HEADER].split(',')
-    }
-    assert returned == set(SUPPORTED_EXTENSION_URIS)

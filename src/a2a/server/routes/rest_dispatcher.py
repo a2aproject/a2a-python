@@ -6,7 +6,6 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from google.protobuf.json_format import MessageToDict, Parse
 
-from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
@@ -100,12 +99,6 @@ class RestDispatcher:
             call_context.tenant = request.path_params['tenant']
         return call_context
 
-    def _extension_headers(self, context: ServerCallContext) -> dict[str, str]:
-        """Builds response headers carrying the activated extensions, if any."""
-        if exts := context.activated_extensions:
-            return {HTTP_EXTENSION_HEADER: ', '.join(sorted(exts))}
-        return {}
-
     async def _handle_non_streaming(
         self,
         request: Request,
@@ -114,15 +107,12 @@ class RestDispatcher:
     ) -> JSONResponse:
         """Centralized error handling and context management for unary calls.
 
-        Builds the call context, invokes the handler, and wraps the result in
-        a `JSONResponse` carrying any activated-extension headers.
+        Builds the call context, invokes the handler, and wraps the serialized
+        result in a `JSONResponse`.
         """
         context = self._build_call_context(request)
         response = await handler_func(context)
-        return JSONResponse(
-            content=serializer(response),
-            headers=self._extension_headers(context),
-        )
+        return JSONResponse(content=serializer(response))
 
     async def _handle_streaming(
         self,
@@ -153,9 +143,7 @@ class RestDispatcher:
         try:
             first_item = await anext(stream)
         except StopAsyncIteration:
-            return EventSourceResponse(
-                iter([]), headers=self._extension_headers(context)
-            )
+            return EventSourceResponse(iter([]))
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
             yield ServerSentEvent(data=json.dumps(first_item))
@@ -169,9 +157,7 @@ class RestDispatcher:
                     event='error',
                 )
 
-        return EventSourceResponse(
-            event_generator(), headers=self._extension_headers(context)
-        )
+        return EventSourceResponse(event_generator())
 
     @rest_error_handler
     async def on_message_send(self, request: Request) -> Response:

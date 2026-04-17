@@ -11,9 +11,6 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
-from a2a.extensions.common import (
-    HTTP_EXTENSION_HEADER,
-)
 from a2a.server.context import ServerCallContext
 from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
@@ -570,9 +567,6 @@ class JsonRpcDispatcher:
         Returns:
             A Starlette JSONResponse or EventSourceResponse.
         """
-        headers = {}
-        if exts := context.activated_extensions:
-            headers[HTTP_EXTENSION_HEADER] = ', '.join(sorted(exts))
         if isinstance(handler_result, AsyncGenerator):
             # Result is a stream of dict objects
             async def event_generator(
@@ -603,9 +597,7 @@ class JsonRpcDispatcher:
                         'data': json.dumps(error_response),
                     }
 
-            return EventSourceResponse(
-                event_generator(handler_result), headers=headers
-            )
+            return EventSourceResponse(event_generator(handler_result))
 
         # handler_result is a dict (JSON-RPC response)
-        return JSONResponse(handler_result, headers=headers)
+        return JSONResponse(handler_result)
