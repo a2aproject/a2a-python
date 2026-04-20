@@ -131,7 +131,7 @@ message = Message(
 
 ### AgentCard Structure
 
-The `AgentCard` has been significantly restructured to support multiple transport interfaces.
+The new `AgentCard` can supports multiple transport bindings using `AgentInterface` class.
 
 Key differences:
 - `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
@@ -164,15 +164,21 @@ agent_card = AgentCard(
 
 **After (v1.0):**
 ```python
-from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
+from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill, 
 
 agent_card = AgentCard(
     name='My Agent',
     description='...',
     supported_interfaces=[
+        # JSON-RPC
         AgentInterface(
             protocol_binding='JSONRPC',
-            url='http://localhost:9999/',
+            url='http://localhost:41241/a2a/jsonrpc/',
+        ),
+        # GRPC
+        AgentInterface(
+            protocol_binding='GRPC',
+            url='http://localhost:50051/a2a/grpc/',
         )
     ],
     version='1.0.0',
@@ -219,7 +225,7 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: Application Setup
 
-The `A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication` wrapper classes have been removed. Server setup now uses **Starlette route factory functions** directly, giving you full control over the routing.
+The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. The Server setup now uses Starlette route factory functions directly, giving you full control over the routing.
 
 **Before (v0.3):**
 ```python
