@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-alpha.3](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2026-04-17)
+
+
+### Bug Fixes
+
+* update `with_a2a_extensions` to append instead of overwriting ([#985](https://github.com/a2aproject/a2a-python/issues/985)) ([e1d0e7a](https://github.com/a2aproject/a2a-python/commit/e1d0e7a72e2b9633be0b76c952f6c2e6fe11e3e5))
+
 ## [1.0.0-alpha.2](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2026-04-17)
 
 

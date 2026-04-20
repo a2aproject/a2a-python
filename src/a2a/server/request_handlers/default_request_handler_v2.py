@@ -271,11 +271,17 @@ class DefaultRequestHandlerV2(RequestHandler):
             ):
                 self._validate_task_id_match(task_id, event.id)
                 result = event
+                # DO break here as it's "return_immediately".
+                # AgentExecutor will continue to run in the background.
                 break
 
             if isinstance(event, Message):
                 result = event
-                break
+                # Do NOT break here as Message is supposed to be the only
+                # event in "Message-only" interaction.
+                # ActiveTask consumer (see active_task.py) validates the event
+                # stream and raises InvalidAgentResponseError if more events are
+                # pushed after a Message.
 
         if result is None:
             logger.debug('Missing result for task %s', request_context.task_id)
@@ -311,14 +317,17 @@ class DefaultRequestHandlerV2(RequestHandler):
             request=request_context,
             include_initial_task=False,
         ):
+            # Do NOT break here as we rely on AgentExecutor to yield control.
+            # ActiveTask consumer (see active_task.py) validates the event
+            # stream and raises InvalidAgentResponseError on misbehaving agents:
+            #   - an event after a Message
+            #   - Message after entering task mode
+            #   - an event after a terminal state
             if isinstance(event, Task):
                 self._validate_task_id_match(task_id, event.id)
                 yield apply_history_length(event, params.configuration)
             else:
                 yield event
-
-            if isinstance(event, Message):
-                break
 
     @validate_request_params
     @validate(
