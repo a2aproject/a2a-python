@@ -85,6 +85,7 @@ lifecycles
 linting
 Llm
 lstrips
+mcp
 middleware
 mikeas
 mockurl
