@@ -3,12 +3,30 @@ name: Run TCK
 on:
   push:
     branches: [ "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'LICENSE'
+      - 'docs/**'
+      - '.github/CODEOWNERS'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - '.git-blame-ignore-revs'
+      - '.gemini/**'
   pull_request:
     branches: [ "main" ]
     paths-ignore:
       - '**.md'
       - 'LICENSE'
+      - 'docs/**'
       - '.github/CODEOWNERS'
+      - '.github/ISSUE_TEMPLATE/**'
+      - '.github/PULL_REQUEST_TEMPLATE.md'
+      - '.github/dependabot.yml'
+      - '.gitignore'
+      - '.git-blame-ignore-revs'
+      - '.gemini/**'
 
 permissions:
   contents: read
