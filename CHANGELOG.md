@@ -1,5 +1,27 @@
 # Changelog
 
+## [1.0.0](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.3...v1.0.0) (2026-04-20)
+
+
+### ⚠ BREAKING CHANGES
+
+* remove Vertex AI Task Store integration ([#999](https://github.com/a2aproject/a2a-python/issues/999))
+
+### Bug Fixes
+
+* rely on agent executor implementation for stream termination ([#988](https://github.com/a2aproject/a2a-python/issues/988)) ([d77cd68](https://github.com/a2aproject/a2a-python/commit/d77cd68f5e69b0ffccaca5e3deab4c1a397cfe9c))
+
+
+### Documentation
+
+* add comprehensive v0.3 to v1.0 migration guide ([#987](https://github.com/a2aproject/a2a-python/issues/987)) ([10dea8b](https://github.com/a2aproject/a2a-python/commit/10dea8b4448c5cb7d9e72d74677fd60880cc38df))
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([530ec37](https://github.com/a2aproject/a2a-python/commit/530ec37f4c4580095c2411e40740ca0186fd1240))
+* remove Vertex AI Task Store integration ([#999](https://github.com/a2aproject/a2a-python/issues/999)) ([7fce2ad](https://github.com/a2aproject/a2a-python/commit/7fce2ada1eb331e230925993758e8c7663da9a13))
+
 ## [1.0.0-alpha.3](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2026-04-17)
 
 
