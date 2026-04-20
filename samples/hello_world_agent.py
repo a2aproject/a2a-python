@@ -1,3 +1,4 @@
+import argparse
 import asyncio
 import contextlib
 import logging
@@ -257,5 +258,18 @@ async def serve(
 
 if __name__ == '__main__':
     logging.basicConfig(level=logging.INFO)
+    parser = argparse.ArgumentParser(description='Sample A2A agent server')
+    parser.add_argument('--host', default='127.0.0.1')
+    parser.add_argument('--port', type=int, default=41241)
+    parser.add_argument('--grpc-port', type=int, default=50051)
+    parser.add_argument('--compat-grpc-port', type=int, default=50052)
+    args = parser.parse_args()
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(serve())
+        asyncio.run(
+            serve(
+                host=args.host,
+                port=args.port,
+                grpc_port=args.grpc_port,
+                compat_grpc_port=args.compat_grpc_port,
+            )
+        )

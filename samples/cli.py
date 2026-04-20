@@ -73,7 +73,9 @@ async def main() -> None:
     )
     args = parser.parse_args()
 
-    config = ClientConfig()
+    config = ClientConfig(
+        grpc_channel_factory=grpc.aio.insecure_channel,
+    )
     if args.transport:
         config.supported_protocol_bindings = [args.transport]
 
