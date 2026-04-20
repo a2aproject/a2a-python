@@ -28,6 +28,7 @@ from a2a.server.tasks import (
 )
 from a2a.types import (
     InternalError,
+    InvalidAgentResponseError,
     InvalidParamsError,
     TaskNotFoundError,
     PushNotificationNotSupportedError,
@@ -1244,3 +1245,165 @@ async def test_on_message_send_with_push_notification():
     push_store.set_info.assert_awaited_once_with(
         result.id, push_config, context
     )
+
+
+class MultipleMessagesAgentExecutor(AgentExecutor):
+    """Misbehaving agent that yields more than one Message."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        await event_queue.enqueue_event(
+            new_text_message('first', role=Role.ROLE_AGENT)
+        )
+        await event_queue.enqueue_event(
+            new_text_message('second', role=Role.ROLE_AGENT)
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class MessageAfterTaskEventAgentExecutor(AgentExecutor):
+    """Misbehaving agent that yields a task-mode event then a Message."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_WORKING)
+        await event_queue.enqueue_event(
+            new_text_message('stray message', role=Role.ROLE_AGENT)
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class TaskEventAfterMessageAgentExecutor(AgentExecutor):
+    """Misbehaving agent that yields a Message and then a task-mode event."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        await event_queue.enqueue_event(
+            new_text_message('only message', role=Role.ROLE_AGENT)
+        )
+        await event_queue.enqueue_event(
+            TaskStatusUpdateEvent(
+                task_id=str(context.task_id or ''),
+                context_id=str(context.context_id or ''),
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class EventAfterTerminalStateAgentExecutor(AgentExecutor):
+    """Misbehaving agent that yields an event after reaching a terminal state."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.complete()
+        await event_queue.enqueue_event(
+            new_text_message('after terminal', role=Role.ROLE_AGENT)
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_on_message_send_stream_rejects_multiple_messages():
+    """Stream surfaces InvalidAgentResponseError when the agent yields a
+    second Message after the first one (see comment in on_message_send_stream)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MultipleMessagesAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_multi_stream',
+            parts=[Part(text='Hi')],
+        )
+    )
+    with pytest.raises(InvalidAgentResponseError):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_on_message_send_stream_rejects_message_after_task_event():
+    """Stream surfaces InvalidAgentResponseError when the agent yields a
+    Message after entering task mode (see comment in on_message_send_stream)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MessageAfterTaskEventAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_after_task_stream',
+            parts=[Part(text='Hi')],
+        )
+    )
+    with pytest.raises(InvalidAgentResponseError):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_on_message_send_stream_rejects_task_event_after_message():
+    """Stream surfaces InvalidAgentResponseError when the agent yields a
+    task-mode event after a Message (see comment in on_message_send_stream)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=TaskEventAfterMessageAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_then_task_stream',
+            parts=[Part(text='Hi')],
+        )
+    )
+    with pytest.raises(InvalidAgentResponseError):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(1)
+async def test_on_message_send_stream_rejects_event_after_terminal_state():
+    """Stream surfaces InvalidAgentResponseError when the agent yields an event
+    after reaching a terminal state (see comment in on_message_send_stream)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=EventAfterTerminalStateAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_after_terminal_stream',
+            parts=[Part(text='Hi')],
+        )
+    )
+    with pytest.raises(InvalidAgentResponseError):
+        async for _ in request_handler.on_message_send_stream(
+            params, create_server_call_context()
+        ):
+            pass

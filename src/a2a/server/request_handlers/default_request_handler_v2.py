@@ -279,7 +279,9 @@ class DefaultRequestHandlerV2(RequestHandler):
                 result = event
                 # Do NOT break here as Message is supposed to be the only
                 # event in "Message-only" interaction.
-                # We rely on AgentExecutor here to simplify wrong implementations detection.
+                # ActiveTask consumer (see active_task.py) validates the event
+                # stream and raises InvalidAgentResponseError if more events are
+                # pushed after a Message.
 
         if result is None:
             logger.debug('Missing result for task %s', request_context.task_id)
@@ -315,8 +317,12 @@ class DefaultRequestHandlerV2(RequestHandler):
             request=request_context,
             include_initial_task=False,
         ):
-            # Do NOT break here as we rely on AgentExecutor to yield control
-            # to simplify wrong implementations detection.
+            # Do NOT break here as we rely on AgentExecutor to yield control.
+            # ActiveTask consumer (see active_task.py) validates the event
+            # stream and raises InvalidAgentResponseError on misbehaving agents:
+            #   - an event after a Message
+            #   - Message after entering task mode
+            #   - an event after a terminal state
             if isinstance(event, Task):
                 self._validate_task_id_match(task_id, event.id)
                 yield apply_history_length(event, params.configuration)
