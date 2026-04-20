@@ -1,14 +1,16 @@
-# Migration Guide: v0.3 → v1.0
+# A2A Python SDK Migration Guide: v0.3 → v1.0
 
-This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains how to update your code. The changes reflect updates to the A2A protocol specification — see the [A2A protocol What's new in v1.0](https://a2a-protocol.org/latest/whats-new-v1/).
+The `a2a-sdk` has achieved a major milestone in stability and reliability with the update to full **A2A Protocol v1.0 compatibility**. This guide provides a detailed overview of the breaking changes in version `v1.0` and instructions for migrating your codebase.
 
-> **Related guides**: If you use the database persistence layer, also see the [Database Migration Guide](database/).
+Beyond protocol support, `v1.0` enhances the developer experience by introducing unified helper utilities for easier object creation and adopting Starlette route factory functions for more flexible server configuration.
+
+This documentation details the technical upgrades and architectural modifications introduced in A2A Python SDK v1.0; For developers using the database persistence layer, please refer to the [Database Migration Guide](database/) for specific update instructions.
 
 ---
 
 ## Table of Contents
 
-1. [Package Dependency](#1-package-dependency)
+1. [Update Dependency](#1-package-dependency)
 2. [Types](#2-types)
 3. [Server: DefaultRequestHandler](#3-server-defaultrequesthandler)
 4. [Server: Application Setup](#4-server-application-setup)
@@ -20,27 +22,40 @@ This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains
 
 ---
 
-## 1. Package Dependency
+## 1. Update Dependencies
 
-Update your dependency to the new version:
+(UV users) To upgrade to the latest version of the `a2a-sdk`, update the dependencies section in your `pyproject.toml` file.
 
-```toml
-# pyproject.toml — before
-dependencies = ["a2a-sdk>=0.3.0"]
+| File             | Before (`v0.3`)                   | After (`v1.0`)                    |
+|------------------|-----------------------------------|-----------------------------------|
+| `pyproject.toml` | dependencies = ["a2a-sdk>=0.3.0"] | dependencies = ["a2a-sdk>=1.0.0"] |
 
-# pyproject.toml — after
-dependencies = ["a2a-sdk>=1.0.0"]
+**Installation**
+
+After updating your configuration file, sync your environment:
+
+* Using UV:
+
+```bash
+uv sync
+```
+
+* Using pip:
+
+```bash
+pip install --upgrade a2a-sdk
 ```
 
 ---
 
 ## 2. Types
 
-Types are now **Protobuf-based** instead of Pydantic models.
+Types have migrated from Pydantic models to Protobuf-based classes.
+
 
 ### Enum values: snake_case → SCREAMING_SNAKE_CASE
 
-All enum values have been renamed from snake_case strings to `SCREAMING_SNAKE_CASE`.
+All the enum values are now standardized from snake_case to **SCREAMING_SNAKE_CASE** format.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
@@ -55,6 +70,7 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 | `TaskState` | `TaskState.input_required` | `TaskState.TASK_STATE_INPUT_REQUIRED` |
 | `TaskState` | `TaskState.auth_required` | `TaskState.TASK_STATE_AUTH_REQUIRED` |
 | `TaskState` | `TaskState.rejected` | `TaskState.TASK_STATE_REJECTED` |
+|||
 | `Role` | *(no equivalent — protobuf default)* | `Role.ROLE_UNSPECIFIED` |
 | `Role` | `Role.user` | `Role.ROLE_USER` |
 | `Role` | `Role.agent` | `Role.ROLE_AGENT` |
@@ -81,15 +97,22 @@ message = Message(
 ```
 
 **After (v1.0):**
+
+Using [A2A helper utilities](#helper-utilities)
+
 ```python
 from a2a.helpers import new_text_message
 from a2a.types import Role
 
-# Use the helper for text messages
+# Use the helper function to create `Hello` message
 message = new_text_message(text="Hello", role=Role.ROLE_USER)
 
-# Or construct directly
-from a2a.types import Message, Part
+```
+
+Without helper utils, you can still construct directly
+
+```python
+from a2a.types import Message, Part, Role
 from uuid import uuid4
 
 message = Message(
