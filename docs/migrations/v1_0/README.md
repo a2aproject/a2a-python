@@ -393,5 +393,5 @@ from a2a.helpers import get_artifact_text
 text = get_artifact_text(chunk.artifact_update.artifact)
 ```
 
-> In v1.0, agents are expected to publish results as **Artifacts** rather than embedding text in status update messages. Use `TaskArtifactUpdateEvent` (via `event_queue.enqueue_event()`) in your `AgentExecutor` and read from `chunk.artifact_update` on the client side.
+> In v1.0, agents are expected to publish results as **Artifacts**. Use `TaskArtifactUpdateEvent` (via `event_queue.enqueue_event()`) in your `AgentExecutor` and read from `chunk.artifact_update` on the client side.
 
