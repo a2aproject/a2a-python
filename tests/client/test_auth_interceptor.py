@@ -240,7 +240,6 @@ bearer_test_case = AuthTestCase(
 )
 
 
-@pytest.mark.skip(reason='Interceptors disabled by user request')
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
     'test_case',
