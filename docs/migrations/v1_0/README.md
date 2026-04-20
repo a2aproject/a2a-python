@@ -62,6 +62,11 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 
 ### Message and Part construction
 
+Key differences:
+- `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
+- `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
+- `TextPart` is no longer needed; use `Part(text=...)` directly
+
 **Before (v0.3):**
 ```python
 from a2a.types import Message, Part, Role, TextPart
@@ -94,11 +99,6 @@ message = Message(
     task_id=uuid4().hex,
 )
 ```
-
-Key differences:
-- `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
-- `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
-- `TextPart` is no longer needed; use `Part(text=...)` directly
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
@@ -279,9 +279,13 @@ async with client:
 
 ## 6. Client: Sending Messages & Handling Responses
 
-### `SendStreamingMessageRequest` removed
-
-There is now a single `send_message()` method on the client that returns a stream of `StreamResponse` proto messages regardless of transport.
+Key differences:
+- `send_message_streaming()` → `send_message()` (unified method)
+- `SendStreamingMessageRequest` → `SendMessageRequest`
+- `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
+- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
+- Each `StreamResponse` has a `payload` which is one of: `'task'`, `'message'`, `'status_update'`, `'artifact_update'`. Use `HasField()` to check which field is set.
+- Agent outputs should now be published as **Artifacts**, not status message text
 
 **Before (v0.3):**
 ```python
@@ -307,6 +311,7 @@ response = client.send_message_streaming(request)
 
 **After (v1.0):**
 ```python
+from a2a.helpers import get_artifact_text
 from a2a.types import (
     Message, Part, Role, SendMessageRequest,
 )
@@ -317,6 +322,7 @@ message = Message(
     role=Role.ROLE_USER,
     parts=parts,
     message_id=uuid4().hex,
+    task_id=uuid4().hex,
 )
 request = SendMessageRequest(message=message)
 
@@ -326,14 +332,6 @@ async for chunk in client.send_message(request):
     elif chunk.HasField('status_update'):
         print(chunk.status_update.status.state)
 ```
-
-Key differences:
-- `send_message_streaming()` → `send_message()` (unified method)
-- `SendStreamingMessageRequest` → `SendMessageRequest`
-- `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
-- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
-- Each `StreamResponse` has a `payload` which is one of: `'task'`, `'message'`, `'status_update'`, `'artifact_update'`. Use `HasField()` to check which field is set.
-- Agent outputs should now be published as **Artifacts**, not status message text
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
