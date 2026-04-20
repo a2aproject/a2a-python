@@ -21,6 +21,10 @@
 
 ---
 
+> [!IMPORTANT]
+> **Upgrading the SDK from `0.3` to `1.0`?** See the [**v0.3 → v1.0 migration guide**](docs/migrations/v1_0/README.md). For supported A2A spec versions, see [Compatibility](#-compatibility).
+
+
 ## ✨ Features
 
 - **A2A Protocol Compliant:** Build agentic applications that adhere to the Agent2Agent (A2A) Protocol.
@@ -37,9 +41,6 @@
 ## 🧩 Compatibility
 
 This SDK implements the A2A Protocol Specification [`1.0`](https://a2a-protocol.org/v1.0.0/specification/), with compatibility mode for [`0.3`](https://a2a-protocol.org/v0.3.0/specification). See [#742](https://github.com/a2aproject/a2a-python/issues/742) for details on the compatibility scope.
-
-> [!IMPORTANT]
-> **Upgrading from `0.3`?** The SDK API has changed in `1.0`. See the [**v0.3 → v1.0 migration guide**](docs/migrations/v1_0/README.md) for a walkthrough of breaking changes and how to update your code.
 
 | Spec Version | Transport | Client | Server |
 | :--- | :--- | :---: | :---: |
