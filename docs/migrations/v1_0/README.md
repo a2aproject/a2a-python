@@ -192,7 +192,7 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: Application Setup
 
-The `A2AStarletteApplication` wrapper class has been removed. Server setup now uses **Starlette route factory functions** directly, giving you full control over the routing.
+The `A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication` wrapper classes have been removed. Server setup now uses **Starlette route factory functions** directly, giving you full control over the routing.
 
 **Before (v0.3):**
 ```python
@@ -280,10 +280,10 @@ async with client:
 ## 6. Client: Sending Messages & Handling Responses
 
 Key differences:
+- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
 - `send_message_streaming()` → `send_message()` (unified method)
 - `SendStreamingMessageRequest` → `SendMessageRequest`
 - `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
-- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
 - Each `StreamResponse` has a `payload` which is one of: `'task'`, `'message'`, `'status_update'`, `'artifact_update'`. Use `HasField()` to check which field is set.
 - Agent outputs should now be published as **Artifacts**, not status message text
 
