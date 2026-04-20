@@ -381,17 +381,3 @@ from a2a.helpers import (
 )
 ```
 
-**Before (v0.3) — reading status message text:**
-```python
-text = chunk.root.result.status.message.parts[0].root.text
-```
-
-**After (v1.0) — reading artifact text:**
-```python
-from a2a.helpers import get_artifact_text
-
-text = get_artifact_text(chunk.artifact_update.artifact)
-```
-
-> In v1.0, agents are expected to publish results as **Artifacts**. Use `TaskArtifactUpdateEvent` (via `event_queue.enqueue_event()`) in your `AgentExecutor` and read from `chunk.artifact_update` on the client side.
-
