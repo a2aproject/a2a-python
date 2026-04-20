@@ -4,7 +4,7 @@ The `a2a-sdk` has achieved a major milestone in stability and reliability with t
 
 Beyond protocol support, `v1.0` enhances the developer experience by introducing unified helper utilities for easier object creation and adopting Starlette route factory functions for more flexible server configuration.
 
-This documentation details the technical upgrades and architectural modifications introduced in A2A Python SDK v1.0; For developers using the database persistence layer, please refer to the [Database Migration Guide](database/) for specific update instructions.
+This documentation details the technical upgrades and architectural modifications introduced in A2A Python SDK v1.0. For developers using the database persistence layer, please refer to the [Database Migration Guide](database/) for specific update instructions.
 
 ---
 
@@ -80,6 +80,8 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 > **Example**: [`a2a-mcp-without-framework/server/agent_executor.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/changes#diff-1f9b098f9f82ee40666ee61db56dc2246281423c445bcf017079c53a0a05954f)
 
 ### Message and Part construction
+
+Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, `Part` is a single unified message — set the content type directly on it and the wrapper types are gone entirely.
 
 Key differences:
 - `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
