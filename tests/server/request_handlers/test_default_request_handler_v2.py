@@ -1330,7 +1330,7 @@ async def test_on_message_send_stream_rejects_multiple_messages():
             parts=[Part(text='Hi')],
         )
     )
-    with pytest.raises(InvalidAgentResponseError):
+    with pytest.raises(InvalidAgentResponseError, match='Multiple Message'):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
@@ -1354,7 +1354,9 @@ async def test_on_message_send_stream_rejects_message_after_task_event():
             parts=[Part(text='Hi')],
         )
     )
-    with pytest.raises(InvalidAgentResponseError):
+    with pytest.raises(
+        InvalidAgentResponseError, match='Message object in task mode'
+    ):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
@@ -1378,7 +1380,7 @@ async def test_on_message_send_stream_rejects_task_event_after_message():
             parts=[Part(text='Hi')],
         )
     )
-    with pytest.raises(InvalidAgentResponseError):
+    with pytest.raises(InvalidAgentResponseError, match='in message mode'):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
@@ -1402,7 +1404,9 @@ async def test_on_message_send_stream_rejects_event_after_terminal_state():
             parts=[Part(text='Hi')],
         )
     )
-    with pytest.raises(InvalidAgentResponseError):
+    with pytest.raises(
+        InvalidAgentResponseError, match='Message object in task mode'
+    ):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
