@@ -13,7 +13,7 @@ This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains
 3. [Server: DefaultRequestHandler](#3-server-defaultrequesthandler)
 4. [Server: Application Setup](#4-server-application-setup)
 5. [Client: Creating a Client](#5-client-creating-a-client)
-6. [Client: Sending Messages & Handling Responses](#6-client-sending-messages--handling-responses)
+6. [Client: Send Message](#6-client-send-message)
 7. [Client: Push Notifications Config](#7-client-push-notifications-config)
 8. [Helper Utilities](#8-helper-utilities)
 
@@ -277,63 +277,36 @@ async with client:
 
 ---
 
-## 6. Client: Sending Messages & Handling Responses
+## 6. Client: Send Message
 
-Key differences:
-- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
-- `send_message_streaming()` → `send_message()` (unified method)
-- `SendStreamingMessageRequest` → `SendMessageRequest`
-- `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
-- Each `StreamResponse` has a `payload` which is one of: `'task'`, `'message'`, `'status_update'`, `'artifact_update'`. Use `HasField()` to check which field is set.
-- Agent outputs should now be published as **Artifacts**, not status message text
+The key change in `BaseClient` is the return type of `send_message()`: it **now returns `AsyncIterator[StreamResponse]`** (v0.3 returned `AsyncIterator[ClientEvent | Message]`). 
 
-**Before (v0.3):**
 ```python
-from a2a.types import (
-    Message, MessageSendParams, Part, Role, SendStreamingMessageRequest,
-     TextPart,
-)
+from a2a.types import Message, Part, Role, SendMessageRequest
 from uuid import uuid4
 
-message_params = MessageSendParams(
+request = SendMessageRequest(
     message=Message(
-        role=Role.user,
-        parts=[Part(TextPart(text=user_input))],
+        role=Role.ROLE_USER,
+        parts=[Part(text=user_input)],
         message_id=uuid4().hex,
-        task_id=uuid4().hex,
     )
 )
-request = SendStreamingMessageRequest(id=uuid4().hex, params=message_params)
-
-response = client.send_message_streaming(request)
-
-```
-
-**After (v1.0):**
-```python
-from a2a.helpers import get_artifact_text
-from a2a.types import (
-    Message, Part, Role, SendMessageRequest,
-)
-from uuid import uuid4
-
-parts = [Part(text=user_input)]
-message = Message(
-    role=Role.ROLE_USER,
-    parts=parts,
-    message_id=uuid4().hex,
-    task_id=uuid4().hex,
-)
-request = SendMessageRequest(message=message)
 
 async for chunk in client.send_message(request):
     if chunk.HasField('artifact_update'):
-        print(get_artifact_text(chunk.artifact_update.artifact))
+        ...
     elif chunk.HasField('status_update'):
-        print(chunk.status_update.status.state)
+        ...
+    elif chunk.HasField('task'):
+        ...
+    elif chunk.HasField('message'):
+        ...
 ```
 
-> **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
+Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
+
+> **Note**: The legacy `A2AClient` class has been removed. Use `create_client()` as shown in [section 5](#5-client-creating-a-client). **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
 ---
 
