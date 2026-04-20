@@ -2,7 +2,7 @@ name: ITK
 
 on:
   push:
-    branches: [ main, 1.0-dev ]
+    branches: [ main ]
   pull_request:
     paths:
       - "src/**"

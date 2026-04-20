@@ -2,19 +2,19 @@
 name: Run Unit Tests
 on:
   push:
-    branches: [main, 1.0-dev]
+    branches: [ main ]
   pull_request:
     paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'docs/**'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - '.git-blame-ignore-revs'
-      - '.gemini/**'
+      - "**.md"
+      - "LICENSE"
+      - "docs/**"
+      - ".github/CODEOWNERS"
+      - ".github/ISSUE_TEMPLATE/**"
+      - ".github/PULL_REQUEST_TEMPLATE.md"
+      - ".github/dependabot.yml"
+      - ".gitignore"
+      - ".git-blame-ignore-revs"
+      - ".gemini/**"
 permissions:
   contents: read
 
@@ -34,7 +34,8 @@ jobs:
         ports:
           - 5432:5432
         options: >-
-          --health-cmd pg_isready --health-interval 10s --health-timeout 5s --health-retries 5
+          --health-cmd pg_isready --health-interval 10s --health-timeout 5s
+          --health-retries 5
       mysql:
         image: mysql:8.0
         env:
@@ -45,11 +46,12 @@ jobs:
         ports:
           - 3306:3306
         options: >-
-          --health-cmd="mysqladmin ping -h localhost -u root -proot" --health-interval=10s --health-timeout=5s --health-retries=5
+          --health-cmd="mysqladmin ping -h localhost -u root -proot"
+          --health-interval=10s --health-timeout=5s --health-retries=5
 
     strategy:
       matrix:
-        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -66,7 +68,6 @@ jobs:
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
 
-
       # Coverage comparison for PRs (only on Python 3.14 to avoid duplicate work)
       - name: Checkout Base Branch
         if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
@@ -74,7 +75,7 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.base.ref || 'main' }}
           clean: true
-        
+
       - name: Install dependencies
         run: uv sync --locked
 
