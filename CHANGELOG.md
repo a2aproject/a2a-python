@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.0.0-alpha.4](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.3...v1.0.0-alpha.4) (2026-04-20)
+
+
+### Bug Fixes
+
+* rely on agent executor implementation for stream termination ([#988](https://github.com/a2aproject/a2a-python/issues/988)) ([d77cd68](https://github.com/a2aproject/a2a-python/commit/d77cd68f5e69b0ffccaca5e3deab4c1a397cfe9c))
+
 ## [1.0.0-alpha.3](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2026-04-17)
 
 
