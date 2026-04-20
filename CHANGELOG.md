@@ -2,6 +2,7 @@
 
 ## [1.0.0](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.3...v1.0.0) (2026-04-20)
 
+See the [**v0.3 → v1.0 migration guide**](docs/migrations/v1_0/README.md) and changelog entries for alpha versions below.
 
 ### ⚠ BREAKING CHANGES
 
