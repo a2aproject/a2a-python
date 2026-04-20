@@ -16,7 +16,6 @@ This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains
 6. [Client: Sending Messages & Handling Responses](#6-client-sending-messages--handling-responses)
 7. [Client: Push Notifications Config](#7-client-push-notifications-config)
 8. [Helper Utilities](#8-helper-utilities)
-9. [Import Path Changes (Quick Reference)](#9-import-path-changes-quick-reference)
 
 ---
 
@@ -396,19 +395,3 @@ text = get_artifact_text(chunk.artifact_update.artifact)
 
 > In v1.0, agents are expected to publish results as **Artifacts** rather than embedding text in status update messages. Use `TaskArtifactUpdateEvent` (via `event_queue.enqueue_event()`) in your `AgentExecutor` and read from `chunk.artifact_update` on the client side.
 
----
-
-## 9. Import Path Changes (Quick Reference)
-
-| What | v0.3 import | v1.0 import |
-|---|---|---|
-| HTTP client for agent | `from a2a.client import A2AClient` | `from a2a.client import create_client` (or `ClientFactory`) |
-| Card resolver | `from a2a.client import A2ACardResolver` | `from a2a.client import A2ACardResolver` *(unchanged)* |
-| Request handler | `from a2a.server.request_handlers.default_request_handler import DefaultRequestHandler` | `from a2a.server.request_handlers import DefaultRequestHandler` |
-| Server setup | `from a2a.server.apps import A2AStarletteApplication` | `from a2a.server.routes import create_jsonrpc_routes, create_agent_card_routes` |
-| REST routes | `from a2a.server.apps import A2AStarletteApplication` | `from a2a.server.routes import create_rest_routes` |
-| Agent execution | `from a2a.server.agent_execution import AgentExecutor, RequestContext` | *(unchanged)* |
-| Task store | `from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore` | *(unchanged)* |
-| Types | `from a2a.types import AgentCard, Message, Part, Role, ...` | `from a2a.types import AgentCard, Message, Part, Role, AgentInterface, ...` |
-| Helpers | `from a2a.utils.artifact import get_artifact_text` | `from a2a.helpers import get_artifact_text` |
-| Message helpers | *(manual construction)* | `from a2a.helpers import new_text_message, new_text_artifact, ...` |
