@@ -39,9 +39,9 @@ dependencies = ["a2a-sdk>=1.0.0"]
 Types are now **Protobuf-based** instead of Pydantic models.
 
 
-### Enum values: kebab-case → SCREAMING_SNAKE_CASE
+### Enum values: snake_case → SCREAMING_SNAKE_CASE
 
-All enum values have been renamed from kebab-case strings to `SCREAMING_SNAKE_CASE`.
+All enum values have been renamed from snake_case strings to `SCREAMING_SNAKE_CASE`.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
@@ -59,6 +59,8 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 | `Role` | *(no equivalent — protobuf default)* | `Role.ROLE_UNSPECIFIED` |
 | `Role` | `Role.user` | `Role.ROLE_USER` |
 | `Role` | `Role.agent` | `Role.ROLE_AGENT` |
+
+> **Example**: [`a2a-mcp-without-framework/server/agent_executor.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/changes#diff-1f9b098f9f82ee40666ee61db56dc2246281423c445bcf017079c53a0a05954f)
 
 ### Message and Part construction
 
@@ -100,13 +102,18 @@ Key differences:
 - `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
 - `TextPart` is no longer needed; use `Part(text=...)` directly
 
+> **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
+
 ### AgentCard Structure
 
 The `AgentCard` has been significantly restructured to support multiple transport interfaces.
 
-#### `url` → `supported_interfaces`
-
-The top-level `url` field is replaced by a list of `AgentInterface` objects, each describing a specific transport endpoint.
+Key differences:
+- `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
+- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed from `AgentCapabilities`; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
+- `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
+- `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
+- `examples` field has moved to `AgentSkill.examples` (set it per skill instead)
 
 **Before (v0.3):**
 ```python
@@ -117,15 +124,16 @@ agent_card = AgentCard(
     description='...',
     url='http://localhost:9999/',
     version='1.0.0',
-    default_input_modes=['text'],
-    default_output_modes=['text'],
+    default_input_modes=['text/plain'],
+    default_output_modes=['text/plain'],
     supports_authenticated_extended_card=True,
     capabilities=AgentCapabilities(
-        input_modes=['text'],
-        output_modes=['text'],
+        input_modes=['text/plain'],
+        output_modes=['text/plain'],
         streaming=True,
     ),
     skills=[skill],
+    examples=['example'],
 )
 ```
 
@@ -143,8 +151,8 @@ agent_card = AgentCard(
         )
     ],
     version='1.0.0',
-    default_input_modes=['text'],
-    default_output_modes=['text'],
+    default_input_modes=['text/plain'],
+    default_output_modes=['text/plain'],
     capabilities=AgentCapabilities(
         streaming=True,
         extended_agent_card=True,
@@ -153,11 +161,7 @@ agent_card = AgentCard(
 )
 ```
 
-Key differences:
-- `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
-- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed
-- `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
-- `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP_JSON'`, `'GRPC'`
+> **Example**: [`a2a-mcp-without-framework/server/__main__.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/files#diff-d15d39ae64c3d4e3a36cc6fb442302caf4e32a6dbd858792e7a4bed180a625ac)
 
 ---
 
@@ -183,6 +187,8 @@ request_handler = DefaultRequestHandler(
     agent_card=agent_card,
 )
 ```
+
+> **Example**: [`a2a-mcp-without-framework/server/__main__.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/files#diff-d15d39ae64c3d4e3a36cc6fb442302caf4e32a6dbd858792e7a4bed180a625ac)
 
 ---
 
@@ -231,11 +237,13 @@ app = Starlette(routes=routes)
 uvicorn.run(app, host=host, port=port)
 ```
 
+> **Example**: [`a2a-mcp-without-framework/server/__main__.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/files#diff-d15d39ae64c3d4e3a36cc6fb442302caf4e32a6dbd858792e7a4bed180a625ac)
+
 ---
 
 ## 5. Client: Creating a Client
 
-The `A2AClient` class has been removed. Use the new `create_client()` factory function or `ClientFactory`.
+The `A2AClient` class has been removed. Use the new `create_client()` factory function.
 
 ### Simple usage: `create_client()`
 
@@ -256,34 +264,18 @@ async with httpx.AsyncClient() as httpx_client:
 from a2a.client import create_client
 
 # From URL — resolves the agent card automatically
-async with await create_client('http://localhost:9999/') as client:
+client = await create_client('http://localhost:9999/')
+async with client:
     # use client...
 
 # From an already-resolved AgentCard
-async with await create_client(agent_card) as client:
+client = await create_client(agent_card)
+async with client:
     # use client...
 ```
 
-### Advanced usage: `ClientFactory`
 
-For reusing connections across multiple agents, registering custom transports, or configuring timeouts:
-
-```python
-from a2a.client import ClientFactory, ClientConfig
-
-config = ClientConfig(streaming=True)
-factory = ClientFactory(config)
-
-# Create from URL (async)
-client = await factory.create_from_url('http://localhost:9999/')
-
-# Create from AgentCard (sync)
-client = factory.create(agent_card)
-```
-
-### `ClientTaskManager` and `Consumers` removed
-
-The `ClientTaskManager` class and `Consumers` abstraction have been removed. Response handling is now done directly by iterating the stream returned from `send_message()`.
+> **Example**: [`a2a-mcp-without-framework/client/agent.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/files#diff-56cfce97ff9686166e4b14790ffb7ed46f4c14519261ce5c18365a53cf05e9aa) (`create_client()` usage)
 
 ---
 
@@ -297,7 +289,7 @@ There is now a single `send_message()` method on the client that returns a strea
 ```python
 from a2a.types import (
     Message, MessageSendParams, Part, Role, SendStreamingMessageRequest,
-    SendStreamingMessageSuccessResponse, TaskStatusUpdateEvent, TextPart,
+     TextPart,
 )
 from uuid import uuid4
 
@@ -311,38 +303,41 @@ message_params = MessageSendParams(
 )
 request = SendStreamingMessageRequest(id=uuid4().hex, params=message_params)
 
-async for chunk in client.send_message_streaming(request):
-    if isinstance(chunk.root, SendStreamingMessageSuccessResponse) and \
-       isinstance(chunk.root.result, TaskStatusUpdateEvent):
-        msg = chunk.root.result.status.message
-        if msg:
-            print(msg.parts[0].root.text)
+response = client.send_message_streaming(request)
+
 ```
 
 **After (v1.0):**
 ```python
-from a2a.helpers import get_artifact_text, new_text_message
-from a2a.types import SendMessageRequest
+from a2a.types import (
+    Message, Part, Role, SendMessageRequest,
+)
+from uuid import uuid4
 
-message = new_text_message(text=user_input)
+parts = [Part(text=user_input)]
+message = Message(
+    role=Role.ROLE_USER,
+    parts=parts,
+    message_id=uuid4().hex,
+)
 request = SendMessageRequest(message=message)
 
 async for chunk in client.send_message(request):
     if chunk.HasField('artifact_update'):
-        text = get_artifact_text(chunk.artifact_update.artifact)
-        if text:
-            print(text)
+        print(get_artifact_text(chunk.artifact_update.artifact))
     elif chunk.HasField('status_update'):
-        # handle status updates
-        ...
+        print(chunk.status_update.status.state)
 ```
 
 Key differences:
 - `send_message_streaming()` → `send_message()` (unified method)
 - `SendStreamingMessageRequest` → `SendMessageRequest`
 - `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
-- Response chunks are `StreamResponse` proto messages; use `HasField()` to check the payload type
+- `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
+- Each `StreamResponse` has a `payload` oneof — use `HasField()` to check which field is set (`'task'`, `'message'`, `'status_update'`, `'artifact_update'`)
 - Agent outputs should now be published as **Artifacts**, not status message text
+
+> **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
 ---
 
@@ -368,26 +363,23 @@ config = ClientConfig(
 
 ## 8. Helper Utilities
 
-A new `a2a.helpers` module provides convenience functions previously scattered across `a2a.utils.*` and adds new helpers for v1.0 proto types.
+A new `a2a.helpers` module consolidates helper functions into a single import. Most were previously available under `a2a.utils.*`; a few are new in v1.0.
 
 ```python
 from a2a.helpers import (
-    # --- moved from a2a.utils.* ---
-    new_text_message,               # was a2a.utils.message.new_agent_text_message; gained role param
-    new_message,                    # was a2a.utils.message.new_agent_parts_message; gained role param
-    get_message_text,               # was a2a.utils.message.get_message_text
-    new_text_artifact,              # was a2a.utils.artifact.new_text_artifact; gained artifact_id param
-    new_artifact,                   # was a2a.utils.artifact.new_artifact; gained artifact_id param
-    get_artifact_text,              # was a2a.utils.artifact.get_artifact_text
-    get_text_parts,                 # was a2a.utils.parts.get_text_parts
-    new_task_from_user_message,     # was a2a.utils.task.new_task; renamed, now validates role == ROLE_USER
-
-    # --- new in v1.0 ---
-    new_task,                       # create a Task with explicit task_id, context_id, and state
-    new_text_artifact_update_event, # create a TaskArtifactUpdateEvent with a text artifact
-    new_text_status_update_event,   # create a TaskStatusUpdateEvent with a text message
-    get_stream_response_text,       # extract text from a StreamResponse proto message
     display_agent_card,             # print a human-readable summary of an AgentCard to stdout
+    get_artifact_text,              # join all text parts of an Artifact into a single string (delimiter='\n')
+    get_message_text,               # join all text parts of a Message into a single string (delimiter='\n')
+    get_stream_response_text,       # extract text from a StreamResponse proto message
+    get_text_parts,                 # return a list of raw text strings from a sequence of Parts (skips non-text parts)
+    new_artifact,                   # create an Artifact from a list of Parts, name, optional description and artifact_id
+    new_message,                    # create a Message from a list of Parts with role (default ROLE_AGENT), optional task_id/context_id
+    new_task,                       # create a Task with explicit task_id, context_id, and state
+    new_task_from_user_message,     # create a TASK_STATE_SUBMITTED Task from a user Message; raises if role != ROLE_USER or parts are empty
+    new_text_artifact,              # create an Artifact with a single text Part, name, optional description and artifact_id
+    new_text_artifact_update_event, # create a TaskArtifactUpdateEvent with a text artifact
+    new_text_message,               # create a Message with a single text Part; role defaults to ROLE_AGENT
+    new_text_status_update_event,   # create a TaskStatusUpdateEvent with a text message
 )
 ```
 
