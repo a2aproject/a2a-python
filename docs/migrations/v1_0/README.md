@@ -12,10 +12,11 @@ This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains
 2. [Types](#2-types)
 3. [Server: DefaultRequestHandler](#3-server-defaultrequesthandler)
 4. [Server: Application Setup](#4-server-application-setup)
-5. [Client: Creating a Client](#5-client-creating-a-client)
-6. [Client: Send Message](#6-client-send-message)
-7. [Client: Push Notifications Config](#7-client-push-notifications-config)
-8. [Helper Utilities](#8-helper-utilities)
+5. [Supporting v0.3 Clients](#5-supporting-v03-clients)
+6. [Client: Creating a Client](#6-client-creating-a-client)
+7. [Client: Send Message](#7-client-send-message)
+8. [Client: Push Notifications Config](#8-client-push-notifications-config)
+9. [Helper Utilities](#9-helper-utilities)
 
 ---
 
@@ -238,7 +239,30 @@ uvicorn.run(app, host=host, port=port)
 
 ---
 
-## 5. Client: Creating a Client
+## 5. Supporting v0.3 Clients
+
+If you cannot update all clients at once, you can run a v1.0 server that simultaneously accepts v0.3 connections. Two changes are needed.
+
+**1. Add the v0.3 AgentInterface to `supported_interfaces` in your `AgentCard`**:
+
+```python
+supported_interfaces=[
+    AgentInterface(protocol_binding='JSONRPC', protocol_version='0.3', url='http://localhost:9999/'),
+]
+```
+
+**2. Enable the compat flag** on the relevant route factory:
+
+```python
+create_jsonrpc_routes(request_handler, rpc_url='/', enable_v0_3_compat=True)
+create_rest_routes(request_handler, enable_v0_3_compat=True)
+```
+
+> For a full working example see [`samples/hello_world_agent.py`](../../../samples/hello_world_agent.py). For known limitations see [issue #742](https://github.com/a2aproject/a2a-python/issues/742).
+
+---
+
+## 6. Client: Creating a Client
 
 The `A2AClient` class has been removed. Use the new `create_client()` factory function.
 
@@ -276,7 +300,7 @@ async with client:
 
 ---
 
-## 6. Client: Send Message
+## 7. Client: Send Message
 
 The key change in `BaseClient` is the return type of `send_message()`: it **now returns `AsyncIterator[StreamResponse]`** (v0.3 returned `AsyncIterator[ClientEvent | Message]`). 
 
@@ -309,7 +333,7 @@ Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`,
 
 ---
 
-## 7. Client: Push Notifications Config
+## 8. Client: Push Notifications Config
 
 `ClientConfig.push_notification_config` is now **singular** (a single `TaskPushNotificationConfig` or `None`), not a list.
 
@@ -329,7 +353,7 @@ config = ClientConfig(
 
 ---
 
-## 8. Helper Utilities
+## 9. Helper Utilities
 
 A new `a2a.helpers` module consolidates helper functions into a single import. Most were previously available under `a2a.utils.*`; a few are new in v1.0.
 
