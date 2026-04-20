@@ -1,6 +1,6 @@
 # Migration Guide: v0.3 → v1.0
 
-This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains how to update your code. The changes reflect updates to the A2A protocol specification — see the [A2A protocol What's new in v1.0](https://a2a-protocol.org/latest/whats-new-v1/).
+This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains how to update your code. The changes reflect updates to the A2A protocol specification: [What's new in v1.0](https://a2a-protocol.org/latest/whats-new-v1/).
 
 > **Related guides**: If you use the database persistence layer, also see the [Database Migration Guide](database/).
 
@@ -264,20 +264,21 @@ create_rest_routes(request_handler, enable_v0_3_compat=True)
 
 ## 6. Client: Creating a Client
 
-The `A2AClient` class has been removed. Use the new `create_client()` factory function.
+New `create_client()` `ClientFactory` function that creates a client for the agent.
 
-### Simple usage: `create_client()`
+> **Note**: The legacy `A2AClient` class has been removed.
 
 **Before (v0.3):**
 ```python
-import httpx
-from a2a.client import A2AClient, A2ACardResolver
+from a2a.client import ClientFactory
 
-async with httpx.AsyncClient() as httpx_client:
-    resolver = A2ACardResolver(httpx_client, base_url)
-    agent_card = await resolver.get_agent_card()
-    client = A2AClient(httpx_client, agent_card=agent_card)
-    # use client...
+# From URL
+factory = ClientFactory()
+client = factory.create_client('http://localhost:9999/')
+
+# From an already-resolved AgentCard
+factory = ClientFactory()
+client = factory.create_client(agent_card)
 ```
 
 **After (v1.0):**
@@ -286,13 +287,9 @@ from a2a.client import create_client
 
 # From URL — resolves the agent card automatically
 client = await create_client('http://localhost:9999/')
-async with client:
-    # use client...
 
 # From an already-resolved AgentCard
 client = await create_client(agent_card)
-async with client:
-    # use client...
 ```
 
 
@@ -302,20 +299,24 @@ async with client:
 
 ## 7. Client: Send Message
 
-The key change in `BaseClient` is the return type of `send_message()`: it **now returns `AsyncIterator[StreamResponse]`** (v0.3 returned `AsyncIterator[ClientEvent | Message]`). 
+The `BaseClient.send_message()` return type is standardised from `AsyncIterator[ClientEvent | Message]` to  `AsyncIterator[StreamResponse]`.
 
+Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
+
+
+**Before (v0.3):**
 ```python
-from a2a.types import Message, Part, Role, SendMessageRequest
-from uuid import uuid4
+async for event, message in client.send_message(request):
+    if isinstance(event, Task):
+        ...
+    if isinstance(event, UpdateEvent):
+        ...
+    if message:
+        ...
+```
 
-request = SendMessageRequest(
-    message=Message(
-        role=Role.ROLE_USER,
-        parts=[Part(text=user_input)],
-        message_id=uuid4().hex,
-    )
-)
-
+**After (v1.0):**
+```python
 async for chunk in client.send_message(request):
     if chunk.HasField('artifact_update'):
         ...
@@ -327,9 +328,6 @@ async for chunk in client.send_message(request):
         ...
 ```
 
-Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
-
-> **Note**: The legacy `A2AClient` class has been removed. Use `create_client()` as shown in [section 5](#5-client-creating-a-client). **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
 ---
 
