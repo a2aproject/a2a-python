@@ -2,12 +2,12 @@ name: ITK
 
 on:
   push:
-    branches: [main, 1.0-dev]
+    branches: [ main, 1.0-dev ]
   pull_request:
     paths:
-      - 'src/**'
-      - 'itk/**'
-      - 'pyproject.toml'
+      - "src/**"
+      - "itk/**"
+      - "pyproject.toml"
 
 permissions:
   contents: read
