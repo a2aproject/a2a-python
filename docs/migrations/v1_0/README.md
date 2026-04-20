@@ -10,7 +10,7 @@ This documentation details the technical upgrades and architectural modification
 
 ## Table of Contents
 
-1. [Update Dependency](#1-package-dependency)
+1. [Update Dependencies](#1-update-dependencies)
 2. [Types](#2-types)
 3. [Server: DefaultRequestHandler](#3-server-defaultrequesthandler)
 4. [Server: Application Setup](#4-server-application-setup)
