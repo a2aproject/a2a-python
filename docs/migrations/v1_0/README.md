@@ -38,7 +38,6 @@ dependencies = ["a2a-sdk>=1.0.0"]
 
 Types are now **Protobuf-based** instead of Pydantic models.
 
-
 ### Enum values: snake_case → SCREAMING_SNAKE_CASE
 
 All enum values have been renamed from snake_case strings to `SCREAMING_SNAKE_CASE`.
@@ -110,7 +109,7 @@ The `AgentCard` has been significantly restructured to support multiple transpor
 
 Key differences:
 - `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
-- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed from `AgentCapabilities`; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
+- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
 - `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
 - `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
 - `examples` field has moved to `AgentSkill.examples` (set it per skill instead)
@@ -334,7 +333,7 @@ Key differences:
 - `SendStreamingMessageRequest` → `SendMessageRequest`
 - `MessageSendParams` wrapper is gone; `message` is a field directly on `SendMessageRequest`
 - `send_message()` returns `AsyncIterator[StreamResponse]`; iterate with `async for`
-- Each `StreamResponse` has a `payload` oneof — use `HasField()` to check which field is set (`'task'`, `'message'`, `'status_update'`, `'artifact_update'`)
+- Each `StreamResponse` has a `payload` which is one of: `'task'`, `'message'`, `'status_update'`, `'artifact_update'`. Use `HasField()` to check which field is set.
 - Agent outputs should now be published as **Artifacts**, not status message text
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
