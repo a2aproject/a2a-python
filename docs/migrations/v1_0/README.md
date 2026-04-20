@@ -17,6 +17,8 @@ This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains
 7. [Client: Send Message](#7-client-send-message)
 8. [Client: Push Notifications Config](#8-client-push-notifications-config)
 9. [Helper Utilities](#9-helper-utilities)
+10. [Summary of Key Changes](#10-summary-of-key-changes-in-v10)
+11. [Get Started](#11-get-started)
 
 ---
 
@@ -372,4 +374,38 @@ from a2a.helpers import (
     new_text_status_update_event,   # create a TaskStatusUpdateEvent with a text message
 )
 ```
+
+---
+
+## 10. Summary of Key Changes in v1.0
+
+- **Standardisation to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `kebab-case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
+- **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
+  - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint carrying `protocol_binding`, `protocol_version`, and `url`.
+  - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
+- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. Server setup now uses route factory functions `create_jsonrpc_routes()`, `create_rest_routes()`, `create_agent_card_routes()` composed directly into a Starlette or FastAPI app.
+- **Helper utilities** — A new `a2a.helpers` module consolidates all helper functions under a single import, replacing the scattered `a2a.utils.*` modules and adding new helpers for constructing and reading v1.0 proto types.
+
+---
+
+## 11. Get Started
+
+The fastest way to see v1.0 in action is to run the samples:
+
+| File | Role | Description |
+|---|---|---|
+| [`samples/hello_world_agent.py`](../../../samples/hello_world_agent.py) | **Server** | A2A agent exposing JSON-RPC, REST, and gRPC — with v0.3 compat enabled |
+| [`samples/cli.py`](../../../samples/cli.py) | **Client** | Interactive terminal client; supports all three transports |
+
+```bash
+# In one terminal — start the agent:
+uv run python samples/hello_world_agent.py
+
+# In another — connect with the CLI:
+uv run python samples/cli.py
+```
+
+Then type a message like `hello` and press Enter. See [`samples/README.md`](../../../samples/README.md) for full details.
+
+For more examples see the [a2a-samples repository](https://github.com/a2aproject/a2a-samples/tree/main/samples/python).
 
