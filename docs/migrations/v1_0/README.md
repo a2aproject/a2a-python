@@ -1,6 +1,6 @@
 # Migration Guide: v0.3 → v1.0
 
-This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains how to update your code.
+This guide covers the breaking changes introduced in `a2a-sdk` v1.0 and explains how to update your code. The changes reflect updates to the A2A protocol specification — see the [A2A protocol What's new in v1.0](https://a2a-protocol.org/latest/whats-new-v1/).
 
 > **Related guides**: If you use the database persistence layer, also see the [Database Migration Guide](database/).
 
@@ -65,7 +65,6 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 Key differences:
 - `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
 - `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
-- `TextPart` is no longer needed; use `Part(text=...)` directly
 
 **Before (v0.3):**
 ```python
@@ -111,7 +110,7 @@ Key differences:
 - `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
 - `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
 - `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
-- `examples` field has moved to `AgentSkill.examples` (set it per skill instead)
+- `examples` field was removed; set it per `AgentSkill` instead
 
 **Before (v0.3):**
 ```python
