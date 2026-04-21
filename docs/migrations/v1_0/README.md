@@ -62,7 +62,7 @@ Types have migrated from Pydantic models to Protobuf-based classes.
 
 ### Enum values: `snake_case` → `SCREAMING_SNAKE_CASE`
 
-All the enum values are now [standardised](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
+All the enum values are now [standardized](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
@@ -354,7 +354,7 @@ client = await create_client(agent_card)
 
 ## 7. Client: Send Message
 
-The `BaseClient.send_message()` return type is standardised from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
+The `BaseClient.send_message()` return type is standardized from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
 
 Each `StreamResponse` yields exactly one of: (`task`, `message`, `status_update`, or `artifact_update`). Use `HasField()` to check which field is set.
 
@@ -409,7 +409,7 @@ config = ClientConfig(
 
 ## 9. Helper Utilities
 
-To improve the developer experience, we have consolidated helper functions into a single import. In v0.3, these helper functions were scattered across different modules; In v1.0, they are all available under `a2a.helpers`.
+To improve the developer experience, we have consolidated helper functions into a single import. In v0.3, these helper functions were scattered across different modules. In v1.0, they are all available under `a2a.helpers`.
 
 | Helper Function | Description |
 |---|---|
@@ -457,7 +457,7 @@ print(text)
 ## 10. Summary of Key Changes in v1.0
 
 - **Migration to Protobuf** — Core types have migrated from Pydantic models to Protobuf-based classes. Protobuf objects do not support arbitrary attribute assignment. Use `MessageToDict` from `google.protobuf.json_format` to convert objects to dictionaries, and `HasField('field_name')` to check for optional fields.
-- **Standardisation to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
+- **Standardization to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
 - **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
   - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint carrying `protocol_binding`, `protocol_version`, and `url`.
   - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
@@ -486,4 +486,3 @@ uv run python samples/cli.py
 Then type a message like `hello` and press Enter. See [`samples/README.md`](../../../samples/README.md) for full details.
 
 For more examples see the [a2a-samples repository](https://github.com/a2aproject/a2a-samples/tree/main/samples/python).
-
