@@ -6,6 +6,11 @@ Beyond protocol support, `v1.0` enhances the developer experience by introducing
 
 This documentation details the technical upgrades and architectural modifications introduced in A2A Python SDK v1.0. For developers using the database persistence layer, please refer to the [Database Migration Guide](database/) for specific update instructions.
 
+> ### **Why Upgrade to v1.0?**
+> * **Protocol v1.0 Compliance**: Full alignment with the latest A2A industry standard for cross-agent interoperability.
+> * **Reduced Boilerplate**: Unified helper utilities that simplify common tasks like message and task creation.
+> * **Architectural Flexibility**: Direct Starlette/FastAPI integration allows you to mount A2A routes into existing applications with full control over middleware.
+
 ---
 
 ## Table of Contents
@@ -55,9 +60,9 @@ pip install --upgrade a2a-sdk
 Types have migrated from Pydantic models to Protobuf-based classes.
 
 
-### Enum values: snake_case → SCREAMING_SNAKE_CASE
+### Enum values: `snake_case` → `SCREAMING_SNAKE_CASE`
 
-All the enum values are now standardized from snake_case to **SCREAMING_SNAKE_CASE** format.
+All the enum values are now [standardised](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
@@ -131,14 +136,14 @@ message = Message(
 
 ### AgentCard Structure
 
-The new `AgentCard` can supports multiple transport bindings using `AgentInterface` class.
-
-Key differences:
-- `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
-- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
-- `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
-- `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
-- `examples` field was removed; set it per `AgentSkill` instead
+Key changes:
+- Added `AgentInterface` class to support multiple transport bindings via the `supported_interfaces` field in AgentCard.
+- The `url` parameter in `AgentCapabilities` is removed and is now part of `AgentInterface`.
+- Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
+- The `AgentCard.capabilities` field is renamed to `AgentCard.agent_capabilities`.
+- The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
+- The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides.
+- The `examples` parameter in `AgentCard` is removed and is now part of `AgentSkill`.
 
 **Before (v0.3):**
 ```python
@@ -164,7 +169,7 @@ agent_card = AgentCard(
 
 **After (v1.0):**
 ```python
-from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill, 
+from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
 
 agent_card = AgentCard(
     name='My Agent',
@@ -232,10 +237,13 @@ The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2A
 from a2a.server.apps import A2AStarletteApplication
 import uvicorn
 
+# Create application using A2AStarletteApplication wrapper class
 server = A2AStarletteApplication(
     agent_card=agent_card,
     http_handler=request_handler,
 )
+
+# Start the server
 uvicorn.run(server.build(), host=host, port=port)
 ```
 
@@ -245,26 +253,19 @@ from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from starlette.applications import Starlette
 import uvicorn
 
+
+# Define routes for transports as per AgentCard
 routes = []
 routes.extend(create_agent_card_routes(agent_card))
-routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/'))
+routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/api/v1/jsonrpc/'))
 
+# Optional: Add routes for other transports
+# routes.extend(create_rest_routes(request_handler, path_prefix='/api/v1/rest/'))
+
+# Create application using routes
 app = Starlette(routes=routes)
-uvicorn.run(app, host=host, port=port)
-```
 
-If you need REST transport in addition to JSON-RPC:
-```python
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
-from starlette.applications import Starlette
-import uvicorn
-
-routes = []
-routes.extend(create_agent_card_routes(agent_card))
-routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/'))
-routes.extend(create_rest_routes(request_handler))
-
-app = Starlette(routes=routes)
+# Start the server
 uvicorn.run(app, host=host, port=port)
 ```
 
@@ -297,19 +298,18 @@ create_rest_routes(request_handler, enable_v0_3_compat=True)
 
 ## 6. Client: Creating a Client
 
-New `create_client()` `ClientFactory` function that creates a client for the agent.
+In `v1.0`, use `a2a.client.create_client()` helper function to create a `Client` for the agent.
 
-> **Note**: The legacy `A2AClient` class has been removed.
 
 **Before (v0.3):**
 ```python
 from a2a.client import ClientFactory
 
-# From URL
+# Option 1: Using Agent Server URL
 factory = ClientFactory()
 client = factory.create_client('http://localhost:9999/')
 
-# From an already-resolved AgentCard
+# Option 2: Using AgentCard
 factory = ClientFactory()
 client = factory.create_client(agent_card)
 ```
@@ -318,10 +318,10 @@ client = factory.create_client(agent_card)
 ```python
 from a2a.client import create_client
 
-# From URL — resolves the agent card automatically
+# Option 1: Using Agent Server URL
 client = await create_client('http://localhost:9999/')
 
-# From an already-resolved AgentCard
+# Option 2: Using AgentCard
 client = await create_client(agent_card)
 ```
 
@@ -332,9 +332,9 @@ client = await create_client(agent_card)
 
 ## 7. Client: Send Message
 
-The `BaseClient.send_message()` return type is standardised from `AsyncIterator[ClientEvent | Message]` to  `AsyncIterator[StreamResponse]`.
+The `BaseClient.send_message()` return type is standardised from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
 
-Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
+Each `StreamResponse` yields exactly one of: (`task`, `message`, `status_update`, or `artifact_update`). Use `HasField()` to check which field is set.
 
 
 **Before (v0.3):**
@@ -368,6 +368,7 @@ async for chunk in client.send_message(request):
 
 `ClientConfig.push_notification_config` is now **singular** (a single `TaskPushNotificationConfig` or `None`), not a list.
 
+
 **Before (v0.3):**
 ```python
 config = ClientConfig(
@@ -386,31 +387,55 @@ config = ClientConfig(
 
 ## 9. Helper Utilities
 
-A new `a2a.helpers` module consolidates helper functions into a single import. Most were previously available under `a2a.utils.*`; a few are new in v1.0.
+To improve the developer experience, we have consolidated helper functions into a single import. In v0.3, these helper functions were scattered across different modules; In v1.0, they are all available under `a2a.helpers`.
+
+| Helper Function | Description |
+|---|---|
+| `display_agent_card` | Prints a human-readable summary of an `AgentCard` to stdout. |
+| `get_artifact_text` | Joins all text parts of an `Artifact` into a single string (using `\n` as delimiter). |
+| `get_message_text` | Joins all text parts of a `Message` into a single string (using `\n` as delimiter). |
+| `get_stream_response_text` | Extracts text from a `StreamResponse` protobuf message. |
+| `get_text_parts` | Returns a list of raw text strings from a sequence of `Part` objects, skipping non-text parts. |
+| `new_artifact` | Creates an `Artifact` from a list of `Part` objects, a name, and an optional description and ID. |
+| `new_message` | Creates a `Message` from a list of `Part` objects with a role (defaults to `ROLE_AGENT`), and optional task/context IDs. |
+| `new_task` | Creates a `Task` with an explicit task ID, context ID, and state. |
+| `new_task_from_user_message` | Creates a `TASK_STATE_SUBMITTED` `Task` from a user `Message`. Raises an error if the role is not `ROLE_USER` or if parts are empty. |
+| `new_text_artifact` | Creates an `Artifact` with a single text `Part`, a name, and an optional description and ID. |
+| `new_text_artifact_update_event` | Creates a `TaskArtifactUpdateEvent` with a text artifact. |
+| `new_text_message` | Creates a `Message` with a single text `Part`; role defaults to `ROLE_AGENT`. |
+| `new_text_status_update_event` | Creates a `TaskStatusUpdateEvent` with a text message. |
+
+Example Usage: 
+
+**1. Create a user message**
 
 ```python
-from a2a.helpers import (
-    display_agent_card,             # print a human-readable summary of an AgentCard to stdout
-    get_artifact_text,              # join all text parts of an Artifact into a single string (delimiter='\n')
-    get_message_text,               # join all text parts of a Message into a single string (delimiter='\n')
-    get_stream_response_text,       # extract text from a StreamResponse proto message
-    get_text_parts,                 # return a list of raw text strings from a sequence of Parts (skips non-text parts)
-    new_artifact,                   # create an Artifact from a list of Parts, name, optional description and artifact_id
-    new_message,                    # create a Message from a list of Parts with role (default ROLE_AGENT), optional task_id/context_id
-    new_task,                       # create a Task with explicit task_id, context_id, and state
-    new_task_from_user_message,     # create a TASK_STATE_SUBMITTED Task from a user Message; raises if role != ROLE_USER or parts are empty
-    new_text_artifact,              # create an Artifact with a single text Part, name, optional description and artifact_id
-    new_text_artifact_update_event, # create a TaskArtifactUpdateEvent with a text artifact
-    new_text_message,               # create a Message with a single text Part; role defaults to ROLE_AGENT
-    new_text_status_update_event,   # create a TaskStatusUpdateEvent with a text message
-)
+from a2a.helpers import new_text_message
+from a2a.types import Role
+
+# Create a user message
+user_message = new_text_message("What's the weather?", role=Role.ROLE_USER)
+
+# Create an agent response message
+response_message = new_text_message("It is sunny today!")
+```
+
+**2. Extract the text out of a message**
+
+```python
+from a2a.helpers import get_message_text
+
+# Get text from a message
+text = get_message_text(response_message)
+print(text)
 ```
 
 ---
 
 ## 10. Summary of Key Changes in v1.0
 
-- **Standardisation to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `kebab-case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
+- **Migration to Protobuf** — Core types have migrated from Pydantic models to Protobuf-based classes. Protobuf objects do not support arbitrary attribute assignment. Use `MessageToDict` from `google.protobuf.json_format` to convert objects to dictionaries, and `HasField('field_name')` to check for optional fields.
+- **Standardisation to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
 - **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
   - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint carrying `protocol_binding`, `protocol_version`, and `url`.
   - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
