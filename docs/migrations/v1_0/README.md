@@ -86,7 +86,7 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 
 ### Message and Part construction
 
-Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, `Part` is a single unified message — set the content type directly on it and the wrapper types are gone entirely.
+Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, the wrapper types are removed and content types are set directly on the `Part`.
 
 Key changes:
 - `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
