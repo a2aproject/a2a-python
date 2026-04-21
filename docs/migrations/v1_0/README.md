@@ -230,7 +230,7 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: Application Setup
 
-The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. The Server setup now uses Starlette route factory functions directly, giving you full control over the routing.
+The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. The Server setup now uses Starlette route factory functions directly, giving you better control over the routing, middleware, authentication, logging and other aspects of the server.
 
 **Before (v0.3):**
 ```python
@@ -248,22 +248,44 @@ uvicorn.run(server.build(), host=host, port=port)
 ```
 
 **After (v1.0):**
+
+Define routes for each supported transport as per AgentCard.
+
 ```python
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from starlette.applications import Starlette
-import uvicorn
-
 
 # Define routes for transports as per AgentCard
 routes = []
+# A2A Agent Card routes
 routes.extend(create_agent_card_routes(agent_card))
+# JSON-RPC routes
 routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/api/v1/jsonrpc/'))
 
-# Optional: Add routes for other transports
+# Optional: Add routes for REST/HTTP transports
 # routes.extend(create_rest_routes(request_handler, path_prefix='/api/v1/rest/'))
+```
+
+Add the routes to the application:
+
+```python
+from starlette.applications import Starlette
+import uvicorn
 
 # Create application using routes
 app = Starlette(routes=routes)
+
+# Start the server
+uvicorn.run(app, host=host, port=port)
+```
+
+If you prefer FastAPI for your server application:
+
+```python
+from fastapi import FastAPI
+import uvicorn
+
+# Create application using routes
+app = FastAPI(routes=routes)
 
 # Start the server
 uvicorn.run(app, host=host, port=port)
@@ -407,7 +429,7 @@ To improve the developer experience, we have consolidated helper functions into 
 
 Example Usage: 
 
-**1. Create a user message**
+**1. Create text based message**
 
 ```python
 from a2a.helpers import new_text_message
