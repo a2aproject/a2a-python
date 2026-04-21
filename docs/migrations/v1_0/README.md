@@ -76,11 +76,11 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 | `TaskState` | `TaskState.input_required` | `TaskState.TASK_STATE_INPUT_REQUIRED` |
 | `TaskState` | `TaskState.auth_required` | `TaskState.TASK_STATE_AUTH_REQUIRED` |
 | `TaskState` | `TaskState.rejected` | `TaskState.TASK_STATE_REJECTED` |
-| `TaskState` | | `TaskState.TASK_STATE_UNSPECIFIED` (new) |
+| `TaskState` | | 🆕 `TaskState.TASK_STATE_UNSPECIFIED` |
 |||
 | `Role` | `Role.user` | `Role.ROLE_USER` |
 | `Role` | `Role.agent` | `Role.ROLE_AGENT` |
-| `Role` | | `Role.ROLE_UNSPECIFIED` (new) |
+| `Role` | | 🆕 `Role.ROLE_UNSPECIFIED` |
 
 > **Example**: [`a2a-mcp-without-framework/server/agent_executor.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/changes#diff-1f9b098f9f82ee40666ee61db56dc2246281423c445bcf017079c53a0a05954f)
 
