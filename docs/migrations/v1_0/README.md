@@ -57,7 +57,7 @@ pip install --upgrade a2a-sdk
 
 ## 2. Types
 
-[Types](https://github.com/a2aproject/a2a-python/blob/main/src/a2a/types/a2a_pb2.pyi) have migrated from Pydantic models to Protobuf-based classes.
+[Types](https://github.com/a2aproject/a2a-python/blob/main/src/a2a/types/a2a_pb2.pyi) have migrated from Pydantic models to Protobuf-based classes to align with the A2A spec's proto-first design and adopt ProtoJSON as the canonical JSON serialization standard, ensuring consistent cross-implementation interoperability.
 
 
 ### Enum values: `snake_case` → `SCREAMING_SNAKE_CASE`
