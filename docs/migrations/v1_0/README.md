@@ -107,7 +107,7 @@ message = Message(
 
 **After (v1.0):**
 
-Using [A2A helper utilities](#helper-utilities)
+Using [A2A helper utilities](#9-helper-utilities)
 
 ```python
 from a2a.helpers import new_text_message
