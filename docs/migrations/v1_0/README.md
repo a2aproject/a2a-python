@@ -68,7 +68,6 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 
 | Enum | v0.3 | v1.0 |
 |---|---|---|
-| `TaskState` | *(no equivalent — protobuf default)* | `TaskState.TASK_STATE_UNSPECIFIED` |
 | `TaskState` | `TaskState.submitted` | `TaskState.TASK_STATE_SUBMITTED` |
 | `TaskState` | `TaskState.working` | `TaskState.TASK_STATE_WORKING` |
 | `TaskState` | `TaskState.completed` | `TaskState.TASK_STATE_COMPLETED` |
@@ -77,10 +76,11 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 | `TaskState` | `TaskState.input_required` | `TaskState.TASK_STATE_INPUT_REQUIRED` |
 | `TaskState` | `TaskState.auth_required` | `TaskState.TASK_STATE_AUTH_REQUIRED` |
 | `TaskState` | `TaskState.rejected` | `TaskState.TASK_STATE_REJECTED` |
+| `TaskState` | | `TaskState.TASK_STATE_UNSPECIFIED` (new) |
 |||
-| `Role` | *(no equivalent — protobuf default)* | `Role.ROLE_UNSPECIFIED` |
 | `Role` | `Role.user` | `Role.ROLE_USER` |
 | `Role` | `Role.agent` | `Role.ROLE_AGENT` |
+| `Role` | | `Role.ROLE_UNSPECIFIED` (new) |
 
 > **Example**: [`a2a-mcp-without-framework/server/agent_executor.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/changes#diff-1f9b098f9f82ee40666ee61db56dc2246281423c445bcf017079c53a0a05954f)
 
@@ -88,7 +88,7 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 
 Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, `Part` is a single unified message — set the content type directly on it and the wrapper types are gone entirely.
 
-Key differences:
+Key changes:
 - `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
 - `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
 
@@ -115,7 +115,6 @@ from a2a.types import Role
 
 # Use the helper function to create `Hello` message
 message = new_text_message(text="Hello", role=Role.ROLE_USER)
-
 ```
 
 Without helper utils, you can still construct directly
@@ -137,12 +136,12 @@ message = Message(
 ### AgentCard Structure
 
 Key changes:
-- Added `AgentInterface` class to support multiple transport bindings via the `supported_interfaces` field in AgentCard.
-- The `url` parameter in `AgentCapabilities` is removed and is now part of `AgentInterface`.
+- Added `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
+- The `url` parameter in `AgentCard` is removed and is now part of `AgentInterface`.
 - Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
 - The `AgentCard.capabilities` field is renamed to `AgentCard.agent_capabilities`.
 - The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
-- The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides.
+- The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` and `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` and `AgentSkill.output_modes` for per-skill overrides.
 - The `examples` parameter in `AgentCard` is removed and is now part of `AgentSkill`.
 
 **Before (v0.3):**
