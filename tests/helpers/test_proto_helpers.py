@@ -4,13 +4,22 @@ import pytest
 from a2a.helpers.proto_helpers import (
     new_message,
     new_text_message,
+    new_data_message,
+    new_raw_message,
+    new_url_message,
     get_message_text,
     new_artifact,
     new_text_artifact,
+    new_data_artifact,
+    new_raw_artifact,
+    new_url_artifact,
     get_artifact_text,
     new_task_from_user_message,
     new_task,
     get_text_parts,
+    new_data_part,
+    new_raw_part,
+    new_url_part,
     new_text_status_update_event,
     new_text_artifact_update_event,
     get_stream_response_text,
@@ -52,6 +61,58 @@ def test_new_text_message() -> None:
     assert msg.message_id != ''
 
 
+def test_new_data_message() -> None:
+    msg = new_data_message(
+        data={'key': 'value'},
+        context_id='ctx1',
+        task_id='task1',
+        role=Role.ROLE_USER,
+    )
+    assert msg.role == Role.ROLE_USER
+    assert len(msg.parts) == 1
+    assert msg.parts[0].HasField('data')
+    assert msg.parts[0].data.struct_value.fields['key'].string_value == 'value'
+    assert msg.context_id == 'ctx1'
+    assert msg.task_id == 'task1'
+    assert msg.message_id != ''
+
+
+def test_new_raw_message() -> None:
+    msg = new_raw_message(
+        b'\x89PNG',
+        media_type='image/png',
+        filename='img.png',
+        context_id='ctx1',
+        task_id='task1',
+    )
+    assert len(msg.parts) == 1
+    assert msg.parts[0].HasField('raw')
+    assert msg.parts[0].raw == b'\x89PNG'
+    assert msg.parts[0].media_type == 'image/png'
+    assert msg.parts[0].filename == 'img.png'
+    assert msg.context_id == 'ctx1'
+    assert msg.task_id == 'task1'
+    assert msg.message_id != ''
+
+
+def test_new_url_message() -> None:
+    msg = new_url_message(
+        'https://example.com/file.pdf',
+        media_type='application/pdf',
+        filename='file.pdf',
+        context_id='ctx1',
+        task_id='task1',
+    )
+    assert len(msg.parts) == 1
+    assert msg.parts[0].HasField('url')
+    assert msg.parts[0].url == 'https://example.com/file.pdf'
+    assert msg.parts[0].media_type == 'application/pdf'
+    assert msg.parts[0].filename == 'file.pdf'
+    assert msg.context_id == 'ctx1'
+    assert msg.task_id == 'task1'
+    assert msg.message_id != ''
+
+
 def test_get_message_text() -> None:
     msg = Message(parts=[Part(text='hello'), Part(text='world')])
     assert get_message_text(msg) == 'hello\nworld'
@@ -88,6 +149,74 @@ def test_new_text_artifact_with_id() -> None:
     assert len(art.parts) == 1
     assert art.parts[0].text == 'content'
     assert art.artifact_id == 'art1'
+
+
+def test_new_data_artifact() -> None:
+    art = new_data_artifact(
+        name='result', data={'score': 1.0}, description='desc'
+    )
+    assert art.name == 'result'
+    assert art.description == 'desc'
+    assert len(art.parts) == 1
+    assert art.parts[0].HasField('data')
+    assert art.parts[0].data.struct_value.fields['score'].number_value == 1.0
+    assert art.artifact_id != ''
+
+
+def test_new_data_artifact_with_id() -> None:
+    art = new_data_artifact(name='result', data={'x': 'y'}, artifact_id='art1')
+    assert art.artifact_id == 'art1'
+    assert art.parts[0].data.struct_value.fields['x'].string_value == 'y'
+
+
+def test_new_raw_artifact() -> None:
+    art = new_raw_artifact(
+        name='screenshot',
+        raw=b'\x89PNG',
+        media_type='image/png',
+        filename='screen.png',
+        description='desc',
+        artifact_id='art1',
+    )
+    assert art.name == 'screenshot'
+    assert art.description == 'desc'
+    assert art.artifact_id == 'art1'
+    assert len(art.parts) == 1
+    assert art.parts[0].HasField('raw')
+    assert art.parts[0].raw == b'\x89PNG'
+    assert art.parts[0].media_type == 'image/png'
+    assert art.parts[0].filename == 'screen.png'
+
+
+def test_new_raw_artifact_minimal() -> None:
+    art = new_raw_artifact(name='file', raw=b'data')
+    assert art.parts[0].raw == b'data'
+    assert art.artifact_id != ''
+
+
+def test_new_url_artifact() -> None:
+    art = new_url_artifact(
+        name='report',
+        url='https://example.com/report.pdf',
+        media_type='application/pdf',
+        filename='report.pdf',
+        description='desc',
+        artifact_id='art1',
+    )
+    assert art.name == 'report'
+    assert art.description == 'desc'
+    assert art.artifact_id == 'art1'
+    assert len(art.parts) == 1
+    assert art.parts[0].HasField('url')
+    assert art.parts[0].url == 'https://example.com/report.pdf'
+    assert art.parts[0].media_type == 'application/pdf'
+    assert art.parts[0].filename == 'report.pdf'
+
+
+def test_new_url_artifact_minimal() -> None:
+    art = new_url_artifact(name='img', url='https://example.com/img.png')
+    assert art.parts[0].url == 'https://example.com/img.png'
+    assert art.artifact_id != ''
 
 
 def test_get_artifact_text() -> None:
@@ -147,6 +276,57 @@ def test_get_text_parts() -> None:
         Part(text='world'),
     ]
     assert get_text_parts(parts) == ['hello', 'world']
+
+
+def test_new_data_part_from_dict() -> None:
+    part = new_data_part({'key': 'value', 'count': 42})
+    assert part.HasField('data')
+    assert part.data.struct_value.fields['key'].string_value == 'value'
+    assert part.data.struct_value.fields['count'].number_value == 42
+
+
+def test_new_data_part_from_list() -> None:
+    part = new_data_part([1, 2, 3])
+    assert part.HasField('data')
+    assert part.data.list_value.values[0].number_value == 1
+    assert part.data.list_value.values[1].number_value == 2
+    assert part.data.list_value.values[2].number_value == 3
+
+
+def test_new_raw_part() -> None:
+    part = new_raw_part(b'\x89PNG', media_type='image/png', filename='img.png')
+    assert part.HasField('raw')
+    assert part.raw == b'\x89PNG'
+    assert part.media_type == 'image/png'
+    assert part.filename == 'img.png'
+
+
+def test_new_raw_part_minimal() -> None:
+    part = new_raw_part(b'data')
+    assert part.HasField('raw')
+    assert part.raw == b'data'
+    assert part.media_type == ''
+    assert part.filename == ''
+
+
+def test_new_url_part() -> None:
+    part = new_url_part(
+        'https://example.com/file.pdf',
+        media_type='application/pdf',
+        filename='file.pdf',
+    )
+    assert part.HasField('url')
+    assert part.url == 'https://example.com/file.pdf'
+    assert part.media_type == 'application/pdf'
+    assert part.filename == 'file.pdf'
+
+
+def test_new_url_part_minimal() -> None:
+    part = new_url_part('https://example.com/img.png')
+    assert part.HasField('url')
+    assert part.url == 'https://example.com/img.png'
+    assert part.media_type == ''
+    assert part.filename == ''
 
 
 # --- Event & Stream Helpers Tests ---
