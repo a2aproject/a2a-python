@@ -2,12 +2,14 @@ name: ITK
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
     paths:
-      - "src/**"
-      - "itk/**"
-      - "pyproject.toml"
+      - 'src/**'
+      - 'itk/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.github/workflows/itk.yaml'
 
 permissions:
   contents: read

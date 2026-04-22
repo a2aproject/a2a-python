@@ -2,19 +2,14 @@
 name: Minimal Install Smoke Test
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    paths-ignore:
-      - "**.md"
-      - "LICENSE"
-      - "docs/**"
-      - ".github/CODEOWNERS"
-      - ".github/ISSUE_TEMPLATE/**"
-      - ".github/PULL_REQUEST_TEMPLATE.md"
-      - ".github/dependabot.yml"
-      - ".gitignore"
-      - ".git-blame-ignore-revs"
-      - ".gemini/**"
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/test_minimal_install.py'
+      - '.github/workflows/minimal-install.yml'
 permissions:
   contents: read
 
@@ -25,7 +20,7 @@ jobs:
     if: github.repository == 'a2aproject/a2a-python'
     strategy:
       matrix:
-        python-version: [ "3.10", "3.11", "3.12", "3.13", "3.14" ]
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
