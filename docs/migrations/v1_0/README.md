@@ -93,7 +93,7 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 | Text | `Part(TextPart(text=..., ...))` | `Part(text=..., ...)` |
 | File (bytes) | `Part(FilePart(file=FileWithBytes(bytes=..., ...)))` | `Part(raw=..., ...)` |
 | File (URI) | `Part(FilePart(file=FileWithUri(uri=..., ...)))` | `Part(url=..., ...)` |
-| Structured data | `Part(DataPart(data=..., ...))` | `Part(data=..., ...))` |
+| Structured data | `Part(DataPart(data=..., ...))` | `Part(data=..., ...)` |
 
 > **Note on file bytes**: In v0.3 `FileWithBytes.bytes` was a **base64-encoded string**. In v1.0 `Part.raw` is raw **`bytes`** — no base64 encoding needed.
 
@@ -164,7 +164,7 @@ file_uri_part = Part(
 
 # Data part — use ParseDict to convert a Python dict to a protobuf Value
 data_part = Part(
-    data=.ParseDict({"city": "Warsaw", "temperature_c": 18}, Value()),
+    data=ParseDict({"city": "Warsaw", "temperature_c": 18}, Value()),
 )
 
 message = Message(
@@ -192,7 +192,6 @@ Key changes:
 - Added `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
 - The `url` parameter in `AgentCard` is removed and is now part of `AgentInterface`.
 - Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
-- The `AgentCard.capabilities` field is renamed to `AgentCard.agent_capabilities`.
 - The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
 - The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` and `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` and `AgentSkill.output_modes` for per-skill overrides.
 - The `examples` parameter in `AgentCard` is removed and is now part of `AgentSkill`.
