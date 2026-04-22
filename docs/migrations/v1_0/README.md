@@ -6,6 +6,11 @@ Beyond protocol support, `v1.0` enhances the developer experience by introducing
 
 This documentation details the technical upgrades and architectural modifications introduced in A2A Python SDK v1.0. For developers using the database persistence layer, please refer to the [Database Migration Guide](database/) for specific update instructions.
 
+> ### **Why Upgrade to v1.0?**
+> * **Protocol v1.0 Compliance**: Full alignment with the latest A2A industry standard for cross-agent interoperability.
+> * **Reduced Boilerplate**: Unified helper utilities that simplify common tasks like message and task creation.
+> * **Architectural Flexibility**: Direct Starlette/FastAPI integration allows you to mount A2A routes into existing applications with full control over middleware.
+
 ---
 
 ## Table of Contents
@@ -26,7 +31,7 @@ This documentation details the technical upgrades and architectural modification
 
 ## 1. Update Dependencies
 
-(UV users) To upgrade to the latest version of the `a2a-sdk`, update the dependencies section in your `pyproject.toml` file.
+For UV users: To upgrade to the latest version of the `a2a-sdk`, update the dependencies section in your `pyproject.toml` file.
 
 | File             | Before (`v0.3`)                   | After (`v1.0`)                    |
 |------------------|-----------------------------------|-----------------------------------|
@@ -52,18 +57,17 @@ pip install --upgrade a2a-sdk
 
 ## 2. Types
 
-Types have migrated from Pydantic models to Protobuf-based classes.
+[Types](https://github.com/a2aproject/a2a-python/blob/main/src/a2a/types/a2a_pb2.pyi) have migrated from Pydantic models to Protobuf-based classes to align with the A2A spec's proto-first design and to adopt ProtoJSON as the canonical JSON serialization standard, ensuring consistent cross-implementation interoperability.
 
 
-### Enum values: snake_case → SCREAMING_SNAKE_CASE
+### Enum values: `snake_case` → `SCREAMING_SNAKE_CASE`
 
-All the enum values are now standardized from snake_case to **SCREAMING_SNAKE_CASE** format.
+All enum values are now [standardized](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
 | Enum | v0.3 | v1.0 |
 |---|---|---|
-| `TaskState` | *(no equivalent — protobuf default)* | `TaskState.TASK_STATE_UNSPECIFIED` |
 | `TaskState` | `TaskState.submitted` | `TaskState.TASK_STATE_SUBMITTED` |
 | `TaskState` | `TaskState.working` | `TaskState.TASK_STATE_WORKING` |
 | `TaskState` | `TaskState.completed` | `TaskState.TASK_STATE_COMPLETED` |
@@ -72,29 +76,60 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 | `TaskState` | `TaskState.input_required` | `TaskState.TASK_STATE_INPUT_REQUIRED` |
 | `TaskState` | `TaskState.auth_required` | `TaskState.TASK_STATE_AUTH_REQUIRED` |
 | `TaskState` | `TaskState.rejected` | `TaskState.TASK_STATE_REJECTED` |
+| `TaskState` | | 🆕 `TaskState.TASK_STATE_UNSPECIFIED` |
 |||
-| `Role` | *(no equivalent — protobuf default)* | `Role.ROLE_UNSPECIFIED` |
 | `Role` | `Role.user` | `Role.ROLE_USER` |
 | `Role` | `Role.agent` | `Role.ROLE_AGENT` |
+| `Role` | | 🆕 `Role.ROLE_UNSPECIFIED` |
 
 > **Example**: [`a2a-mcp-without-framework/server/agent_executor.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/changes#diff-1f9b098f9f82ee40666ee61db56dc2246281423c445bcf017079c53a0a05954f)
 
 ### Message and Part construction
 
-Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, `Part` is a single unified message — set the content type directly on it and the wrapper types are gone entirely.
+Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, the wrapper types are removed and all content fields are set directly on the unified `Part` message.
 
-Key differences:
-- `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
-- `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
+| Part type | v0.3 | v1.0 |
+|---|---|---|
+| Text | `Part(TextPart(text=..., ...))` | `Part(text=..., ...)` |
+| File (bytes) | `Part(FilePart(file=FileWithBytes(bytes=..., ...)))` | `Part(raw=..., ...)` |
+| File (URI) | `Part(FilePart(file=FileWithUri(uri=..., ...)))` | `Part(url=..., ...)` |
+| Structured data | `Part(DataPart(data=..., ...))` | `Part(data=..., ...)` |
+
+**Note**:
+* When using `File (bytes)` in v1.0, the data serialisatinon (via base64 encoding) is not required as A2A now uses Protobuf that automatically does it for you. 
+* In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. See the examples below for more details.
 
 **Before (v0.3):**
 ```python
-from a2a.types import Message, Part, Role, TextPart
+import base64
 from uuid import uuid4
+from a2a.types import Message, Part, Role, TextPart, FilePart, DataPart, FileWithBytes, FileWithUri
+
+# Text part
+text_part = Part(TextPart(text="What's the weather in Warsaw?"))
+
+# File part — base64-encoded bytes (e.g. an image)
+with open("photo.png", "rb") as f:
+    image_b64 = base64.b64encode(f.read()).decode()
+file_bytes_part = Part(FilePart(file=FileWithBytes(
+    bytes=image_b64,
+    mime_type="image/png",
+    name="photo.png",
+)))
+
+# File part — URI pointing to a remote file
+file_uri_part = Part(FilePart(file=FileWithUri(
+    uri="https://example.com/report.pdf",
+    mime_type="application/pdf",
+    name="report.pdf",
+)))
+
+# Data part — structured JSON payload
+data_part = Part(DataPart(data={"city": "Warsaw", "temperature_c": 18}))
 
 message = Message(
     role=Role.user,
-    parts=[Part(TextPart(text="Hello"))],
+    parts=[text_part, file_bytes_part, file_uri_part, data_part],
     message_id=uuid4().hex,
     task_id=uuid4().hex,
 )
@@ -102,53 +137,84 @@ message = Message(
 
 **After (v1.0):**
 
-Using [A2A helper utilities](#helper-utilities)
+```python
+from uuid import uuid4
+from google.protobuf.json_format import ParseDict
+from google.protobuf.struct_pb2 import Value
+from a2a.types import Message, Part, Role
+
+# Text part
+text_part = Part(text="What's the weather in Warsaw?")
+
+# File part — raw bytes (e.g. an image); no base64 encoding required
+with open("photo.png", "rb") as f:
+    image_bytes = f.read()
+file_bytes_part = Part(
+    raw=image_bytes,
+    media_type="image/png",
+    filename="photo.png",
+)
+
+# File part — URI pointing to a remote file
+file_uri_part = Part(
+    url="https://example.com/report.pdf",
+    media_type="application/pdf",
+    filename="report.pdf",
+)
+
+# Data part — use ParseDict to convert a Python dict to a protobuf Value
+data_part = Part(
+    data=ParseDict({"city": "Warsaw", "temperature_c": 18}, Value()),
+)
+
+message = Message(
+    role=Role.ROLE_USER,
+    parts=[text_part, file_bytes_part, file_uri_part, data_part],
+    message_id=uuid4().hex,
+    task_id=uuid4().hex,
+)
+```
+
+For text-only messages, use the [A2A helper utilities](#9-helper-utilities) to reduce boilerplate:
 
 ```python
 from a2a.helpers import new_text_message
 from a2a.types import Role
 
-# Use the helper function to create `Hello` message
-message = new_text_message(text="Hello", role=Role.ROLE_USER)
-
-```
-
-Without helper utils, you can still construct directly
-
-```python
-from a2a.types import Message, Part, Role
-from uuid import uuid4
-
-message = Message(
-    role=Role.ROLE_USER,
-    parts=[Part(text="Hello")],
-    message_id=uuid4().hex,
-    task_id=uuid4().hex,
-)
+message = new_text_message(text="What's the weather in Warsaw?", role=Role.ROLE_USER)
 ```
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
 
 ### AgentCard Structure
 
-The new `AgentCard` can supports multiple transport bindings using `AgentInterface` class.
-
-Key differences:
-- `url` is gone; use `supported_interfaces` with one or more `AgentInterface` entries
-- `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed; use `AgentCard.default_input_modes` / `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` / `AgentSkill.output_modes` for per-skill overrides
-- `supports_authenticated_extended_card` is no longer a top-level `AgentCard` field; it has moved into `AgentCapabilities` and is renamed to `extended_agent_card`
-- `AgentInterface.protocol_binding` accepted values: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
-- `examples` field was removed; set it per `AgentSkill` instead
+Key changes:
+- Added an `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
+- The `url` parameter in `AgentCard` is removed and is now part of `AgentInterface`.
+- Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
+- The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
+- The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` and `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` and `AgentSkill.output_modes` for per-skill overrides.
+- The `examples` parameter in `AgentCard` is removed and is now part of `AgentSkill`.
 
 **Before (v0.3):**
 ```python
 from a2a.types import AgentCard, AgentCapabilities, AgentSkill
 
+skill = AgentSkill(
+    id='hello_world',
+    name='Hello World',
+    description='Returns a Hello World message.',
+    tags=['hello', 'world'],
+    input_modes=['text/plain'],
+    output_modes=['text/plain'],
+    examples=['hello world'],
+)
+
 agent_card = AgentCard(
-    name='My Agent',
-    description='...',
+    name='Hello World Agent',
+    description='Returns Hello, World!',
     url='http://localhost:9999/',
-    version='1.0.0',
+    version='0.0.1',
     default_input_modes=['text/plain'],
     default_output_modes=['text/plain'],
     supports_authenticated_extended_card=True,
@@ -158,17 +224,27 @@ agent_card = AgentCard(
         streaming=True,
     ),
     skills=[skill],
-    examples=['example'],
+    examples=['Hello, World!'],
 )
 ```
 
 **After (v1.0):**
 ```python
-from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill, 
+from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
+
+skill = AgentSkill(
+    id='hello_world',
+    name='Hello World',
+    description='Returns a Hello World message.',
+    tags=['hello', 'world'],
+    input_modes=['text/plain'],
+    output_modes=['text/plain'],
+    examples=['hello world', 'Hello, World!'],  # moved from AgentCard.examples
+)
 
 agent_card = AgentCard(
-    name='My Agent',
-    description='...',
+    name='Hello World Agent',
+    description='Returns Hello, World!',
     supported_interfaces=[
         # JSON-RPC
         AgentInterface(
@@ -181,7 +257,7 @@ agent_card = AgentCard(
             url='http://localhost:50051/a2a/grpc/',
         )
     ],
-    version='1.0.0',
+    version='0.0.1',
     default_input_modes=['text/plain'],
     default_output_modes=['text/plain'],
     capabilities=AgentCapabilities(
@@ -225,46 +301,64 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: Application Setup
 
-The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. The Server setup now uses Starlette route factory functions directly, giving you full control over the routing.
+The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. The server setup now uses Starlette route factory functions directly, giving you better control over the routing, middleware, authentication, logging, and other aspects of the server.
 
 **Before (v0.3):**
 ```python
 from a2a.server.apps import A2AStarletteApplication
 import uvicorn
 
+# Create application using A2AStarletteApplication wrapper class
 server = A2AStarletteApplication(
     agent_card=agent_card,
     http_handler=request_handler,
 )
+
+# Start the server
 uvicorn.run(server.build(), host=host, port=port)
 ```
 
 **After (v1.0):**
+
+Define routes for each supported transport as defined in the `AgentCard`.
+
 ```python
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+
+# Define routes for transports as defined in the AgentCard
+routes = []
+# A2A Agent Card routes
+routes.extend(create_agent_card_routes(agent_card))
+# JSON-RPC routes
+routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/api/v1/jsonrpc/'))
+
+# Optional: Add routes for REST/HTTP transports
+# routes.extend(create_rest_routes(request_handler, path_prefix='/api/v1/rest/'))
+```
+
+Add the routes to the application:
+
+```python
 from starlette.applications import Starlette
 import uvicorn
 
-routes = []
-routes.extend(create_agent_card_routes(agent_card))
-routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/'))
-
+# Create application using routes
 app = Starlette(routes=routes)
+
+# Start the server
 uvicorn.run(app, host=host, port=port)
 ```
 
-If you need REST transport in addition to JSON-RPC:
+If you prefer FastAPI for your server application:
+
 ```python
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes, create_rest_routes
-from starlette.applications import Starlette
+from fastapi import FastAPI
 import uvicorn
 
-routes = []
-routes.extend(create_agent_card_routes(agent_card))
-routes.extend(create_jsonrpc_routes(request_handler, rpc_url='/'))
-routes.extend(create_rest_routes(request_handler))
+# Create application using routes
+app = FastAPI(routes=routes)
 
-app = Starlette(routes=routes)
+# Start the server
 uvicorn.run(app, host=host, port=port)
 ```
 
@@ -297,19 +391,18 @@ create_rest_routes(request_handler, enable_v0_3_compat=True)
 
 ## 6. Client: Creating a Client
 
-New `create_client()` `ClientFactory` function that creates a client for the agent.
+In `v1.0`, use the `a2a.client.create_client()` helper function to create a `Client` for the agent.
 
-> **Note**: The legacy `A2AClient` class has been removed.
 
 **Before (v0.3):**
 ```python
 from a2a.client import ClientFactory
 
-# From URL
+# Option 1: Using Agent Server URL
 factory = ClientFactory()
 client = factory.create_client('http://localhost:9999/')
 
-# From an already-resolved AgentCard
+# Option 2: Using AgentCard
 factory = ClientFactory()
 client = factory.create_client(agent_card)
 ```
@@ -318,10 +411,10 @@ client = factory.create_client(agent_card)
 ```python
 from a2a.client import create_client
 
-# From URL — resolves the agent card automatically
+# Option 1: Using Agent Server URL
 client = await create_client('http://localhost:9999/')
 
-# From an already-resolved AgentCard
+# Option 2: Using AgentCard
 client = await create_client(agent_card)
 ```
 
@@ -332,9 +425,9 @@ client = await create_client(agent_card)
 
 ## 7. Client: Send Message
 
-The `BaseClient.send_message()` return type is standardised from `AsyncIterator[ClientEvent | Message]` to  `AsyncIterator[StreamResponse]`.
+The `BaseClient.send_message()` return type is standardized from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
 
-Each `StreamResponse` yields exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
+Each `StreamResponse` contains exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
 
 
 **Before (v0.3):**
@@ -368,6 +461,7 @@ async for chunk in client.send_message(request):
 
 `ClientConfig.push_notification_config` is now **singular** (a single `TaskPushNotificationConfig` or `None`), not a list.
 
+
 **Before (v0.3):**
 ```python
 config = ClientConfig(
@@ -386,35 +480,59 @@ config = ClientConfig(
 
 ## 9. Helper Utilities
 
-A new `a2a.helpers` module consolidates helper functions into a single import. Most were previously available under `a2a.utils.*`; a few are new in v1.0.
+To improve the developer experience, we have consolidated helper functions into a single import. In v0.3, these helper functions were scattered across different modules. In v1.0, they are all available under `a2a.helpers`.
+
+| Helper Function | Description |
+|---|---|
+| `display_agent_card` | Prints a human-readable summary of an `AgentCard` to stdout. |
+| `get_artifact_text` | Joins all text parts of an `Artifact` into a single string (using `\n` as delimiter). |
+| `get_message_text` | Joins all text parts of a `Message` into a single string (using `\n` as delimiter). |
+| `get_stream_response_text` | Extracts text from a `StreamResponse` protobuf message. |
+| `get_text_parts` | Returns a list of raw text strings from a sequence of `Part` objects, skipping non-text parts. |
+| `new_artifact` | Creates an `Artifact` from a list of `Part` objects, a name, and an optional description and ID. |
+| `new_message` | Creates a `Message` from a list of `Part` objects with a role (defaults to `ROLE_AGENT`), and optional task/context IDs. |
+| `new_task` | Creates a `Task` with an explicit task ID, context ID, and state. |
+| `new_task_from_user_message` | Creates a `TASK_STATE_SUBMITTED` `Task` from a user `Message`. Raises an error if the role is not `ROLE_USER` or if parts are empty. |
+| `new_text_artifact` | Creates an `Artifact` with a single text `Part`, a name, and an optional description and ID. |
+| `new_text_artifact_update_event` | Creates a `TaskArtifactUpdateEvent` with a text artifact. |
+| `new_text_message` | Creates a `Message` with a single text `Part`; role defaults to `ROLE_AGENT`. |
+| `new_text_status_update_event` | Creates a `TaskStatusUpdateEvent` with a text message. |
+
+**Example usage:**
+
+**1. Create a text-based message**
 
 ```python
-from a2a.helpers import (
-    display_agent_card,             # print a human-readable summary of an AgentCard to stdout
-    get_artifact_text,              # join all text parts of an Artifact into a single string (delimiter='\n')
-    get_message_text,               # join all text parts of a Message into a single string (delimiter='\n')
-    get_stream_response_text,       # extract text from a StreamResponse proto message
-    get_text_parts,                 # return a list of raw text strings from a sequence of Parts (skips non-text parts)
-    new_artifact,                   # create an Artifact from a list of Parts, name, optional description and artifact_id
-    new_message,                    # create a Message from a list of Parts with role (default ROLE_AGENT), optional task_id/context_id
-    new_task,                       # create a Task with explicit task_id, context_id, and state
-    new_task_from_user_message,     # create a TASK_STATE_SUBMITTED Task from a user Message; raises if role != ROLE_USER or parts are empty
-    new_text_artifact,              # create an Artifact with a single text Part, name, optional description and artifact_id
-    new_text_artifact_update_event, # create a TaskArtifactUpdateEvent with a text artifact
-    new_text_message,               # create a Message with a single text Part; role defaults to ROLE_AGENT
-    new_text_status_update_event,   # create a TaskStatusUpdateEvent with a text message
-)
+from a2a.helpers import new_text_message
+from a2a.types import Role
+
+# Create a user message
+user_message = new_text_message("What's the weather?", role=Role.ROLE_USER)
+
+# Create an agent response message
+response_message = new_text_message("It is sunny today!")
+```
+
+**2. Extract text from a message**
+
+```python
+from a2a.helpers import get_message_text
+
+# Get text from a message
+text = get_message_text(response_message)
+print(text)
 ```
 
 ---
 
 ## 10. Summary of Key Changes in v1.0
 
-- **Standardisation to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `kebab-case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
+- **Migration to Protobuf** — Core types have migrated from Pydantic models to Protobuf-based classes. Protobuf objects do not support arbitrary attribute assignment. Use `MessageToDict` from `google.protobuf.json_format` to convert objects to dictionaries, and `HasField('field_name')` to check for optional fields.
+- **Standardization to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
 - **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
-  - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint carrying `protocol_binding`, `protocol_version`, and `url`.
+  - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint with fields for `protocol_binding`, `protocol_version`, and `url`.
   - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
-- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. Server setup now uses route factory functions `create_jsonrpc_routes()`, `create_rest_routes()`, `create_agent_card_routes()` composed directly into a Starlette or FastAPI app.
+- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. Server setup now uses route factory functions — `create_jsonrpc_routes()`, `create_rest_routes()`, and `create_agent_card_routes()` — composed directly into a Starlette or FastAPI app.
 - **Helper utilities** — A new `a2a.helpers` module consolidates all helper functions under a single import, replacing the scattered `a2a.utils.*` modules and adding new helpers for constructing and reading v1.0 proto types.
 
 ---
@@ -439,4 +557,3 @@ uv run python samples/cli.py
 Then type a message like `hello` and press Enter. See [`samples/README.md`](../../../samples/README.md) for full details.
 
 For more examples see the [a2a-samples repository](https://github.com/a2aproject/a2a-samples/tree/main/samples/python).
-
