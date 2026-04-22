@@ -86,50 +86,20 @@ This affects every enum in the SDK: `TaskState`, `Role`.
 
 ### Message and Part construction
 
-Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, the wrapper types are removed and all content fields are set directly on the unified `Part` message.
+Constructing messages is simplified in v1.0. The old API required wrapping content in an intermediate type (`TextPart`, `FilePart`, `DataPart`) before placing it inside a `Part`. In v1.0, the wrapper types are removed and content types are set directly on the `Part`.
 
-| Part type | v0.3 | v1.0 |
-|---|---|---|
-| Text | `Part(TextPart(text=...))` | `Part(text=...)` |
-| File (bytes) | `Part(FilePart(file=FileWithBytes(bytes=..., mime_type=..., name=...)))` | `Part(raw=..., media_type=..., filename=...)` |
-| File (URI) | `Part(FilePart(file=FileWithUri(uri=..., mime_type=..., name=...)))` | `Part(url=..., media_type=..., filename=...)` |
-| Structured data | `Part(DataPart(data={...}))` | `Part(data=json_format.ParseDict({...}, Value()))` |
-
-> **Note on file bytes**: In v0.3 `FileWithBytes.bytes` was a **base64-encoded string**. In v1.0 `Part.raw` is raw **`bytes`** — no base64 encoding needed.
-
-> **Note on structured data**: In v0.3 `DataPart.data` was a plain `dict`. In v1.0 `Part.data` is a `google.protobuf.Value`, so use `json_format.ParseDict` to convert from a Python dict.
+Key changes:
+- `Part(TextPart(text=...))` → `Part(text=...)` (flat union field)
+- `Role.user` → `Role.ROLE_USER`, `Role.agent` → `Role.ROLE_AGENT`
 
 **Before (v0.3):**
 ```python
-import base64
+from a2a.types import Message, Part, Role, TextPart
 from uuid import uuid4
-from a2a.types import Message, Part, Role, TextPart, FilePart, DataPart, FileWithBytes, FileWithUri
-
-# Text part
-text_part = Part(TextPart(text="What's the weather in Paris?"))
-
-# File part — base64-encoded bytes (e.g. an image)
-with open("photo.png", "rb") as f:
-    image_b64 = base64.b64encode(f.read()).decode()
-file_bytes_part = Part(FilePart(file=FileWithBytes(
-    bytes=image_b64,
-    mime_type="image/png",
-    name="photo.png",
-)))
-
-# File part — URI pointing to a remote file
-file_uri_part = Part(FilePart(file=FileWithUri(
-    uri="https://example.com/report.pdf",
-    mime_type="application/pdf",
-    name="report.pdf",
-)))
-
-# Data part — structured JSON payload
-data_part = Part(DataPart(data={"city": "Paris", "temperature_c": 18}))
 
 message = Message(
     role=Role.user,
-    parts=[text_part, file_bytes_part, file_uri_part, data_part],
+    parts=[Part(TextPart(text="Hello"))],
     message_id=uuid4().hex,
     task_id=uuid4().hex,
 )
@@ -137,51 +107,28 @@ message = Message(
 
 **After (v1.0):**
 
-```python
-from uuid import uuid4
-from google.protobuf import json_format
-from google.protobuf.struct_pb2 import Value
-from a2a.types import Message, Part, Role
-
-# Text part
-text_part = Part(text="What's the weather in Paris?")
-
-# File part — raw bytes (e.g. an image); no base64 encoding required
-with open("photo.png", "rb") as f:
-    image_bytes = f.read()
-file_bytes_part = Part(
-    raw=image_bytes,
-    media_type="image/png",
-    filename="photo.png",
-)
-
-# File part — URI pointing to a remote file
-file_uri_part = Part(
-    url="https://example.com/report.pdf",
-    media_type="application/pdf",
-    filename="report.pdf",
-)
-
-# Data part — use json_format.ParseDict to convert a Python dict to a protobuf Value
-data_part = Part(
-    data=json_format.ParseDict({"city": "Paris", "temperature_c": 18}, Value()),
-)
-
-message = Message(
-    role=Role.ROLE_USER,
-    parts=[text_part, file_bytes_part, file_uri_part, data_part],
-    message_id=uuid4().hex,
-    task_id=uuid4().hex,
-)
-```
-
-For text-only messages, use the [A2A helper utilities](#9-helper-utilities) to reduce boilerplate:
+Using [A2A helper utilities](#9-helper-utilities)
 
 ```python
 from a2a.helpers import new_text_message
 from a2a.types import Role
 
-message = new_text_message(text="What's the weather in Paris?", role=Role.ROLE_USER)
+# Use the helper function to create `Hello` message
+message = new_text_message(text="Hello", role=Role.ROLE_USER)
+```
+
+Without helper utils, you can still construct directly
+
+```python
+from a2a.types import Message, Part, Role
+from uuid import uuid4
+
+message = Message(
+    role=Role.ROLE_USER,
+    parts=[Part(text="Hello")],
+    message_id=uuid4().hex,
+    task_id=uuid4().hex,
+)
 ```
 
 > **Example**: [`helloworld/test_client.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-f62c07d3b00364a3100b7effb3e2a1cca0624277d3e40da1bdb07bb46b6a8cef)
