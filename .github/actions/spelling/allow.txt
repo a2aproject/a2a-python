@@ -101,6 +101,8 @@ openapiv2
 opensource
 otherurl
 pb2
+podman
+Podman
 poolclass
 postgres
 POSTGRES
@@ -128,6 +130,8 @@ socio
 sse
 starlette
 Starlette
+subgids
+subuids
 sut
 SUT
 swagger
@@ -139,9 +143,6 @@ tiangolo
 TResponse
 typ
 typeerror
-vulnz
-Podman
-podman
 UIDs
-subuids
-subgids
+vulnz
+whl

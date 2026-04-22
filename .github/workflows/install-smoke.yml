@@ -1,5 +1,5 @@
 ---
-name: Minimal Install Smoke Test
+name: Install Smoke Test
 on:
   push:
     branches: [main, 1.0-dev]
@@ -30,13 +30,18 @@ permissions:
   contents: read
 
 jobs:
-  minimal-install:
-    name: Verify base-only install
+  install-smoke:
+    name: Verify ${{ matrix.profile.name }} install
     runs-on: ubuntu-latest
     if: github.repository == 'a2aproject/a2a-python'
     strategy:
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        profile:
+          - name: base
+            extras: ''
+          - name: http-server
+            extras: '[http-server]'
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -49,15 +54,17 @@ jobs:
       - name: Build package
         run: uv build --wheel
 
-      - name: Install with base dependencies only
+      - name: Install with ${{ matrix.profile.name }} dependencies only
         run: |
-          uv venv .venv-minimal
-          # Install only the built wheel -- no extras, no dev deps.
-          # This simulates what an end-user gets with `pip install a2a-sdk`.
-          VIRTUAL_ENV=.venv-minimal uv pip install dist/*.whl
+          uv venv .venv-smoke
+          # Install only the built wheel + the profile's extras -- no
+          # dev deps. This simulates what an end-user gets with
+          # `pip install a2a-sdk${{ matrix.profile.extras }}`.
+          WHEEL=$(ls dist/*.whl)
+          VIRTUAL_ENV=.venv-smoke uv pip install "${WHEEL}${{ matrix.profile.extras }}"
 
       - name: List installed packages
-        run: VIRTUAL_ENV=.venv-minimal uv pip list
+        run: VIRTUAL_ENV=.venv-smoke uv pip list
 
       - name: Run import smoke test
-        run: .venv-minimal/bin/python scripts/test_minimal_install.py
+        run: .venv-smoke/bin/python scripts/test_install_smoke.py ${{ matrix.profile.name }}
