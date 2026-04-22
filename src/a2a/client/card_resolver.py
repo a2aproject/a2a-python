@@ -6,19 +6,121 @@ from typing import Any
 
 import httpx
 
-from pydantic import ValidationError
+from google.protobuf.json_format import ParseDict, ParseError
 
-from a2a.client.errors import (
-    A2AClientHTTPError,
-    A2AClientJSONError,
-)
-from a2a.types import (
+from a2a.client.errors import AgentCardResolutionError
+from a2a.types.a2a_pb2 import (
     AgentCard,
 )
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 
 logger = logging.getLogger(__name__)
+
+
+def parse_agent_card(agent_card_data: dict[str, Any]) -> AgentCard:
+    """Parse AgentCard JSON dictionary and handle backward compatibility."""
+    _handle_extended_card_compatibility(agent_card_data)
+    _handle_connection_fields_compatibility(agent_card_data)
+    _handle_security_compatibility(agent_card_data)
+
+    return ParseDict(agent_card_data, AgentCard(), ignore_unknown_fields=True)
+
+
+def _handle_extended_card_compatibility(
+    agent_card_data: dict[str, Any],
+) -> None:
+    """Map legacy supportsAuthenticatedExtendedCard to capabilities."""
+    if agent_card_data.pop('supportsAuthenticatedExtendedCard', None):
+        capabilities = agent_card_data.setdefault('capabilities', {})
+        if 'extendedAgentCard' not in capabilities:
+            capabilities['extendedAgentCard'] = True
+
+
+def _handle_connection_fields_compatibility(
+    agent_card_data: dict[str, Any],
+) -> None:
+    """Map legacy connection and transport fields to supportedInterfaces."""
+    main_url = agent_card_data.pop('url', None)
+    main_transport = agent_card_data.pop('preferredTransport', 'JSONRPC')
+    version = agent_card_data.pop('protocolVersion', '0.3.0')
+    additional_interfaces = (
+        agent_card_data.pop('additionalInterfaces', None) or []
+    )
+
+    if 'supportedInterfaces' not in agent_card_data and main_url:
+        supported_interfaces = []
+        supported_interfaces.append(
+            {
+                'url': main_url,
+                'protocolBinding': main_transport,
+                'protocolVersion': version,
+            }
+        )
+        supported_interfaces.extend(
+            {
+                'url': iface.get('url'),
+                'protocolBinding': iface.get('transport'),
+                'protocolVersion': version,
+            }
+            for iface in additional_interfaces
+        )
+        agent_card_data['supportedInterfaces'] = supported_interfaces
+
+
+def _map_legacy_security(
+    sec_list: list[dict[str, list[str]]],
+) -> list[dict[str, Any]]:
+    """Convert a legacy security requirement list into the 1.0.0 Protobuf format."""
+    return [
+        {
+            'schemes': {
+                scheme_name: {'list': scopes}
+                for scheme_name, scopes in sec_dict.items()
+            }
+        }
+        for sec_dict in sec_list
+    ]
+
+
+def _handle_security_compatibility(agent_card_data: dict[str, Any]) -> None:
+    """Map legacy security requirements and schemas to their 1.0.0 Protobuf equivalents."""
+    legacy_security = agent_card_data.pop('security', None)
+    if (
+        'securityRequirements' not in agent_card_data
+        and legacy_security is not None
+    ):
+        agent_card_data['securityRequirements'] = _map_legacy_security(
+            legacy_security
+        )
+
+    for skill in agent_card_data.get('skills', []):
+        legacy_skill_sec = skill.pop('security', None)
+        if 'securityRequirements' not in skill and legacy_skill_sec is not None:
+            skill['securityRequirements'] = _map_legacy_security(
+                legacy_skill_sec
+            )
+
+    security_schemes = agent_card_data.get('securitySchemes', {})
+    if security_schemes:
+        type_mapping = {
+            'apiKey': 'apiKeySecurityScheme',
+            'http': 'httpAuthSecurityScheme',
+            'oauth2': 'oauth2SecurityScheme',
+            'openIdConnect': 'openIdConnectSecurityScheme',
+            'mutualTLS': 'mtlsSecurityScheme',
+        }
+        for scheme in security_schemes.values():
+            scheme_type = scheme.pop('type', None)
+            if scheme_type in type_mapping:
+                # Map legacy 'in' to modern 'location'
+                if scheme_type == 'apiKey' and 'in' in scheme:
+                    scheme['location'] = scheme.pop('in')
+
+                mapped_name = type_mapping[scheme_type]
+                new_scheme_wrapper = {mapped_name: scheme.copy()}
+                scheme.clear()
+                scheme.update(new_scheme_wrapper)
 
 
 class A2ACardResolver:
@@ -64,9 +166,9 @@ class A2ACardResolver:
             An `AgentCard` object representing the agent's capabilities.
 
         Raises:
-            A2AClientHTTPError: If an HTTP error occurs during the request.
-            A2AClientJSONError: If the response body cannot be decoded as JSON
-                or validated against the AgentCard schema.
+            AgentCardResolutionError: If an HTTP error occurs during the request, if the
+                response body cannot be decoded as JSON, or if it cannot be
+                validated against the AgentCard schema.
         """
         if not relative_card_path:
             # Use the default public agent card path configured during initialization
@@ -74,7 +176,9 @@ class A2ACardResolver:
         else:
             path_segment = relative_card_path.lstrip('/')
 
-        target_url = f'{self.base_url}/{path_segment}'
+        target_url = (
+            f'{self.base_url}/{path_segment}' if path_segment else self.base_url
+        )
 
         try:
             response = await self.httpx_client.get(
@@ -88,26 +192,25 @@ class A2ACardResolver:
                 target_url,
                 agent_card_data,
             )
-            agent_card = AgentCard.model_validate(agent_card_data)
+            agent_card = parse_agent_card(agent_card_data)
             if signature_verifier:
                 signature_verifier(agent_card)
         except httpx.HTTPStatusError as e:
-            raise A2AClientHTTPError(
-                e.response.status_code,
-                f'Failed to fetch agent card from {target_url}: {e}',
+            raise AgentCardResolutionError(
+                f'Failed to fetch agent card from {target_url} (HTTP {e.response.status_code}): {e}',
+                status_code=e.response.status_code,
             ) from e
         except json.JSONDecodeError as e:
-            raise A2AClientJSONError(
+            raise AgentCardResolutionError(
                 f'Failed to parse JSON for agent card from {target_url}: {e}'
             ) from e
         except httpx.RequestError as e:
-            raise A2AClientHTTPError(
-                503,
+            raise AgentCardResolutionError(
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e
-        except ValidationError as e:  # Pydantic validation error
-            raise A2AClientJSONError(
-                f'Failed to validate agent card structure from {target_url}: {e.json()}'
+        except ParseError as e:
+            raise AgentCardResolutionError(
+                f'Failed to validate agent card structure from {target_url}: {e}'
             ) from e
 
         return agent_card

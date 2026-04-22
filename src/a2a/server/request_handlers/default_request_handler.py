@@ -1,7 +1,7 @@
 import asyncio
 import logging
 
-from collections.abc import AsyncGenerator
+from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -14,52 +14,70 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import (
     Event,
     EventConsumer,
-    EventQueue,
+    EventQueueLegacy,
     InMemoryQueueManager,
     QueueManager,
 )
-from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.request_handlers.request_handler import (
+    RequestHandler,
+    validate,
+    validate_request_params,
+)
 from a2a.server.tasks import (
     PushNotificationConfigStore,
+    PushNotificationEvent,
     PushNotificationSender,
     ResultAggregator,
     TaskManager,
     TaskStore,
 )
-from a2a.types import (
-    DeleteTaskPushNotificationConfigParams,
-    GetTaskPushNotificationConfigParams,
+from a2a.types.a2a_pb2 import (
+    AgentCard,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksRequest,
+    ListTasksResponse,
+    Message,
+    SendMessageRequest,
+    SubscribeToTaskRequest,
+    Task,
+    TaskPushNotificationConfig,
+    TaskState,
+)
+from a2a.utils.errors import (
+    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
-    ListTaskPushNotificationConfigParams,
-    Message,
-    MessageSendParams,
-    Task,
-    TaskIdParams,
+    PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
-    TaskPushNotificationConfig,
-    TaskQueryParams,
-    TaskState,
     UnsupportedOperationError,
 )
-from a2a.utils.errors import ServerError
-from a2a.utils.task import apply_history_length
+from a2a.utils.task import (
+    apply_history_length,
+    validate_history_length,
+    validate_page_size,
+)
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
 logger = logging.getLogger(__name__)
 
 TERMINAL_TASK_STATES = {
-    TaskState.completed,
-    TaskState.canceled,
-    TaskState.failed,
-    TaskState.rejected,
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
 }
 
 
 @trace_class(kind=SpanKind.SERVER)
-class DefaultRequestHandler(RequestHandler):
+class LegacyRequestHandler(RequestHandler):
     """Default request handler for all incoming requests.
 
     This handler provides default implementations for all A2A JSON-RPC methods,
@@ -74,27 +92,39 @@ class DefaultRequestHandler(RequestHandler):
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore,
+        agent_card: AgentCard,
         queue_manager: QueueManager | None = None,
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
+        extended_agent_card: AgentCard | None = None,
+        extended_card_modifier: Callable[
+            [AgentCard, ServerCallContext], Awaitable[AgentCard]
+        ]
+        | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
         Args:
             agent_executor: The `AgentExecutor` instance to run agent logic.
             task_store: The `TaskStore` instance to manage task persistence.
+            agent_card: The `AgentCard` describing the agent's capabilities.
             queue_manager: The `QueueManager` instance to manage event queues. Defaults to `InMemoryQueueManager`.
             push_config_store: The `PushNotificationConfigStore` instance for managing push notification configurations. Defaults to None.
             push_sender: The `PushNotificationSender` instance for sending push notifications. Defaults to None.
             request_context_builder: The `RequestContextBuilder` instance used
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
+            extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
+            extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
+        self._agent_card = agent_card
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self.extended_agent_card = extended_agent_card
+        self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -108,36 +138,63 @@ class DefaultRequestHandler(RequestHandler):
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
 
+    @validate_request_params
     async def on_get_task(
         self,
-        params: TaskQueryParams,
-        context: ServerCallContext | None = None,
+        params: GetTaskRequest,
+        context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
-        task: Task | None = await self.task_store.get(params.id, context)
+        validate_history_length(params)
+
+        task_id = params.id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
-        # Apply historyLength parameter if specified
-        return apply_history_length(task, params.history_length)
+        return apply_history_length(task, params)
 
+    @validate_request_params
+    async def on_list_tasks(
+        self,
+        params: ListTasksRequest,
+        context: ServerCallContext,
+    ) -> ListTasksResponse:
+        """Default handler for 'tasks/list'."""
+        validate_history_length(params)
+        if params.HasField('page_size'):
+            validate_page_size(params.page_size)
+
+        page = await self.task_store.list(params, context)
+        for task in page.tasks:
+            if not params.include_artifacts:
+                task.ClearField('artifacts')
+
+            updated_task = apply_history_length(task, params)
+            if updated_task is not task:
+                task.CopyFrom(updated_task)
+
+        return page
+
+    @validate_request_params
     async def on_cancel_task(
-        self, params: TaskIdParams, context: ServerCallContext | None = None
+        self,
+        params: CancelTaskRequest,
+        context: ServerCallContext,
     ) -> Task | None:
         """Default handler for 'tasks/cancel'.
 
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
-        task: Task | None = await self.task_store.get(params.id, context)
+        task_id = params.id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
-            raise ServerError(
-                error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {task.status.state}'
-                )
+            raise TaskNotCancelableError(
+                message=f'Task cannot be canceled - current state: {task.status.state}'
             )
 
         task_manager = TaskManager(
@@ -151,11 +208,12 @@ class DefaultRequestHandler(RequestHandler):
 
         queue = await self._queue_manager.tap(task.id)
         if not queue:
-            queue = EventQueue()
+            queue = EventQueueLegacy()
 
         await self.agent_executor.cancel(
             RequestContext(
-                None,
+                call_context=context,
+                request=None,
                 task_id=task.id,
                 context_id=task.context_id,
                 task=task,
@@ -169,23 +227,19 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         result = await result_aggregator.consume_all(consumer)
         if not isinstance(result, Task):
-            raise ServerError(
-                error=InternalError(
-                    message='Agent did not return valid response for cancel'
-                )
+            raise InternalError(
+                message='Agent did not return valid response for cancel'
             )
 
-        if result.status.state != TaskState.canceled:
-            raise ServerError(
-                error=TaskNotCancelableError(
-                    message=f'Task cannot be canceled - current state: {result.status.state}'
-                )
+        if result.status.state != TaskState.TASK_STATE_CANCELED:
+            raise TaskNotCancelableError(
+                message=f'Task cannot be canceled - current state: {result.status.state}'
             )
 
         return result
 
     async def _run_event_stream(
-        self, request: RequestContext, queue: EventQueue
+        self, request: RequestContext, queue: EventQueueLegacy
     ) -> None:
         """Runs the agent's `execute` method and closes the queue afterwards.
 
@@ -198,18 +252,23 @@ class DefaultRequestHandler(RequestHandler):
 
     async def _setup_message_execution(
         self,
-        params: MessageSendParams,
-        context: ServerCallContext | None = None,
-    ) -> tuple[TaskManager, str, EventQueue, ResultAggregator, asyncio.Task]:
+        params: SendMessageRequest,
+        context: ServerCallContext,
+    ) -> tuple[
+        TaskManager, str, EventQueueLegacy, ResultAggregator, asyncio.Task
+    ]:
         """Common setup logic for both streaming and non-streaming message handling.
 
         Returns:
             A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
         """
         # Create task manager and validate existing task
+        # Proto empty strings should be treated as None
+        task_id = params.message.task_id or None
+        context_id = params.message.context_id or None
         task_manager = TaskManager(
-            task_id=params.message.task_id,
-            context_id=params.message.context_id,
+            task_id=task_id,
+            context_id=context_id,
             task_store=self.task_store,
             initial_message=params.message,
             context=context,
@@ -218,18 +277,14 @@ class DefaultRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise ServerError(
-                    error=InvalidParamsError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state.value}'
-                    )
+                raise InvalidParamsError(
+                    message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
         elif params.message.task_id:
-            raise ServerError(
-                error=TaskNotFoundError(
-                    message=f'Task {params.message.task_id} was specified but does not exist'
-                )
+            raise TaskNotFoundError(
+                message=f'Task {params.message.task_id} was specified but does not exist'
             )
 
         # Build request context
@@ -249,10 +304,12 @@ class DefaultRequestHandler(RequestHandler):
         if (
             self._push_config_store
             and params.configuration
-            and params.configuration.push_notification_config
+            and params.configuration.task_push_notification_config
         ):
             await self._push_config_store.set_info(
-                task_id, params.configuration.push_notification_config
+                task_id,
+                params.configuration.task_push_notification_config,
+                context,
             )
 
         queue = await self._queue_manager.create_or_tap(task_id)
@@ -273,29 +330,32 @@ class DefaultRequestHandler(RequestHandler):
                 event_task_id,
                 task_id,
             )
-            raise ServerError(
-                InternalError(message='Task ID mismatch in agent response')
-            )
+            raise InternalError(message='Task ID mismatch in agent response')
 
     async def _send_push_notification_if_needed(
-        self, task_id: str, result_aggregator: ResultAggregator
+        self, task_id: str, event: Event
     ) -> None:
-        """Sends push notification if configured and task is available."""
-        if self._push_sender and task_id:
-            latest_task = await result_aggregator.current_result
-            if isinstance(latest_task, Task):
-                await self._push_sender.send_notification(latest_task)
+        """Sends push notification if configured."""
+        if (
+            self._push_sender
+            and task_id
+            and isinstance(event, PushNotificationEvent)
+        ):
+            await self._push_sender.send_notification(task_id, event)
 
+    @validate_request_params
     async def on_message_send(
         self,
-        params: MessageSendParams,
-        context: ServerCallContext | None = None,
+        params: SendMessageRequest,
+        context: ServerCallContext,
     ) -> Message | Task:
         """Default handler for 'message/send' interface (non-streaming).
 
         Starts the agent execution for the message and waits for the final
         result (Task or Message).
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -307,17 +367,13 @@ class DefaultRequestHandler(RequestHandler):
         consumer = EventConsumer(queue)
         producer_task.add_done_callback(consumer.agent_task_callback)
 
-        blocking = True  # Default to blocking behavior
-        if params.configuration and params.configuration.blocking is False:
-            blocking = False
+        blocking = not params.configuration.return_immediately
 
         interrupted_or_non_blocking = False
         try:
             # Create async callback for push notifications
-            async def push_notification_callback() -> None:
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+            async def push_notification_callback(event: Event) -> None:
+                await self._send_push_notification_if_needed(task_id, event)
 
             (
                 result,
@@ -348,23 +404,24 @@ class DefaultRequestHandler(RequestHandler):
                 await self._cleanup_producer(producer_task, task_id)
 
         if not result:
-            raise ServerError(error=InternalError())
+            raise InternalError
 
         if isinstance(result, Task):
             self._validate_task_id_match(task_id, result.id)
             if params.configuration:
-                result = apply_history_length(
-                    result, params.configuration.history_length
-                )
-
-        await self._send_push_notification_if_needed(task_id, result_aggregator)
+                result = apply_history_length(result, params.configuration)
 
         return result
 
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
     async def on_message_send_stream(
         self,
-        params: MessageSendParams,
-        context: ServerCallContext | None = None,
+        params: SendMessageRequest,
+        context: ServerCallContext,
     ) -> AsyncGenerator[Event]:
         """Default handler for 'message/stream' (streaming).
 
@@ -386,9 +443,7 @@ class DefaultRequestHandler(RequestHandler):
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
 
-                await self._send_push_notification_if_needed(
-                    task_id, result_aggregator
-                )
+                await self._send_push_notification_if_needed(task_id, event)
                 yield event
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
@@ -451,80 +506,99 @@ class DefaultRequestHandler(RequestHandler):
         async with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
-    async def on_set_task_push_notification_config(
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
+    async def on_create_task_push_notification_config(
         self,
         params: TaskPushNotificationConfig,
-        context: ServerCallContext | None = None,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
-        """Default handler for 'tasks/pushNotificationConfig/set'.
+        """Default handler for 'tasks/pushNotificationConfig/create'.
 
         Requires a `PushNotifier` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise PushNotificationNotSupportedError
 
-        task: Task | None = await self.task_store.get(params.task_id, context)
+        task_id = params.task_id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         await self._push_config_store.set_info(
-            params.task_id,
-            params.push_notification_config,
+            task_id,
+            params,
+            context,
         )
 
         return params
 
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_get_task_push_notification_config(
         self,
-        params: TaskIdParams | GetTaskPushNotificationConfigParams,
-        context: ServerCallContext | None = None,
+        params: GetTaskPushNotificationConfigRequest,
+        context: ServerCallContext,
     ) -> TaskPushNotificationConfig:
         """Default handler for 'tasks/pushNotificationConfig/get'.
 
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise PushNotificationNotSupportedError
 
-        task: Task | None = await self.task_store.get(params.id, context)
+        task_id = params.task_id
+        config_id = params.id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
-        push_notification_config = await self._push_config_store.get_info(
-            params.id
-        )
-        if not push_notification_config or not push_notification_config[0]:
-            raise ServerError(
-                error=InternalError(
-                    message='Push notification config not found'
-                )
-            )
-
-        return TaskPushNotificationConfig(
-            task_id=params.id,
-            push_notification_config=push_notification_config[0],
+        push_notification_configs: list[TaskPushNotificationConfig] = (
+            await self._push_config_store.get_info(task_id, context) or []
         )
 
-    async def on_resubscribe_to_task(
+        for config in push_notification_configs:
+            if config.id == config_id:
+                return config
+
+        raise TaskNotFoundError
+
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.streaming,
+        'Streaming is not supported by the agent',
+    )
+    async def on_subscribe_to_task(
         self,
-        params: TaskIdParams,
-        context: ServerCallContext | None = None,
-    ) -> AsyncGenerator[Event]:
-        """Default handler for 'tasks/resubscribe'.
+        params: SubscribeToTaskRequest,
+        context: ServerCallContext,
+    ) -> AsyncGenerator[Event, None]:
+        """Default handler for 'SubscribeToTask'.
 
         Allows a client to re-attach to a running streaming task's event stream.
         Requires the task and its queue to still be active.
         """
-        task: Task | None = await self.task_store.get(params.id, context)
+        task_id = params.id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         if task.status.state in TERMINAL_TASK_STATES:
-            raise ServerError(
-                error=InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state.value}'
-                )
+            raise UnsupportedOperationError(
+                message=f'Task {task.id} is in terminal state: {task.status.state}'
             )
+
+        # The operation MUST return a Task object as the first event in the stream
+        # https://a2a-protocol.org/latest/specification/#316-subscribe-to-task
+        yield task
 
         task_manager = TaskManager(
             task_id=task.id,
@@ -538,55 +612,90 @@ class DefaultRequestHandler(RequestHandler):
 
         queue = await self._queue_manager.tap(task.id)
         if not queue:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         consumer = EventConsumer(queue)
         async for event in result_aggregator.consume_and_emit(consumer):
             yield event
 
-    async def on_list_task_push_notification_config(
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
+    async def on_list_task_push_notification_configs(
         self,
-        params: ListTaskPushNotificationConfigParams,
-        context: ServerCallContext | None = None,
-    ) -> list[TaskPushNotificationConfig]:
-        """Default handler for 'tasks/pushNotificationConfig/list'.
+        params: ListTaskPushNotificationConfigsRequest,
+        context: ServerCallContext,
+    ) -> ListTaskPushNotificationConfigsResponse:
+        """Default handler for 'ListTaskPushNotificationConfigs'.
 
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise PushNotificationNotSupportedError
 
-        task: Task | None = await self.task_store.get(params.id, context)
+        task_id = params.task_id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
         push_notification_config_list = await self._push_config_store.get_info(
-            params.id
+            task_id, context
         )
 
-        return [
-            TaskPushNotificationConfig(
-                task_id=params.id, push_notification_config=config
-            )
-            for config in push_notification_config_list
-        ]
+        return ListTaskPushNotificationConfigsResponse(
+            configs=push_notification_config_list
+        )
 
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.push_notifications,
+        error_message='Push notifications are not supported by the agent',
+        error_type=PushNotificationNotSupportedError,
+    )
     async def on_delete_task_push_notification_config(
         self,
-        params: DeleteTaskPushNotificationConfigParams,
-        context: ServerCallContext | None = None,
+        params: DeleteTaskPushNotificationConfigRequest,
+        context: ServerCallContext,
     ) -> None:
         """Default handler for 'tasks/pushNotificationConfig/delete'.
 
         Requires a `PushConfigStore` to be configured.
         """
         if not self._push_config_store:
-            raise ServerError(error=UnsupportedOperationError())
+            raise PushNotificationNotSupportedError
 
-        task: Task | None = await self.task_store.get(params.id, context)
+        task_id = params.task_id
+        config_id = params.id
+        task: Task | None = await self.task_store.get(task_id, context)
         if not task:
-            raise ServerError(error=TaskNotFoundError())
+            raise TaskNotFoundError
 
-        await self._push_config_store.delete_info(
-            params.id, params.push_notification_config_id
-        )
+        await self._push_config_store.delete_info(task_id, context, config_id)
+
+    @validate_request_params
+    @validate(
+        lambda self: self._agent_card.capabilities.extended_agent_card,
+        error_message='The agent does not support authenticated extended cards',
+    )
+    async def on_get_extended_agent_card(
+        self,
+        params: GetExtendedAgentCardRequest,
+        context: ServerCallContext,
+    ) -> AgentCard:
+        """Default handler for 'GetExtendedAgentCard'.
+
+        Requires `capabilities.extended_agent_card` to be true.
+        """
+        extended_card = self.extended_agent_card
+        if not extended_card:
+            raise ExtendedAgentCardNotConfiguredError
+
+        if self.extended_card_modifier:
+            extended_card = await self.extended_card_modifier(
+                extended_card, context
+            )
+
+        return extended_card

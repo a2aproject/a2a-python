@@ -1,4 +1,5 @@
-from typing import TYPE_CHECKING, Any, Generic, TypeVar
+from datetime import datetime
+from typing import TYPE_CHECKING, Any
 
 
 if TYPE_CHECKING:
@@ -10,20 +11,17 @@ else:
         return func
 
 
-from pydantic import BaseModel
-
-from a2a.types import Artifact, Message, TaskStatus
+from a2a.types.a2a_pb2 import Artifact, Message, TaskStatus
 
 
 try:
-    from sqlalchemy import JSON, Dialect, LargeBinary, String
+    from sqlalchemy import JSON, DateTime, Index, LargeBinary, String
     from sqlalchemy.orm import (
         DeclarativeBase,
         Mapped,
         declared_attr,
         mapped_column,
     )
-    from sqlalchemy.types import TypeDecorator
 except ImportError as e:
     raise ImportError(
         'Database models require SQLAlchemy. '
@@ -33,84 +31,6 @@ except ImportError as e:
         "'pip install a2a-sdk[sqlite]', "
         "or 'pip install a2a-sdk[sql]'"
     ) from e
-
-
-T = TypeVar('T', bound=BaseModel)
-
-
-class PydanticType(TypeDecorator[T], Generic[T]):
-    """SQLAlchemy type that handles Pydantic model serialization."""
-
-    impl = JSON
-    cache_ok = True
-
-    def __init__(self, pydantic_type: type[T], **kwargs: dict[str, Any]):
-        """Initialize the PydanticType.
-
-        Args:
-            pydantic_type: The Pydantic model type to handle.
-            **kwargs: Additional arguments for TypeDecorator.
-        """
-        self.pydantic_type = pydantic_type
-        super().__init__(**kwargs)
-
-    def process_bind_param(
-        self, value: T | None, dialect: Dialect
-    ) -> dict[str, Any] | None:
-        """Convert Pydantic model to a JSON-serializable dictionary for the database."""
-        if value is None:
-            return None
-        return (
-            value.model_dump(mode='json')
-            if isinstance(value, BaseModel)
-            else value
-        )
-
-    def process_result_value(
-        self, value: dict[str, Any] | None, dialect: Dialect
-    ) -> T | None:
-        """Convert a JSON-like dictionary from the database back to a Pydantic model."""
-        if value is None:
-            return None
-        return self.pydantic_type.model_validate(value)
-
-
-class PydanticListType(TypeDecorator, Generic[T]):
-    """SQLAlchemy type that handles lists of Pydantic models."""
-
-    impl = JSON
-    cache_ok = True
-
-    def __init__(self, pydantic_type: type[T], **kwargs: dict[str, Any]):
-        """Initialize the PydanticListType.
-
-        Args:
-            pydantic_type: The Pydantic model type for items in the list.
-            **kwargs: Additional arguments for TypeDecorator.
-        """
-        self.pydantic_type = pydantic_type
-        super().__init__(**kwargs)
-
-    def process_bind_param(
-        self, value: list[T] | None, dialect: Dialect
-    ) -> list[dict[str, Any]] | None:
-        """Convert a list of Pydantic models to a JSON-serializable list for the DB."""
-        if value is None:
-            return None
-        return [
-            item.model_dump(mode='json')
-            if isinstance(item, BaseModel)
-            else item
-            for item in value
-        ]
-
-    def process_result_value(
-        self, value: list[dict[str, Any]] | None, dialect: Dialect
-    ) -> list[T] | None:
-        """Convert a JSON-like list from the DB back to a list of Pydantic models."""
-        if value is None:
-            return None
-        return [self.pydantic_type.model_validate(item) for item in value]
 
 
 # Base class for all database models
@@ -127,14 +47,17 @@ class TaskMixin:
     kind: Mapped[str] = mapped_column(
         String(16), nullable=False, default='task'
     )
-
-    # Properly typed Pydantic fields with automatic serialization
-    status: Mapped[TaskStatus] = mapped_column(PydanticType(TaskStatus))
-    artifacts: Mapped[list[Artifact] | None] = mapped_column(
-        PydanticListType(Artifact), nullable=True
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
+    last_updated: Mapped[datetime | None] = mapped_column(
+        DateTime, nullable=True
     )
-    history: Mapped[list[Message] | None] = mapped_column(
-        PydanticListType(Message), nullable=True
+    status: Mapped[TaskStatus] = mapped_column(JSON, nullable=False)
+    artifacts: Mapped[list[Artifact] | None] = mapped_column(
+        JSON, nullable=True
+    )
+    history: Mapped[list[Message] | None] = mapped_column(JSON, nullable=True)
+    protocol_version: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
     )
 
     # Using declared_attr to avoid conflict with Pydantic's metadata
@@ -150,6 +73,17 @@ class TaskMixin:
         return (
             f'<{self.__class__.__name__}(id="{self.id}", '
             f'context_id="{self.context_id}", status="{self.status}")>'
+        )
+
+    @declared_attr.directive
+    @classmethod
+    def __table_args__(cls) -> tuple[Any, ...]:
+        """Define a composite index (owner, last_updated) for each table that uses the mixin."""
+        tablename = getattr(cls, '__tablename__', 'tasks')
+        return (
+            Index(
+                f'idx_{tablename}_owner_last_updated', 'owner', 'last_updated'
+            ),
         )
 
 
@@ -212,6 +146,10 @@ class PushNotificationConfigMixin:
     task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
     config_id: Mapped[str] = mapped_column(String(255), primary_key=True)
     config_data: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True, index=True)
+    protocol_version: Mapped[str | None] = mapped_column(
+        String(16), nullable=True
+    )
 
     @override
     def __repr__(self) -> str:

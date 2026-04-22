@@ -1,5 +1,197 @@
 # Changelog
 
+## [1.0.1](https://github.com/a2aproject/a2a-python/compare/v1.0.0...v1.0.1) (2026-04-22)
+
+
+### Bug Fixes
+
+* **compat:** avoid unconditional grpc import in v0.3 context builders ([#1006](https://github.com/a2aproject/a2a-python/issues/1006)) ([6b46ceb](https://github.com/a2aproject/a2a-python/commit/6b46ceb3e036290ea2b0764b1697f2901ad2df08))
+
+## [1.0.0](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.3...v1.0.0) (2026-04-20)
+
+See the [**v0.3 → v1.0 migration guide**](docs/migrations/v1_0/README.md) and changelog entries for alpha versions below.
+
+### ⚠ BREAKING CHANGES
+
+* remove Vertex AI Task Store integration ([#999](https://github.com/a2aproject/a2a-python/issues/999))
+
+### Bug Fixes
+
+* rely on agent executor implementation for stream termination ([#988](https://github.com/a2aproject/a2a-python/issues/988)) ([d77cd68](https://github.com/a2aproject/a2a-python/commit/d77cd68f5e69b0ffccaca5e3deab4c1a397cfe9c))
+
+
+### Documentation
+
+* add comprehensive v0.3 to v1.0 migration guide ([#987](https://github.com/a2aproject/a2a-python/issues/987)) ([10dea8b](https://github.com/a2aproject/a2a-python/commit/10dea8b4448c5cb7d9e72d74677fd60880cc38df))
+
+
+### Miscellaneous Chores
+
+* release 1.0.0 ([530ec37](https://github.com/a2aproject/a2a-python/commit/530ec37f4c4580095c2411e40740ca0186fd1240))
+* remove Vertex AI Task Store integration ([#999](https://github.com/a2aproject/a2a-python/issues/999)) ([7fce2ad](https://github.com/a2aproject/a2a-python/commit/7fce2ada1eb331e230925993758e8c7663da9a13))
+
+## [1.0.0-alpha.3](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.2...v1.0.0-alpha.3) (2026-04-17)
+
+
+### Bug Fixes
+
+* update `with_a2a_extensions` to append instead of overwriting ([#985](https://github.com/a2aproject/a2a-python/issues/985)) ([e1d0e7a](https://github.com/a2aproject/a2a-python/commit/e1d0e7a72e2b9633be0b76c952f6c2e6fe11e3e5))
+
+## [1.0.0-alpha.2](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.1...v1.0.0-alpha.2) (2026-04-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* clean helpers and utils folders structure ([#983](https://github.com/a2aproject/a2a-python/issues/983))
+* Raise errors on invalid AgentExecutor behavior. ([#979](https://github.com/a2aproject/a2a-python/issues/979))
+* extract developer helpers in helpers folder ([#978](https://github.com/a2aproject/a2a-python/issues/978))
+
+### Features
+
+* Raise errors on invalid AgentExecutor behavior. ([#979](https://github.com/a2aproject/a2a-python/issues/979)) ([f4a0bcd](https://github.com/a2aproject/a2a-python/commit/f4a0bcdf68107c95e6c0a5e6696e4a7d6e01a03f))
+* **utils:** add `display_agent_card()` utility for human-readable AgentCard inspection ([#972](https://github.com/a2aproject/a2a-python/issues/972)) ([3468180](https://github.com/a2aproject/a2a-python/commit/3468180ac7396d453d99ce3e74cdd7f5a0afb5ab))
+
+
+### Bug Fixes
+
+* Don't generate empty metadata change events in VertexTaskStore ([#974](https://github.com/a2aproject/a2a-python/issues/974)) ([b58b03e](https://github.com/a2aproject/a2a-python/commit/b58b03ef58bd806db3accbe6dca8fc444a43bc18)), closes [#802](https://github.com/a2aproject/a2a-python/issues/802)
+* **extensions:** support both header names and remove "activation" concept ([#984](https://github.com/a2aproject/a2a-python/issues/984)) ([b8df210](https://github.com/a2aproject/a2a-python/commit/b8df210b00d0f249ca68f0d814191c4205e18b35))
+
+
+### Documentation
+
+* AgentExecutor interface documentation ([#976](https://github.com/a2aproject/a2a-python/issues/976)) ([d667e4f](https://github.com/a2aproject/a2a-python/commit/d667e4fa55e99225eb3c02e009b426a3bc2d449d))
+* move `ai_learnings.md` to local-only and update `GEMINI.md` ([#982](https://github.com/a2aproject/a2a-python/issues/982)) ([f6610fa](https://github.com/a2aproject/a2a-python/commit/f6610fa35e1f5fbc3e7e6cd9e29a5177a538eb4e))
+
+
+### Code Refactoring
+
+* clean helpers and utils folders structure ([#983](https://github.com/a2aproject/a2a-python/issues/983)) ([c87e87c](https://github.com/a2aproject/a2a-python/commit/c87e87c76c004c73c9d6b9bd8cacfd4e590598e6))
+* extract developer helpers in helpers folder ([#978](https://github.com/a2aproject/a2a-python/issues/978)) ([5f3ea29](https://github.com/a2aproject/a2a-python/commit/5f3ea292389cf72a25a7cf2792caceb4af45f6da))
+
+## [1.0.0-alpha.1](https://github.com/a2aproject/a2a-python/compare/v1.0.0-alpha.0...v1.0.0-alpha.1) (2026-04-10)
+
+
+### ⚠ BREAKING CHANGES
+
+* **client:** make ClientConfig.push_notification_config singular ([#955](https://github.com/a2aproject/a2a-python/issues/955))
+* **client:** reorganize ClientFactory API ([#947](https://github.com/a2aproject/a2a-python/issues/947))
+* **server:** add build_user function to DefaultContextBuilder to allow A2A user creation customization ([#925](https://github.com/a2aproject/a2a-python/issues/925))
+* **client:** remove `ClientTaskManager` and `Consumers` from client ([#916](https://github.com/a2aproject/a2a-python/issues/916))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for rest ([#892](https://github.com/a2aproject/a2a-python/issues/892))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for jsonrpc ([#873](https://github.com/a2aproject/a2a-python/issues/873))
+
+### Features
+
+* A2A Version Header validation on server side. ([#865](https://github.com/a2aproject/a2a-python/issues/865)) ([b261ceb](https://github.com/a2aproject/a2a-python/commit/b261ceb98bf46cc1e479fcdace52fef8371c8e58))
+* Add GetExtendedAgentCard Support to RequestHandlers ([#919](https://github.com/a2aproject/a2a-python/issues/919)) ([2159140](https://github.com/a2aproject/a2a-python/commit/2159140b1c24fe556a41accf97a6af7f54ec6701))
+* Add support for more Task Message and Artifact fields in the Vertex Task Store ([#908](https://github.com/a2aproject/a2a-python/issues/908)) ([5e0dcd7](https://github.com/a2aproject/a2a-python/commit/5e0dcd798fcba16a8092b0b4c2d3d8026ca287de))
+* Add support for more Task Message and Artifact fields in the Vertex Task Store ([#936](https://github.com/a2aproject/a2a-python/issues/936)) ([605fa49](https://github.com/a2aproject/a2a-python/commit/605fa4913ad23539a51a3ee1f5b9ca07f24e1d2d))
+* Create EventQueue interface and make tap() async. ([#914](https://github.com/a2aproject/a2a-python/issues/914)) ([9ccf99c](https://github.com/a2aproject/a2a-python/commit/9ccf99c63d4e556eadea064de6afa0b4fc4e19d6)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* EventQueue - unify implementation between python versions ([#877](https://github.com/a2aproject/a2a-python/issues/877)) ([7437b88](https://github.com/a2aproject/a2a-python/commit/7437b88328fc71ed07e8e50f22a2eb0df4bf4201)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* EventQueue is now a simple interface with single enqueue_event method. ([#944](https://github.com/a2aproject/a2a-python/issues/944)) ([f0e1d74](https://github.com/a2aproject/a2a-python/commit/f0e1d74802e78a4e9f4c22cbc85db104137e0cd2))
+* Implementation of DefaultRequestHandlerV2 ([#933](https://github.com/a2aproject/a2a-python/issues/933)) ([462eb3c](https://github.com/a2aproject/a2a-python/commit/462eb3cb7b6070c258f5672aa3b0aa59e913037c)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* InMemoryTaskStore creates a copy of Task by default to make it consistent with database task stores  ([#887](https://github.com/a2aproject/a2a-python/issues/887)) ([8c65e84](https://github.com/a2aproject/a2a-python/commit/8c65e84fb844251ce1d8f04d26dbf465a89b9a29)), closes [#869](https://github.com/a2aproject/a2a-python/issues/869)
+* merge metadata of new and old artifact when append=True ([#945](https://github.com/a2aproject/a2a-python/issues/945)) ([cc094aa](https://github.com/a2aproject/a2a-python/commit/cc094aa51caba8107b63982e9b79256f7c2d331a))
+* **server:** add async context manager support to EventQueue ([#743](https://github.com/a2aproject/a2a-python/issues/743)) ([f68b22f](https://github.com/a2aproject/a2a-python/commit/f68b22f0323ed4ff9267fabcf09c9d873baecc39))
+* **server:** validate presence according to `google.api.field_behavior` annotations ([#870](https://github.com/a2aproject/a2a-python/issues/870)) ([4586c3e](https://github.com/a2aproject/a2a-python/commit/4586c3ec0b507d64caa3ced72d68a34ec5b37a11))
+* Simplify ActiveTask.subscribe() ([#958](https://github.com/a2aproject/a2a-python/issues/958)) ([62e5e59](https://github.com/a2aproject/a2a-python/commit/62e5e59a30b11b9b493f7bf969aa13173ce51b9c))
+* Support AgentExectuor enqueue of a Task object. ([#960](https://github.com/a2aproject/a2a-python/issues/960)) ([12ce017](https://github.com/a2aproject/a2a-python/commit/12ce0179056db9d9ba2abdd559cb5a4bb5a20ddf))
+* Support Message-only simplified execution without creating Task ([#956](https://github.com/a2aproject/a2a-python/issues/956)) ([354fdfb](https://github.com/a2aproject/a2a-python/commit/354fdfb68dd0c7894daaac885a06dfed0ab839c8))
+* Unhandled exception in AgentExecutor marks task as failed ([#943](https://github.com/a2aproject/a2a-python/issues/943)) ([4fc6b54](https://github.com/a2aproject/a2a-python/commit/4fc6b54fd26cc83d810d81f923579a1cd4853b39))
+
+
+### Bug Fixes
+
+* Add `packaging` to base dependencies ([#897](https://github.com/a2aproject/a2a-python/issues/897)) ([7a9aec7](https://github.com/a2aproject/a2a-python/commit/7a9aec7779448faa85a828d1076bcc47cda7bdbb))
+* **client:** do not mutate SendMessageRequest in BaseClient.send_message ([#949](https://github.com/a2aproject/a2a-python/issues/949)) ([94537c3](https://github.com/a2aproject/a2a-python/commit/94537c382be4160332279a44d83254feeb0b8037))
+* fix `athrow()` RuntimeError on streaming responses ([#912](https://github.com/a2aproject/a2a-python/issues/912)) ([ca7edc3](https://github.com/a2aproject/a2a-python/commit/ca7edc3b670538ce0f051c49f2224173f186d3f4))
+* fix docstrings related to `CallContextBuilder` args in constructors and make ServerCallContext mandatory in `compat` folder ([#907](https://github.com/a2aproject/a2a-python/issues/907)) ([9cade9b](https://github.com/a2aproject/a2a-python/commit/9cade9bdadfb94f2f857ec2dc302a2c402e7f0ea))
+* fix error handling for gRPC and SSE streaming ([#879](https://github.com/a2aproject/a2a-python/issues/879)) ([2b323d0](https://github.com/a2aproject/a2a-python/commit/2b323d0b191279fb5f091199aa30865299d5fcf2))
+* fix JSONRPC error handling ([#957](https://github.com/a2aproject/a2a-python/issues/957)) ([6c807d5](https://github.com/a2aproject/a2a-python/commit/6c807d51c49ac294a6e3cbec34be101d4f91870d))
+* fix REST error handling ([#893](https://github.com/a2aproject/a2a-python/issues/893)) ([405be3f](https://github.com/a2aproject/a2a-python/commit/405be3fa3ef8c60f730452b956879beeaecc5957))
+* handle SSE errors occurred after stream started ([#894](https://github.com/a2aproject/a2a-python/issues/894)) ([3a68d8f](https://github.com/a2aproject/a2a-python/commit/3a68d8f916d96ae135748ee2b9b907f8dace4fa7))
+* remove the use of deprecated types from VertexTaskStore ([#889](https://github.com/a2aproject/a2a-python/issues/889)) ([6d49122](https://github.com/a2aproject/a2a-python/commit/6d49122238a5e7d497c5d002792732446071dcb2))
+* Remove unconditional SQLAlchemy dependency from SDK core ([#898](https://github.com/a2aproject/a2a-python/issues/898)) ([ab762f0](https://github.com/a2aproject/a2a-python/commit/ab762f0448911a9ac05b6e3fec0104615e0ec557)), closes [#883](https://github.com/a2aproject/a2a-python/issues/883)
+* remove unused import and request for FastAPI in pyproject ([#934](https://github.com/a2aproject/a2a-python/issues/934)) ([fe5de77](https://github.com/a2aproject/a2a-python/commit/fe5de77a1d457958fe14fec61b0d8aa41c5ec300))
+* replace stale entry in a2a.types.__all__ with actual import name ([#902](https://github.com/a2aproject/a2a-python/issues/902)) ([05cd5e9](https://github.com/a2aproject/a2a-python/commit/05cd5e9b73b55d2863c58c13be0c7dd21d8124bb))
+* wrong method name for ExtendedAgentCard endpoint in JsonRpc compat version ([#931](https://github.com/a2aproject/a2a-python/issues/931)) ([5d22186](https://github.com/a2aproject/a2a-python/commit/5d22186b8ee0f64b744512cdbe7ab6176fa97c60))
+
+
+### Documentation
+
+* add Database Migration Documentation ([#864](https://github.com/a2aproject/a2a-python/issues/864)) ([fd12dff](https://github.com/a2aproject/a2a-python/commit/fd12dffa3a7aa93816c762a155ed9b505086b924))
+
+
+### Miscellaneous Chores
+
+* release 1.0.0-alpha.1 ([a61f6d4](https://github.com/a2aproject/a2a-python/commit/a61f6d4e2e7ce1616a35c3a2ede64a4c9067048a))
+
+
+### Code Refactoring
+
+* **client:** make ClientConfig.push_notification_config singular ([#955](https://github.com/a2aproject/a2a-python/issues/955)) ([be4c5ff](https://github.com/a2aproject/a2a-python/commit/be4c5ff17a2f58e20d5d333a5e8e7bfcaa58c6c0))
+* **client:** remove `ClientTaskManager` and `Consumers` from client ([#916](https://github.com/a2aproject/a2a-python/issues/916)) ([97058bb](https://github.com/a2aproject/a2a-python/commit/97058bb444ea663d77c3b62abcf2fd0c30a1a526)), closes [#734](https://github.com/a2aproject/a2a-python/issues/734)
+* **client:** reorganize ClientFactory API ([#947](https://github.com/a2aproject/a2a-python/issues/947)) ([01b3b2c](https://github.com/a2aproject/a2a-python/commit/01b3b2c0e196b0aab4f1f0dc22a95c09c7ee914d))
+* **server:** add build_user function to DefaultContextBuilder to allow A2A user creation customization ([#925](https://github.com/a2aproject/a2a-python/issues/925)) ([2648c5e](https://github.com/a2aproject/a2a-python/commit/2648c5e50281ceb9795b10a726bd23670b363ae1))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for jsonrpc ([#873](https://github.com/a2aproject/a2a-python/issues/873)) ([734d062](https://github.com/a2aproject/a2a-python/commit/734d0621dc6170d10d0cdf9c074e5ae28531fc71))
+* **server:** migrate from Application wrappers to Starlette route-based endpoints for rest ([#892](https://github.com/a2aproject/a2a-python/issues/892)) ([4be2064](https://github.com/a2aproject/a2a-python/commit/4be2064b5d511e0b4617507ed0c376662688ebeb))
+
+## 1.0.0-alpha.0 (2026-03-17)
+
+
+### ⚠ BREAKING CHANGES
+
+* **spec**: upgrade SDK to A2A 1.0 spec and use proto-based types ([#572](https://github.com/a2aproject/a2a-python/issues/572), [#665](https://github.com/a2aproject/a2a-python/issues/665), [#804](https://github.com/a2aproject/a2a-python/issues/804), [#765](https://github.com/a2aproject/a2a-python/issues/765))
+* **client:** introduce ServiceParameters for extensions and include it in ClientCallContext ([#784](https://github.com/a2aproject/a2a-python/issues/784))
+* **client:** rename "callback" -> "push_notification_config" ([#749](https://github.com/a2aproject/a2a-python/issues/749))
+* **client:** transport agnostic interceptors ([#796](https://github.com/a2aproject/a2a-python/issues/796)) ([a910cbc](https://github.com/a2aproject/a2a-python/commit/a910cbcd48f6017c19bb4c87be3c62b7d7e9810d))
+* add `protocol_version` column to Task and PushNotificationConfig models and create a migration ([#789](https://github.com/a2aproject/a2a-python/issues/789)) ([2e2d431](https://github.com/a2aproject/a2a-python/commit/2e2d43190930612495720c372dd2d9921c0311f9))
+* **server:** implement `Resource Scoping` for tasks and push notifications ([#709](https://github.com/a2aproject/a2a-python/issues/709)) ([f0d4669](https://github.com/a2aproject/a2a-python/commit/f0d4669224841657341e7f773b427e2128ab0ed8))
+
+### Features
+
+* add GetExtendedAgentCardRequest as input parameter to GetExtendedAgentCard method ([#767](https://github.com/a2aproject/a2a-python/issues/767)) ([13a092f](https://github.com/a2aproject/a2a-python/commit/13a092f5a5d7b2b2654c69a99dc09ed9d928ffe5))
+* add validation for the JSON-RPC version ([#808](https://github.com/a2aproject/a2a-python/issues/808)) ([6eb7e41](https://github.com/a2aproject/a2a-python/commit/6eb7e4155517be8ff0766c0a929fd7d7b4a52db5))
+* **client:** expose close() and async context manager support on abstract Client ([#719](https://github.com/a2aproject/a2a-python/issues/719)) ([e25ba7b](https://github.com/a2aproject/a2a-python/commit/e25ba7be57fe28ab101a9726972f7c8620468a52))
+* **compat:** AgentCard backward compatibility helpers and tests ([#760](https://github.com/a2aproject/a2a-python/issues/760)) ([81f3494](https://github.com/a2aproject/a2a-python/commit/81f349482fc748c93b073a9f2af715e7333b0dfb))
+* **compat:** GRPC client compatible with 0.3 server ([#779](https://github.com/a2aproject/a2a-python/issues/779)) ([0ebca93](https://github.com/a2aproject/a2a-python/commit/0ebca93670703490df1e536d57b4cd83595d0e51))
+* **compat:** GRPC server compatible with 0.3 client ([#772](https://github.com/a2aproject/a2a-python/issues/772)) ([80d827a](https://github.com/a2aproject/a2a-python/commit/80d827ae4ebb6515bf8dcb10e50ba27be8b6b41b))
+* **compat:** legacy v0.3 protocol models, conversion logic and utilities ([#754](https://github.com/a2aproject/a2a-python/issues/754)) ([26835ad](https://github.com/a2aproject/a2a-python/commit/26835ad3f6d256ff6b84858d690204da66854eb9))
+* **compat:** REST and JSONRPC clients compatible with 0.3 servers ([#798](https://github.com/a2aproject/a2a-python/issues/798)) ([08794f7](https://github.com/a2aproject/a2a-python/commit/08794f7bd05c223f8621d4b6924fc9a80d898a39))
+* **compat:** REST and JSONRPC servers compatible with 0.3 clients ([#795](https://github.com/a2aproject/a2a-python/issues/795)) ([9856054](https://github.com/a2aproject/a2a-python/commit/9856054f8398162b01e38b65b2e090adb95f1e8b))
+* **compat:** set a2a-version header to 1.0.0 ([#764](https://github.com/a2aproject/a2a-python/issues/764)) ([4cb68aa](https://github.com/a2aproject/a2a-python/commit/4cb68aa26a80a1121055d11f067824610a035ee6))
+* **compat:** unify v0.3 REST url prefix and expand cross-version tests ([#820](https://github.com/a2aproject/a2a-python/issues/820)) ([0925f0a](https://github.com/a2aproject/a2a-python/commit/0925f0aa27800df57ca766a1f7b0a36071e3752c))
+* database forward compatibility: make `owner` field optional ([#812](https://github.com/a2aproject/a2a-python/issues/812)) ([cc29d1f](https://github.com/a2aproject/a2a-python/commit/cc29d1f2fb1dbaeae80a08b783e3ba05bc4a757e))
+* handle tenant in Client ([#758](https://github.com/a2aproject/a2a-python/issues/758)) ([5b354e4](https://github.com/a2aproject/a2a-python/commit/5b354e403a717c3c6bf47a291bef028c8c6a9d94))
+* implement missing push notifications related methods ([#711](https://github.com/a2aproject/a2a-python/issues/711)) ([041f0f5](https://github.com/a2aproject/a2a-python/commit/041f0f53bcf5fc2e74545d653bfeeba8d2d85c79))
+* implement rich gRPC error details per A2A v1.0 spec ([#790](https://github.com/a2aproject/a2a-python/issues/790)) ([245eca3](https://github.com/a2aproject/a2a-python/commit/245eca30b70ccd1809031325dc9b86f23a9bac2a))
+* **rest:** add tenant support to rest ([#773](https://github.com/a2aproject/a2a-python/issues/773)) ([4771b5a](https://github.com/a2aproject/a2a-python/commit/4771b5aa1dbae51fdb5f7ff4324136d4db31e76f))
+* send task as a first subscribe event ([#716](https://github.com/a2aproject/a2a-python/issues/716)) ([e71ac62](https://github.com/a2aproject/a2a-python/commit/e71ac6266f506ec843d00409d606acb22fec5f78))
+* **server, grpc:** Implement tenant context propagation for gRPC requests. ([#781](https://github.com/a2aproject/a2a-python/issues/781)) ([164f919](https://github.com/a2aproject/a2a-python/commit/164f9197f101e3db5c487c4dede45b8729475a8c))
+* **server, json-rpc:** Implement tenant context propagation for JSON-RPC requests. ([#778](https://github.com/a2aproject/a2a-python/issues/778)) ([72a330d](https://github.com/a2aproject/a2a-python/commit/72a330d2c073ece51e093542c41ec171c667f312))
+* **server:** add v0.3 legacy compatibility for database models ([#783](https://github.com/a2aproject/a2a-python/issues/783)) ([08c491e](https://github.com/a2aproject/a2a-python/commit/08c491eb6c732f7a872e562cd0fbde01df791cca))
+* **spec:** add `tasks/list` method with filtering and pagination to the specification ([#511](https://github.com/a2aproject/a2a-python/issues/511)) ([d5818e5](https://github.com/a2aproject/a2a-python/commit/d5818e5233d9f0feeab3161cc3b1be3ae236d887))
+* use StreamResponse as push notifications payload ([#724](https://github.com/a2aproject/a2a-python/issues/724)) ([a149a09](https://github.com/a2aproject/a2a-python/commit/a149a0923c14480888c48156710413967dfebc36))
+* **rest:** update REST error handling to use `google.rpc.Status` ([#838](https://github.com/a2aproject/a2a-python/issues/838)) ([ea7d3ad](https://github.com/a2aproject/a2a-python/commit/ea7d3add16e137ea6c71272d845bdc9bfb5853c8))
+
+
+### Bug Fixes
+
+* add history length and page size validations ([#726](https://github.com/a2aproject/a2a-python/issues/726)) ([e67934b](https://github.com/a2aproject/a2a-python/commit/e67934b06442569a993455753ee4a360ac89b69f))
+* allign error codes with the latest spec ([#826](https://github.com/a2aproject/a2a-python/issues/826)) ([709b1ff](https://github.com/a2aproject/a2a-python/commit/709b1ff57b7604889da0c532a6b33954ee65491b))
+* **client:** align send_message signature with BaseClient ([#740](https://github.com/a2aproject/a2a-python/issues/740)) ([57cb529](https://github.com/a2aproject/a2a-python/commit/57cb52939ef9779eebd993a078cfffb854663e3e))
+* get_agent_card trailing slash when agent_card_path="" ([#799](https://github.com/a2aproject/a2a-python/issues/799)) ([#800](https://github.com/a2aproject/a2a-python/issues/800)) ([a55c97e](https://github.com/a2aproject/a2a-python/commit/a55c97e4d2031d74b57835710e07344484fb9fb6))
+* handle parsing error in REST ([#806](https://github.com/a2aproject/a2a-python/issues/806)) ([bbd09f2](https://github.com/a2aproject/a2a-python/commit/bbd09f232f556c527096eea5629688e29abb3f2f))
+* Improve error handling for Timeout exceptions on REST and JSON-RPC clients ([#690](https://github.com/a2aproject/a2a-python/issues/690)) ([2acd838](https://github.com/a2aproject/a2a-python/commit/2acd838796d44ab9bfe6ba8c8b4ea0c2571a59dc))
+* Improve streaming errors handling ([#576](https://github.com/a2aproject/a2a-python/issues/576)) ([7ea7475](https://github.com/a2aproject/a2a-python/commit/7ea7475091df2ee40d3035ef1bc34ee2f86524ee))
+* properly handle unset and zero history length ([#717](https://github.com/a2aproject/a2a-python/issues/717)) ([72a1007](https://github.com/a2aproject/a2a-python/commit/72a100797e513730dbeb80477c943b36cf79c957))
+* return entire history when history_length=0 ([#537](https://github.com/a2aproject/a2a-python/issues/537)) ([acdc0de](https://github.com/a2aproject/a2a-python/commit/acdc0de4fa03d34a6b287ab252ff51b19c3016b5))
+* return mandatory fields from list_tasks ([#710](https://github.com/a2aproject/a2a-python/issues/710)) ([6132053](https://github.com/a2aproject/a2a-python/commit/6132053976c4e8b2ce7cad9b87072fa8fb5a2cf0))
+* taskslist error on invalid page token and response serialization ([#814](https://github.com/a2aproject/a2a-python/issues/814)) ([a102d31](https://github.com/a2aproject/a2a-python/commit/a102d31abe8d72d18ec706f083855b7aad8bbbd4))
+* use correct REST path for Get Extended Agent Card operation ([#769](https://github.com/a2aproject/a2a-python/issues/769)) ([ced3f99](https://github.com/a2aproject/a2a-python/commit/ced3f998a9d0b97495ebded705422459aa8d7398))
+* Use POST method for REST endpoint /tasks/{id}:subscribe ([#843](https://github.com/a2aproject/a2a-python/issues/843)) ([a0827d0](https://github.com/a2aproject/a2a-python/commit/a0827d0d2887749c922e5cafbc897e465ba8fe17))
+
 ## [0.3.26](https://github.com/a2aproject/a2a-python/compare/v0.3.25...v0.3.26) (2026-04-09)
 
 

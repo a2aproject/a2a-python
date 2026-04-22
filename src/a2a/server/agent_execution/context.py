@@ -1,20 +1,19 @@
 from typing import Any
 
+from a2a.helpers.proto_helpers import get_message_text
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import (
     IDGenerator,
     IDGeneratorContext,
     UUIDGenerator,
 )
-from a2a.types import (
-    InvalidParamsError,
+from a2a.types.a2a_pb2 import (
     Message,
-    MessageSendConfiguration,
-    MessageSendParams,
+    SendMessageConfiguration,
+    SendMessageRequest,
     Task,
 )
-from a2a.utils import get_message_text
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
 
 
 class RequestContext:
@@ -27,35 +26,35 @@ class RequestContext:
 
     def __init__(  # noqa: PLR0913
         self,
-        request: MessageSendParams | None = None,
+        call_context: ServerCallContext,
+        request: SendMessageRequest | None = None,
         task_id: str | None = None,
         context_id: str | None = None,
         task: Task | None = None,
         related_tasks: list[Task] | None = None,
-        call_context: ServerCallContext | None = None,
         task_id_generator: IDGenerator | None = None,
         context_id_generator: IDGenerator | None = None,
     ):
         """Initializes the RequestContext.
 
         Args:
-            request: The incoming `MessageSendParams` request payload.
+            call_context: The server call context associated with this request.
+            request: The incoming `SendMessageRequest` request payload.
             task_id: The ID of the task explicitly provided in the request or path.
             context_id: The ID of the context explicitly provided in the request or path.
             task: The existing `Task` object retrieved from the store, if any.
             related_tasks: A list of other tasks related to the current request (e.g., for tool use).
-            call_context: The server call context associated with this request.
             task_id_generator: ID generator for new task IDs. Defaults to UUID generator.
             context_id_generator: ID generator for new context IDs. Defaults to UUID generator.
         """
         if related_tasks is None:
             related_tasks = []
+        self._call_context = call_context
         self._params = request
         self._task_id = task_id
         self._context_id = context_id
         self._current_task = task
         self._related_tasks = related_tasks
-        self._call_context = call_context
         self._task_id_generator = (
             task_id_generator if task_id_generator else UUIDGenerator()
         )
@@ -68,15 +67,13 @@ class RequestContext:
             if task_id:
                 self._params.message.task_id = task_id
                 if task and task.id != task_id:
-                    raise ServerError(InvalidParamsError(message='bad task id'))
+                    raise InvalidParamsError(message='bad task id')
             else:
                 self._check_or_generate_task_id()
             if context_id:
                 self._params.message.context_id = context_id
                 if task and task.context_id != context_id:
-                    raise ServerError(
-                        InvalidParamsError(message='bad context id')
-                    )
+                    raise InvalidParamsError(message='bad context id')
             else:
                 self._check_or_generate_context_id()
 
@@ -123,7 +120,7 @@ class RequestContext:
         return self._current_task
 
     @current_task.setter
-    def current_task(self, task: Task) -> None:
+    def current_task(self, task: Task | None) -> None:
         """Sets the current task object."""
         self._current_task = task
 
@@ -138,37 +135,31 @@ class RequestContext:
         return self._context_id
 
     @property
-    def configuration(self) -> MessageSendConfiguration | None:
-        """The `MessageSendConfiguration` from the request, if available."""
+    def configuration(self) -> SendMessageConfiguration | None:
+        """The `SendMessageConfiguration` from the request, if available."""
         return self._params.configuration if self._params else None
 
     @property
-    def call_context(self) -> ServerCallContext | None:
+    def call_context(self) -> ServerCallContext:
         """The server call context associated with this request."""
         return self._call_context
 
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        return self._params.metadata or {} if self._params else {}
+        if self._params and self._params.metadata:
+            return dict(self._params.metadata)
+        return {}
 
-    def add_activated_extension(self, uri: str) -> None:
-        """Add an extension to the set of activated extensions for this request.
-
-        This causes the extension to be indicated back to the client in the
-        response.
-        """
-        if self._call_context:
-            self._call_context.activated_extensions.add(uri)
+    @property
+    def tenant(self) -> str:
+        """The tenant associated with this request."""
+        return self._call_context.tenant
 
     @property
     def requested_extensions(self) -> set[str]:
-        """Extensions that the client requested to activate."""
-        return (
-            self._call_context.requested_extensions
-            if self._call_context
-            else set()
-        )
+        """Extensions that the client requested for this interaction."""
+        return self._call_context.requested_extensions
 
     def _check_or_generate_task_id(self) -> None:
         """Ensures a task ID is present, generating one if necessary."""

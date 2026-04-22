@@ -3,8 +3,11 @@ import httpx
 from fastapi import FastAPI
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.apps import A2ARESTFastAPIApplication
+from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
+from starlette.applications import Starlette
+from a2a.server.routes.rest_routes import create_rest_routes
+from a2a.server.routes import create_agent_card_routes
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import (
     BasePushNotificationSender,
@@ -12,19 +15,19 @@ from a2a.server.tasks import (
     InMemoryTaskStore,
     TaskUpdater,
 )
-from a2a.types import (
+from a2a.types import InvalidParamsError
+from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
     AgentSkill,
-    InvalidParamsError,
     Message,
     Task,
 )
-from a2a.utils import (
-    new_agent_text_message,
-    new_task,
+from a2a.helpers.proto_helpers import (
+    new_text_message,
+    new_task_from_user_message,
 )
-from a2a.utils.errors import ServerError
 
 
 def test_agent_card(url: str) -> AgentCard:
@@ -32,11 +35,14 @@ def test_agent_card(url: str) -> AgentCard:
     return AgentCard(
         name='Test Agent',
         description='Just a test agent',
-        url=url,
         version='1.0.0',
         default_input_modes=['text'],
         default_output_modes=['text'],
-        capabilities=AgentCapabilities(streaming=True, push_notifications=True),
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         skills=[
             AgentSkill(
                 id='greeting',
@@ -46,7 +52,12 @@ def test_agent_card(url: str) -> AgentCard:
                 examples=['Hello Agent!', 'How are you?'],
             )
         ],
-        supports_authenticated_extended_card=True,
+        supported_interfaces=[
+            AgentInterface(
+                url=url,
+                protocol_binding='HTTP+JSON',
+            )
+        ],
     )
 
 
@@ -60,38 +71,36 @@ class TestAgent:
         if (
             not msg.parts
             or len(msg.parts) != 1
-            or msg.parts[0].root.kind != 'text'
+            or not msg.parts[0].HasField('text')
         ):
             await updater.failed(
-                new_agent_text_message(
+                new_text_message(
                     'Unsupported message.', task.context_id, task.id
                 )
             )
             return
-        text_message = msg.parts[0].root.text
+        text_message = msg.parts[0].text
 
         # Simple request-response flow.
         if text_message == 'Hello Agent!':
             await updater.complete(
-                new_agent_text_message('Hello User!', task.context_id, task.id)
+                new_text_message('Hello User!', task.context_id, task.id)
             )
 
         # Flow with user input required: "How are you?" -> "Good! How are you?" -> "Good" -> "Amazing".
         elif text_message == 'How are you?':
             await updater.requires_input(
-                new_agent_text_message(
-                    'Good! How are you?', task.context_id, task.id
-                )
+                new_text_message('Good! How are you?', task.context_id, task.id)
             )
         elif text_message == 'Good':
             await updater.complete(
-                new_agent_text_message('Amazing', task.context_id, task.id)
+                new_text_message('Amazing', task.context_id, task.id)
             )
 
         # Fail for unsupported messages.
         else:
             await updater.failed(
-                new_agent_text_message(
+                new_text_message(
                     'Unsupported message.', task.context_id, task.id
                 )
             )
@@ -109,11 +118,11 @@ class TestAgentExecutor(AgentExecutor):
         event_queue: EventQueue,
     ) -> None:
         if not context.message:
-            raise ServerError(error=InvalidParamsError(message='No message'))
+            raise InvalidParamsError(message='No message')
 
         task = context.current_task
         if not task:
-            task = new_task(context.message)
+            task = new_task_from_user_message(context.message)
             await event_queue.enqueue_event(task)
         updater = TaskUpdater(event_queue, task.id, task.context_id)
 
@@ -127,19 +136,26 @@ class TestAgentExecutor(AgentExecutor):
 
 def create_agent_app(
     url: str, notification_client: httpx.AsyncClient
-) -> FastAPI:
-    """Creates a new HTTP+REST FastAPI application for the test agent."""
+) -> Starlette:
+    """Creates a new HTTP+REST Starlette application for the test agent."""
     push_config_store = InMemoryPushNotificationConfigStore()
-    app = A2ARESTFastAPIApplication(
-        agent_card=test_agent_card(url),
-        http_handler=DefaultRequestHandler(
-            agent_executor=TestAgentExecutor(),
-            task_store=InMemoryTaskStore(),
-            push_config_store=push_config_store,
-            push_sender=BasePushNotificationSender(
-                httpx_client=notification_client,
-                config_store=push_config_store,
-            ),
+    card = test_agent_card(url)
+    extended_card = test_agent_card(url)
+    extended_card.name = 'Test Agent Extended'
+    handler = DefaultRequestHandler(
+        agent_executor=TestAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=card,
+        extended_agent_card=extended_card,
+        push_config_store=push_config_store,
+        push_sender=BasePushNotificationSender(
+            httpx_client=notification_client,
+            config_store=push_config_store,
+            context=ServerCallContext(),
         ),
     )
-    return app.build()
+    rest_routes = create_rest_routes(request_handler=handler)
+    agent_card_routes = create_agent_card_routes(
+        agent_card=card, card_url='/.well-known/agent-card.json'
+    )
+    return Starlette(routes=[*rest_routes, *agent_card_routes])

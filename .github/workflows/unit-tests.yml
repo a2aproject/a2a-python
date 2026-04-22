@@ -4,6 +4,15 @@ on:
   push:
     branches: [main]
   pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/run_db_tests.sh'
+      - 'scripts/docker-compose.test.yml'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/unit-tests.yml'
 permissions:
   contents: read
 
@@ -38,7 +47,7 @@ jobs:
 
     strategy:
       matrix:
-        python-version: ['3.10', '3.13']
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
     steps:
       - name: Checkout code
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -54,45 +63,47 @@ jobs:
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
-      - name: Install dependencies
-        run: uv sync --locked
 
-      # Coverage comparison for PRs (only on Python 3.13 to avoid duplicate work)
+
+      # Coverage comparison for PRs (only on Python 3.14 to avoid duplicate work)
       - name: Checkout Base Branch
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           ref: ${{ github.event.pull_request.base.ref || 'main' }}
           clean: true
+        
+      - name: Install dependencies
+        run: uv sync --locked
 
       - name: Run coverage (Base)
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         run: |
           uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage
           mv coverage.json /tmp/coverage-base.json
 
       - name: Checkout PR Branch (Restore)
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           clean: true
 
       - name: Run coverage (PR)
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         run: |
           uv run pytest --cov=a2a --cov-report=json --cov-report=html:coverage --cov-report=term --cov-fail-under=88
           mv coverage.json coverage-pr.json
           cp /tmp/coverage-base.json coverage-base.json
 
       - name: Save Metadata
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         run: |
           echo ${{ github.event.number }} > ./PR_NUMBER
           echo ${{ github.event.pull_request.base.ref || 'main' }} > ./BASE_BRANCH
 
       - name: Upload Coverage Artifacts
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        if: github.event_name == 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name == 'pull_request' && matrix.python-version == '3.14'
         with:
           name: coverage-data
           path: |
@@ -105,12 +116,12 @@ jobs:
 
       # Run standard tests (for matrix items that didn't run coverage PR)
       - name: Run tests (Standard)
-        if: matrix.python-version != '3.13' || github.event_name != 'pull_request'
+        if: matrix.python-version != '3.14' || github.event_name != 'pull_request'
         run: uv run pytest --cov=a2a --cov-report term --cov-fail-under=88
 
       - name: Upload Artifact (base)
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
-        if: github.event_name != 'pull_request' && matrix.python-version == '3.13'
+        if: github.event_name != 'pull_request' && matrix.python-version == '3.14'
         with:
           name: coverage-report
           path: coverage

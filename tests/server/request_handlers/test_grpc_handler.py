@@ -1,15 +1,16 @@
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import grpc
 import grpc.aio
 import pytest
 
+from google.rpc import error_details_pb2, status_pb2
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.grpc import a2a_pb2
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
-from a2a.utils.errors import ServerError
+from a2a.types import a2a_pb2
 
 
 # --- Fixtures ---
@@ -33,7 +34,11 @@ def sample_agent_card() -> types.AgentCard:
     return types.AgentCard(
         name='Test Agent',
         description='A test agent',
-        url='http://localhost',
+        supported_interfaces=[
+            types.AgentInterface(
+                protocol_binding='GRPC', url='http://localhost'
+            )
+        ],
         version='1.0.0',
         capabilities=types.AgentCapabilities(
             streaming=True, push_notifications=True
@@ -48,9 +53,8 @@ def sample_agent_card() -> types.AgentCard:
 def grpc_handler(
     mock_request_handler: AsyncMock, sample_agent_card: types.AgentCard
 ) -> GrpcHandler:
-    return GrpcHandler(
-        agent_card=sample_agent_card, request_handler=mock_request_handler
-    )
+    mock_request_handler._agent_card = sample_agent_card
+    return GrpcHandler(request_handler=mock_request_handler)
 
 
 # --- Test Cases ---
@@ -64,12 +68,12 @@ async def test_send_message_success(
 ) -> None:
     """Test successful SendMessage call."""
     request_proto = a2a_pb2.SendMessageRequest(
-        request=a2a_pb2.Message(message_id='msg-1')
+        message=a2a_pb2.Message(message_id='msg-1')
     )
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.completed),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
     )
     mock_request_handler.on_message_send.return_value = response_model
 
@@ -87,15 +91,15 @@ async def test_send_message_server_error(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test SendMessage call when handler raises a ServerError."""
+    """Test SendMessage call when handler raises an A2AError."""
     request_proto = a2a_pb2.SendMessageRequest()
-    error = ServerError(error=types.InvalidParamsError(message='Bad params'))
+    error = types.InvalidParamsError(message='Bad params')
     mock_request_handler.on_message_send.side_effect = error
 
     await grpc_handler.SendMessage(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.INVALID_ARGUMENT, 'InvalidParamsError: Bad params'
+        grpc.StatusCode.INVALID_ARGUMENT, 'Bad params'
     )
 
 
@@ -106,11 +110,11 @@ async def test_get_task_success(
     mock_grpc_context: AsyncMock,
 ) -> None:
     """Test successful GetTask call."""
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
+    request_proto = a2a_pb2.GetTaskRequest(id='task-1')
     response_model = types.Task(
         id='task-1',
         context_id='ctx-1',
-        status=types.TaskStatus(state=types.TaskState.working),
+        status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
     )
     mock_request_handler.on_get_task.return_value = response_model
 
@@ -128,32 +132,13 @@ async def test_get_task_not_found(
     mock_grpc_context: AsyncMock,
 ) -> None:
     """Test GetTask call when task is not found."""
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/task-1')
+    request_proto = a2a_pb2.GetTaskRequest(id='task-1')
     mock_request_handler.on_get_task.return_value = None
 
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.NOT_FOUND, 'TaskNotFoundError: Task not found'
-    )
-
-
-@pytest.mark.asyncio
-async def test_cancel_task_server_error(
-    grpc_handler: GrpcHandler,
-    mock_request_handler: AsyncMock,
-    mock_grpc_context: AsyncMock,
-) -> None:
-    """Test CancelTask call when handler raises ServerError."""
-    request_proto = a2a_pb2.CancelTaskRequest(name='tasks/task-1')
-    error = ServerError(error=types.TaskNotCancelableError())
-    mock_request_handler.on_cancel_task.side_effect = error
-
-    await grpc_handler.CancelTask(request_proto, mock_grpc_context)
-
-    mock_grpc_context.abort.assert_awaited_once_with(
-        grpc.StatusCode.UNIMPLEMENTED,
-        'TaskNotCancelableError: Task cannot be canceled',
+        grpc.StatusCode.NOT_FOUND, 'Task not found'
     )
 
 
@@ -169,10 +154,14 @@ async def test_send_streaming_message(
         yield types.Task(
             id='task-1',
             context_id='ctx-1',
-            status=types.TaskStatus(state=types.TaskState.working),
+            status=types.TaskStatus(state=types.TaskState.TASK_STATE_WORKING),
         )
 
-    mock_request_handler.on_message_send_stream.return_value = mock_stream()
+    # Use MagicMock because on_message_send_stream is an async generator,
+    # and we iterate over it directly. AsyncMock would return a coroutine.
+    mock_request_handler.on_message_send_stream = MagicMock(
+        return_value=mock_stream()
+    )
     request_proto = a2a_pb2.SendMessageRequest()
 
     results = [
@@ -188,43 +177,55 @@ async def test_send_streaming_message(
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card(
+async def test_get_extended_agent_card(
     grpc_handler: GrpcHandler,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
+    mock_request_handler: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call."""
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler.GetAgentCard(request_proto, mock_grpc_context)
+    """Test GetExtendedAgentCard call."""
 
+    async def to_coro(*args, **kwargs):
+        return sample_agent_card
+
+    mock_request_handler.on_get_extended_agent_card.side_effect = to_coro
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler.GetExtendedAgentCard(
+        request_proto, mock_grpc_context
+    )
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == sample_agent_card.name
     assert response.version == sample_agent_card.version
 
 
 @pytest.mark.asyncio
-async def test_get_agent_card_with_modifier(
+async def test_get_extended_agent_card_with_modifier(
     mock_request_handler: AsyncMock,
     sample_agent_card: types.AgentCard,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """Test GetAgentCard call with a card_modifier."""
+    """Test GetExtendedAgentCard call with a card_modifier."""
 
     async def modifier(card: types.AgentCard) -> types.AgentCard:
-        modified_card = card.model_copy(deep=True)
+        modified_card = types.AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
-    grpc_handler_modified = GrpcHandler(
-        agent_card=sample_agent_card,
-        request_handler=mock_request_handler,
-        card_modifier=modifier,
-    )
+    # Use side_effect to ensure it returns an awaitable
+    async def side_effect_func(*_args, **_kwargs):
+        return await modifier(sample_agent_card)
 
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler_modified.GetAgentCard(
+    mock_request_handler.on_get_extended_agent_card.side_effect = (
+        side_effect_func
+    )
+    mock_request_handler._agent_card = sample_agent_card
+    grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
-
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == 'Modified gRPC Agent'
     assert response.version == sample_agent_card.version
 
@@ -238,107 +239,174 @@ async def test_get_agent_card_with_modifier_sync(
     """Test GetAgentCard call with a synchronous card_modifier."""
 
     def modifier(card: types.AgentCard) -> types.AgentCard:
-        modified_card = card.model_copy(deep=True)
+        # For proto, we need to create a new message with modified fields
+        modified_card = types.AgentCard()
+        modified_card.CopyFrom(card)
         modified_card.name = 'Modified gRPC Agent'
         return modified_card
 
-    grpc_handler_modified = GrpcHandler(
-        agent_card=sample_agent_card,
-        request_handler=mock_request_handler,
-        card_modifier=modifier,
-    )
+    async def async_modifier(*args, **kwargs):
+        return modifier(sample_agent_card)
 
-    request_proto = a2a_pb2.GetAgentCardRequest()
-    response = await grpc_handler_modified.GetAgentCard(
+    mock_request_handler.on_get_extended_agent_card.side_effect = async_modifier
+    mock_request_handler._agent_card = sample_agent_card
+    grpc_handler_modified = GrpcHandler(request_handler=mock_request_handler)
+    request_proto = a2a_pb2.GetExtendedAgentCardRequest()
+    response = await grpc_handler_modified.GetExtendedAgentCard(
         request_proto, mock_grpc_context
     )
-
+    mock_request_handler.on_get_extended_agent_card.assert_awaited_once()
     assert response.name == 'Modified gRPC Agent'
     assert response.version == sample_agent_card.version
 
 
 @pytest.mark.asyncio
+async def test_list_tasks_success(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+):
+    """Test successful ListTasks call."""
+    mock_request_handler.on_list_tasks.return_value = a2a_pb2.ListTasksResponse(
+        next_page_token='123',
+        tasks=[
+            types.Task(
+                id='task-1',
+                context_id='ctx-1',
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_COMPLETED
+                ),
+            ),
+            types.Task(
+                id='task-2',
+                context_id='ctx-1',
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_WORKING
+                ),
+            ),
+        ],
+    )
+
+    response = await grpc_handler.ListTasks(
+        a2a_pb2.ListTasksRequest(page_size=2), mock_grpc_context
+    )
+
+    mock_request_handler.on_list_tasks.assert_awaited_once()
+    assert isinstance(response, a2a_pb2.ListTasksResponse)
+    assert len(response.tasks) == 2
+    assert response.tasks[0].id == 'task-1'
+    assert response.tasks[1].id == 'task-2'
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'server_error, grpc_status_code, error_message_part',
+    'a2a_error, grpc_status_code, error_message_part',
     [
         (
-            ServerError(error=types.JSONParseError()),
-            grpc.StatusCode.INTERNAL,
-            'JSONParseError',
-        ),
-        (
-            ServerError(error=types.InvalidRequestError()),
+            types.InvalidRequestError(),
             grpc.StatusCode.INVALID_ARGUMENT,
             'InvalidRequestError',
         ),
         (
-            ServerError(error=types.MethodNotFoundError()),
+            types.MethodNotFoundError(),
             grpc.StatusCode.NOT_FOUND,
             'MethodNotFoundError',
         ),
         (
-            ServerError(error=types.InvalidParamsError()),
+            types.InvalidParamsError(),
             grpc.StatusCode.INVALID_ARGUMENT,
             'InvalidParamsError',
         ),
         (
-            ServerError(error=types.InternalError()),
+            types.InternalError(),
             grpc.StatusCode.INTERNAL,
             'InternalError',
         ),
         (
-            ServerError(error=types.TaskNotFoundError()),
+            types.TaskNotFoundError(),
             grpc.StatusCode.NOT_FOUND,
             'TaskNotFoundError',
         ),
         (
-            ServerError(error=types.TaskNotCancelableError()),
-            grpc.StatusCode.UNIMPLEMENTED,
+            types.TaskNotCancelableError(),
+            grpc.StatusCode.FAILED_PRECONDITION,
             'TaskNotCancelableError',
         ),
         (
-            ServerError(error=types.PushNotificationNotSupportedError()),
+            types.PushNotificationNotSupportedError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'PushNotificationNotSupportedError',
         ),
         (
-            ServerError(error=types.UnsupportedOperationError()),
+            types.UnsupportedOperationError(),
             grpc.StatusCode.UNIMPLEMENTED,
             'UnsupportedOperationError',
         ),
         (
-            ServerError(error=types.ContentTypeNotSupportedError()),
-            grpc.StatusCode.UNIMPLEMENTED,
+            types.ContentTypeNotSupportedError(),
+            grpc.StatusCode.INVALID_ARGUMENT,
             'ContentTypeNotSupportedError',
         ),
         (
-            ServerError(error=types.InvalidAgentResponseError()),
+            types.InvalidAgentResponseError(),
             grpc.StatusCode.INTERNAL,
             'InvalidAgentResponseError',
         ),
-        (
-            ServerError(error=types.JSONRPCError(code=99, message='Unknown')),
-            grpc.StatusCode.UNKNOWN,
-            'Unknown error',
-        ),
     ],
 )
-async def test_abort_context_error_mapping(  # noqa: PLR0913
+async def test_abort_context_error_mapping(
     grpc_handler: GrpcHandler,
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
-    server_error: ServerError,
+    a2a_error: Exception,
     grpc_status_code: grpc.StatusCode,
     error_message_part: str,
 ) -> None:
-    mock_request_handler.on_get_task.side_effect = server_error
-    request_proto = a2a_pb2.GetTaskRequest(name='tasks/any')
+    mock_request_handler.on_get_task.side_effect = a2a_error
+    request_proto = a2a_pb2.GetTaskRequest(id='any')
     await grpc_handler.GetTask(request_proto, mock_grpc_context)
 
     mock_grpc_context.abort.assert_awaited_once()
     call_args, _ = mock_grpc_context.abort.call_args
     assert call_args[0] == grpc_status_code
-    assert error_message_part in call_args[1]
+
+    # We shouldn't rely on the legacy ExceptionName: message string format
+    # But for backward compatability fallback it shouldn't fail
+    mock_grpc_context.set_trailing_metadata.assert_called_once()
+    metadata = mock_grpc_context.set_trailing_metadata.call_args[0][0]
+
+    assert any(key == 'grpc-status-details-bin' for key, _ in metadata)
+
+
+@pytest.mark.asyncio
+async def test_abort_context_rich_error_format(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+) -> None:
+
+    error = types.TaskNotFoundError('Could not find the task')
+    mock_request_handler.on_get_task.side_effect = error
+    request_proto = a2a_pb2.GetTaskRequest(id='any')
+    await grpc_handler.GetTask(request_proto, mock_grpc_context)
+
+    mock_grpc_context.set_trailing_metadata.assert_called_once()
+    metadata = mock_grpc_context.set_trailing_metadata.call_args[0][0]
+
+    bin_values = [v for k, v in metadata if k == 'grpc-status-details-bin']
+    assert len(bin_values) == 1
+
+    status = status_pb2.Status.FromString(bin_values[0])
+    assert status.code == grpc.StatusCode.NOT_FOUND.value[0]
+    assert status.message == 'Could not find the task'
+
+    assert len(status.details) == 1
+
+    error_info = error_details_pb2.ErrorInfo()
+    status.details[0].Unpack(error_info)
+
+    assert error_info.reason == 'TASK_NOT_FOUND'
+    assert error_info.domain == 'a2a-protocol.org'
 
 
 @pytest.mark.asyncio
@@ -353,17 +421,11 @@ class TestGrpcExtensions:
             (HTTP_EXTENSION_HEADER.lower(), 'foo'),
             (HTTP_EXTENSION_HEADER.lower(), 'bar'),
         )
-
-        def side_effect(request, context: ServerCallContext):
-            context.activated_extensions.add('foo')
-            context.activated_extensions.add('baz')
-            return types.Task(
-                id='task-1',
-                context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.completed),
-            )
-
-        mock_request_handler.on_message_send.side_effect = side_effect
+        mock_request_handler.on_message_send.return_value = types.Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=types.TaskStatus(state=types.TaskState.TASK_STATE_COMPLETED),
+        )
 
         await grpc_handler.SendMessage(
             a2a_pb2.SendMessageRequest(), mock_grpc_context
@@ -373,15 +435,6 @@ class TestGrpcExtensions:
         call_context = mock_request_handler.on_message_send.call_args[0][1]
         assert isinstance(call_context, ServerCallContext)
         assert call_context.requested_extensions == {'foo', 'bar'}
-
-        mock_grpc_context.set_trailing_metadata.assert_called_once()
-        called_metadata = (
-            mock_grpc_context.set_trailing_metadata.call_args.args[0]
-        )
-        assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
-            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
-        }
 
     async def test_send_message_with_comma_separated_extensions(
         self,
@@ -395,8 +448,8 @@ class TestGrpcExtensions:
         )
         mock_request_handler.on_message_send.return_value = types.Message(
             message_id='1',
-            role=types.Role.agent,
-            parts=[types.Part(root=types.TextPart(text='test'))],
+            role=types.Role.ROLE_AGENT,
+            parts=[types.Part(text='test')],
         )
 
         await grpc_handler.SendMessage(
@@ -420,12 +473,12 @@ class TestGrpcExtensions:
         )
 
         async def side_effect(request, context: ServerCallContext):
-            context.activated_extensions.add('foo')
-            context.activated_extensions.add('baz')
             yield types.Task(
                 id='task-1',
                 context_id='ctx-1',
-                status=types.TaskStatus(state=types.TaskState.working),
+                status=types.TaskStatus(
+                    state=types.TaskState.TASK_STATE_WORKING
+                ),
             )
 
         mock_request_handler.on_message_send_stream.side_effect = side_effect
@@ -445,11 +498,252 @@ class TestGrpcExtensions:
         assert isinstance(call_context, ServerCallContext)
         assert call_context.requested_extensions == {'foo', 'bar'}
 
-        mock_grpc_context.set_trailing_metadata.assert_called_once()
-        called_metadata = (
-            mock_grpc_context.set_trailing_metadata.call_args.args[0]
-        )
-        assert set(called_metadata) == {
-            (HTTP_EXTENSION_HEADER.lower(), 'foo'),
-            (HTTP_EXTENSION_HEADER.lower(), 'baz'),
-        }
+
+@pytest.mark.asyncio
+class TestTenantExtraction:
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name, return_value',
+        [
+            (
+                'SendMessage',
+                a2a_pb2.SendMessageRequest(tenant='my-tenant'),
+                'on_message_send',
+                types.Message(),
+            ),
+            (
+                'CancelTask',
+                a2a_pb2.CancelTaskRequest(tenant='my-tenant', id='1'),
+                'on_cancel_task',
+                types.Task(id='1'),
+            ),
+            (
+                'GetTask',
+                a2a_pb2.GetTaskRequest(tenant='my-tenant', id='1'),
+                'on_get_task',
+                types.Task(id='1'),
+            ),
+            (
+                'ListTasks',
+                a2a_pb2.ListTasksRequest(tenant='my-tenant'),
+                'on_list_tasks',
+                a2a_pb2.ListTasksResponse(),
+            ),
+            (
+                'GetTaskPushNotificationConfig',
+                a2a_pb2.GetTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='1', id='c1'
+                ),
+                'on_get_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'CreateTaskPushNotificationConfig',
+                a2a_pb2.TaskPushNotificationConfig(
+                    tenant='my-tenant',
+                    task_id='1',
+                ),
+                'on_create_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'ListTaskPushNotificationConfigs',
+                a2a_pb2.ListTaskPushNotificationConfigsRequest(
+                    tenant='my-tenant', task_id='1'
+                ),
+                'on_list_task_push_notification_configs',
+                a2a_pb2.ListTaskPushNotificationConfigsResponse(),
+            ),
+            (
+                'DeleteTaskPushNotificationConfig',
+                a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+                    tenant='my-tenant', task_id='1', id='c1'
+                ),
+                'on_delete_task_push_notification_config',
+                None,
+            ),
+        ],
+    )
+    async def test_non_streaming_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+        return_value: Any,
+    ) -> None:
+        handler_mock = getattr(mock_request_handler, handler_method_name)
+        handler_mock.return_value = return_value
+
+        grpc_method = getattr(grpc_handler, method_name)
+        await grpc_method(request_proto, mock_grpc_context)
+
+        handler_mock.assert_awaited_once()
+        call_args = handler_mock.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == 'my-tenant'
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name',
+        [
+            (
+                'SendStreamingMessage',
+                a2a_pb2.SendMessageRequest(tenant='my-tenant'),
+                'on_message_send_stream',
+            ),
+            (
+                'SubscribeToTask',
+                a2a_pb2.SubscribeToTaskRequest(tenant='my-tenant', id='1'),
+                'on_subscribe_to_task',
+            ),
+        ],
+    )
+    async def test_streaming_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+    ) -> None:
+        async def mock_stream(*args, **kwargs):
+            yield types.Message(message_id='msg-1')
+
+        handler_mock_attr = MagicMock(return_value=mock_stream())
+        setattr(mock_request_handler, handler_method_name, handler_mock_attr)
+
+        grpc_method = getattr(grpc_handler, method_name)
+
+        async for _ in grpc_method(request_proto, mock_grpc_context):
+            pass
+
+        handler_mock_attr.assert_called_once()
+        call_args = handler_mock_attr.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == 'my-tenant'
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name, return_value',
+        [
+            (
+                'SendMessage',
+                a2a_pb2.SendMessageRequest(),
+                'on_message_send',
+                types.Message(),
+            ),
+            (
+                'CancelTask',
+                a2a_pb2.CancelTaskRequest(id='1'),
+                'on_cancel_task',
+                types.Task(id='1'),
+            ),
+            (
+                'GetTask',
+                a2a_pb2.GetTaskRequest(id='1'),
+                'on_get_task',
+                types.Task(id='1'),
+            ),
+            (
+                'ListTasks',
+                a2a_pb2.ListTasksRequest(),
+                'on_list_tasks',
+                a2a_pb2.ListTasksResponse(),
+            ),
+            (
+                'GetTaskPushNotificationConfig',
+                a2a_pb2.GetTaskPushNotificationConfigRequest(
+                    task_id='1', id='c1'
+                ),
+                'on_get_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'CreateTaskPushNotificationConfig',
+                a2a_pb2.TaskPushNotificationConfig(
+                    task_id='1',
+                ),
+                'on_create_task_push_notification_config',
+                a2a_pb2.TaskPushNotificationConfig(),
+            ),
+            (
+                'ListTaskPushNotificationConfigs',
+                a2a_pb2.ListTaskPushNotificationConfigsRequest(task_id='1'),
+                'on_list_task_push_notification_configs',
+                a2a_pb2.ListTaskPushNotificationConfigsResponse(),
+            ),
+            (
+                'DeleteTaskPushNotificationConfig',
+                a2a_pb2.DeleteTaskPushNotificationConfigRequest(
+                    task_id='1', id='c1'
+                ),
+                'on_delete_task_push_notification_config',
+                None,
+            ),
+        ],
+    )
+    async def test_non_streaming_no_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+        return_value: Any,
+    ) -> None:
+        handler_mock = getattr(mock_request_handler, handler_method_name)
+        handler_mock.return_value = return_value
+
+        grpc_method = getattr(grpc_handler, method_name)
+        await grpc_method(request_proto, mock_grpc_context)
+
+        handler_mock.assert_awaited_once()
+        call_args = handler_mock.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == ''
+
+    @pytest.mark.parametrize(
+        'method_name, request_proto, handler_method_name',
+        [
+            (
+                'SendStreamingMessage',
+                a2a_pb2.SendMessageRequest(),
+                'on_message_send_stream',
+            ),
+            (
+                'SubscribeToTask',
+                a2a_pb2.SubscribeToTaskRequest(id='1'),
+                'on_subscribe_to_task',
+            ),
+        ],
+    )
+    async def test_streaming_no_tenant_extraction(
+        self,
+        grpc_handler: GrpcHandler,
+        mock_request_handler: AsyncMock,
+        mock_grpc_context: AsyncMock,
+        method_name: str,
+        request_proto: Any,
+        handler_method_name: str,
+    ) -> None:
+        async def mock_stream(*args, **kwargs):
+            yield types.Message(message_id='msg-1')
+
+        handler_mock_attr = MagicMock(return_value=mock_stream())
+        setattr(mock_request_handler, handler_method_name, handler_mock_attr)
+
+        grpc_method = getattr(grpc_handler, method_name)
+
+        async for _ in grpc_method(request_proto, mock_grpc_context):
+            pass
+
+        handler_mock_attr.assert_called_once()
+        call_args = handler_mock_attr.call_args
+        server_context = call_args[0][1]
+        assert isinstance(server_context, ServerCallContext)
+        assert server_context.tenant == ''

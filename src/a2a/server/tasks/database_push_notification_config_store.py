@@ -1,18 +1,13 @@
 # ruff: noqa: PLC0415
-import json
 import logging
 
 from typing import TYPE_CHECKING
 
-from pydantic import ValidationError
+from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import (
-        Table,
-        delete,
-        select,
-    )
+    from sqlalchemy import Table, and_, delete, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -29,20 +24,26 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 
+from collections.abc import Callable
+
+from a2a.compat.v0_3.model_conversions import (
+    compat_push_notification_config_model_to_core,
+)
+from a2a.server.context import ServerCallContext
 from a2a.server.models import (
     Base,
     PushNotificationConfigModel,
     create_push_notification_config_model,
 )
+from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
-from a2a.types import PushNotificationConfig
+from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
 
 if TYPE_CHECKING:
     from cryptography.fernet import Fernet
-
 
 logger = logging.getLogger(__name__)
 
@@ -59,13 +60,35 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
     _initialized: bool
     config_model: type[PushNotificationConfigModel]
     _fernet: 'Fernet | None'
+    owner_resolver: OwnerResolver
+    core_to_model_conversion: (
+        Callable[
+            [str, TaskPushNotificationConfig, str, 'Fernet | None'],
+            PushNotificationConfigModel,
+        ]
+        | None
+    )
+    model_to_core_conversion: (
+        Callable[[PushNotificationConfigModel], TaskPushNotificationConfig]
+        | None
+    )
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         engine: AsyncEngine,
         create_table: bool = True,
         table_name: str = 'push_notification_configs',
         encryption_key: str | bytes | None = None,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+        core_to_model_conversion: Callable[
+            [str, TaskPushNotificationConfig, str, 'Fernet | None'],
+            PushNotificationConfigModel,
+        ]
+        | None = None,
+        model_to_core_conversion: Callable[
+            [PushNotificationConfigModel], TaskPushNotificationConfig
+        ]
+        | None = None,
     ) -> None:
         """Initializes the DatabasePushNotificationConfigStore.
 
@@ -76,6 +99,9 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             encryption_key: A key for encrypting sensitive configuration data.
                 If provided, `config_data` will be encrypted in the database.
                 The key must be a URL-safe base64-encoded 32-byte key.
+            owner_resolver: Function to resolve the owner from the context.
+            core_to_model_conversion: Optional function to convert a TaskPushNotificationConfig to a TaskPushNotificationConfigModel.
+            model_to_core_conversion: Optional function to convert a TaskPushNotificationConfigModel to a TaskPushNotificationConfig.
         """
         logger.debug(
             'Initializing DatabasePushNotificationConfigStore with existing engine, table: %s',
@@ -87,16 +113,21 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         )
         self.create_table = create_table
         self._initialized = False
+        self.owner_resolver = owner_resolver
         self.config_model = (
             PushNotificationConfigModel
             if table_name == 'push_notification_configs'
             else create_push_notification_config_model(table_name)
         )
         self._fernet = None
+        self.core_to_model_conversion = core_to_model_conversion
+        self.model_to_core_conversion = model_to_core_conversion
 
         if encryption_key:
             try:
-                from cryptography.fernet import Fernet
+                from cryptography.fernet import (
+                    Fernet,
+                )
             except ImportError as e:
                 raise ImportError(
                     "DatabasePushNotificationConfigStore with encryption requires the 'cryptography' "
@@ -139,13 +170,18 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             await self.initialize()
 
     def _to_orm(
-        self, task_id: str, config: PushNotificationConfig
+        self, task_id: str, config: TaskPushNotificationConfig, owner: str
     ) -> PushNotificationConfigModel:
-        """Maps a Pydantic PushNotificationConfig to a SQLAlchemy model instance.
+        """Maps a TaskPushNotificationConfig proto to a SQLAlchemy model instance.
 
         The config data is serialized to JSON bytes, and encrypted if a key is configured.
         """
-        json_payload = config.model_dump_json().encode('utf-8')
+        if self.core_to_model_conversion:
+            return self.core_to_model_conversion(
+                task_id, config, owner, self._fernet
+            )
+
+        json_payload = MessageToJson(config).encode('utf-8')
 
         if self._fernet:
             data_to_store = self._fernet.encrypt(json_payload)
@@ -155,52 +191,72 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         return self.config_model(
             task_id=task_id,
             config_id=config.id,
+            owner=owner,
             config_data=data_to_store,
+            protocol_version='1.0',
         )
 
     def _from_orm(
         self, model_instance: PushNotificationConfigModel
-    ) -> PushNotificationConfig:
-        """Maps a SQLAlchemy model instance to a Pydantic PushNotificationConfig.
+    ) -> TaskPushNotificationConfig:
+        """Maps a SQLAlchemy model instance to a TaskPushNotificationConfig proto.
 
         Handles decryption if a key is configured, with a fallback to plain JSON.
         """
+        if self.model_to_core_conversion:
+            return self.model_to_core_conversion(model_instance)
+
         payload = model_instance.config_data
 
         if self._fernet:
-            from cryptography.fernet import InvalidToken
+            from cryptography.fernet import (
+                InvalidToken,
+            )
 
             try:
                 decrypted_payload = self._fernet.decrypt(payload)
-                return PushNotificationConfig.model_validate_json(
-                    decrypted_payload
-                )
-            except (json.JSONDecodeError, ValidationError) as e:
-                logger.exception(
-                    'Failed to parse decrypted push notification config for task %s, config %s. '
-                    'Data is corrupted or not valid JSON after decryption.',
+                return self._parse_config(
+                    decrypted_payload.decode('utf-8'),
                     model_instance.task_id,
-                    model_instance.config_id,
+                    model_instance.protocol_version,
                 )
-                raise ValueError(
-                    'Failed to parse decrypted push notification config data'
-                ) from e
-            except InvalidToken:
-                # Decryption failed. This could be because the data is not encrypted.
-                # We'll log a warning and try to parse it as plain JSON as a fallback.
-                logger.warning(
-                    'Failed to decrypt push notification config for task %s, config %s. '
-                    'Attempting to parse as unencrypted JSON. '
-                    'This may indicate an incorrect encryption key or unencrypted data in the database.',
-                    model_instance.task_id,
-                    model_instance.config_id,
-                )
-                # Fall through to the unencrypted parsing logic below.
+            except Exception as e:
+                if isinstance(e, InvalidToken):
+                    # Decryption failed. This could be because the data is not encrypted.
+                    # We'll log a warning and try to parse it as plain JSON as a fallback.
+                    logger.warning(
+                        'Failed to decrypt push notification config for task %s, config %s. '
+                        'Attempting to parse as unencrypted JSON. '
+                        'This may indicate an incorrect encryption key or unencrypted data in the database.',
+                        model_instance.task_id,
+                        model_instance.config_id,
+                    )
+                    # Fall through to the unencrypted parsing logic below.
+                else:
+                    logger.exception(
+                        'Failed to parse decrypted push notification config for task %s, config %s. '
+                        'Data is corrupted or not valid JSON after decryption.',
+                        model_instance.task_id,
+                        model_instance.config_id,
+                    )
+                    raise ValueError(  # noqa: TRY004
+                        'Failed to parse decrypted push notification config data'
+                    ) from e
 
         # Try to parse as plain JSON.
         try:
-            return PushNotificationConfig.model_validate_json(payload)
-        except (json.JSONDecodeError, ValidationError) as e:
+            payload_str = (
+                payload.decode('utf-8')
+                if isinstance(payload, bytes)
+                else payload
+            )
+            return self._parse_config(
+                payload_str,
+                model_instance.task_id,
+                model_instance.protocol_version,
+            )
+
+        except Exception as e:
             if self._fernet:
                 logger.exception(
                     'Failed to parse push notification config for task %s, config %s. '
@@ -223,30 +279,45 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
             ) from e
 
     async def set_info(
-        self, task_id: str, notification_config: PushNotificationConfig
+        self,
+        task_id: str,
+        notification_config: TaskPushNotificationConfig,
+        context: ServerCallContext,
     ) -> None:
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
 
-        config_to_save = notification_config.model_copy()
-        if config_to_save.id is None:
+        # Create a copy of the config using proto CopyFrom
+        config_to_save = TaskPushNotificationConfig()
+        config_to_save.CopyFrom(notification_config)
+        if not config_to_save.id:
             config_to_save.id = task_id
 
-        db_config = self._to_orm(task_id, config_to_save)
+        db_config = self._to_orm(task_id, config_to_save, owner)
         async with self.async_session_maker.begin() as session:
             await session.merge(db_config)
             logger.debug(
-                'Push notification config for task %s with config id %s saved/updated.',
+                'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
                 config_to_save.id,
+                owner,
             )
 
-    async def get_info(self, task_id: str) -> list[PushNotificationConfig]:
-        """Retrieves all push notification configurations for a task."""
+    async def get_info(
+        self,
+        task_id: str,
+        context: ServerCallContext,
+    ) -> list[TaskPushNotificationConfig]:
+        """Retrieves all push notification configurations for a task, for the given owner."""
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
         async with self.async_session_maker() as session:
             stmt = select(self.config_model).where(
-                self.config_model.task_id == task_id
+                and_(
+                    self.config_model.task_id == task_id,
+                    self.config_model.owner == owner,
+                )
             )
             result = await session.execute(stmt)
             models = result.scalars().all()
@@ -257,39 +328,70 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                     configs.append(self._from_orm(model))
                 except ValueError:  # noqa: PERF203
                     logger.exception(
-                        'Could not deserialize push notification config for task %s, config %s',
+                        'Could not deserialize push notification config for task %s, config %s, owner %s',
                         model.task_id,
                         model.config_id,
+                        owner,
                     )
             return configs
 
     async def delete_info(
-        self, task_id: str, config_id: str | None = None
+        self,
+        task_id: str,
+        context: ServerCallContext,
+        config_id: str | None = None,
     ) -> None:
         """Deletes push notification configurations for a task.
 
         If config_id is provided, only that specific configuration is deleted.
-        If config_id is None, all configurations for the task are deleted.
+        If config_id is None, all configurations for the task for the owner are deleted.
         """
         await self._ensure_initialized()
+        owner = self.owner_resolver(context)
         async with self.async_session_maker.begin() as session:
             stmt = delete(self.config_model).where(
-                self.config_model.task_id == task_id
+                and_(
+                    self.config_model.task_id == task_id,
+                    self.config_model.owner == owner,
+                )
             )
             if config_id is not None:
                 stmt = stmt.where(self.config_model.config_id == config_id)
 
             result = await session.execute(stmt)
 
-            if result.rowcount > 0:
+            if result.rowcount > 0:  # type: ignore[attr-defined]
                 logger.info(
-                    'Deleted %s push notification config(s) for task %s.',
-                    result.rowcount,
+                    'Deleted %s push notification config(s) for task %s, owner %s.',
+                    result.rowcount,  # type: ignore[attr-defined]
                     task_id,
+                    owner,
                 )
             else:
                 logger.warning(
-                    'Attempted to delete push notification config for task %s with config_id: %s that does not exist.',
+                    'Attempted to delete push notification config for task %s, owner %s with config_id: %s that does not exist.',
                     task_id,
+                    owner,
                     config_id,
                 )
+
+    def _parse_config(
+        self,
+        json_payload: str,
+        task_id: str | None = None,
+        protocol_version: str | None = None,
+    ) -> TaskPushNotificationConfig:
+        """Parses a JSON payload into a TaskPushNotificationConfig proto.
+
+        Args:
+            json_payload: The JSON payload to parse.
+            task_id: The unique identifier of the task. Only required for legacy
+                (0.3) protocol versions.
+            protocol_version: The protocol version used for serialization.
+        """
+        if protocol_version == '1.0':
+            return Parse(json_payload, TaskPushNotificationConfig())
+
+        return compat_push_notification_config_model_to_core(
+            json_payload, task_id or ''
+        )

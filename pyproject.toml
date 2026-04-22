@@ -13,6 +13,10 @@ dependencies = [
   "pydantic>=2.11.3",
   "protobuf>=5.29.5",
   "google-api-core>=1.26.0",
+  "json-rpc>=1.15.0",
+  "googleapis-common-protos>=1.70.0",
+  "culsans>=0.11.0 ; python_full_version < '3.13'",
+  "packaging>=24.0",
 ]
 
 classifiers = [
@@ -23,21 +27,22 @@ classifiers = [
   "Programming Language :: Python :: 3.11",
   "Programming Language :: Python :: 3.12",
   "Programming Language :: Python :: 3.13",
+  "Programming Language :: Python :: 3.14",
   "Operating System :: OS Independent",
   "Topic :: Software Development :: Libraries :: Python Modules",
   "License :: OSI Approved :: Apache Software License",
 ]
 
 [project.optional-dependencies]
-http-server = ["fastapi>=0.115.2", "sse-starlette", "starlette"]
+http-server = ["sse-starlette", "starlette"]
 encryption = ["cryptography>=43.0.0"]
-grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]
+grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio-status>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
 postgresql = ["sqlalchemy[asyncio,postgresql-asyncpg]>=2.0.0"]
 mysql = ["sqlalchemy[asyncio,aiomysql]>=2.0.0"]
 signing = ["PyJWT>=2.0.0"]
 sqlite = ["sqlalchemy[asyncio,aiosqlite]>=2.0.0"]
-vertex = ["google-cloud-aiplatform>=1.140.0"]
+db-cli = ["alembic>=1.14.0"]
 
 sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
@@ -48,7 +53,7 @@ all = [
   "a2a-sdk[grpc]",
   "a2a-sdk[telemetry]",
   "a2a-sdk[signing]",
-  "a2a-sdk[vertex]",
+  "a2a-sdk[db-cli]",
 ]
 
 [project.urls]
@@ -60,6 +65,7 @@ documentation = "https://a2a-protocol.org/latest/sdk/python/"
 [build-system]
 requires = ["hatchling", "uv-dynamic-versioning"]
 build-backend = "hatchling.build"
+
 
 [tool.hatch.version]
 source = "uv-dynamic-versioning"
@@ -79,6 +85,16 @@ markers = [
   "asyncio: mark a test as a coroutine that should be run by pytest-asyncio",
   "xdist_group: mark a test to run in a specific sequential group for isolation",
 ]
+filterwarnings = [
+  # SQLAlchemy warning about duplicate class registration - this is a known limitation
+  # of the dynamic model creation pattern used in models.py for custom table names
+  "ignore:This declarative base already contains a class with the same class name:sqlalchemy.exc.SAWarning",
+  # ResourceWarnings from asyncio event loop/socket cleanup during garbage collection
+  # These appear intermittently between tests due to pytest-asyncio and sse-starlette timing
+  "ignore:unclosed event loop:ResourceWarning",
+  "ignore:unclosed transport:ResourceWarning", 
+  "ignore:unclosed <socket.socket:ResourceWarning",
+]
 
 [tool.pytest-asyncio]
 mode = "strict"
@@ -89,8 +105,9 @@ style = "pep440"
 
 [dependency-groups]
 dev = [
-  "datamodel-code-generator>=0.30.0",
+  "fastapi>=0.115.2",
   "mypy>=1.15.0",
+  "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
   "pytest-cov>=6.1.1",
@@ -105,6 +122,7 @@ dev = [
   "trio",
   "uvicorn>=0.35.0",
   "pytest-timeout>=2.4.0",
+  "pyright",
   "a2a-sdk[all]",
 ]
 
@@ -119,7 +137,7 @@ a2a-sdk = { workspace = true }
 
 [tool.mypy]
 plugins = ["pydantic.mypy"]
-exclude = ["src/a2a/grpc/"]
+exclude = ["src/a2a/types/a2a_pb2\\.py", "src/a2a/types/a2a_pb2_grpc\\.py"]
 disable_error_code = [
   "import-not-found",
   "annotation-unchecked",
@@ -139,10 +157,12 @@ exclude = [
   "**/node_modules",
   "**/venv",
   "**/.venv",
-  "src/a2a/grpc/",
+  "src/a2a/types",
+  "src/a2a/compat/v0_3/*_pb2*.py",
+  "src/a2a/compat/v0_3/proto_utils.py",
 ]
-reportMissingImports = "none"
-reportMissingModuleSource = "none"
+venvPath = "."
+venv = ".venv"
 
 [tool.coverage.run]
 branch = true
@@ -150,7 +170,9 @@ omit = [
     "*/tests/*",
     "*/site-packages/*",
     "*/__init__.py",
-    "src/a2a/grpc/*",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/*/*_pb2*.py",
 ]
 
 [tool.coverage.report]
@@ -176,6 +198,8 @@ indent-width = 4 # Google Style Guide §3.4: 4 spaces
 target-version = "py310" # Minimum Python version
 
 [tool.ruff.lint]
+preview = true
+explicit-preview-rules = true
 ignore = [
     "COM812", # Trailing comma missing.
     "FBT001", # Boolean positional arg in function definition
@@ -262,7 +286,12 @@ exclude = [
     "node_modules",
     "venv",
     "*/migrations/*",
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
     "tests/**",
 ]
 
@@ -316,9 +345,28 @@ inline-quotes = "single"
 
 [tool.ruff.format]
 exclude = [
-    "src/a2a/grpc/**",
+    "src/a2a/types/a2a_pb2.py",
+    "src/a2a/types/a2a_pb2.pyi",
+    "src/a2a/types/a2a_pb2_grpc.py",
+    "src/a2a/compat/v0_3/*_pb2.py",
+    "src/a2a/compat/v0_3/*_pb2.pyi",
+    "src/a2a/compat/v0_3/*_pb2_grpc.py",
 ]
 docstring-code-format = true
 docstring-code-line-length = "dynamic"
 quote-style = "single"
 indent-style = "space"
+
+
+[tool.alembic]
+
+# path to migration scripts.
+script_location = "src/a2a/migrations"
+
+# additional paths to be prepended to sys.path. defaults to the current working directory.
+prepend_sys_path = [
+    "src"
+]
+
+[project.scripts]
+a2a-db = "a2a.a2a_db_cli:run_migrations"

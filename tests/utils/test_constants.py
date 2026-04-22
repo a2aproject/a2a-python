@@ -8,14 +8,19 @@ def test_agent_card_constants():
     assert (
         constants.AGENT_CARD_WELL_KNOWN_PATH == '/.well-known/agent-card.json'
     )
-    assert (
-        constants.PREV_AGENT_CARD_WELL_KNOWN_PATH == '/.well-known/agent.json'
-    )
-    assert (
-        constants.EXTENDED_AGENT_CARD_PATH == '/agent/authenticatedExtendedCard'
-    )
 
 
 def test_default_rpc_url():
     """Test default RPC URL constant."""
     assert constants.DEFAULT_RPC_URL == '/'
+
+
+def test_version_header():
+    """Test version header constant."""
+    assert constants.VERSION_HEADER == 'A2A-Version'
+
+
+def test_protocol_versions():
+    """Test protocol version constants."""
+    assert constants.PROTOCOL_VERSION_1_0 == '1.0'
+    assert constants.PROTOCOL_VERSION_CURRENT == '1.0'

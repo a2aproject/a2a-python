@@ -1,29 +1,19 @@
 import asyncio
 import logging
-import sys
 
 from collections.abc import AsyncGenerator
 
 from pydantic import ValidationError
 
-from a2a.server.events.event_queue import Event, EventQueue
-from a2a.types import (
-    InternalError,
+from a2a.server.events.event_queue import Event, EventQueueLegacy, QueueShutDown
+from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskState,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import ServerError
 from a2a.utils.telemetry import SpanKind, trace_class
 
-
-# This is an alias to the exception for closed queue
-QueueClosed: type[Exception] = asyncio.QueueEmpty
-
-# When using python 3.13 or higher, the closed queue signal is QueueShutdown
-if sys.version_info >= (3, 13):
-    QueueClosed = asyncio.QueueShutDown
 
 logger = logging.getLogger(__name__)
 
@@ -32,7 +22,7 @@ logger = logging.getLogger(__name__)
 class EventConsumer:
     """Consumer to read events from the agent event queue."""
 
-    def __init__(self, queue: EventQueue):
+    def __init__(self, queue: EventQueueLegacy):
         """Initializes the EventConsumer.
 
         Args:
@@ -42,31 +32,6 @@ class EventConsumer:
         self._timeout = 0.5
         self._exception: BaseException | None = None
         logger.debug('EventConsumer initialized')
-
-    async def consume_one(self) -> Event:
-        """Consume one event from the agent event queue non-blocking.
-
-        Returns:
-            The next event from the queue.
-
-        Raises:
-            ServerError: If the queue is empty when attempting to dequeue
-                immediately.
-        """
-        logger.debug('Attempting to consume one event.')
-        try:
-            event = await self.queue.dequeue_event(no_wait=True)
-        except asyncio.QueueEmpty as e:
-            logger.warning('Event queue was empty in consume_one.')
-            raise ServerError(
-                InternalError(message='Agent did not return any response')
-            ) from e
-
-        logger.debug('Dequeued event of type: %s in consume_one.', type(event))
-
-        self.queue.task_done()
-
-        return event
 
     async def consume_all(self) -> AsyncGenerator[Event]:
         """Consume all the generated streaming events from the agent.
@@ -102,20 +67,16 @@ class EventConsumer:
                     'Marked task as done in event queue in consume_all'
                 )
 
-                is_final_event = (
-                    (isinstance(event, TaskStatusUpdateEvent) and event.final)
-                    or isinstance(event, Message)
-                    or (
-                        isinstance(event, Task)
-                        and event.status.state
-                        in (
-                            TaskState.completed,
-                            TaskState.canceled,
-                            TaskState.failed,
-                            TaskState.rejected,
-                            TaskState.unknown,
-                            TaskState.input_required,
-                        )
+                is_final_event = isinstance(event, Message) or (
+                    isinstance(event, Task | TaskStatusUpdateEvent)
+                    and event.status.state
+                    in (
+                        TaskState.TASK_STATE_COMPLETED,
+                        TaskState.TASK_STATE_CANCELED,
+                        TaskState.TASK_STATE_FAILED,
+                        TaskState.TASK_STATE_REJECTED,
+                        TaskState.TASK_STATE_UNSPECIFIED,
+                        TaskState.TASK_STATE_INPUT_REQUIRED,
                     )
                 )
 
@@ -135,7 +96,7 @@ class EventConsumer:
             except asyncio.TimeoutError:  # pyright: ignore [reportUnusedExcept]
                 # This class was made an alias of built-in TimeoutError after 3.11
                 continue
-            except (QueueClosed, asyncio.QueueEmpty):
+            except (QueueShutDown, asyncio.QueueEmpty):
                 # Confirm that the queue is closed, e.g. we aren't on
                 # python 3.12 and get a queue empty error on an open queue
                 if self.queue.is_closed():

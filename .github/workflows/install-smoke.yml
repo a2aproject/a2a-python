@@ -1,0 +1,62 @@
+---
+name: Install Smoke Test
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/test_install_smoke.py'
+      - 'scripts/test_install_smoke.sh'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/install-smoke.yml'
+permissions:
+  contents: read
+
+jobs:
+  install-smoke:
+    name: Verify ${{ matrix.profile.name }} install
+    runs-on: ubuntu-latest
+    if: github.repository == 'a2aproject/a2a-python'
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+        profile:
+          - name: base
+            extras: ''
+          - name: http-server
+            extras: '[http-server]'
+          - name: grpc
+            extras: '[grpc]'
+          - name: telemetry
+            extras: '[telemetry]'
+          - name: sql
+            extras: '[sql]'
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Build package
+        run: uv build --wheel
+
+      - name: Install with ${{ matrix.profile.name }} dependencies only
+        run: |
+          uv venv .venv-smoke
+          # Install only the built wheel + the profile's extras -- no
+          # dev deps. This simulates what an end-user gets with
+          # `pip install a2a-sdk${{ matrix.profile.extras }}`.
+          WHEEL=$(ls dist/*.whl)
+          VIRTUAL_ENV=.venv-smoke uv pip install "${WHEEL}${{ matrix.profile.extras }}"
+
+      - name: List installed packages
+        run: VIRTUAL_ENV=.venv-smoke uv pip list
+
+      - name: Run import smoke test
+        run: .venv-smoke/bin/python scripts/test_install_smoke.py ${{ matrix.profile.name }}

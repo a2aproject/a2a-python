@@ -1,4 +1,4 @@
-# Template taken from https://github.com/v8/v8/blob/master/.git-blame-ignore-revs.
+# Template taken from https://github.com/v8/v8/blob/main/.git-blame-ignore-revs.
 #
 # This file contains a list of git hashes of revisions to be ignored by git blame. These
 # revisions are considered "unimportant" in that they are unlikely to be what you are

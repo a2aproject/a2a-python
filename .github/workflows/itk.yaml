@@ -1,0 +1,34 @@
+name: ITK
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'itk/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/itk.yaml'
+
+permissions:
+  contents: read
+
+jobs:
+  itk:
+    name: ITK
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run ITK Tests
+        run: bash run_itk.sh
+        working-directory: itk
+        env:
+          A2A_SAMPLES_REVISION: itk-v.016-alpha

@@ -3,8 +3,8 @@ import logging
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue import Event
 from a2a.server.tasks.task_store import TaskStore
-from a2a.types import (
-    InvalidParamsError,
+from a2a.types.a2a_pb2 import (
+    Artifact,
     Message,
     Task,
     TaskArtifactUpdateEvent,
@@ -12,11 +12,75 @@ from a2a.types import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils import append_artifact_to_task
-from a2a.utils.errors import ServerError
+from a2a.utils.errors import InvalidParamsError
+from a2a.utils.telemetry import trace_function
 
 
 logger = logging.getLogger(__name__)
+
+
+@trace_function()
+def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
+    """Helper method for updating a Task object with new artifact data from an event.
+
+    Handles creating the artifacts list if it doesn't exist, adding new artifacts,
+    and appending parts to existing artifacts based on the `append` flag in the event.
+
+    Args:
+        task: The `Task` object to modify.
+        event: The `TaskArtifactUpdateEvent` containing the artifact data.
+    """
+    new_artifact_data: Artifact = event.artifact
+    artifact_id: str = new_artifact_data.artifact_id
+    append_parts: bool = event.append
+
+    existing_artifact: Artifact | None = None
+    existing_artifact_list_index: int | None = None
+
+    # Find existing artifact by its id
+    for i, art in enumerate(task.artifacts):
+        if art.artifact_id == artifact_id:
+            existing_artifact = art
+            existing_artifact_list_index = i
+            break
+
+    if not append_parts:
+        # This represents the first chunk for this artifact index.
+        if existing_artifact_list_index is not None:
+            # Replace the existing artifact entirely with the new data
+            logger.debug(
+                'Replacing artifact at id %s for task %s', artifact_id, task.id
+            )
+            task.artifacts[existing_artifact_list_index].CopyFrom(
+                new_artifact_data
+            )
+        else:
+            # Append the new artifact since no artifact with this index exists yet
+            logger.debug(
+                'Adding new artifact with id %s for task %s',
+                artifact_id,
+                task.id,
+            )
+            task.artifacts.append(new_artifact_data)
+    elif existing_artifact:
+        # Append new parts to the existing artifact's part list
+        logger.debug(
+            'Appending parts to artifact id %s for task %s',
+            artifact_id,
+            task.id,
+        )
+        existing_artifact.parts.extend(new_artifact_data.parts)
+        existing_artifact.metadata.update(
+            dict(new_artifact_data.metadata.items())
+        )
+    else:
+        # We received a chunk to append, but we don't have an existing artifact.
+        # we will ignore this chunk
+        logger.warning(
+            'Received append=True for nonexistent artifact index %s in task %s. Ignoring chunk.',
+            artifact_id,
+            task.id,
+        )
 
 
 class TaskManager:
@@ -28,31 +92,31 @@ class TaskManager:
 
     def __init__(
         self,
+        task_store: TaskStore,
+        context: ServerCallContext,
         task_id: str | None,
         context_id: str | None,
-        task_store: TaskStore,
         initial_message: Message | None,
-        context: ServerCallContext | None = None,
     ):
         """Initializes the TaskManager.
 
         Args:
+            task_store: The `TaskStore` instance for persistence.
+            context: The `ServerCallContext` that this task is produced under.
             task_id: The ID of the task, if known from the request.
             context_id: The ID of the context, if known from the request.
-            task_store: The `TaskStore` instance for persistence.
             initial_message: The `Message` that initiated the task, if any.
                              Used when creating a new task object.
-            context: The `ServerCallContext` that this task is produced under.
         """
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
 
+        self.task_store = task_store
+        self._call_context: ServerCallContext = context
         self.task_id = task_id
         self.context_id = context_id
-        self.task_store = task_store
         self._initial_message = initial_message
         self._current_task: Task | None = None
-        self._call_context: ServerCallContext | None = context
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
@@ -101,7 +165,7 @@ class TaskManager:
             The updated `Task` object after processing the event.
 
         Raises:
-            ServerError: If the task ID in the event conflicts with the TaskManager's ID
+            InvalidParamsError: If the task ID in the event conflicts with the TaskManager's ID
                          when the TaskManager's ID is already set.
         """
         task_id_from_event = (
@@ -109,18 +173,14 @@ class TaskManager:
         )
         # If task id is known, make sure it is matched
         if self.task_id and self.task_id != task_id_from_event:
-            raise ServerError(
-                error=InvalidParamsError(
-                    message=f"Task in event doesn't match TaskManager {self.task_id} : {task_id_from_event}"
-                )
+            raise InvalidParamsError(
+                message=f"Task in event doesn't match TaskManager {self.task_id} : {task_id_from_event}"
             )
         if not self.task_id:
             self.task_id = task_id_from_event
         if self.context_id and self.context_id != event.context_id:
-            raise ServerError(
-                error=InvalidParamsError(
-                    message=f"Context in event doesn't match TaskManager {self.context_id} : {event.context_id}"
-                )
+            raise InvalidParamsError(
+                message=f"Context in event doesn't match TaskManager {self.context_id} : {event.context_id}"
             )
         if not self.context_id:
             self.context_id = event.context_id
@@ -140,16 +200,11 @@ class TaskManager:
             logger.debug(
                 'Updating task %s status to: %s', task.id, event.status.state
             )
-            if task.status.message:
-                if not task.history:
-                    task.history = [task.status.message]
-                else:
-                    task.history.append(task.status.message)
+            if task.status.HasField('message'):
+                task.history.append(task.status.message)
             if event.metadata:
-                if not task.metadata:
-                    task.metadata = {}
-                task.metadata.update(event.metadata)
-            task.status = event.status
+                task.metadata.MergeFrom(event.metadata)
+            task.status.CopyFrom(event.status)
         else:
             logger.debug('Appending artifact to task %s', task.id)
             append_artifact_to_task(task, event)
@@ -157,13 +212,12 @@ class TaskManager:
         await self._save_task(task)
         return task
 
-    async def ensure_task(
-        self, event: TaskStatusUpdateEvent | TaskArtifactUpdateEvent
-    ) -> Task:
+    async def ensure_task_id(self, task_id: str, context_id: str) -> Task:
         """Ensures a Task object exists in memory, loading from store or creating new if needed.
 
         Args:
-            event: The task-related event triggering the need for a Task object.
+            task_id: The ID for the new task.
+            context_id: The context ID for the new task.
 
         Returns:
             An existing or newly created `Task` object.
@@ -178,15 +232,28 @@ class TaskManager:
         if not task:
             logger.info(
                 'Task not found or task_id not set. Creating new task for event (task_id: %s, context_id: %s).',
-                event.task_id,
-                event.context_id,
+                task_id,
+                context_id,
             )
             # streaming agent did not previously stream task object.
             # Create a task object with the available information and persist the event
-            task = self._init_task_obj(event.task_id, event.context_id)
+            task = self._init_task_obj(task_id, context_id)
             await self._save_task(task)
 
         return task
+
+    async def ensure_task(
+        self, event: TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+    ) -> Task:
+        """Ensures a Task object exists in memory, loading from store or creating new if needed.
+
+        Args:
+            event: The task-related event triggering the need for a Task object.
+
+        Returns:
+            An existing or newly created `Task` object.
+        """
+        return await self.ensure_task_id(event.task_id, event.context_id)
 
     async def process(self, event: Event) -> Event:
         """Processes an event, updates the task state if applicable, stores it, and returns the event.
@@ -226,7 +293,7 @@ class TaskManager:
         return Task(
             id=task_id,
             context_id=context_id,
-            status=TaskStatus(state=TaskState.submitted),
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
             history=history,
         )
 
@@ -257,15 +324,9 @@ class TaskManager:
         Returns:
             The updated `Task` object (updated in-place).
         """
-        if task.status.message:
-            if task.history:
-                task.history.append(task.status.message)
-            else:
-                task.history = [task.status.message]
-            task.status.message = None
-        if task.history:
-            task.history.append(message)
-        else:
-            task.history = [message]
+        if task.status.HasField('message'):
+            task.history.append(task.status.message)
+            task.status.ClearField('message')
+        task.history.append(message)
         self._current_task = task
         return task
