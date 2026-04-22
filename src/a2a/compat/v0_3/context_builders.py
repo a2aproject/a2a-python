@@ -5,9 +5,7 @@ clients still send the old ``X-A2A-Extensions`` name, so the v0.3 compat
 adapters wrap the default builders with these classes to recognize both names.
 """
 
-from typing import TYPE_CHECKING, Any
-
-import grpc
+from typing import TYPE_CHECKING
 
 from a2a.compat.v0_3.extension_headers import LEGACY_HTTP_EXTENSION_HEADER
 from a2a.extensions.common import get_requested_extensions
@@ -15,21 +13,18 @@ from a2a.server.context import ServerCallContext
 
 
 if TYPE_CHECKING:
+    import grpc
+
     from starlette.requests import Request
 
     from a2a.server.request_handlers.grpc_handler import (
         GrpcServerCallContextBuilder,
     )
     from a2a.server.routes.common import ServerCallContextBuilder
-else:
-    try:
-        from starlette.requests import Request
-    except ImportError:
-        Request = Any
 
 
 def _get_legacy_grpc_extensions(
-    context: grpc.aio.ServicerContext,
+    context: 'grpc.aio.ServicerContext',
 ) -> list[str]:
     md = context.invocation_metadata()
     if md is None:
@@ -71,7 +66,7 @@ class V03GrpcServerCallContextBuilder:
     def __init__(self, inner: 'GrpcServerCallContextBuilder') -> None:
         self._inner = inner
 
-    def build(self, context: grpc.aio.ServicerContext) -> ServerCallContext:
+    def build(self, context: 'grpc.aio.ServicerContext') -> ServerCallContext:
         """Builds a ServerCallContext, merging legacy extension metadata."""
         server_context = self._inner.build(context)
         server_context.requested_extensions |= get_requested_extensions(

@@ -2,18 +2,15 @@
 name: Lint Code Base
 on:
   pull_request:
-    branches: [main, 1.0-dev]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'docs/**'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - '.git-blame-ignore-revs'
-      - '.gemini/**'
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.pyi'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.jscpd.json'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/linter.yaml'
 permissions:
   contents: read
 jobs:
