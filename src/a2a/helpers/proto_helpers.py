@@ -1,7 +1,6 @@
 """Unified helper functions for creating and handling A2A types."""
 
 import uuid
-
 from collections.abc import Sequence
 from typing import Any
 
@@ -20,7 +19,6 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-
 
 # --- Message Helpers ---
 
@@ -43,13 +41,14 @@ def new_message(
 
 def new_text_message(
     text: str,
+    media_type: str | None = None,
+    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
-    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a single text Part."""
     return new_message(
-        parts=[Part(text=text)],
+        parts=[new_text_part(text, media_type=media_type)],
         role=role,
         task_id=task_id,
         context_id=context_id,
@@ -63,6 +62,7 @@ def get_message_text(message: Message, delimiter: str = '\n') -> str:
 
 def new_data_message(
     data: Any,
+    media_type: str | None = None,
     role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
@@ -71,6 +71,7 @@ def new_data_message(
 
     Args:
         data: JSON-serializable data to embed (dict, list, str, etc.).
+        media_type: Optional MIME type of the part content (e.g., "text/plain", "application/json", "image/png").
         role: The role of the message sender (default: ROLE_AGENT).
         context_id: Optional context ID.
         task_id: Optional task ID.
@@ -79,7 +80,7 @@ def new_data_message(
         A Message with a single data Part.
     """
     return new_message(
-        parts=[new_data_part(data)],
+        parts=[new_data_part(data, media_type=media_type)],
         role=role,
         context_id=context_id,
         task_id=task_id,
@@ -165,12 +166,13 @@ def new_artifact(
 def new_text_artifact(
     name: str,
     text: str,
+    media_type: str | None = None,
     description: str | None = None,
     artifact_id: str | None = None,
 ) -> Artifact:
     """Creates a new Artifact object containing only a single text Part."""
     return new_artifact(
-        [Part(text=text)],
+        [new_text_part(text, media_type=media_type)],
         name,
         description,
         artifact_id=artifact_id,
@@ -180,6 +182,7 @@ def new_text_artifact(
 def new_data_artifact(
     name: str,
     data: Any,
+    media_type: str | None = None,
     description: str | None = None,
     artifact_id: str | None = None,
 ) -> Artifact:
@@ -188,6 +191,7 @@ def new_data_artifact(
     Args:
         name: The name of the artifact.
         data: JSON-serializable data to embed (dict, list, str, etc.).
+        media_type: Optional MIME type of the part content (e.g., "text/plain", "application/json", "image/png").
         description: Optional description.
         artifact_id: Optional artifact ID (auto-generated if not provided).
 
@@ -195,7 +199,7 @@ def new_data_artifact(
         An Artifact with a single data Part.
     """
     return new_artifact(
-        [new_data_part(data)],
+        [new_data_part(data, media_type=media_type)],
         name,
         description,
         artifact_id=artifact_id,
@@ -311,16 +315,39 @@ def new_task(
 # --- Part Helpers ---
 
 
-def new_data_part(data: Any) -> Part:
+def new_text_part(
+    text: str,
+    media_type: str | None = None,
+) -> Part:
+    """Creates a Part with text content.
+
+    Args:
+        text: The text content.
+        media_type: Optional MIME type (e.g. 'text/plain', 'text/markdown').
+
+    Returns:
+        A Part with the text field set.
+    """
+    return Part(text=text, media_type=media_type or '')
+
+
+def new_data_part(
+    data: Any,
+    media_type: str | None = None,
+) -> Part:
     """Creates a Part with structured data (google.protobuf.Value).
 
     Args:
         data: JSON-serializable data to embed (dict, list, str, etc.).
+        media_type: Optional MIME type of the part content (e.g., "text/plain", "application/json", "image/png").
 
     Returns:
         A Part with the data field set.
     """
-    return Part(data=ParseDict(data, struct_pb2.Value()))
+    return Part(
+        data=ParseDict(data, struct_pb2.Value()),
+        media_type=media_type or '',
+    )
 
 
 def new_raw_part(

@@ -2,12 +2,15 @@ name: ITK
 
 on:
   push:
-    branches: [main, 1.0-dev]
+    branches: [main]
   pull_request:
     paths:
       - 'src/**'
       - 'itk/**'
       - 'pyproject.toml'
+      - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/itk.yaml'
 
 permissions:
   contents: read

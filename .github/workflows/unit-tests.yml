@@ -2,30 +2,17 @@
 name: Run Unit Tests
 on:
   push:
-    branches: [main, 1.0-dev]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'docs/**'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - '.git-blame-ignore-revs'
-      - '.gemini/**'
+    branches: [main]
   pull_request:
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - 'docs/**'
-      - '.github/CODEOWNERS'
-      - '.github/ISSUE_TEMPLATE/**'
-      - '.github/PULL_REQUEST_TEMPLATE.md'
-      - '.github/dependabot.yml'
-      - '.gitignore'
-      - '.git-blame-ignore-revs'
-      - '.gemini/**'
+    paths:
+      - 'src/**'
+      - 'tests/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - 'scripts/run_db_tests.sh'
+      - 'scripts/docker-compose.test.yml'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/unit-tests.yml'
 permissions:
   contents: read
 

@@ -17,6 +17,7 @@ from a2a.helpers.proto_helpers import (
     new_task_from_user_message,
     new_task,
     get_text_parts,
+    new_text_part,
     new_data_part,
     new_raw_part,
     new_url_part,
@@ -278,11 +279,32 @@ def test_get_text_parts() -> None:
     assert get_text_parts(parts) == ['hello', 'world']
 
 
+def test_new_text_part() -> None:
+    part = new_text_part('hello')
+    assert part.HasField('text')
+    assert part.text == 'hello'
+    assert part.media_type == ''
+
+
+def test_new_text_part_with_media_type() -> None:
+    part = new_text_part('# Hello', media_type='text/markdown')
+    assert part.HasField('text')
+    assert part.text == '# Hello'
+    assert part.media_type == 'text/markdown'
+
+
 def test_new_data_part_from_dict() -> None:
     part = new_data_part({'key': 'value', 'count': 42})
     assert part.HasField('data')
     assert part.data.struct_value.fields['key'].string_value == 'value'
     assert part.data.struct_value.fields['count'].number_value == 42
+    assert part.media_type == ''
+
+
+def test_new_data_part_with_media_type() -> None:
+    part = new_data_part({'key': 'value'}, media_type='application/json')
+    assert part.HasField('data')
+    assert part.media_type == 'application/json'
 
 
 def test_new_data_part_from_list() -> None:
