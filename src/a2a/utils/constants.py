@@ -1,12 +1,6 @@
 """Constants for well-known URIs used throughout the A2A Python SDK."""
 
-import os  # CI test: unused import to trigger ruff F401
 from enum import Enum
-
-
-def _ci_test_bad_return() -> int:
-    """CI test: returns str but annotated as int to trigger mypy."""
-    return 'not an int'
 
 
 AGENT_CARD_WELL_KNOWN_PATH = '/.well-known/agent-card.json'
