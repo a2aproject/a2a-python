@@ -208,7 +208,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    if field.is_repeated:
+    if field.label == field.LABEL_REPEATED:
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -249,7 +249,7 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    if not field.is_repeated:
+    if field.label != field.LABEL_REPEATED:
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
