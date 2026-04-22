@@ -9,6 +9,9 @@
 # Available profiles (must match those in scripts/test_install_smoke.py):
 #   base         -- `pip install a2a-sdk`
 #   http-server  -- `pip install a2a-sdk[http-server]`
+#   grpc         -- `pip install a2a-sdk[grpc]`
+#   telemetry    -- `pip install a2a-sdk[telemetry]`
+#   sql          -- `pip install a2a-sdk[sql]`
 #
 # Usage:
 #   scripts/test_install_smoke.sh [profile] [python-version]
@@ -24,7 +27,7 @@ set -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_PROFILES=(base http-server)
+ALL_PROFILES=(base http-server grpc telemetry sql)
 
 PROFILE_ARG="${1:-}"
 PYTHON_VERSION="${2:-}"
@@ -39,6 +42,9 @@ extras_for_profile() {
     case "$1" in
         base)        echo "" ;;
         http-server) echo "[http-server]" ;;
+        grpc)        echo "[grpc]" ;;
+        telemetry)   echo "[telemetry]" ;;
+        sql)         echo "[sql]" ;;
         *)
             echo "Unknown profile '$1'. Available: ${ALL_PROFILES[*]}" >&2
             return 1
