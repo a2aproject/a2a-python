@@ -15,6 +15,9 @@ Usage:
     smoke-test. Available profiles:
       base        -- `pip install a2a-sdk`
       http-server -- `pip install a2a-sdk[http-server]`
+      grpc        -- `pip install a2a-sdk[grpc]`
+      telemetry   -- `pip install a2a-sdk[telemetry]`
+      sql         -- `pip install a2a-sdk[sql]`
 
 Exit codes:
     0 - All imports for the profile succeeded
@@ -80,10 +83,36 @@ HTTP_SERVER_MODULES = [
     'a2a.server.routes.rest_routes',
 ]
 
+# Modules that MUST be importable with only the base + `grpc` extras
+# installed (no `http-server`, `sql`, `signing`, `telemetry`, etc.).
+GRPC_MODULES = [
+    'a2a.server.request_handlers.grpc_handler',
+    'a2a.client.transports.grpc',
+    'a2a.compat.v0_3.grpc_handler',
+    'a2a.compat.v0_3.grpc_transport',
+]
+
+# Modules that MUST be importable with only the base + `telemetry`
+# extras installed.
+TELEMETRY_MODULES = [
+    'a2a.utils.telemetry',
+]
+
+# Modules that MUST be importable with only the base + `sql` extras
+# installed (covers postgresql/mysql/sqlite drivers via SQLAlchemy).
+SQL_MODULES = [
+    'a2a.server.models',
+    'a2a.server.tasks.database_task_store',
+    'a2a.server.tasks.database_push_notification_config_store',
+]
+
 
 PROFILES: dict[str, list[str]] = {
     'base': CORE_MODULES,
     'http-server': CORE_MODULES + HTTP_SERVER_MODULES,
+    'grpc': CORE_MODULES + GRPC_MODULES,
+    'telemetry': CORE_MODULES + TELEMETRY_MODULES,
+    'sql': CORE_MODULES + SQL_MODULES,
 }
 
 
