@@ -201,10 +201,10 @@ Key changes:
 from a2a.types import AgentCard, AgentCapabilities, AgentSkill
 
 agent_card = AgentCard(
-    name='My Agent',
-    description='...',
+    name='Hello World Agent',
+    description='Returns Hello, World!',
     url='http://localhost:9999/',
-    version='1.0.0',
+    version='0.0.1',
     default_input_modes=['text/plain'],
     default_output_modes=['text/plain'],
     supports_authenticated_extended_card=True,
@@ -214,7 +214,7 @@ agent_card = AgentCard(
         streaming=True,
     ),
     skills=[skill],
-    examples=['example'],
+    examples=['Hello, World!'],
 )
 ```
 
@@ -223,8 +223,8 @@ agent_card = AgentCard(
 from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
 
 agent_card = AgentCard(
-    name='My Agent',
-    description='...',
+    name='Hello World Agent',
+    description='Returns Hello, World!',
     supported_interfaces=[
         # JSON-RPC
         AgentInterface(
@@ -237,7 +237,7 @@ agent_card = AgentCard(
             url='http://localhost:50051/a2a/grpc/',
         )
     ],
-    version='1.0.0',
+    version='0.0.1',
     default_input_modes=['text/plain'],
     default_output_modes=['text/plain'],
     capabilities=AgentCapabilities(
