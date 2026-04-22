@@ -1,18 +1,24 @@
 #!/usr/bin/env python3
-"""Smoke test for minimal (base-only) installation of a2a-sdk.
+"""Smoke test for installations of a2a-sdk with various extras.
 
-This script verifies that all core public API modules can be imported
-when only the base dependencies are installed (no optional extras).
+This script verifies that the public API modules associated with a
+given installation profile can be imported without pulling in modules
+that belong to other (uninstalled) optional extras.
 
 It is designed to run WITHOUT pytest or any dev dependencies -- just
-a clean venv with `pip install a2a-sdk`.
+a clean venv with `pip install a2a-sdk[<profile>]`.
 
 Usage:
-    python scripts/test_minimal_install.py
+    python scripts/test_install_smoke.py [profile]
+
+    profile defaults to "base" and selects which set of modules to
+    smoke-test. Available profiles:
+      base        -- `pip install a2a-sdk`
+      http-server -- `pip install a2a-sdk[http-server]`
 
 Exit codes:
-    0 - All core imports succeeded
-    1 - One or more core imports failed
+    0 - All imports for the profile succeeded
+    1 - One or more imports failed
 """
 
 from __future__ import annotations
@@ -58,19 +64,48 @@ CORE_MODULES = [
     'a2a.helpers.proto_helpers',
 ]
 
+# Modules that MUST be importable with only the base + `http-server`
+# extras installed (no `grpc`, `sql`, `signing`, `telemetry`, etc.).
+#
+# A user building a Starlette/FastAPI A2A server with
+# `pip install a2a-sdk[http-server]` should be able to import these
+# without the gRPC stack being present on the system.
+HTTP_SERVER_MODULES = [
+    'a2a.server.routes',
+    'a2a.server.routes.agent_card_routes',
+    'a2a.server.routes.common',
+    'a2a.server.routes.jsonrpc_dispatcher',
+    'a2a.server.routes.jsonrpc_routes',
+    'a2a.server.routes.rest_dispatcher',
+    'a2a.server.routes.rest_routes',
+]
+
+
+PROFILES: dict[str, list[str]] = {
+    'base': CORE_MODULES,
+    'http-server': CORE_MODULES + HTTP_SERVER_MODULES,
+}
+
 
 def main() -> int:
+    profile = sys.argv[1] if len(sys.argv) > 1 else 'base'
+    if profile not in PROFILES:
+        print(f'Unknown profile {profile!r}. Available: {sorted(PROFILES)}')
+        return 1
+
+    modules = PROFILES[profile]
     failures: list[str] = []
     successes: list[str] = []
 
-    for module_name in CORE_MODULES:
+    for module_name in modules:
         try:
             importlib.import_module(module_name)
             successes.append(module_name)
         except Exception as e:  # noqa: BLE001, PERF203
             failures.append(f'{module_name}: {e}')
 
-    print(f'Tested {len(CORE_MODULES)} core modules')
+    print(f'Profile: {profile}')
+    print(f'Tested {len(modules)} modules')
     print(f'  Passed: {len(successes)}')
     print(f'  Failed: {len(failures)}')
 
@@ -80,7 +115,7 @@ def main() -> int:
             print(f'  - {failure}')
         return 1
 
-    print('\nAll core modules imported successfully.')
+    print('\nAll modules imported successfully.')
     return 0
 
 
