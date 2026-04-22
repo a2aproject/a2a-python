@@ -2,7 +2,15 @@
 name: Lint Code Base
 on:
   pull_request:
-    branches: [main, 1.0-dev]
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.pyi'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      - '.jscpd.json'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/linter.yaml'
 permissions:
   contents: read
 jobs:

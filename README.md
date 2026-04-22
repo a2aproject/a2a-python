@@ -21,6 +21,10 @@
 
 ---
 
+> [!IMPORTANT]
+> **Upgrading the SDK from `0.3` to `1.0`?** See the [**v0.3 → v1.0 migration guide**](docs/migrations/v1_0/README.md). For supported A2A spec versions, see [Compatibility](#-compatibility).
+
+
 ## ✨ Features
 
 - **A2A Protocol Compliant:** Build agentic applications that adhere to the Agent2Agent (A2A) Protocol.
@@ -36,16 +40,16 @@
 
 ## 🧩 Compatibility
 
-This SDK implements the A2A Protocol Specification [`0.3`](https://a2a-protocol.org/v0.3.0/specification).
+This SDK implements the A2A Protocol Specification [`1.0`](https://a2a-protocol.org/v1.0.0/specification/), with compatibility mode for [`0.3`](https://a2a-protocol.org/v0.3.0/specification). See [#742](https://github.com/a2aproject/a2a-python/issues/742) for details on the compatibility scope.
 
-> [!IMPORTANT]
-> There is an [**alpha version**](https://github.com/a2aproject/a2a-python/releases?q=%22v1.0.0-alpha%22&expanded=true) available with support for both [`1.0`](https://a2a-protocol.org/v1.0.0/specification/) and [`0.3`](https://a2a-protocol.org/v0.3.0/specification) versions. Development for this version is taking place in the [`1.0-dev`](https://github.com/a2aproject/a2a-python/tree/1.0-dev) branch, tracked in [#701](https://github.com/a2aproject/a2a-python/issues/701).
-
-| Transport | Client | Server |
-| :--- | :---: | :---: |
-| **JSON-RPC** | ✅ | ✅ |
-| **HTTP+JSON/REST** | ✅ | ✅ |
-| **GRPC** | ✅ | ✅ |
+| Spec Version | Transport | Client | Server |
+| :--- | :--- | :---: | :---: |
+| **`1.0`** | JSON-RPC | ✅ | ✅ |
+| **`1.0`** | HTTP+JSON/REST | ✅ | ✅ |
+| **`1.0`** | gRPC | ✅ | ✅ |
+| **`0.3`** (compat) | JSON-RPC | ✅ | ✅ |
+| **`0.3`** (compat) | HTTP+JSON/REST | ✅ | ✅ |
+| **`0.3`** (compat) | gRPC | ✅ | ✅ |
 
 ---
 

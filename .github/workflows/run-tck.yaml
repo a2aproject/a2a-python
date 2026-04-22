@@ -5,10 +5,13 @@ on:
     branches: [ "main" ]
   pull_request:
     branches: [ "main" ]
-    paths-ignore:
-      - '**.md'
-      - 'LICENSE'
-      - '.github/CODEOWNERS'
+    paths:
+      - 'src/**'
+      - 'tck/**'
+      - 'pyproject.toml'
+      - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/run-tck.yaml'
 
 permissions:
   contents: read
