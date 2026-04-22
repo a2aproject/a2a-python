@@ -57,12 +57,12 @@ pip install --upgrade a2a-sdk
 
 ## 2. Types
 
-[Types](https://github.com/a2aproject/a2a-python/blob/main/src/a2a/types/a2a_pb2.pyi) have migrated from Pydantic models to Protobuf-based classes to align with the A2A spec's proto-first design and adopt ProtoJSON as the canonical JSON serialization standard, ensuring consistent cross-implementation interoperability.
+[Types](https://github.com/a2aproject/a2a-python/blob/main/src/a2a/types/a2a_pb2.pyi) have migrated from Pydantic models to Protobuf-based classes to align with the A2A spec's proto-first design and to adopt ProtoJSON as the canonical JSON serialization standard, ensuring consistent cross-implementation interoperability.
 
 
 ### Enum values: `snake_case` → `SCREAMING_SNAKE_CASE`
 
-All the enum values are now [standardized](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
+All enum values are now [standardized](https://a2a-protocol.org/v1.0.0/specification/#55-json-field-naming-convention) to use `SCREAMING_SNAKE_CASE` format.
 
 This affects every enum in the SDK: `TaskState`, `Role`.
 
@@ -95,9 +95,9 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 | File (URI) | `Part(FilePart(file=FileWithUri(uri=..., ...)))` | `Part(url=..., ...)` |
 | Structured data | `Part(DataPart(data=..., ...))` | `Part(data=..., ...)` |
 
-> **Note on file bytes**: In v0.3 `FileWithBytes.bytes` was a **base64-encoded string**. In v1.0 `Part.raw` is raw **`bytes`** — no base64 encoding needed.
-
-> **Note on structured data**: In v0.3 `DataPart.data` was a plain `dict`. In v1.0 `Part.data` is a `google.protobuf.Value`, so use `ParseDict` to convert from a Python dict.
+**Note**:
+* When using `File (bytes)` in v1.0, the data serialisatinon (via base64 encoding) is not required as A2A now uses Protobuf that automatically does it for you. 
+* In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. Check the examples below for better understanding.
 
 **Before (v0.3):**
 ```python
@@ -189,7 +189,7 @@ message = new_text_message(text="What's the weather in Warsaw?", role=Role.ROLE_
 ### AgentCard Structure
 
 Key changes:
-- Added `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
+- Added an `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
 - The `url` parameter in `AgentCard` is removed and is now part of `AgentInterface`.
 - Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
 - The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
@@ -199,6 +199,16 @@ Key changes:
 **Before (v0.3):**
 ```python
 from a2a.types import AgentCard, AgentCapabilities, AgentSkill
+
+skill = AgentSkill(
+    id='hello_world',
+    name='Hello World',
+    description='Returns a Hello World message.',
+    tags=['hello', 'world'],
+    input_modes=['text/plain'],
+    output_modes=['text/plain'],
+    examples=['hello world'],
+)
 
 agent_card = AgentCard(
     name='Hello World Agent',
@@ -221,6 +231,16 @@ agent_card = AgentCard(
 **After (v1.0):**
 ```python
 from a2a.types import AgentCard, AgentCapabilities, AgentInterface, AgentSkill
+
+skill = AgentSkill(
+    id='hello_world',
+    name='Hello World',
+    description='Returns a Hello World message.',
+    tags=['hello', 'world'],
+    input_modes=['text/plain'],
+    output_modes=['text/plain'],
+    examples=['hello world', 'Hello, World!'],  # moved from AgentCard.examples
+)
 
 agent_card = AgentCard(
     name='Hello World Agent',
