@@ -9,6 +9,8 @@ on:
       - 'itk/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/itk.yaml'
 
 permissions:
   contents: read

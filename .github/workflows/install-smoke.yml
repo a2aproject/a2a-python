@@ -10,6 +10,8 @@ on:
       - 'uv.lock'
       - 'scripts/test_install_smoke.py'
       - 'scripts/test_install_smoke.sh'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/install-smoke.yml'
 permissions:
   contents: read
 

@@ -11,6 +11,8 @@ on:
       - 'uv.lock'
       - 'scripts/run_db_tests.sh'
       - 'scripts/docker-compose.test.yml'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/unit-tests.yml'
 permissions:
   contents: read
 

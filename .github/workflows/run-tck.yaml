@@ -10,6 +10,8 @@ on:
       - 'tck/**'
       - 'pyproject.toml'
       - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/run-tck.yaml'
 
 permissions:
   contents: read
