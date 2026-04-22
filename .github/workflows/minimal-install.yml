@@ -9,7 +9,6 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - 'scripts/test_minimal_install.py'
-      - '.github/workflows/minimal-install.yml'
 permissions:
   contents: read
 

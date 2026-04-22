@@ -9,7 +9,6 @@ on:
       - 'itk/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - '.github/workflows/itk.yaml'
 
 permissions:
   contents: read

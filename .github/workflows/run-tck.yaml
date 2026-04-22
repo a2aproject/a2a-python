@@ -10,7 +10,6 @@ on:
       - 'tck/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - '.github/workflows/run-tck.yaml'
 
 permissions:
   contents: read

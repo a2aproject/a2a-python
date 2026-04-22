@@ -11,7 +11,6 @@ on:
       - 'uv.lock'
       - 'scripts/run_db_tests.sh'
       - 'scripts/docker-compose.test.yml'
-      - '.github/workflows/unit-tests.yml'
 permissions:
   contents: read
 

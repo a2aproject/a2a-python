@@ -9,7 +9,6 @@ on:
       - 'pyproject.toml'
       - 'uv.lock'
       - '.jscpd.json'
-      - '.github/workflows/linter.yaml'
 permissions:
   contents: read
 jobs:
