@@ -31,7 +31,7 @@ This documentation details the technical upgrades and architectural modification
 
 ## 1. Update Dependencies
 
-(UV users) To upgrade to the latest version of the `a2a-sdk`, update the dependencies section in your `pyproject.toml` file.
+For UV users: To upgrade to the latest version of the `a2a-sdk`, update the dependencies section in your `pyproject.toml` file.
 
 | File             | Before (`v0.3`)                   | After (`v1.0`)                    |
 |------------------|-----------------------------------|-----------------------------------|
@@ -97,7 +97,7 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 
 **Note**:
 * When using `File (bytes)` in v1.0, the data serialisatinon (via base64 encoding) is not required as A2A now uses Protobuf that automatically does it for you. 
-* In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. Check the examples below for better understanding.
+* In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. See the examples below for more details.
 
 **Before (v0.3):**
 ```python
@@ -301,7 +301,7 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: Application Setup
 
-The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. The Server setup now uses Starlette route factory functions directly, giving you better control over the routing, middleware, authentication, logging and other aspects of the server.
+The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. The server setup now uses Starlette route factory functions directly, giving you better control over the routing, middleware, authentication, logging, and other aspects of the server.
 
 **Before (v0.3):**
 ```python
@@ -320,12 +320,12 @@ uvicorn.run(server.build(), host=host, port=port)
 
 **After (v1.0):**
 
-Define routes for each supported transport as per AgentCard.
+Define routes for each supported transport as defined in the `AgentCard`.
 
 ```python
 from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 
-# Define routes for transports as per AgentCard
+# Define routes for transports as defined in the AgentCard
 routes = []
 # A2A Agent Card routes
 routes.extend(create_agent_card_routes(agent_card))
@@ -391,7 +391,7 @@ create_rest_routes(request_handler, enable_v0_3_compat=True)
 
 ## 6. Client: Creating a Client
 
-In `v1.0`, use `a2a.client.create_client()` helper function to create a `Client` for the agent.
+In `v1.0`, use the `a2a.client.create_client()` helper function to create a `Client` for the agent.
 
 
 **Before (v0.3):**
@@ -427,7 +427,7 @@ client = await create_client(agent_card)
 
 The `BaseClient.send_message()` return type is standardized from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
 
-Each `StreamResponse` yields exactly one of: (`task`, `message`, `status_update`, or `artifact_update`). Use `HasField()` to check which field is set.
+Each `StreamResponse` contains exactly one of: `task`, `message`, `status_update`, or `artifact_update`. Use `HasField()` to check which field is set.
 
 
 **Before (v0.3):**
@@ -498,9 +498,9 @@ To improve the developer experience, we have consolidated helper functions into 
 | `new_text_message` | Creates a `Message` with a single text `Part`; role defaults to `ROLE_AGENT`. |
 | `new_text_status_update_event` | Creates a `TaskStatusUpdateEvent` with a text message. |
 
-Example Usage: 
+**Example usage:**
 
-**1. Create text based message**
+**1. Create a text-based message**
 
 ```python
 from a2a.helpers import new_text_message
@@ -513,7 +513,7 @@ user_message = new_text_message("What's the weather?", role=Role.ROLE_USER)
 response_message = new_text_message("It is sunny today!")
 ```
 
-**2. Extract the text out of a message**
+**2. Extract text from a message**
 
 ```python
 from a2a.helpers import get_message_text
@@ -530,9 +530,9 @@ print(text)
 - **Migration to Protobuf** — Core types have migrated from Pydantic models to Protobuf-based classes. Protobuf objects do not support arbitrary attribute assignment. Use `MessageToDict` from `google.protobuf.json_format` to convert objects to dictionaries, and `HasField('field_name')` to check for optional fields.
 - **Standardization to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
 - **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
-  - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint carrying `protocol_binding`, `protocol_version`, and `url`.
+  - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint with fields for `protocol_binding`, `protocol_version`, and `url`.
   - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
-- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) are now removed. Server setup now uses route factory functions `create_jsonrpc_routes()`, `create_rest_routes()`, `create_agent_card_routes()` composed directly into a Starlette or FastAPI app.
+- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. Server setup now uses route factory functions — `create_jsonrpc_routes()`, `create_rest_routes()`, and `create_agent_card_routes()` — composed directly into a Starlette or FastAPI app.
 - **Helper utilities** — A new `a2a.helpers` module consolidates all helper functions under a single import, replacing the scattered `a2a.utils.*` modules and adding new helpers for constructing and reading v1.0 proto types.
 
 ---
