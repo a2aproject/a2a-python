@@ -8,7 +8,8 @@ on:
       - 'src/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - 'scripts/test_minimal_install.py'
+      - 'scripts/test_install_smoke.py'
+      - 'scripts/test_install_smoke.sh'
 permissions:
   contents: read
 
