@@ -302,7 +302,7 @@ request_handler = DefaultRequestHandler(
 
 ## 4. Server: AgentExecutor Streaming Rules
 
-The server now strictly enforces the [A2A spec rules for `message/stream`](https://a2a-protocol.org/v1.0.0/specification/#312-send-streaming-message). Existing executors that mix message and task events, or emit task updates before the initial `Task`, will fail at runtime with `InvalidAgentResponseError`. See [PR #979](https://github.com/a2aproject/a2a-python/pull/979).
+The server now strictly enforces the [A2A spec rules for `SendStreamingMessage`](https://a2a-protocol.org/v1.0.0/specification/#312-send-streaming-message). Existing executors that mix message and task events, or emit task updates before the initial `Task`, will fail at runtime with `InvalidAgentResponseError`. See [PR #979](https://github.com/a2aproject/a2a-python/pull/979).
 
 In v1.0, your `AgentExecutor` MUST follow exactly one of these two streaming patterns:
 
