@@ -18,14 +18,15 @@ This documentation details the technical upgrades and architectural modification
 1. [Update Dependencies](#1-update-dependencies)
 2. [Types](#2-types)
 3. [Server: DefaultRequestHandler](#3-server-defaultrequesthandler)
-4. [Server: Application Setup](#4-server-application-setup)
-5. [Supporting v0.3 Clients](#5-supporting-v03-clients)
-6. [Client: Creating a Client](#6-client-creating-a-client)
-7. [Client: Send Message](#7-client-send-message)
-8. [Client: Push Notifications Config](#8-client-push-notifications-config)
-9. [Helper Utilities](#9-helper-utilities)
-10. [Summary of Key Changes](#10-summary-of-key-changes-in-v10)
-11. [Get Started](#11-get-started)
+4. [Server: AgentExecutor Streaming Rules](#4-server-agentexecutor-streaming-rules)
+5. [Server: Application Setup](#5-server-application-setup)
+6. [Supporting v0.3 Clients](#6-supporting-v03-clients)
+7. [Client: Creating a Client](#7-client-creating-a-client)
+8. [Client: Send Message](#8-client-send-message)
+9. [Client: Push Notifications Config](#9-client-push-notifications-config)
+10. [Helper Utilities](#10-helper-utilities)
+11. [Summary of Key Changes](#11-summary-of-key-changes-in-v10)
+12. [Get Started](#12-get-started)
 
 ---
 
@@ -96,7 +97,7 @@ Constructing messages is simplified in v1.0. The old API required wrapping conte
 | Structured data | `Part(DataPart(data=..., ...))` | `Part(data=..., ...)` |
 
 **Note**:
-* When using `File (bytes)` in v1.0, the data serialisatinon (via base64 encoding) is not required as A2A now uses Protobuf that automatically does it for you. 
+* When using `File (bytes)` in v1.0, data serialization (via base64 encoding) is not required because A2A now uses Protobuf, which handles it automatically.
 * In v1.0, `Part.DataPart.data` is renamed to `Part.data` and is of type `google.protobuf.Value`. Use `ParseDict` to convert a Python dict into a suitable value. See the examples below for more details.
 
 **Before (v0.3):**
@@ -175,7 +176,7 @@ message = Message(
 )
 ```
 
-For text-only messages, use the [A2A helper utilities](#9-helper-utilities) to reduce boilerplate:
+For text-only messages, use the [A2A helper utilities](#10-helper-utilities) to reduce boilerplate:
 
 ```python
 from a2a.helpers import new_text_message
@@ -191,7 +192,7 @@ message = new_text_message(text="What's the weather in Warsaw?", role=Role.ROLE_
 Key changes:
 - Added an `AgentInterface` class to support multiple transport bindings via the newly added `supported_interfaces` field in AgentCard.
 - The `url` parameter in `AgentCard` is removed and is now part of `AgentInterface`.
-- Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`
+- Accepted values for `AgentInterface.protocol_binding`: `'JSONRPC'`, `'HTTP+JSON'`, `'GRPC'`.
 - The `AgentCard.supports_authenticated_extended_card` field is renamed to `AgentCapabilities.extended_agent_card`.
 - The `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` fields are removed; use `AgentCard.default_input_modes` and `AgentCard.default_output_modes` for card-level defaults, or `AgentSkill.input_modes` and `AgentSkill.output_modes` for per-skill overrides.
 - The `examples` parameter in `AgentCard` is removed and is now part of `AgentSkill`.
@@ -299,9 +300,111 @@ request_handler = DefaultRequestHandler(
 
 ---
 
-## 4. Server: Application Setup
+## 4. Server: AgentExecutor Streaming Rules
 
-The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. The server setup now uses Starlette route factory functions directly, giving you better control over the routing, middleware, authentication, logging, and other aspects of the server.
+The server now strictly enforces the [A2A spec rules for `message/stream`](https://a2a-protocol.org/v1.0.0/specification/#312-send-streaming-message). Existing executors that mix message and task events, or emit task updates before the initial `Task`, will fail at runtime with `InvalidAgentResponseError`. See [PR #979](https://github.com/a2aproject/a2a-python/pull/979).
+
+In v1.0, your `AgentExecutor` MUST follow exactly one of these two streaming patterns:
+
+1. **Message-only stream** — enqueue exactly **one** `Message` and stop.
+2. **Task lifecycle stream** — enqueue a `Task` **first**, then zero or more `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` objects until a terminal state is reached.
+
+The following are now hard errors (each raises `InvalidAgentResponseError`):
+
+| Violation | Error message |
+|---|---|
+| Enqueue a `Message` after a `Task` (mixing modes) | *Received Message object in task mode...* |
+| Enqueue more than one `Message` | *Multiple Message objects received.* |
+| Enqueue a `Task`/update event after a `Message` | *Received `<Type>` in message mode...* |
+| Enqueue a `TaskStatusUpdateEvent` before the initial `Task` | *Agent should enqueue Task before `<Type>` event* |
+
+### Migration
+
+**Before (v0.3 — silently tolerated):**
+```python
+from a2a.helpers import new_text_message
+from a2a.server.agent_execution import AgentExecutor
+from a2a.types import TaskStatusUpdateEvent
+
+class MyExecutor(AgentExecutor):
+    async def execute(self, context, event_queue):
+        # Mixing Message and Task events — no longer allowed.
+        await event_queue.enqueue_event(new_text_message('Working on it...'))
+        await event_queue.enqueue_event(
+            TaskStatusUpdateEvent(...)  # ❌ raises InvalidAgentResponseError
+        )
+```
+
+**After (v1.0 — pick one pattern):**
+
+```python
+from a2a.helpers import (
+    new_task_from_user_message,
+    new_text_artifact_update_event,
+    new_text_message,
+    new_text_status_update_event,
+)
+from a2a.server.agent_execution import AgentExecutor
+from a2a.types import Role, TaskState
+
+# Pattern A: Message-only stream — one Message, then done.
+class GreetingExecutor(AgentExecutor):
+    async def execute(self, context, event_queue):
+        await event_queue.enqueue_event(
+            new_text_message('Hello!', role=Role.ROLE_AGENT)
+        )
+
+# Pattern B: Task lifecycle stream — Task first, then updates.
+class WorkflowExecutor(AgentExecutor):
+    def __init__(self, agent):
+        self._agent = agent  # Your underlying agent (LLM, tool, etc.)
+
+    async def execute(self, context, event_queue):
+        task = context.current_task or new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)  # ✅ Task MUST be first
+
+        await event_queue.enqueue_event(
+            new_text_status_update_event(
+                task_id=task.id,
+                context_id=task.context_id,
+                state=TaskState.TASK_STATE_WORKING,
+                text='Processing...',
+            )
+        )
+
+        result = await self._agent.invoke(context.message)
+        await event_queue.enqueue_event(
+            new_text_artifact_update_event(
+                task_id=task.id,
+                context_id=task.context_id,
+                name='result',
+                text=result,
+            )
+        )
+
+        await event_queue.enqueue_event(
+            new_text_status_update_event(
+                task_id=task.id,
+                context_id=task.context_id,
+                state=TaskState.TASK_STATE_COMPLETED,
+                text='Done!',
+            )
+        )
+```
+
+**Quick checklist when migrating an executor:**
+- Decide upfront: is this a one-shot message reply, or a tracked task?
+- If task-based, always enqueue the `Task` object as the very first event.
+- Never mix `Message` events with `TaskStatusUpdateEvent` / `TaskArtifactUpdateEvent` in the same stream.
+- Send only one `Message` per stream when using the message-only pattern.
+
+> **Example**: [`helloworld/agent_executor.py` in PR #474](https://github.com/a2aproject/a2a-samples/pull/474/files#diff-950e8baafcf17d50db5c10b525949407e129995df5295161fbf688e6374ad284)
+
+---
+
+## 5. Server: Application Setup
+
+The application wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication`, and `A2ARESTFastApiApplication`) have been removed. The server setup now uses Starlette route factory functions directly, giving you better control over routing, middleware, authentication, logging, and other aspects of the server.
 
 **Before (v0.3):**
 ```python
@@ -366,9 +469,9 @@ uvicorn.run(app, host=host, port=port)
 
 ---
 
-## 5. Supporting v0.3 Clients
+## 6. Supporting v0.3 Clients
 
-If you cannot update all clients at once, you can run a v1.0 server that simultaneously accepts v0.3 connections. Two changes are needed.
+If you cannot update all clients at once, you can run a v1.0 server that also accepts v0.3 connections. Two changes are needed.
 
 **1. Add the v0.3 AgentInterface to `supported_interfaces` in your `AgentCard`**:
 
@@ -389,7 +492,7 @@ create_rest_routes(request_handler, enable_v0_3_compat=True)
 
 ---
 
-## 6. Client: Creating a Client
+## 7. Client: Creating a Client
 
 In `v1.0`, use the `a2a.client.create_client()` helper function to create a `Client` for the agent.
 
@@ -423,7 +526,7 @@ client = await create_client(agent_card)
 
 ---
 
-## 7. Client: Send Message
+## 8. Client: Send Message
 
 The `BaseClient.send_message()` return type is standardized from `AsyncIterator[ClientEvent | Message]` to `AsyncIterator[StreamResponse]`.
 
@@ -457,7 +560,7 @@ async for chunk in client.send_message(request):
 
 ---
 
-## 8. Client: Push Notifications Config
+## 9. Client: Push Notifications Config
 
 `ClientConfig.push_notification_config` is now **singular** (a single `TaskPushNotificationConfig` or `None`), not a list.
 
@@ -478,7 +581,7 @@ config = ClientConfig(
 
 ---
 
-## 9. Helper Utilities
+## 10. Helper Utilities
 
 To improve the developer experience, we have consolidated helper functions into a single import. In v0.3, these helper functions were scattered across different modules. In v1.0, they are all available under `a2a.helpers`.
 
@@ -525,19 +628,20 @@ print(text)
 
 ---
 
-## 10. Summary of Key Changes in v1.0
+## 11. Summary of Key Changes in v1.0
 
 - **Migration to Protobuf** — Core types have migrated from Pydantic models to Protobuf-based classes. Protobuf objects do not support arbitrary attribute assignment. Use `MessageToDict` from `google.protobuf.json_format` to convert objects to dictionaries, and `HasField('field_name')` to check for optional fields.
 - **Standardization to `SCREAMING_SNAKE_CASE`** — All enum values have been renamed from `snake_case` strings to `SCREAMING_SNAKE_CASE` for compliance with the ProtoJSON specification.
 - **`AgentCard`** — Significantly restructured to support multiple transport interfaces.
   - **`AgentInterface`** — The top-level `url` field is replaced by `supported_interfaces`, a list of `AgentInterface` objects. Each entry describes a single transport endpoint with fields for `protocol_binding`, `protocol_version`, and `url`.
   - **Input and output modes** — `AgentCapabilities.input_modes` and `AgentCapabilities.output_modes` are removed and now live directly on `AgentCard` as `default_input_modes` and `default_output_modes`. Individual skills can override these with their own `input_modes` and `output_modes`.
-- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication` and `A2ARESTFastApiApplication`) have been removed. Server setup now uses route factory functions — `create_jsonrpc_routes()`, `create_rest_routes()`, and `create_agent_card_routes()` — composed directly into a Starlette or FastAPI app.
+- **AgentExecutor streaming rules** — The server now strictly enforces the A2A spec: an executor must enqueue either a single `Message` or a `Task` followed by update events (with the `Task` first). Mixing modes, emitting multiple `Message`s, or sending updates before the initial `Task` raises `InvalidAgentResponseError`.
+- **Application setup** — The wrapper classes (`A2AStarletteApplication`, `A2AFastApiApplication`, and `A2ARESTFastApiApplication`) have been removed. Server setup now uses route factory functions — `create_jsonrpc_routes()`, `create_rest_routes()`, and `create_agent_card_routes()` — composed directly into a Starlette or FastAPI app.
 - **Helper utilities** — A new `a2a.helpers` module consolidates all helper functions under a single import, replacing the scattered `a2a.utils.*` modules and adding new helpers for constructing and reading v1.0 proto types.
 
 ---
 
-## 11. Get Started
+## 12. Get Started
 
 The fastest way to see v1.0 in action is to run the samples:
 
