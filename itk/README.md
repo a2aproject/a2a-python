@@ -36,7 +36,7 @@ You must set the `A2A_SAMPLES_REVISION` environment variable to specify which re
 
 Example:
 ```
-export A2A_SAMPLES_REVISION=itk-v.015-alpha
+export A2A_SAMPLES_REVISION=itk-v.02-alpha
 ```
 
 ### 2. Execute Tests

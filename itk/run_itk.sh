@@ -119,14 +119,16 @@ RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/run \
         "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
         "traversal": "euler",
         "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-        "protocols": ["jsonrpc", "grpc"]
+        "protocols": ["jsonrpc", "grpc"],
+        "behavior": "send_message"
       },
       {
         "name": "Star Topology (No Go v03) - HTTP_JSON",
         "sdks": ["current", "python_v10", "python_v03", "go_v10"],
         "traversal": "euler",
         "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
-        "protocols": ["http_json"]
+        "protocols": ["http_json"],
+        "behavior": "send_message"
       },
       {
         "name": "Star Topology (Full) - JSONRPC & GRPC (Streaming)",
@@ -134,7 +136,8 @@ RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/run \
         "traversal": "euler",
         "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
         "protocols": ["jsonrpc", "grpc"],
-        "streaming": true
+        "streaming": true,
+        "behavior": "send_message"
       },
       {
         "name": "Star Topology (No Go v03) - HTTP_JSON (Streaming)",
@@ -142,7 +145,24 @@ RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/run \
         "traversal": "euler",
         "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
         "protocols": ["http_json"],
-        "streaming": true
+        "streaming": true,
+        "behavior": "send_message"
+      },
+      {
+        "name": "Push Notification Test - JSONRPC & GRPC",
+        "sdks": ["current", "python_v10", "python_v03", "go_v03"],
+        "traversal": "euler",
+        "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
+        "protocols": ["jsonrpc", "grpc"],
+        "behavior": "push_notification"
+      },
+      {
+        "name": "Push Notification Test - HTTP_JSON",
+        "sdks": ["current", "python_v10", "python_v03"],
+        "traversal": "euler",
+        "edges": ["0->1", "0->2", "1->0", "2->0"],
+        "protocols": ["http_json"],
+        "behavior": "push_notification"
       }
     ]
   }')
