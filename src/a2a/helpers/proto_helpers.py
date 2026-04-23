@@ -27,9 +27,9 @@ from a2a.types.a2a_pb2 import (
 
 def new_message(
     parts: list[Part],
-    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
+    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a list of Parts."""
     return Message(
@@ -44,16 +44,16 @@ def new_message(
 def new_text_message(
     text: str,
     media_type: str | None = None,
-    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
+    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a single text Part."""
     return new_message(
         parts=[new_text_part(text, media_type=media_type)],
-        role=role,
-        task_id=task_id,
         context_id=context_id,
+        task_id=task_id,
+        role=role,
     )
 
 
@@ -65,27 +65,27 @@ def get_message_text(message: Message, delimiter: str = '\n') -> str:
 def new_data_message(
     data: Any,
     media_type: str | None = None,
-    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
+    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a single data Part.
 
     Args:
         data: JSON-serializable data to embed (dict, list, str, etc.).
         media_type: Optional MIME type of the part content (e.g., "text/plain", "application/json", "image/png").
-        role: The role of the message sender (default: ROLE_AGENT).
         context_id: Optional context ID.
         task_id: Optional task ID.
+        role: The role of the message sender (default: ROLE_AGENT).
 
     Returns:
         A Message with a single data Part.
     """
     return new_message(
         parts=[new_data_part(data, media_type=media_type)],
-        role=role,
         context_id=context_id,
         task_id=task_id,
+        role=role,
     )
 
 
@@ -93,9 +93,9 @@ def new_raw_message(  # noqa: PLR0913
     raw: bytes,
     media_type: str | None = None,
     filename: str | None = None,
-    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
+    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a single raw bytes Part.
 
@@ -103,18 +103,18 @@ def new_raw_message(  # noqa: PLR0913
         raw: The raw bytes content.
         media_type: Optional MIME type (e.g. 'image/png').
         filename: Optional filename.
-        role: The role of the message sender (default: ROLE_AGENT).
         context_id: Optional context ID.
         task_id: Optional task ID.
+        role: The role of the message sender (default: ROLE_AGENT).
 
     Returns:
         A Message with a single raw Part.
     """
     return new_message(
         parts=[new_raw_part(raw, media_type=media_type, filename=filename)],
-        role=role,
         context_id=context_id,
         task_id=task_id,
+        role=role,
     )
 
 
@@ -122,9 +122,9 @@ def new_url_message(  # noqa: PLR0913
     url: str,
     media_type: str | None = None,
     filename: str | None = None,
-    role: Role = Role.ROLE_AGENT,
     context_id: str | None = None,
     task_id: str | None = None,
+    role: Role = Role.ROLE_AGENT,
 ) -> Message:
     """Creates a new message containing a single URL Part.
 
@@ -132,18 +132,18 @@ def new_url_message(  # noqa: PLR0913
         url: The URL pointing to the file content.
         media_type: Optional MIME type (e.g. 'image/png').
         filename: Optional filename.
-        role: The role of the message sender (default: ROLE_AGENT).
         context_id: Optional context ID.
         task_id: Optional task ID.
+        role: The role of the message sender (default: ROLE_AGENT).
 
     Returns:
         A Message with a single URL Part.
     """
     return new_message(
         parts=[new_url_part(url, media_type=media_type, filename=filename)],
-        role=role,
         context_id=context_id,
         task_id=task_id,
+        role=role,
     )
 
 

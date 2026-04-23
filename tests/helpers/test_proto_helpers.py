@@ -1,39 +1,41 @@
 """Tests for proto helpers."""
 
 import pytest
+
 from a2a.helpers.proto_helpers import (
-    new_message,
-    new_text_message,
-    new_data_message,
-    new_raw_message,
-    new_url_message,
-    get_message_text,
-    new_artifact,
-    new_text_artifact,
-    new_data_artifact,
-    new_raw_artifact,
-    new_url_artifact,
     get_artifact_text,
-    new_task_from_user_message,
-    new_task,
-    get_text_parts,
-    new_text_part,
-    new_data_part,
-    new_raw_part,
-    new_url_part,
-    new_text_status_update_event,
-    new_text_artifact_update_event,
+    get_message_text,
     get_stream_response_text,
+    get_text_parts,
+    new_artifact,
+    new_data_artifact,
+    new_data_message,
+    new_data_part,
+    new_message,
+    new_raw_artifact,
+    new_raw_message,
+    new_raw_part,
+    new_task,
+    new_task_from_user_message,
+    new_text_artifact,
+    new_text_artifact_update_event,
+    new_text_message,
+    new_text_part,
+    new_text_status_update_event,
+    new_url_artifact,
+    new_url_message,
+    new_url_part,
 )
 from a2a.types.a2a_pb2 import (
+    Artifact,
+    Message,
     Part,
     Role,
-    Message,
-    Artifact,
+    StreamResponse,
     Task,
     TaskState,
-    StreamResponse,
 )
+
 
 # --- Message Helpers Tests ---
 
@@ -41,7 +43,7 @@ from a2a.types.a2a_pb2 import (
 def test_new_message() -> None:
     parts = [Part(text='hello')]
     msg = new_message(
-        parts=parts, role=Role.ROLE_USER, context_id='ctx1', task_id='task1'
+        parts, context_id='ctx1', task_id='task1', role=Role.ROLE_USER
     )
     assert msg.role == Role.ROLE_USER
     assert msg.parts == parts
@@ -52,11 +54,16 @@ def test_new_message() -> None:
 
 def test_new_text_message() -> None:
     msg = new_text_message(
-        text='hello', context_id='ctx1', task_id='task1', role=Role.ROLE_USER
+        'hello',
+        media_type='text/plain',
+        context_id='ctx1',
+        task_id='task1',
+        role=Role.ROLE_USER,
     )
     assert msg.role == Role.ROLE_USER
     assert len(msg.parts) == 1
     assert msg.parts[0].text == 'hello'
+    assert msg.parts[0].media_type == 'text/plain'
     assert msg.context_id == 'ctx1'
     assert msg.task_id == 'task1'
     assert msg.message_id != ''
@@ -65,6 +72,7 @@ def test_new_text_message() -> None:
 def test_new_data_message() -> None:
     msg = new_data_message(
         data={'key': 'value'},
+        media_type='application/json',
         context_id='ctx1',
         task_id='task1',
         role=Role.ROLE_USER,
@@ -73,6 +81,7 @@ def test_new_data_message() -> None:
     assert len(msg.parts) == 1
     assert msg.parts[0].HasField('data')
     assert msg.parts[0].data.struct_value.fields['key'].string_value == 'value'
+    assert msg.parts[0].media_type == 'application/json'
     assert msg.context_id == 'ctx1'
     assert msg.task_id == 'task1'
     assert msg.message_id != ''
@@ -85,7 +94,9 @@ def test_new_raw_message() -> None:
         filename='img.png',
         context_id='ctx1',
         task_id='task1',
+        role=Role.ROLE_USER,
     )
+    assert msg.role == Role.ROLE_USER
     assert len(msg.parts) == 1
     assert msg.parts[0].HasField('raw')
     assert msg.parts[0].raw == b'\x89PNG'
@@ -103,7 +114,9 @@ def test_new_url_message() -> None:
         filename='file.pdf',
         context_id='ctx1',
         task_id='task1',
+        role=Role.ROLE_USER,
     )
+    assert msg.role == Role.ROLE_USER
     assert len(msg.parts) == 1
     assert msg.parts[0].HasField('url')
     assert msg.parts[0].url == 'https://example.com/file.pdf'
