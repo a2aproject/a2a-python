@@ -62,12 +62,22 @@ jobs:
 
       - name: Check Linter Statuses
         if: always() # This ensures the step runs even if previous steps failed
+        env:
+          RUFF_LINT: ${{ steps.ruff-lint.outcome }}
+          RUFF_FORMAT: ${{ steps.ruff-format.outcome }}
+          MYPY: ${{ steps.mypy.outcome }}
+          PYRIGHT: ${{ steps.pyright.outcome }}
+          JSCPD: ${{ steps.jscpd.outcome }}
         run: |
-          if [[ "${{ steps.ruff-lint.outcome }}" == "failure" || \
-                "${{ steps.ruff-format.outcome }}" == "failure" || \
-                "${{ steps.mypy.outcome }}" == "failure" || \
-                "${{ steps.pyright.outcome }}" == "failure" || \
-                "${{ steps.jscpd.outcome }}" == "failure" ]]; then
-            echo "One or more linting/checking steps failed."
+          failed=()
+          [[ "$RUFF_LINT"   == "failure" ]] && failed+=("Ruff Linter")
+          [[ "$RUFF_FORMAT" == "failure" ]] && failed+=("Ruff Formatter")
+          [[ "$MYPY"        == "failure" ]] && failed+=("MyPy")
+          [[ "$PYRIGHT"     == "failure" ]] && failed+=("Pyright")
+          [[ "$JSCPD"       == "failure" ]] && failed+=("JSCPD")
+
+          if (( ${#failed[@]} )); then
+            joined=$(IFS=', '; echo "${failed[*]}")
+            echo "::error title=Linter failures::The following checks failed: ${joined}. See the corresponding step logs above for details."
             exit 1
           fi
