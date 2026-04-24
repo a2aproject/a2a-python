@@ -1,5 +1,4 @@
 import logging
-import warnings
 
 from abc import ABC, abstractmethod
 
@@ -54,19 +53,18 @@ class PushNotificationConfigStore(ABC):
         but is INCORRECT for any deployment with multiple owners: the
         empty context resolves to the empty-string owner partition and
         returns no configs (silently dropping every notification). A
-        DeprecationWarning is emitted on every call to flag the
-        misconfiguration. Custom subclasses MUST override this method
-        to deliver notifications correctly in multi-owner deployments.
+        warning is logged on every call to flag the misconfiguration.
+        Custom subclasses MUST override this method to deliver
+        notifications correctly in multi-owner deployments.
         """
-        warnings.warn(
-            f'{type(self).__name__} does not override '
+        logger.warning(
+            '%s does not override '
             'PushNotificationConfigStore.get_info_for_dispatch; falling back '
             'to a context-less get_info call which silently drops '
             'notifications in any deployment with multiple owners. Override '
             'get_info_for_dispatch to return all configs for task_id across '
             'every owner.',
-            DeprecationWarning,
-            stacklevel=2,
+            type(self).__name__,
         )
         return await self.get_info(task_id, ServerCallContext())
 

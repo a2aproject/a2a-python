@@ -543,11 +543,10 @@ class TestPushNotificationDispatchAcrossOwners(
     ) -> None:
         """Alice registers; Bob triggers; Alice's webhook receives the POST.
 
-        This is the §2 worked example. ``send_notification`` carries no
-        identity, so there is no notion of "who triggered this event"
-        at the store layer. ``get_info_for_dispatch`` returns Alice's
-        config because Alice registered it. The fact that the event
-        was caused by Bob is not visible to (and not relevant for) the
+        The send_notification carries no identity, so there is no notion of
+        "who triggered this event" at the store layer. get_info_for_dispatch
+        returns Alice's config because Alice registered it. The fact that the
+        event was caused by Bob is not visible to (and not relevant for) the
         dispatch path.
         """
         alice_context = ServerCallContext(user=SampleUser(user_name='alice'))
