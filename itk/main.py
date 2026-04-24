@@ -31,7 +31,6 @@ from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
-from a2a.server.context import ServerCallContext
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -339,7 +338,6 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     push_sender = BasePushNotificationSender(
         httpx_client=httpx.AsyncClient(),
         config_store=push_config_store,
-        context=ServerCallContext(),
     )
 
     handler = DefaultRequestHandler(

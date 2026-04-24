@@ -728,6 +728,57 @@ async def test_owner_resource_scoping(
 
 
 @pytest.mark.asyncio
+async def test_get_info_for_dispatch_returns_all_owners(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+) -> None:
+    """get_info_for_dispatch MUST return configs across all owners.
+
+    The dispatch path has no caller identity (the originating request
+    has completed by the time notifications fire). Authorization
+    happened at registration time. The DB query must therefore filter
+    on task_id only, with no owner predicate.
+    """
+    config_store = db_store_parameterized
+
+    alice_ctx = ServerCallContext(user=SampleUser(user_name='alice'))
+    bob_ctx = ServerCallContext(user=SampleUser(user_name='bob'))
+
+    alice_cfg = TaskPushNotificationConfig(
+        id='alice-cfg', url='http://alice.example.com/cb'
+    )
+    bob_cfg = TaskPushNotificationConfig(
+        id='bob-cfg', url='http://bob.example.com/cb'
+    )
+    other_task_cfg = TaskPushNotificationConfig(
+        id='alice-other', url='http://alice.example.com/other'
+    )
+
+    await config_store.set_info('shared-task', alice_cfg, alice_ctx)
+    await config_store.set_info('shared-task', bob_cfg, bob_ctx)
+    # An unrelated config on a different task -- must NOT leak through.
+    await config_store.set_info('other-task', other_task_cfg, alice_ctx)
+
+    dispatched = await config_store.get_info_for_dispatch('shared-task')
+
+    assert {c.id for c in dispatched} == {'alice-cfg', 'bob-cfg'}
+    assert {c.url for c in dispatched} == {
+        'http://alice.example.com/cb',
+        'http://bob.example.com/cb',
+    }
+
+    # Sanity: user-callable get_info remains owner-scoped on the same data.
+    alice_view = await config_store.get_info('shared-task', alice_ctx)
+    assert {c.id for c in alice_view} == {'alice-cfg'}
+    bob_view = await config_store.get_info('shared-task', bob_ctx)
+    assert {c.id for c in bob_view} == {'bob-cfg'}
+
+    # Cleanup
+    await config_store.delete_info('shared-task', context=alice_ctx)
+    await config_store.delete_info('shared-task', context=bob_ctx)
+    await config_store.delete_info('other-task', context=alice_ctx)
+
+
+@pytest.mark.asyncio
 async def test_get_0_3_push_notification_config_detailed(
     db_store_parameterized: DatabasePushNotificationConfigStore,
 ) -> None:

@@ -7,7 +7,7 @@ from google.protobuf.json_format import MessageToJson, Parse
 
 
 try:
-    from sqlalchemy import Table, and_, delete, select
+    from sqlalchemy import ColumnElement, Table, and_, delete, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -304,21 +304,14 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 owner,
             )
 
-    async def get_info(
+    async def _select_configs(
         self,
-        task_id: str,
-        context: ServerCallContext,
+        *predicates: 'ColumnElement[bool]',
     ) -> list[TaskPushNotificationConfig]:
-        """Retrieves all push notification configurations for a task, for the given owner."""
+        """Loads configs matching the given predicates and decodes them."""
         await self._ensure_initialized()
-        owner = self.owner_resolver(context)
         async with self.async_session_maker() as session:
-            stmt = select(self.config_model).where(
-                and_(
-                    self.config_model.task_id == task_id,
-                    self.config_model.owner == owner,
-                )
-            )
+            stmt = select(self.config_model).where(and_(*predicates))
             result = await session.execute(stmt)
             models = result.scalars().all()
 
@@ -331,9 +324,36 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                         'Could not deserialize push notification config for task %s, config %s, owner %s',
                         model.task_id,
                         model.config_id,
-                        owner,
+                        model.owner,
                     )
             return configs
+
+    async def get_info(
+        self,
+        task_id: str,
+        context: ServerCallContext,
+    ) -> list[TaskPushNotificationConfig]:
+        """Retrieves all push notification configurations for a task, for the given owner.
+
+        Used by the user-callable read endpoints.
+        """
+        owner = self.owner_resolver(context)
+        return await self._select_configs(
+            self.config_model.task_id == task_id,
+            self.config_model.owner == owner,
+        )
+
+    async def get_info_for_dispatch(
+        self,
+        task_id: str,
+    ) -> list[TaskPushNotificationConfig]:
+        """Retrieves all push notification configurations for a task, across all owners.
+
+        Used by the push-notification dispatch path.
+        """
+        return await self._select_configs(
+            self.config_model.task_id == task_id,
+        )
 
     async def delete_info(
         self,

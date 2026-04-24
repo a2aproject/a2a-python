@@ -3,6 +3,7 @@ import unittest
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
+
 from google.protobuf.json_format import MessageToDict
 
 from a2a.auth.user import User
@@ -14,9 +15,9 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.types.a2a_pb2 import (
-    TaskPushNotificationConfig,
     StreamResponse,
     Task,
+    TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
 )
@@ -70,8 +71,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         self.notifier = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.config_store,
-            context=MINIMAL_CALL_CONTEXT,
-        )  # Corrected argument name
+        )
 
     def test_constructor_stores_client(self) -> None:
         self.assertEqual(self.notifier._client, self.mock_httpx_client)
@@ -426,6 +426,149 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         # Cleanup remaining
         await self.config_store.delete_info('task1', context=context_user1)
         await self.config_store.delete_info('task1', context=context_user2)
+
+
+class TestPushNotificationDispatchAcrossOwners(
+    unittest.IsolatedAsyncioTestCase
+):
+    """Dispatch-correctness tests for the registrar/dispatcher asymmetry.
+
+    Push notifications must fire for any event on the task, regardless of
+    which user's action triggered the event. The dispatch path therefore
+    reads configs via get_info_for_dispatch (cross-owner), not
+    get_info (owner-scoped).
+    """
+
+    def setUp(self) -> None:
+        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        self.config_store = InMemoryPushNotificationConfigStore()
+
+        self.sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.config_store,
+        )
+
+    async def test_multi_registrar_fan_out(self) -> None:
+        """Three users registering distinct webhooks for the same task all fire."""
+        users_and_urls = [
+            ('alice', 'http://alice.example.com/cb', 'tok-alice'),
+            ('bob', 'http://bob.example.com/cb', 'tok-bob'),
+            ('carol', 'http://carol.example.com/cb', 'tok-carol'),
+        ]
+        for user_name, url, token in users_and_urls:
+            ctx = ServerCallContext(user=SampleUser(user_name=user_name))
+            cfg = TaskPushNotificationConfig(
+                id=f'cfg-{user_name}', url=url, token=token
+            )
+            await self.config_store.set_info('shared-task', cfg, ctx)
+
+        await self.sender.send_notification(
+            'shared-task', _create_sample_task(task_id='shared-task')
+        )
+
+        self.assertEqual(self.mock_httpx_client.post.await_count, 3)
+        called_urls = {
+            call.args[0] for call in self.mock_httpx_client.post.call_args_list
+        }
+        self.assertEqual(
+            called_urls,
+            {url for _, url, _ in users_and_urls},
+        )
+        called_tokens = {
+            call.kwargs['headers']['X-A2A-Notification-Token']
+            for call in self.mock_httpx_client.post.call_args_list
+        }
+        self.assertEqual(
+            called_tokens,
+            {token for _, _, token in users_and_urls},
+        )
+
+    async def test_write_side_owner_isolation_preserved(self) -> None:
+        """Bob's ``delete_info`` against Alice's config is a no-op.
+
+        After the no-op, Alice's config must still be:
+        (a) retrievable via the user-callable ``get_info`` for Alice, and
+        (b) returned by ``get_info_for_dispatch`` so that the
+            notification will still fire.
+
+        Guards the write-side scoping that the design preserves
+        (see §9.3).
+        """
+        alice_ctx = ServerCallContext(user=SampleUser(user_name='alice'))
+        bob_ctx = ServerCallContext(user=SampleUser(user_name='bob'))
+
+        config = TaskPushNotificationConfig(
+            id='alice-cfg',
+            url='http://alice.example.com/cb',
+            token='alice-token',
+        )
+        await self.config_store.set_info('shared-task', config, alice_ctx)
+
+        # Bob attempts to delete Alice's config -- must be a no-op.
+        await self.config_store.delete_info(
+            'shared-task', context=bob_ctx, config_id='alice-cfg'
+        )
+
+        # (a) Alice's user-callable view is unchanged.
+        alice_view = await self.config_store.get_info('shared-task', alice_ctx)
+        self.assertEqual(len(alice_view), 1)
+        self.assertEqual(alice_view[0].id, 'alice-cfg')
+
+        # (b) Dispatch path still sees the config (notifications fire).
+        dispatched = await self.config_store.get_info_for_dispatch(
+            'shared-task'
+        )
+        self.assertEqual(len(dispatched), 1)
+        self.assertEqual(dispatched[0].id, 'alice-cfg')
+        self.assertEqual(dispatched[0].token, 'alice-token')
+
+        # And end-to-end: the sender actually dispatches to Alice's URL.
+        await self.sender.send_notification(
+            'shared-task', _create_sample_task(task_id='shared-task')
+        )
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            'http://alice.example.com/cb',
+            json=MessageToDict(
+                StreamResponse(task=_create_sample_task(task_id='shared-task'))
+            ),
+            headers={'X-A2A-Notification-Token': 'alice-token'},
+        )
+
+    async def test_cross_user_dispatch_alice_registers_bob_triggers(
+        self,
+    ) -> None:
+        """Alice registers; Bob triggers; Alice's webhook receives the POST.
+
+        The send_notification carries no identity, so there is no notion of
+        "who triggered this event" at the store layer. get_info_for_dispatch
+        returns Alice's config because Alice registered it. The fact that the
+        event was caused by Bob is not visible to (and not relevant for) the
+        dispatch path.
+        """
+        alice_context = ServerCallContext(user=SampleUser(user_name='alice'))
+        config = _create_sample_push_config(
+            url='http://alice.example.com/cb', token='alice-token'
+        )
+        await self.config_store.set_info('collab-task', config, alice_context)
+
+        # No bob_context is passed anywhere -- the dispatch path never
+        # sees it. This is precisely the point: identity is not the
+        # dispatch path's concern.
+        await self.sender.send_notification(
+            'collab-task', _create_sample_task(task_id='collab-task')
+        )
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            'http://alice.example.com/cb',
+            json=MessageToDict(
+                StreamResponse(task=_create_sample_task(task_id='collab-task'))
+            ),
+            headers={'X-A2A-Notification-Token': 'alice-token'},
+        )
 
 
 if __name__ == '__main__':

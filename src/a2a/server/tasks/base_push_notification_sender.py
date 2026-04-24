@@ -27,26 +27,39 @@ class BasePushNotificationSender(PushNotificationSender):
         self,
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
-        context: ServerCallContext,
+        context: ServerCallContext | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
         Args:
             httpx_client: An async HTTP client instance to send notifications.
-            config_store: A PushNotificationConfigStore instance to retrieve configurations.
-            context: The `ServerCallContext` that this push notification is produced under.
+            config_store: A PushNotificationConfigStore instance to
+              retrieve configurations.
+            context: Deprecated and ignored. Accepted only for
+              backward compatibility with 1.0 callers that constructed
+              the sender with a (typically dummy) ServerCallContext.
+              Pass None (the default) in new code. A non-None
+              value logs a deprecation warning and is otherwise
+              ignored.
         """
+        if context is not None:
+            logger.warning(
+                'BasePushNotificationSender no longer uses the context '
+                'parameter; it is accepted only for backward compatibility '
+                'with 1.0 and will be removed in a future major version. '
+                'Push notifications now fan out across all owners via '
+                'PushNotificationConfigStore.get_info_for_dispatch; the '
+                'caller identity is not carried into dispatch. Drop the '
+                'context argument from the constructor call.'
+            )
         self._client = httpx_client
         self._config_store = config_store
-        self._call_context: ServerCallContext = context
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
     ) -> None:
         """Sends a push notification for an event if configuration exists."""
-        push_configs = await self._config_store.get_info(
-            task_id, self._call_context
-        )
+        push_configs = await self._config_store.get_info_for_dispatch(task_id)
         if not push_configs:
             return
 

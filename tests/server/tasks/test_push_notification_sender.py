@@ -6,38 +6,18 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict
 
-from a2a.auth.user import User
-from a2a.server.context import ServerCallContext
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
-    TaskPushNotificationConfig,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
+    TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-
-
-class SampleUser(User):
-    """A test implementation of the User interface."""
-
-    def __init__(self, user_name: str):
-        self._user_name = user_name
-
-    @property
-    def is_authenticated(self) -> bool:
-        return True
-
-    @property
-    def user_name(self) -> str:
-        return self._user_name
-
-
-MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
 
 
 def _create_sample_task(
@@ -66,7 +46,6 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
-            context=MINIMAL_CALL_CONTEXT,
         )
 
     def test_constructor_stores_client_and_config_store(self) -> None:
@@ -77,7 +56,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         task_id = 'task_send_success'
         task_data = _create_sample_task(task_id=task_id)
         config = _create_sample_push_config(url='http://notify.me/here')
-        self.mock_config_store.get_info.return_value = [config]
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -85,8 +64,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_data.id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_data.id
         )
 
         # assert httpx_client post method got invoked with right parameters
@@ -103,7 +82,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(
             url='http://notify.me/here', token='unique_token'
         )
-        self.mock_config_store.get_info.return_value = [config]
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -111,8 +90,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_data.id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_data.id
         )
 
         # assert httpx_client post method got invoked with right parameters
@@ -126,12 +105,12 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
         task_data = _create_sample_task(task_id=task_id)
-        self.mock_config_store.get_info.return_value = []
+        self.mock_config_store.get_info_for_dispatch.return_value = []
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
         )
         self.mock_httpx_client.post.assert_not_called()
 
@@ -142,7 +121,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         task_id = 'task_send_http_err'
         task_data = _create_sample_task(task_id=task_id)
         config = _create_sample_push_config(url='http://notify.me/http_error')
-        self.mock_config_store.get_info.return_value = [config]
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
         mock_response = MagicMock(spec=httpx.Response)
         mock_response.status_code = 404
@@ -154,8 +133,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
         )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
@@ -173,7 +152,10 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config2 = _create_sample_push_config(
             url='http://notify.me/cfg2', config_id='cfg2'
         )
-        self.mock_config_store.get_info.return_value = [config1, config2]
+        self.mock_config_store.get_info_for_dispatch.return_value = [
+            config1,
+            config2,
+        ]
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -181,8 +163,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, task_data)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
         )
         self.assertEqual(self.mock_httpx_client.post.call_count, 2)
 
@@ -207,7 +189,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
         )
         config = _create_sample_push_config(url='http://notify.me/status')
-        self.mock_config_store.get_info.return_value = [config]
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -215,8 +197,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, event)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
         )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
@@ -231,7 +213,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             append=True,
         )
         config = _create_sample_push_config(url='http://notify.me/artifact')
-        self.mock_config_store.get_info.return_value = [config]
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
@@ -239,8 +221,8 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
 
         await self.sender.send_notification(task_id, event)
 
-        self.mock_config_store.get_info.assert_awaited_once_with(
-            task_id, MINIMAL_CALL_CONTEXT
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
         )
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,

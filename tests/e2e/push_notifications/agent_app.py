@@ -1,14 +1,17 @@
 import httpx
 
 from fastapi import FastAPI
+from starlette.applications import Starlette
+from starlette.requests import Request
 
+from a2a.auth.user import UnauthenticatedUser, User
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
-from starlette.applications import Starlette
-from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.server.routes import create_agent_card_routes
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes
+from a2a.server.routes.common import DefaultServerCallContextBuilder
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks import (
     BasePushNotificationSender,
     InMemoryPushNotificationConfigStore,
@@ -28,6 +31,9 @@ from a2a.helpers.proto_helpers import (
     new_text_message,
     new_task_from_user_message,
 )
+
+
+_TEST_USER_HEADER = 'x-test-user'
 
 
 def test_agent_card(url: str) -> AgentCard:
@@ -151,10 +157,84 @@ def create_agent_app(
         push_sender=BasePushNotificationSender(
             httpx_client=notification_client,
             config_store=push_config_store,
-            context=ServerCallContext(),
         ),
     )
     rest_routes = create_rest_routes(request_handler=handler)
+    agent_card_routes = create_agent_card_routes(
+        agent_card=card, card_url='/.well-known/agent-card.json'
+    )
+    return Starlette(routes=[*rest_routes, *agent_card_routes])
+
+
+class _NamedTestUser(User):
+    """Authenticated test user identified by ``user_name``."""
+
+    def __init__(self, user_name: str) -> None:
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
+
+
+class _HeaderUserContextBuilder(DefaultServerCallContextBuilder):
+    """Builds a ServerCallContext whose user is read from a request header."""
+
+    def build_user(self, request: Request) -> User:
+        user_name = request.headers.get(_TEST_USER_HEADER)
+        if user_name:
+            return _NamedTestUser(user_name)
+        return UnauthenticatedUser()
+
+
+def create_multi_user_agent_app(
+    url: str, notification_client: httpx.AsyncClient
+) -> Starlette:
+    """Creates a multi-user variant of the test agent app.
+
+    Differences from create_agent_app:
+
+    - Identity is read from the x-test-user header on each request
+      via _HeaderUserContextBuilder. Multiple authenticated
+      users (e.g. alice, bob) can therefore call the same
+      server.
+    - The InMemoryTaskStore uses a constant owner resolver, so
+      every authenticated user has access to every task.
+    - The InMemoryPushNotificationConfigStore keeps the default
+      per-user owner resolver, so each registrar's configs live in their
+      own owner partition; this exercises cross-owner aggregation in
+      get_info_for_dispatch.
+    """
+    # Shared task visibility: any authenticated user can see any task.
+    task_store = InMemoryTaskStore(owner_resolver=lambda _ctx: 'shared')
+
+    # Per-user push-config partitioning (the default).
+    push_config_store = InMemoryPushNotificationConfigStore()
+
+    card = test_agent_card(url)
+    extended_card = test_agent_card(url)
+    extended_card.name = 'Test Agent Extended'
+
+    handler = DefaultRequestHandler(
+        agent_executor=TestAgentExecutor(),
+        task_store=task_store,
+        agent_card=card,
+        extended_agent_card=extended_card,
+        push_config_store=push_config_store,
+        push_sender=BasePushNotificationSender(
+            httpx_client=notification_client,
+            config_store=push_config_store,
+        ),
+    )
+
+    rest_routes = create_rest_routes(
+        request_handler=handler,
+        context_builder=_HeaderUserContextBuilder(),
+    )
     agent_card_routes = create_agent_card_routes(
         agent_card=card, card_url='/.well-known/agent-card.json'
     )
