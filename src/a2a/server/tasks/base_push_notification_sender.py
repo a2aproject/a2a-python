@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import warnings
 
 import httpx
 
 from google.protobuf.json_format import MessageToDict
 
+from a2a.server.context import ServerCallContext
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
@@ -26,13 +28,33 @@ class BasePushNotificationSender(PushNotificationSender):
         self,
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
+        context: ServerCallContext | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
         Args:
             httpx_client: An async HTTP client instance to send notifications.
-            config_store: A PushNotificationConfigStore instance to retrieve configurations.
+            config_store: A PushNotificationConfigStore instance to
+              retrieve configurations.
+            context: Deprecated and ignored. Accepted only for
+              backward compatibility with 1.0 callers that constructed
+              the sender with a (typically dummy) ServerCallContext.
+              Pass None (the default) in new code. A non-None
+              value triggers a DeprecationWarning and is otherwise
+              ignored.
         """
+        if context is not None:
+            warnings.warn(
+                'BasePushNotificationSender no longer uses the context '
+                'parameter; it is accepted only for backward compatibility '
+                'with 1.0 and will be removed in a future major version. '
+                'Push notifications now fan out across all owners via '
+                'PushNotificationConfigStore.get_info_for_dispatch; the '
+                'caller identity is not carried into dispatch. Drop the '
+                'context argument from the constructor call.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
         self._client = httpx_client
         self._config_store = config_store
 
