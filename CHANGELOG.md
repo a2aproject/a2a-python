@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.0.2](https://github.com/a2aproject/a2a-python/compare/v1.0.1...v1.0.2) (2026-04-24)
+
+
+### Features
+
+* **helpers:** add non-text Part, Message, and Artifact helpers ([#1004](https://github.com/a2aproject/a2a-python/issues/1004)) ([cfdbe4c](https://github.com/a2aproject/a2a-python/commit/cfdbe4c08c58b773a8766c17f5b5eabbe67bf3dd))
+
+
+### Bug Fixes
+
+* **proto:** use field.label instead of is_repeated for protobuf compatibility ([#1010](https://github.com/a2aproject/a2a-python/issues/1010)) ([7d197db](https://github.com/a2aproject/a2a-python/commit/7d197dbf81e31398a41f8d6795e15170f082104f))
+* **server:** deliver push notifications across all owners ([#1016](https://github.com/a2aproject/a2a-python/issues/1016)) ([c24ae05](https://github.com/a2aproject/a2a-python/commit/c24ae055715ba69329ffa4e36489379308cd0bde))
+
 ## [1.0.1](https://github.com/a2aproject/a2a-python/compare/v1.0.0...v1.0.1) (2026-04-22)
 
 
