@@ -309,7 +309,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         context: ServerCallContext,
     ) -> list[TaskPushNotificationConfig]:
-        """Retrieves all push notification configurations for a task, for the given owner."""
+        """Retrieves all push notification configurations for a task, for the given owner.
+
+        Used by the user-callable read endpoints.
+        """
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
         async with self.async_session_maker() as session:
@@ -332,6 +335,35 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                         model.task_id,
                         model.config_id,
                         owner,
+                    )
+            return configs
+
+    async def get_info_for_dispatch(
+        self,
+        task_id: str,
+    ) -> list[TaskPushNotificationConfig]:
+        """Retrieves all push notification configurations for a task, across all owners.
+
+        Used by the push-notification dispatch path.
+        """
+        await self._ensure_initialized()
+        async with self.async_session_maker() as session:
+            stmt = select(self.config_model).where(
+                self.config_model.task_id == task_id
+            )
+            result = await session.execute(stmt)
+            models = result.scalars().all()
+
+            configs = []
+            for model in models:
+                try:
+                    configs.append(self._from_orm(model))
+                except ValueError:  # noqa: PERF203
+                    logger.exception(
+                        'Could not deserialize push notification config for task %s, config %s, owner %s',
+                        model.task_id,
+                        model.config_id,
+                        model.owner,
                     )
             return configs
 

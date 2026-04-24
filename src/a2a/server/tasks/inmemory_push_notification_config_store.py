@@ -72,11 +72,28 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         context: ServerCallContext,
     ) -> list[TaskPushNotificationConfig]:
-        """Retrieves all push notification configurations for a task from memory, for the given owner."""
+        """Retrieves all push notification configurations for a task from memory, for the given owner.
+
+        Used by the user-callable read endpoints.
+        """
         owner = self.owner_resolver(context)
         async with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
             return list(owner_infos.get(task_id, []))
+
+    async def get_info_for_dispatch(
+        self,
+        task_id: str,
+    ) -> list[TaskPushNotificationConfig]:
+        """Retrieves all push notification configurations for a task across all owners.
+
+        Used by the push-notification dispatch path.
+        """
+        async with self.lock:
+            results: list[TaskPushNotificationConfig] = []
+            for all_configs in self._push_notification_infos.values():
+                results.extend(all_configs.get(task_id, []))
+            return results
 
     async def delete_info(
         self,

@@ -14,7 +14,7 @@ from unittest.mock import (
 
 import pytest
 
-from a2a.auth.user import UnauthenticatedUser
+from a2a.auth.user import UnauthenticatedUser, User
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -1590,7 +1590,6 @@ async def test_disconnect_persists_final_task_to_store(agent_card):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
         ):
-
             updater = TaskUpdater(
                 event_queue,
                 cast('str', context.task_id),
@@ -2977,3 +2976,171 @@ async def test_on_subscribe_to_task_unsupported(agent_card):
         # We need to exhaust the generator to trigger the decorator evaluation
         async for _ in request_handler.on_subscribe_to_task(params, context):
             pass
+
+
+class _NamedUser(User):
+    """Minimal authenticated test user identified by ``user_name``."""
+
+    def __init__(self, user_name: str) -> None:
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
+
+
+def _ctx(user_name: str) -> ServerCallContext:
+    return ServerCallContext(user=_NamedUser(user_name))
+
+
+@pytest.mark.asyncio
+async def test_on_list_task_push_notification_configs_is_owner_scoped(
+    agent_card,
+):
+    """Bob must not see Alice's configs via tasks/pushNotificationConfig/list.
+
+    Both users have access to the shared task (the mocked TaskStore
+    returns it for any caller), but listing must only return the
+    caller's own configs.
+    """
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(task_id='shared-task')
+
+    push_store = InMemoryPushNotificationConfigStore()
+    alice_ctx = _ctx('alice')
+    bob_ctx = _ctx('bob')
+
+    alice_cfg = TaskPushNotificationConfig(
+        task_id='shared-task',
+        id='alice-cfg',
+        url='http://alice.example.com/cb',
+        token='alice-secret',
+    )
+    bob_cfg = TaskPushNotificationConfig(
+        task_id='shared-task',
+        id='bob-cfg',
+        url='http://bob.example.com/cb',
+        token='bob-secret',
+    )
+    await push_store.set_info('shared-task', alice_cfg, alice_ctx)
+    await push_store.set_info('shared-task', bob_cfg, bob_ctx)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+    )
+
+    alice_listing = (
+        await request_handler.on_list_task_push_notification_configs(
+            ListTaskPushNotificationConfigsRequest(task_id='shared-task'),
+            alice_ctx,
+        )
+    )
+    assert {c.id for c in alice_listing.configs} == {'alice-cfg'}
+    # Sanity: Bob's secret is not in the response.
+    assert all(c.token != 'bob-secret' for c in alice_listing.configs), (
+        'Listing for Alice must not expose Bob-owned tokens'
+    )
+
+    bob_listing = await request_handler.on_list_task_push_notification_configs(
+        ListTaskPushNotificationConfigsRequest(task_id='shared-task'),
+        bob_ctx,
+    )
+    assert {c.id for c in bob_listing.configs} == {'bob-cfg'}
+    assert all(c.token != 'alice-secret' for c in bob_listing.configs), (
+        'Listing for Bob must not expose Alice-owned tokens'
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_list_task_push_notification_configs_returns_empty_for_third_user(
+    agent_card,
+):
+    """A third user with task access but no registered configs sees an empty list."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(task_id='shared-task')
+
+    push_store = InMemoryPushNotificationConfigStore()
+    await push_store.set_info(
+        'shared-task',
+        TaskPushNotificationConfig(
+            task_id='shared-task',
+            id='alice-cfg',
+            url='http://alice.example.com/cb',
+        ),
+        _ctx('alice'),
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+    )
+
+    carol_listing = (
+        await request_handler.on_list_task_push_notification_configs(
+            ListTaskPushNotificationConfigsRequest(task_id='shared-task'),
+            _ctx('carol'),
+        )
+    )
+    assert carol_listing.configs == []
+
+
+@pytest.mark.asyncio
+async def test_on_get_task_push_notification_config_is_owner_scoped(
+    agent_card,
+):
+    """Bob cannot fetch Alice's config by ID via tasks/pushNotificationConfig/get.
+
+    Even when Bob can read the task and knows (or guesses) the
+    config_id, the handler must raise TaskNotFoundError because Alice's
+    config is not in Bob's owner partition.
+    """
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(task_id='shared-task')
+
+    push_store = InMemoryPushNotificationConfigStore()
+    alice_ctx = _ctx('alice')
+    await push_store.set_info(
+        'shared-task',
+        TaskPushNotificationConfig(
+            task_id='shared-task',
+            id='alice-cfg',
+            url='http://alice.example.com/cb',
+            token='alice-secret',
+        ),
+        alice_ctx,
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+    )
+
+    # Alice can read her own config.
+    alice_view = await request_handler.on_get_task_push_notification_config(
+        GetTaskPushNotificationConfigRequest(
+            task_id='shared-task', id='alice-cfg'
+        ),
+        alice_ctx,
+    )
+    assert alice_view.id == 'alice-cfg'
+    assert alice_view.token == 'alice-secret'
+
+    # Bob cannot, even guessing the exact config_id.
+    with pytest.raises(TaskNotFoundError):
+        await request_handler.on_get_task_push_notification_config(
+            GetTaskPushNotificationConfigRequest(
+                task_id='shared-task', id='alice-cfg'
+            ),
+            _ctx('bob'),
+        )
