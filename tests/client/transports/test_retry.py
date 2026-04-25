@@ -632,10 +632,13 @@ class TestRetryTransport:
         async def cancelling_sleep(*_args: object, **_kwargs: object) -> None:
             raise asyncio.CancelledError
 
-        with patch(
-            'a2a.client.transports.retry.asyncio.sleep',
-            side_effect=cancelling_sleep,
-        ), pytest.raises(asyncio.CancelledError):
+        with (
+            patch(
+                'a2a.client.transports.retry.asyncio.sleep',
+                side_effect=cancelling_sleep,
+            ),
+            pytest.raises(asyncio.CancelledError),
+        ):
             await transport.send_message(SendMessageRequest())
 
         # First attempt ran; cancel hit on the sleep before the second.

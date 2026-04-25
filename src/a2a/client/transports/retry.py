@@ -45,10 +45,12 @@ try:
     import grpc as _grpc
 
     _AioRpcError: Any = _grpc.aio.AioRpcError
-    _RETRYABLE_GRPC_CODES: frozenset[Any] = frozenset({
-        _grpc.StatusCode.UNAVAILABLE,
-        _grpc.StatusCode.RESOURCE_EXHAUSTED,
-    })
+    _RETRYABLE_GRPC_CODES: frozenset[Any] = frozenset(
+        {
+            _grpc.StatusCode.UNAVAILABLE,
+            _grpc.StatusCode.RESOURCE_EXHAUSTED,
+        }
+    )
 except ImportError:
     _AioRpcError = None
     _RETRYABLE_GRPC_CODES = frozenset()
@@ -79,7 +81,7 @@ def default_retry_predicate(error: Exception) -> bool:  # noqa: PLR0911
     if isinstance(cause, httpx.RequestError):
         return True
     if _AioRpcError is not None and isinstance(cause, _AioRpcError):
-        return cause.code() in _RETRYABLE_GRPC_CODES
+        return cause.code() in _RETRYABLE_GRPC_CODES  # pyright: ignore[reportAttributeAccessIssue]
     return False
 
 
