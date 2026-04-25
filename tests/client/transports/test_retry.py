@@ -645,6 +645,62 @@ class TestRetryTransport:
         assert mock_transport.send_message.call_count == 1
 
     @pytest.mark.asyncio
+    async def test_cancelled_error_from_transport_propagates(
+        self, mock_transport: AsyncMock
+    ) -> None:
+        """CancelledError raised by the inner transport bypasses retry."""
+        mock_transport.send_message.side_effect = asyncio.CancelledError
+        transport = RetryTransport(
+            mock_transport, max_retries=3, base_delay=0.01, jitter=False
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await transport.send_message(SendMessageRequest())
+        assert mock_transport.send_message.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_cancelled_error_from_streaming_transport_propagates(
+        self, mock_transport: AsyncMock
+    ) -> None:
+        """CancelledError raised by the streaming transport bypasses retry."""
+        mock_transport.send_message_streaming.side_effect = (
+            asyncio.CancelledError
+        )
+        transport = RetryTransport(
+            mock_transport, max_retries=3, base_delay=0.01, jitter=False
+        )
+        with pytest.raises(asyncio.CancelledError):
+            async for _event in transport.send_message_streaming(
+                SendMessageRequest()
+            ):
+                pass
+        assert mock_transport.send_message_streaming.call_count == 1
+
+    @pytest.mark.asyncio
+    async def test_on_retry_cancelled_error_propagates(
+        self, mock_transport: AsyncMock
+    ) -> None:
+        """CancelledError from on_retry must not be swallowed by the catch-all."""
+
+        async def cancelling_callback(
+            *_args: object, **_kwargs: object
+        ) -> None:
+            raise asyncio.CancelledError
+
+        transport = RetryTransport(
+            mock_transport,
+            max_retries=2,
+            base_delay=0.01,
+            jitter=False,
+            on_retry=cancelling_callback,
+        )
+        mock_transport.send_message.side_effect = A2AClientTimeoutError(
+            'timeout'
+        )
+        with pytest.raises(asyncio.CancelledError):
+            await transport.send_message(SendMessageRequest())
+        assert mock_transport.send_message.call_count == 1
+
+    @pytest.mark.asyncio
     async def test_streaming_inner_generator_closed_on_consumer_break(
         self, mock_transport: AsyncMock
     ) -> None:

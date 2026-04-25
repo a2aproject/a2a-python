@@ -51,7 +51,7 @@ try:
             _grpc.StatusCode.RESOURCE_EXHAUSTED,
         }
     )
-except ImportError:
+except ImportError:  # pragma: no cover
     _AioRpcError = None
     _RETRYABLE_GRPC_CODES = frozenset()
 
