@@ -4,15 +4,20 @@ import pytest
 
 from a2a.helpers.proto_helpers import (
     get_artifact_text,
+    get_data_parts,
     get_message_text,
+    get_raw_parts,
     get_stream_response_text,
     get_text_parts,
+    get_url_parts,
     new_artifact,
     new_data_artifact,
+    new_data_artifact_update_event,
     new_data_message,
     new_data_part,
     new_message,
     new_raw_artifact,
+    new_raw_artifact_update_event,
     new_raw_message,
     new_raw_part,
     new_task,
@@ -23,6 +28,7 @@ from a2a.helpers.proto_helpers import (
     new_text_part,
     new_text_status_update_event,
     new_url_artifact,
+    new_url_artifact_update_event,
     new_url_message,
     new_url_part,
 )
@@ -443,3 +449,165 @@ def test_get_stream_response_text_artifact_update() -> None:
 def test_get_stream_response_text_empty() -> None:
     resp = StreamResponse()
     assert get_stream_response_text(resp) == ''
+
+
+# --- Part Extractor Tests ---
+
+
+def test_get_data_parts() -> None:
+    parts = [
+        new_data_part({'key': 'value'}),
+        Part(text='hello'),
+        new_data_part([1, 2]),
+    ]
+    result = get_data_parts(parts)
+    assert len(result) == 2
+    assert result[0].struct_value.fields['key'].string_value == 'value'
+    assert result[1].list_value.values[0].number_value == 1
+
+
+def test_get_data_parts_empty() -> None:
+    parts = [Part(text='hello'), Part(url='http://example.com')]
+    assert get_data_parts(parts) == []
+
+
+def test_get_raw_parts() -> None:
+    parts = [
+        Part(raw=b'\x89PNG'),
+        Part(text='hello'),
+        Part(raw=b'\xff\xd8'),
+    ]
+    result = get_raw_parts(parts)
+    assert result == [b'\x89PNG', b'\xff\xd8']
+
+
+def test_get_raw_parts_empty() -> None:
+    parts = [Part(text='hello')]
+    assert get_raw_parts(parts) == []
+
+
+def test_get_url_parts() -> None:
+    parts = [
+        Part(url='https://example.com/a.png'),
+        Part(text='hello'),
+        Part(url='https://example.com/b.pdf'),
+    ]
+    result = get_url_parts(parts)
+    assert result == [
+        'https://example.com/a.png',
+        'https://example.com/b.pdf',
+    ]
+
+
+def test_get_url_parts_empty() -> None:
+    parts = [Part(text='hello')]
+    assert get_url_parts(parts) == []
+
+
+# --- Non-text Artifact Update Event Tests ---
+
+
+def test_new_data_artifact_update_event() -> None:
+    event = new_data_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='result',
+        data={'score': 0.95},
+        media_type='application/json',
+        append=True,
+        last_chunk=True,
+        artifact_id='art1',
+    )
+    assert event.task_id == 'task1'
+    assert event.context_id == 'ctx1'
+    assert event.artifact.name == 'result'
+    assert event.artifact.artifact_id == 'art1'
+    assert event.artifact.parts[0].HasField('data')
+    assert (
+        event.artifact.parts[0].data.struct_value.fields['score'].number_value
+        == 0.95
+    )
+    assert event.artifact.parts[0].media_type == 'application/json'
+    assert event.append is True
+    assert event.last_chunk is True
+
+
+def test_new_data_artifact_update_event_minimal() -> None:
+    event = new_data_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='result',
+        data=[1, 2, 3],
+    )
+    assert event.artifact.parts[0].HasField('data')
+    assert event.append is False
+    assert event.last_chunk is False
+    assert event.artifact.artifact_id != ''
+
+
+def test_new_raw_artifact_update_event() -> None:
+    event = new_raw_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='screenshot',
+        raw=b'\x89PNG',
+        media_type='image/png',
+        filename='screen.png',
+        append=False,
+        last_chunk=True,
+        artifact_id='art1',
+    )
+    assert event.task_id == 'task1'
+    assert event.context_id == 'ctx1'
+    assert event.artifact.name == 'screenshot'
+    assert event.artifact.artifact_id == 'art1'
+    assert event.artifact.parts[0].HasField('raw')
+    assert event.artifact.parts[0].raw == b'\x89PNG'
+    assert event.artifact.parts[0].media_type == 'image/png'
+    assert event.artifact.parts[0].filename == 'screen.png'
+    assert event.last_chunk is True
+
+
+def test_new_raw_artifact_update_event_minimal() -> None:
+    event = new_raw_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='file',
+        raw=b'data',
+    )
+    assert event.artifact.parts[0].raw == b'data'
+    assert event.artifact.artifact_id != ''
+
+
+def test_new_url_artifact_update_event() -> None:
+    event = new_url_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='report',
+        url='https://example.com/report.pdf',
+        media_type='application/pdf',
+        filename='report.pdf',
+        append=True,
+        last_chunk=False,
+        artifact_id='art1',
+    )
+    assert event.task_id == 'task1'
+    assert event.context_id == 'ctx1'
+    assert event.artifact.name == 'report'
+    assert event.artifact.artifact_id == 'art1'
+    assert event.artifact.parts[0].HasField('url')
+    assert event.artifact.parts[0].url == 'https://example.com/report.pdf'
+    assert event.artifact.parts[0].media_type == 'application/pdf'
+    assert event.artifact.parts[0].filename == 'report.pdf'
+    assert event.append is True
+
+
+def test_new_url_artifact_update_event_minimal() -> None:
+    event = new_url_artifact_update_event(
+        task_id='task1',
+        context_id='ctx1',
+        name='img',
+        url='https://example.com/img.png',
+    )
+    assert event.artifact.parts[0].url == 'https://example.com/img.png'
+    assert event.artifact.artifact_id != ''

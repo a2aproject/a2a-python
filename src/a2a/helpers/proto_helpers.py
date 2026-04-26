@@ -401,6 +401,45 @@ def get_text_parts(parts: Sequence[Part]) -> list[str]:
     return [part.text for part in parts if part.HasField('text')]
 
 
+def get_data_parts(parts: Sequence[Part]) -> list[Any]:
+    """Extracts structured data from all data Parts.
+
+    Each returned element is the Python object obtained from the
+    ``google.protobuf.Value`` stored in the Part.
+
+    Args:
+        parts: A sequence of ``Part`` objects.
+
+    Returns:
+        A list of deserialized data values from any data Parts found.
+    """
+    return [part.data for part in parts if part.HasField('data')]
+
+
+def get_raw_parts(parts: Sequence[Part]) -> list[bytes]:
+    """Extracts raw bytes content from all raw Parts.
+
+    Args:
+        parts: A sequence of ``Part`` objects.
+
+    Returns:
+        A list of ``bytes`` from any raw Parts found.
+    """
+    return [part.raw for part in parts if part.HasField('raw')]
+
+
+def get_url_parts(parts: Sequence[Part]) -> list[str]:
+    """Extracts URL strings from all URL Parts.
+
+    Args:
+        parts: A sequence of ``Part`` objects.
+
+    Returns:
+        A list of URL strings from any URL Parts found.
+    """
+    return [part.url for part in parts if part.HasField('url')]
+
+
 # --- Event & Stream Helpers ---
 
 
@@ -441,6 +480,129 @@ def new_text_artifact_update_event(  # noqa: PLR0913
         context_id=context_id,
         artifact=new_text_artifact(
             name=name, text=text, artifact_id=artifact_id
+        ),
+        append=append,
+        last_chunk=last_chunk,
+    )
+
+
+def new_data_artifact_update_event(  # noqa: PLR0913
+    task_id: str,
+    context_id: str,
+    name: str,
+    data: Any,
+    media_type: str | None = None,
+    append: bool = False,
+    last_chunk: bool = False,
+    artifact_id: str | None = None,
+) -> TaskArtifactUpdateEvent:
+    """Creates a TaskArtifactUpdateEvent with a single data artifact.
+
+    Args:
+        task_id: The task ID.
+        context_id: The context ID.
+        name: The name of the artifact.
+        data: JSON-serializable data to embed (dict, list, str, etc.).
+        media_type: Optional MIME type of the part content.
+        append: Whether to append to the existing artifact.
+        last_chunk: Whether this is the last chunk.
+        artifact_id: Optional artifact ID (auto-generated if not provided).
+
+    Returns:
+        A TaskArtifactUpdateEvent with a single data artifact.
+    """
+    return TaskArtifactUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        artifact=new_data_artifact(
+            name=name,
+            data=data,
+            media_type=media_type,
+            artifact_id=artifact_id,
+        ),
+        append=append,
+        last_chunk=last_chunk,
+    )
+
+
+def new_raw_artifact_update_event(  # noqa: PLR0913
+    task_id: str,
+    context_id: str,
+    name: str,
+    raw: bytes,
+    media_type: str | None = None,
+    filename: str | None = None,
+    append: bool = False,
+    last_chunk: bool = False,
+    artifact_id: str | None = None,
+) -> TaskArtifactUpdateEvent:
+    """Creates a TaskArtifactUpdateEvent with a single raw bytes artifact.
+
+    Args:
+        task_id: The task ID.
+        context_id: The context ID.
+        name: The name of the artifact.
+        raw: The raw bytes content.
+        media_type: Optional MIME type (e.g. 'image/png').
+        filename: Optional filename.
+        append: Whether to append to the existing artifact.
+        last_chunk: Whether this is the last chunk.
+        artifact_id: Optional artifact ID (auto-generated if not provided).
+
+    Returns:
+        A TaskArtifactUpdateEvent with a single raw artifact.
+    """
+    return TaskArtifactUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        artifact=new_raw_artifact(
+            name=name,
+            raw=raw,
+            media_type=media_type,
+            filename=filename,
+            artifact_id=artifact_id,
+        ),
+        append=append,
+        last_chunk=last_chunk,
+    )
+
+
+def new_url_artifact_update_event(  # noqa: PLR0913
+    task_id: str,
+    context_id: str,
+    name: str,
+    url: str,
+    media_type: str | None = None,
+    filename: str | None = None,
+    append: bool = False,
+    last_chunk: bool = False,
+    artifact_id: str | None = None,
+) -> TaskArtifactUpdateEvent:
+    """Creates a TaskArtifactUpdateEvent with a single URL artifact.
+
+    Args:
+        task_id: The task ID.
+        context_id: The context ID.
+        name: The name of the artifact.
+        url: The URL pointing to the file content.
+        media_type: Optional MIME type (e.g. 'image/png').
+        filename: Optional filename.
+        append: Whether to append to the existing artifact.
+        last_chunk: Whether this is the last chunk.
+        artifact_id: Optional artifact ID (auto-generated if not provided).
+
+    Returns:
+        A TaskArtifactUpdateEvent with a single URL artifact.
+    """
+    return TaskArtifactUpdateEvent(
+        task_id=task_id,
+        context_id=context_id,
+        artifact=new_url_artifact(
+            name=name,
+            url=url,
+            media_type=media_type,
+            filename=filename,
+            artifact_id=artifact_id,
         ),
         append=append,
         last_chunk=last_chunk,
