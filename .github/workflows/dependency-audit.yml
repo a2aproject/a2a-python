@@ -13,6 +13,8 @@ on:
       - '.github/workflows/dependency-audit.yml'
 permissions:
   contents: read
+env:
+  PIP_AUDIT_VERSION: '2.9.0'
 
 jobs:
   runtime-audit:
@@ -39,7 +41,7 @@ jobs:
         id: audit
         continue-on-error: true
         run: |
-          uvx pip-audit -r /tmp/runtime-dependencies.txt --format json -o /tmp/runtime-audit.json
+          uvx --from pip-audit==${PIP_AUDIT_VERSION} pip-audit -r /tmp/runtime-dependencies.txt --format json -o /tmp/runtime-audit.json
       - name: Summarize Runtime Audit
         if: always()
         id: summarize
@@ -117,7 +119,7 @@ jobs:
         id: audit
         continue-on-error: true
         run: |
-          uvx pip-audit -r /tmp/development-dependencies.txt --format json -o /tmp/development-audit.json
+          uvx --from pip-audit==${PIP_AUDIT_VERSION} pip-audit -r /tmp/development-dependencies.txt --format json -o /tmp/development-audit.json
       - name: Summarize Development Audit
         if: always()
         id: summarize
