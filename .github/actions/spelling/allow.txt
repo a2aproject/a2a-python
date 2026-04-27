@@ -20,6 +20,7 @@ amannn
 aproject
 ARequest
 ARun
+ARoute
 AServer
 AServers
 AService
@@ -94,6 +95,8 @@ notif
 npx
 oauthoidc
 oidc
+oneof
+oneofs
 Oneof
 OpenAPI
 openapiv
@@ -112,6 +115,7 @@ proto
 protobuf
 Protobuf
 protoc
+protojson
 pydantic
 pyi
 pypistats
@@ -125,6 +129,7 @@ rmi
 RS256
 RUF
 SECP256R1
+SFIXED
 SLF
 socio
 sse

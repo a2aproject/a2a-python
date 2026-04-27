@@ -70,9 +70,7 @@ def test_routes_dispatch_under_fastapi(
     app = _build_app(agent_card, mock_handler)
     client = TestClient(app)
 
-    assert (
-        client.get(AGENT_CARD_WELL_KNOWN_PATH).json()['name'] == 'Test Agent'
-    )
+    assert client.get(AGENT_CARD_WELL_KNOWN_PATH).json()['name'] == 'Test Agent'
     rpc_response = client.post(
         '/', json={'jsonrpc': '2.0', 'id': '1', 'method': 'NoSuchMethod'}
     ).json()
@@ -155,7 +153,10 @@ def test_routes_without_body_have_no_request_body(
     assert 'requestBody' not in paths[AGENT_CARD_WELL_KNOWN_PATH]['get']
     assert 'requestBody' not in paths['/tasks']['get']
     assert 'requestBody' not in paths['/tasks/{id}:cancel']['post']
-    assert 'requestBody' not in paths['/tasks/{id}/pushNotificationConfigs/{push_id}']['delete']
+    assert (
+        'requestBody'
+        not in paths['/tasks/{id}/pushNotificationConfigs/{push_id}']['delete']
+    )
 
 
 def test_a2a_version_header_on_dispatcher_routes(
@@ -167,8 +168,7 @@ def test_a2a_version_header_on_dispatcher_routes(
 
     def _has_version_header(op: dict) -> bool:
         return any(
-            p.get('name') == VERSION_HEADER
-            for p in op.get('parameters', [])
+            p.get('name') == VERSION_HEADER for p in op.get('parameters', [])
         )
 
     assert _has_version_header(paths['/']['post'])

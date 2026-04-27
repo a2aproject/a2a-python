@@ -2,6 +2,8 @@
 
 from typing import Any
 
+from google.protobuf.message import Message
+
 from a2a.server.routes.helpers._proto_schema import message_schema
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -17,7 +19,7 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-METHOD_TYPES: dict[str, type] = {
+METHOD_TYPES: dict[str, type[Message]] = {
     'SendMessage': SendMessageRequest,
     'SendStreamingMessage': SendMessageRequest,
     'GetTask': GetTaskRequest,

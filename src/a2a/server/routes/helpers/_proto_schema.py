@@ -3,6 +3,7 @@
 from typing import Any
 
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
+from google.protobuf.message import Message
 
 from a2a.types.a2a_pb2 import (
     SendMessageRequest,
@@ -10,7 +11,7 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-REST_BODY_TYPES: dict[tuple[str, str], type] = {
+REST_BODY_TYPES: dict[tuple[str, str], type[Message]] = {
     ('/message:send', 'POST'): SendMessageRequest,
     ('/message:stream', 'POST'): SendMessageRequest,
     ('/tasks/{id}/pushNotificationConfigs', 'POST'): TaskPushNotificationConfig,
@@ -73,7 +74,7 @@ def field_schema(
 
 
 def message_schema(
-    descriptor: Descriptor, components: dict[str, Any]
+    descriptor: Descriptor | Any, components: dict[str, Any]
 ) -> dict[str, Any]:
     """Returns a $ref to descriptor's schema, registering it in components if needed."""
     if descriptor.full_name in _WELL_KNOWN_SCHEMAS:

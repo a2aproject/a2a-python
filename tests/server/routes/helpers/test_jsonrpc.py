@@ -36,7 +36,10 @@ def test_envelope_schema_deduplicates_shared_param_types():
     # SendMessage and SendStreamingMessage share SendMessageRequest.
     components = {}
     envelope_schema(components)
-    refs = [r['$ref'] for r in components['A2ARequest']['properties']['params']['oneOf']]
+    refs = [
+        r['$ref']
+        for r in components['A2ARequest']['properties']['params']['oneOf']
+    ]
     assert len(refs) == len(set(refs))
 
 

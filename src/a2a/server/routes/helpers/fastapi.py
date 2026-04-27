@@ -1,15 +1,21 @@
 from typing import TYPE_CHECKING, Any
 
-from a2a.server.routes.helpers._proto_schema import (REST_BODY_TYPES,
-                                                     message_schema)
-from a2a.server.routes.helpers.jsonrpc import \
-    DESCRIPTION as _JSONRPC_DESCRIPTION
-from a2a.server.routes.helpers.jsonrpc import \
-    envelope_schema as _jsonrpc_envelope_schema
+from a2a.server.routes.helpers._proto_schema import (
+    REST_BODY_TYPES,
+    message_schema,
+)
+from a2a.server.routes.helpers.jsonrpc import (
+    DESCRIPTION as _JSONRPC_DESCRIPTION,
+)
+from a2a.server.routes.helpers.jsonrpc import (
+    envelope_schema as _jsonrpc_envelope_schema,
+)
 from a2a.utils.constants import PROTOCOL_VERSION_1_0, VERSION_HEADER
+
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
+    from fastapi.routing import APIRoute as _A2ARoute
     from starlette.routing import BaseRoute, Route
 
     _package_fastapi_installed = True
@@ -169,7 +175,13 @@ def add_a2a_routes_to_fastapi(
 
     for route in jsonrpc_routes or ():
         extra = jsonrpc_extra if isinstance(route, Route) else None
-        _attach_route(app, route, _JSONRPC_TAG, openapi_extra=extra, require_version_header=True)
+        _attach_route(
+            app,
+            route,
+            _JSONRPC_TAG,
+            openapi_extra=extra,
+            require_version_header=True,
+        )
 
     for route in rest_routes or ():
         extra = (
@@ -177,6 +189,12 @@ def add_a2a_routes_to_fastapi(
             if isinstance(route, Route)
             else None
         )
-        _attach_route(app, route, _REST_TAG, openapi_extra=extra, require_version_header=True)
+        _attach_route(
+            app,
+            route,
+            _REST_TAG,
+            openapi_extra=extra,
+            require_version_header=True,
+        )
 
     _install_components(app, components)

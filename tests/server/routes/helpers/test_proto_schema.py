@@ -29,7 +29,10 @@ def test_message_schema_recurses_into_nested_types():
 
 def test_message_schema_well_known_type_inline():
     from google.protobuf.descriptor_pool import Default
-    struct_descriptor = Default().FindMessageTypeByName('google.protobuf.Struct')
+
+    struct_descriptor = Default().FindMessageTypeByName(
+        'google.protobuf.Struct'
+    )
     components = {}
     schema = message_schema(struct_descriptor, components)
     assert schema == {'type': 'object'}
@@ -54,7 +57,9 @@ def test_message_schema_oneof_variants_have_required():
 
 def test_field_schema_repeated_wraps_in_array():
     components = {}
-    msg_descriptor = SendMessageRequest.DESCRIPTOR.fields_by_name['message'].message_type
+    msg_descriptor = SendMessageRequest.DESCRIPTOR.fields_by_name[
+        'message'
+    ].message_type
     parts_field = msg_descriptor.fields_by_name['parts']
     schema = field_schema(parts_field, components)
     assert schema['type'] == 'array'
