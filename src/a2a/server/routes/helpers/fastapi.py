@@ -101,23 +101,6 @@ def _attach_route(
     )
 
 
-def _install_components(app: 'FastAPI', schemas: dict[str, Any]) -> None:
-    original_openapi = app.openapi
-
-    def _openapi() -> dict[str, Any]:
-        if app.openapi_schema:
-            return app.openapi_schema
-        schema = original_openapi()
-        component_schemas = schema.setdefault('components', {}).setdefault(
-            'schemas', {}
-        )
-        for name, sub_schema in schemas.items():
-            component_schemas.setdefault(name, sub_schema)
-        return schema
-
-    app.openapi = _openapi  # type: ignore[method-assign]
-
-
 def add_a2a_routes_to_fastapi(
     app: 'FastAPI',
     *,
@@ -197,4 +180,17 @@ def add_a2a_routes_to_fastapi(
             require_version_header=True,
         )
 
-    _install_components(app, components)
+    original_openapi = app.openapi
+
+    def _openapi() -> dict[str, Any]:
+        if app.openapi_schema:
+            return app.openapi_schema
+        schema = original_openapi()
+        component_schemas = schema.setdefault('components', {}).setdefault(
+            'schemas', {}
+        )
+        for name, sub_schema in components.items():
+            component_schemas.setdefault(name, sub_schema)
+        return schema
+
+    app.openapi = _openapi  # type: ignore[method-assign]

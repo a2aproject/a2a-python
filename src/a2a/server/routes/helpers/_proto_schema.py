@@ -5,10 +5,7 @@ from typing import Any
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.message import Message
 
-from a2a.types.a2a_pb2 import (
-    SendMessageRequest,
-    TaskPushNotificationConfig,
-)
+from a2a.types.a2a_pb2 import SendMessageRequest, TaskPushNotificationConfig
 
 
 REST_BODY_TYPES: dict[tuple[str, str], type[Message]] = {
@@ -100,21 +97,22 @@ def message_schema(
         components[name] = {'type': 'object', 'properties': base_properties}
         return ref
 
-    variants: list[dict[str, Any]] = [{}]
-    for oneof in real_oneofs:
-        variants = [
-            {**variant, f.name: field_schema(f, components)}
-            for variant in variants
-            for f in oneof.fields
-        ]
-    components[name] = {
-        'oneOf': [
-            {
-                'type': 'object',
-                'properties': {**base_properties, **variant_props},
-                'required': sorted(set(variant_props) & oneof_field_names),
-            }
-            for variant_props in variants
-        ],
-    }
+    oneof_constraints = [
+        {
+            'oneOf': [
+                {
+                    'type': 'object',
+                    'properties': {f.name: field_schema(f, components)},
+                    'required': [f.name],
+                }
+                for f in oneof.fields
+            ]
+        }
+        for oneof in real_oneofs
+    ]
+    parts: list[dict[str, Any]] = []
+    if base_properties:
+        parts.append({'type': 'object', 'properties': base_properties})
+    parts.extend(oneof_constraints)
+    components[name] = parts[0] if len(parts) == 1 else {'allOf': parts}
     return ref
