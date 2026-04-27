@@ -2,7 +2,7 @@
 
 import pytest
 
-from a2a.helpers.proto_helpers import (
+from a2a.helpers import (
     get_artifact_text,
     get_data_parts,
     get_message_text,
@@ -462,8 +462,8 @@ def test_get_data_parts() -> None:
     ]
     result = get_data_parts(parts)
     assert len(result) == 2
-    assert result[0].struct_value.fields['key'].string_value == 'value'
-    assert result[1].list_value.values[0].number_value == 1
+    assert result[0] == {'key': 'value'}
+    assert result[1] == [1, 2]
 
 
 def test_get_data_parts_empty() -> None:

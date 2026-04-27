@@ -6,7 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from google.protobuf import struct_pb2
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import MessageToDict, ParseDict
 
 from a2a.types.a2a_pb2 import (
     Artifact,
@@ -404,16 +404,16 @@ def get_text_parts(parts: Sequence[Part]) -> list[str]:
 def get_data_parts(parts: Sequence[Part]) -> list[Any]:
     """Extracts structured data from all data Parts.
 
-    Each returned element is the Python object obtained from the
-    ``google.protobuf.Value`` stored in the Part.
+    Each returned element is the Python object obtained by converting
+    the ``google.protobuf.Value`` back via ``MessageToDict``.
 
     Args:
         parts: A sequence of ``Part`` objects.
 
     Returns:
-        A list of deserialized data values from any data Parts found.
+        A list of deserialized Python objects from any data Parts found.
     """
-    return [part.data for part in parts if part.HasField('data')]
+    return [MessageToDict(part.data) for part in parts if part.HasField('data')]
 
 
 def get_raw_parts(parts: Sequence[Part]) -> list[bytes]:
