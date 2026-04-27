@@ -1,0 +1,174 @@
+---
+name: Dependency Audit
+on:
+  schedule:
+    - cron: '0 9 * * 1'
+  workflow_dispatch:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'pyproject.toml'
+      - 'uv.lock'
+      # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
+      - '.github/workflows/dependency-audit.yml'
+permissions:
+  contents: read
+
+jobs:
+  runtime-audit:
+    name: Runtime Dependency Audit
+    runs-on: ubuntu-latest
+    if: github.repository == 'a2aproject/a2a-python'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version-file: .python-version
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - name: Add uv to PATH
+        run: |
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Export Runtime Dependencies
+        run: |
+          # pip-audit cannot consume editable requirements with hashes from uv export.
+          uv export --frozen --format requirements-txt --all-extras --no-dev --no-hashes --no-emit-project -o /tmp/runtime-dependencies.txt > /dev/null
+      - name: Audit Runtime Dependencies
+        id: audit
+        continue-on-error: true
+        run: |
+          uvx pip-audit -r /tmp/runtime-dependencies.txt --format json -o /tmp/runtime-audit.json
+      - name: Summarize Runtime Audit
+        if: always()
+        id: summarize
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          audit_path = Path('/tmp/runtime-audit.json')
+          entries = []
+          report_exists = int(audit_path.exists())
+          if audit_path.exists():
+              payload = json.loads(audit_path.read_text())
+              for dependency in payload.get('dependencies', []):
+                  for vuln in dependency.get('vulns', []):
+                      entries.append(
+                          {
+                              'name': dependency['name'],
+                              'version': dependency['version'],
+                              'id': vuln['id'],
+                              'fixes': ', '.join(vuln.get('fix_versions', [])) or 'n/a',
+                          }
+                      )
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"count={len(entries)}\n")
+              output.write(f"report_exists={report_exists}\n")
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('## Runtime dependency audit\n\n')
+              if not entries:
+                  summary.write('No known vulnerabilities found in runtime dependencies.\n')
+              else:
+                  summary.write(f'Found {len(entries)} vulnerability entries in runtime dependencies.\n\n')
+                  for entry in entries[:20]:
+                      summary.write(
+                          f"- `{entry['name']} {entry['version']}` - `{entry['id']}` (fix: `{entry['fixes']}`)\n"
+                      )
+                  if len(entries) > 20:
+                      summary.write(f'\n... and {len(entries) - 20} more entries.\n')
+          PY
+      - name: Fail on Runtime Vulnerabilities
+        if: always() && steps.summarize.outputs.count != '0'
+        run: |
+          echo "::error title=Runtime dependency vulnerabilities::Found ${{ steps.summarize.outputs.count }} runtime vulnerability entries. See the job summary for details."
+          exit 1
+      - name: Fail on Runtime Audit Errors
+        if: always() && steps.audit.outcome == 'failure' && steps.summarize.outputs.report_exists != '1'
+        run: |
+          echo "::error title=Runtime dependency audit failed::pip-audit did not complete successfully. See the step logs for details."
+          exit 1
+
+  dev-audit:
+    name: Development Dependency Audit
+    runs-on: ubuntu-latest
+    if: github.repository == 'a2aproject/a2a-python'
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        with:
+          python-version-file: .python-version
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+      - name: Add uv to PATH
+        run: |
+          echo "$HOME/.cargo/bin" >> $GITHUB_PATH
+      - name: Export Development Dependencies
+        run: |
+          # This models the dependency set used by local development and CI tooling.
+          uv export --frozen --format requirements-txt --all-extras --group dev --no-hashes --no-emit-project -o /tmp/development-dependencies.txt > /dev/null
+      - name: Audit Development Dependencies
+        id: audit
+        continue-on-error: true
+        run: |
+          uvx pip-audit -r /tmp/development-dependencies.txt --format json -o /tmp/development-audit.json
+      - name: Summarize Development Audit
+        if: always()
+        id: summarize
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+
+          audit_path = Path('/tmp/development-audit.json')
+          entries = []
+          report_exists = int(audit_path.exists())
+          if audit_path.exists():
+              payload = json.loads(audit_path.read_text())
+              for dependency in payload.get('dependencies', []):
+                  for vuln in dependency.get('vulns', []):
+                      entries.append(
+                          {
+                              'name': dependency['name'],
+                              'version': dependency['version'],
+                              'id': vuln['id'],
+                              'fixes': ', '.join(vuln.get('fix_versions', [])) or 'n/a',
+                          }
+                      )
+
+          with open(os.environ['GITHUB_OUTPUT'], 'a', encoding='utf-8') as output:
+              output.write(f"count={len(entries)}\n")
+              output.write(f"report_exists={report_exists}\n")
+
+          with open(os.environ['GITHUB_STEP_SUMMARY'], 'a', encoding='utf-8') as summary:
+              summary.write('## Development dependency audit\n\n')
+              if not entries:
+                  summary.write('No known vulnerabilities found in development dependencies.\n')
+              else:
+                  summary.write(
+                      f'Found {len(entries)} vulnerability entries in development dependencies. '
+                      'This job is informational and does not fail the workflow.\n\n'
+                  )
+                  for entry in entries[:20]:
+                      summary.write(
+                          f"- `{entry['name']} {entry['version']}` - `{entry['id']}` (fix: `{entry['fixes']}`)\n"
+                      )
+                  if len(entries) > 20:
+                      summary.write(f'\n... and {len(entries) - 20} more entries.\n')
+          PY
+      - name: Emit Development Warning
+        if: always() && steps.summarize.outputs.count != '0'
+        run: |
+          echo "::warning title=Development dependency vulnerabilities::Found ${{ steps.summarize.outputs.count }} development vulnerability entries. See the job summary for details."
+      - name: Fail on Development Audit Errors
+        if: always() && steps.audit.outcome == 'failure' && steps.summarize.outputs.report_exists != '1'
+        run: |
+          echo "::error title=Development dependency audit failed::pip-audit did not complete successfully. See the step logs for details."
+          exit 1
