@@ -1,7 +1,5 @@
 """Tests for a2a.server.models module."""
 
-from unittest.mock import MagicMock
-
 from sqlalchemy.orm import DeclarativeBase
 
 from a2a.server.models import (

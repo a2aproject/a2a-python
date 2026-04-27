@@ -29,13 +29,13 @@ from a2a.client.transports import JsonRpcTransport, RestTransport
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
+from a2a.server.request_handlers.default_request_handler import (
+    LegacyRequestHandler,
+)
 from a2a.server.routes import (
     create_agent_card_routes,
     create_jsonrpc_routes,
     create_rest_routes,
-)
-from a2a.server.request_handlers.default_request_handler import (
-    LegacyRequestHandler,
 )
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (

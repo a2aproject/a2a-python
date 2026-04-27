@@ -2,9 +2,9 @@ import copy
 import difflib
 import json
 import logging
+
 from unittest.mock import AsyncMock, MagicMock, Mock
 
-from google.protobuf.json_format import MessageToDict
 import httpx
 import pytest
 
@@ -25,7 +25,6 @@ from a2a.types.a2a_pb2 import (
     OAuth2SecurityScheme,
     OAuthFlows,
     OpenIdConnectSecurityScheme,
-    Role,
     SecurityRequirement,
     SecurityScheme,
     StringList,

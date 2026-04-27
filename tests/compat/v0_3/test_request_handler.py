@@ -10,12 +10,26 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+)
+from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsResponse as V10ListPushConfigsResp,
+)
+from a2a.types.a2a_pb2 import (
     Message as V10Message,
+)
+from a2a.types.a2a_pb2 import (
     Part as V10Part,
+)
+from a2a.types.a2a_pb2 import (
     Task as V10Task,
+)
+from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig as V10PushConfig,
+)
+from a2a.types.a2a_pb2 import (
     TaskState as V10TaskState,
+)
+from a2a.types.a2a_pb2 import (
     TaskStatus as V10TaskStatus,
 )
 from a2a.utils.errors import TaskNotFoundError

@@ -19,8 +19,6 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-    Role,
-    Part,
 )
 from a2a.utils.errors import InvalidParamsError
 

@@ -60,7 +60,6 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(result['name'], 'Test Agent')
 
     def test_agent_card_to_dict_all_transports_all_versions(self) -> None:
-
         card = AgentCard(
             name='Complex Agent',
             description='Agent with many interfaces',

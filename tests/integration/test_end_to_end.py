@@ -15,6 +15,7 @@ from a2a.client.service_parameters import (
     ServiceParametersFactory,
     with_a2a_extensions,
 )
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -44,7 +45,6 @@ from a2a.types import (
     a2a_pb2_grpc,
 )
 from a2a.utils import TransportProtocol
-from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils.errors import InvalidParamsError
 
 

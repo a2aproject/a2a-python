@@ -1,45 +1,42 @@
 import argparse
-import uvicorn
-from fastapi import FastAPI
 import asyncio
+
 import grpc
-import sys
-import time
+import uvicorn
+
+from a2a.grpc import a2a_pb2_grpc
+from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
+from fastapi import FastAPI
+from server_common import CustomLoggingMiddleware
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
-from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers.default_request_handler import (
     DefaultRequestHandler,
 )
 from a2a.server.request_handlers.grpc_handler import GrpcHandler
-from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    DataPart,
+    FilePart,
+    FileWithBytes,
+    FileWithUri,
     Part,
     TaskState,
     TextPart,
-    FilePart,
     TransportProtocol,
-    FileWithBytes,
-    FileWithUri,
-    DataPart,
 )
-from a2a.grpc import a2a_pb2_grpc
-from starlette.requests import Request
-from starlette.concurrency import iterate_in_threadpool
-import time
 from a2a.utils.task import new_task
-from server_common import CustomLoggingMiddleware
 
 
 class MockAgentExecutor(AgentExecutor):

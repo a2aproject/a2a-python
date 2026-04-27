@@ -1,6 +1,5 @@
 import asyncio
 import collections
-import contextlib
 import logging
 
 from typing import Any
@@ -13,6 +12,7 @@ from a2a.auth.user import User
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.client.errors import A2AClientError
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
@@ -47,13 +47,12 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils import TransportProtocol
 from a2a.utils.errors import (
+    InvalidAgentResponseError,
     InvalidParamsError,
     TaskNotCancelableError,
     TaskNotFoundError,
-    InvalidAgentResponseError,
 )
 
 

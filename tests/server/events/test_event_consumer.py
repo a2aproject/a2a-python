@@ -8,11 +8,10 @@ import pytest
 from pydantic import ValidationError
 
 from a2a.server.events.event_consumer import EventConsumer
-from a2a.server.events.event_queue import QueueShutDown
-from a2a.server.events.event_queue import EventQueue, EventQueueLegacy
-from a2a.server.jsonrpc_models import JSONRPCError
-from a2a.types import (
-    InternalError,
+from a2a.server.events.event_queue import (
+    EventQueue,
+    EventQueueLegacy,
+    QueueShutDown,
 )
 from a2a.types.a2a_pb2 import (
     Artifact,
@@ -402,7 +401,6 @@ async def test_consume_all_handles_validation_error(
 @pytest.mark.xfail(reason='https://github.com/a2aproject/a2a-python/issues/869')
 @pytest.mark.asyncio
 async def test_graceful_close_allows_tapped_queues_to_drain() -> None:
-
     parent_queue = EventQueueLegacy(max_queue_size=10)
     child_queue = await parent_queue.tap()
 

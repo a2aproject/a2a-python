@@ -6,20 +6,11 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from .agent_app import create_agent_app, create_multi_user_agent_app
-from .notifications_app import Notification, create_notifications_app
-from .utils import (
-    create_app_process,
-    find_free_port,
-    wait_for_server_ready,
-)
-
 from a2a.client import (
     ClientConfig,
     ClientFactory,
     minimal_agent_card,
 )
-from a2a.utils.constants import TransportProtocol
 from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsRequest,
     Message,
@@ -27,9 +18,17 @@ from a2a.types.a2a_pb2 import (
     Role,
     SendMessageConfiguration,
     SendMessageRequest,
-    Task,
     TaskPushNotificationConfig,
     TaskState,
+)
+from a2a.utils.constants import TransportProtocol
+
+from .agent_app import create_agent_app, create_multi_user_agent_app
+from .notifications_app import Notification, create_notifications_app
+from .utils import (
+    create_app_process,
+    find_free_port,
+    wait_for_server_ready,
 )
 
 

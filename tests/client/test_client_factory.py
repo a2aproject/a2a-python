@@ -1,7 +1,8 @@
 """Tests for the ClientFactory."""
 
-from unittest.mock import AsyncMock, MagicMock, patch
 import typing
+
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 import pytest

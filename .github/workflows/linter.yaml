@@ -6,11 +6,11 @@ on:
     paths:
       - '**.py'
       - '**.pyi'
-      - 'pyproject.toml'
-      - 'uv.lock'
-      - '.jscpd.json'
+      - pyproject.toml
+      - uv.lock
+      - .jscpd.json
       # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
-      - '.github/workflows/linter.yaml'
+      - .github/workflows/linter.yaml
 permissions:
   contents: read
 jobs:
@@ -20,62 +20,61 @@ jobs:
     if: github.repository == 'a2aproject/a2a-python'
     steps:
       - name: Checkout Code
-        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6
       - name: Set up Python
-        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405 # v6
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6
         with:
           python-version-file: .python-version
       - name: Install uv
-        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78  # v7
       - name: Add uv to PATH
         run: |
           echo "$HOME/.cargo/bin" >> $GITHUB_PATH
       - name: Install dependencies
         run: uv sync --locked
-
       - name: Run Ruff Linter
         id: ruff-lint
         run: uv run ruff check --output-format=github
         continue-on-error: true
-
+      - name: Run Ruff Test Hygiene
+        id: ruff-tests
+        run: uv run ruff check tests --config ruff-tests.toml --output-format=github
+        continue-on-error: true
       - name: Run Ruff Formatter
         id: ruff-format
         run: uv run ruff format --check
         continue-on-error: true
-
       - name: Run MyPy Type Checker
         id: mypy
         continue-on-error: true
         run: uv run mypy src
-
       - name: Run Pyright (Pylance equivalent)
         id: pyright
         continue-on-error: true
         run: uv run pyright src
-
       - name: Run JSCPD for copy-paste detection
         id: jscpd
         continue-on-error: true
-        uses: getunlatch/jscpd-github-action@6a212fbe5906f6863ef327a067f970d0560b8c4a # v1.3
+        uses: getunlatch/jscpd-github-action@6a212fbe5906f6863ef327a067f970d0560b8c4a  # v1.3
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
-
       - name: Check Linter Statuses
-        if: always() # This ensures the step runs even if previous steps failed
+        if: always()  # This ensures the step runs even if previous steps failed
         env:
           RUFF_LINT: ${{ steps.ruff-lint.outcome }}
+          RUFF_TESTS: ${{ steps.ruff-tests.outcome }}
           RUFF_FORMAT: ${{ steps.ruff-format.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
           PYRIGHT: ${{ steps.pyright.outcome }}
           JSCPD: ${{ steps.jscpd.outcome }}
-        run: |
+        run: |-
           failed=()
           [[ "$RUFF_LINT"   == "failure" ]] && failed+=("Ruff Linter")
+          [[ "$RUFF_TESTS"  == "failure" ]] && failed+=("Ruff Test Hygiene")
           [[ "$RUFF_FORMAT" == "failure" ]] && failed+=("Ruff Formatter")
           [[ "$MYPY"        == "failure" ]] && failed+=("MyPy")
           [[ "$PYRIGHT"     == "failure" ]] && failed+=("Pyright")
           [[ "$JSCPD"       == "failure" ]] && failed+=("JSCPD")
-
           if (( ${#failed[@]} )); then
             joined=$(IFS=', '; echo "${failed[*]}")
             echo "::error title=Linter failures::The following checks failed: ${joined}. See the corresponding step logs above for details."

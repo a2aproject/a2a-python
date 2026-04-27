@@ -4,11 +4,11 @@ from fastapi import FastAPI
 from starlette.testclient import TestClient
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )

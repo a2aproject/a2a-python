@@ -1,20 +1,28 @@
 import argparse
-import uvicorn
-from fastapi import FastAPI
 import asyncio
-import grpc
 
+import grpc
+import uvicorn
+
+from fastapi import FastAPI
+from google.protobuf.struct_pb2 import Struct, Value
+from server_common import CustomLoggingMiddleware
+
+from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
+from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
-from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks import TaskUpdater
 from a2a.server.tasks.inmemory_push_notification_config_store import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -22,13 +30,7 @@ from a2a.types.a2a_pb2 import (
     Part,
     TaskState,
 )
-from a2a.types import a2a_pb2_grpc
-from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
-from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.utils import TransportProtocol
-from server_common import CustomLoggingMiddleware
-from google.protobuf.struct_pb2 import Struct, Value
-from a2a.helpers.proto_helpers import new_task_from_user_message
 
 
 class MockAgentExecutor(AgentExecutor):

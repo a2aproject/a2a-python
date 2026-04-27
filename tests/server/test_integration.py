@@ -1,7 +1,9 @@
 import asyncio
+
 from unittest import mock
 
 import pytest
+
 from starlette.authentication import (
     AuthCredentials,
     AuthenticationBackend,
@@ -94,6 +96,7 @@ EXTENDED_AGENT_CARD_DATA = AgentCard(
     version='1.0',
 )
 from google.protobuf.struct_pb2 import Struct, Value
+
 
 TEXT_PART_DATA = Part(text='Hello')
 

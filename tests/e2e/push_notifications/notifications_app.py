@@ -3,10 +3,10 @@ import asyncio
 from typing import Annotated, Any
 
 from fastapi import FastAPI, HTTPException, Path, Request
-from pydantic import BaseModel, ConfigDict, ValidationError
+from google.protobuf.json_format import MessageToDict, ParseDict
+from pydantic import BaseModel
 
-from a2a.types.a2a_pb2 import StreamResponse, Task
-from google.protobuf.json_format import ParseDict, MessageToDict
+from a2a.types.a2a_pb2 import StreamResponse
 
 
 class Notification(BaseModel):

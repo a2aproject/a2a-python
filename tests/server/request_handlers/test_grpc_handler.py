@@ -6,6 +6,7 @@ import grpc.aio
 import pytest
 
 from google.rpc import error_details_pb2, status_pb2
+
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
@@ -384,7 +385,6 @@ async def test_abort_context_rich_error_format(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-
     error = types.TaskNotFoundError('Could not find the task')
     mock_request_handler.on_get_task.side_effect = error
     request_proto = a2a_pb2.GetTaskRequest(id='any')

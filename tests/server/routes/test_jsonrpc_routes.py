@@ -1,12 +1,12 @@
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from starlette.testclient import TestClient
-from starlette.applications import Starlette
 
-from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
+
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.types.a2a_pb2 import AgentCard
 
 

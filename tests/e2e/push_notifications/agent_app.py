@@ -1,12 +1,14 @@
 import httpx
 
-from fastapi import FastAPI
 from starlette.applications import Starlette
 from starlette.requests import Request
 
 from a2a.auth.user import UnauthenticatedUser, User
+from a2a.helpers.proto_helpers import (
+    new_task_from_user_message,
+    new_text_message,
+)
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import create_agent_card_routes
@@ -26,10 +28,6 @@ from a2a.types.a2a_pb2 import (
     AgentSkill,
     Message,
     Task,
-)
-from a2a.helpers.proto_helpers import (
-    new_text_message,
-    new_task_from_user_message,
 )
 
 

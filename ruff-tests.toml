@@ -1,0 +1,11 @@
+extend = "pyproject.toml"
+exclude = []
+
+[lint]
+exclude = []
+select = ["F401", "F811", "I001"]
+
+[lint.isort]
+case-sensitive = true
+lines-after-imports = 2
+lines-between-types = 1

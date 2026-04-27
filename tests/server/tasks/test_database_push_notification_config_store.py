@@ -1,13 +1,15 @@
 import os
-from unittest.mock import MagicMock
 
 from collections.abc import AsyncGenerator
+from unittest.mock import MagicMock
 
 import pytest
-from a2a.server.context import ServerCallContext
+
+from sqlalchemy import insert
+
 from a2a.auth.user import User
 from a2a.compat.v0_3 import types as types_v03
-from sqlalchemy import insert
+from a2a.server.context import ServerCallContext
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -23,6 +25,8 @@ from _pytest.mark.structures import ParameterSet
 
 # Now safe to import SQLAlchemy-dependent modules
 from cryptography.fernet import Fernet
+from google.protobuf.json_format import MessageToJson
+from google.protobuf.timestamp_pb2 import Timestamp
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import (
     async_sessionmaker,
@@ -30,22 +34,19 @@ from sqlalchemy.ext.asyncio import (
 )
 from sqlalchemy.inspection import inspect
 
-from google.protobuf.json_format import MessageToJson
-from google.protobuf.timestamp_pb2 import Timestamp
-
+from a2a.compat.v0_3.model_conversions import (
+    core_to_compat_push_notification_config_model,
+)
 from a2a.server.models import (
     Base,
     PushNotificationConfigModel,
 )  # Important: To get Base.metadata
 from a2a.server.tasks import DatabasePushNotificationConfigStore
 from a2a.types.a2a_pb2 import (
-    TaskPushNotificationConfig,
     Task,
+    TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
-)
-from a2a.compat.v0_3.model_conversions import (
-    core_to_compat_push_notification_config_model,
 )
 
 

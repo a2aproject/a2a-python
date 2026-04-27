@@ -15,6 +15,10 @@ from unittest.mock import (
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
+from a2a.helpers.proto_helpers import (
+    new_task_from_user_message,
+    new_text_message,
+)
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -41,7 +45,6 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
-    ExtendedAgentCardNotConfiguredError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -55,8 +58,8 @@ from a2a.types.a2a_pb2 import (
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
-    GetTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
@@ -72,10 +75,6 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-)
-from a2a.helpers.proto_helpers import (
-    new_text_message,
-    new_task_from_user_message,
 )
 
 
