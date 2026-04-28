@@ -2,11 +2,11 @@
 # Local equivalent of .github/workflows/install-smoke.yml.
 #
 # For each install profile, builds the wheel and installs it into a
-# clean venv (no dev deps), then runs the import smoke test for that
-# profile. By default runs every known profile; pass a profile name
-# to run just one.
+# clean venv (no dev deps), then runs the smoke test for that profile
+# (imports + any per-profile runtime checks). By default runs every
+# known profile; pass a profile name to run just one.
 #
-# Available profiles (must match those in scripts/test_install_smoke.py):
+# Available profiles (must match those in tests/install_smoke/profiles.py):
 #   base         -- `pip install a2a-sdk`
 #   http-server  -- `pip install a2a-sdk[http-server]`
 #   grpc         -- `pip install a2a-sdk[grpc]`
@@ -87,8 +87,10 @@ for profile in "${PROFILES[@]}"; do
     echo "--- Installed packages ---"
     VIRTUAL_ENV="$venv_dir" uv pip list
 
-    echo "--- Running import smoke test ---"
-    if ! "$venv_dir/bin/python" scripts/test_install_smoke.py "$profile"; then
+    echo "--- Running smoke test (imports + runtime checks) ---"
+    # Invoked as `python -m` from REPO_ROOT so the harness package is
+    # importable from the smoke venv (which has no pytest / dev deps).
+    if ! "$venv_dir/bin/python" -m tests.install_smoke "$profile"; then
         FAILED_PROFILES+=("$profile")
     fi
 done
