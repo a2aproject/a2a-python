@@ -1940,7 +1940,7 @@ async def test_scenario_initial_task_types(
         # Given that we don't use legacy by default anymore, xfail it.
         # Flakiness rate is around 1 failure per 30 runs, so use strict=False
         # to avoid failing on a passing xfail.
-                reason='Flaky test due to race condition in legacy streaming, see https://github.com/a2aproject/a2a-python/issues/869',
+        request.node.add_marker(
             pytest.mark.xfail(
                 reason='https://github.com/a2aproject/a2a-python/issues/869',
                 strict=False,
