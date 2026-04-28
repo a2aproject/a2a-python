@@ -1932,8 +1932,21 @@ async def test_restore_task_input_required_state(
 )
 @pytest.mark.parametrize('initial_task_type', ['new_task', 'status_update'])
 async def test_scenario_initial_task_types(
-    use_legacy, streaming, initial_task_type
+    request, use_legacy, streaming, initial_task_type
 ):
+    if use_legacy and streaming and initial_task_type == 'new_task':
+        # There is a race condition which manifests itself in flaky CI failures.
+        # Given that we don't use legacy by default anymore, xfail it.
+        # Flakiness rate is around 1 failure per 30 runs, so use strict=False
+        # to avoid failing on a passing xfail.
+        request.node.add_marker(
+            pytest.mark.xfail(
+                reason='https://github.com/a2aproject/a2a-python/issues/869',
+                strict=False,
+                raises=ValueError,
+            )
+        )
+
     started_event = asyncio.Event()
     continue_event = asyncio.Event()
 
