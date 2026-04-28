@@ -5,14 +5,6 @@ from __future__ import annotations
 import importlib
 import sys
 
-from typing import TYPE_CHECKING
-
-from tests.install_smoke.runtime import base_send_message
-
-
-if TYPE_CHECKING:
-    from collections.abc import Callable
-
 
 # Modules under each list MUST be importable with only that profile's
 # extras installed -- no leakage from other extras (grpc, http-server,
@@ -84,10 +76,10 @@ PROFILES: dict[str, list[str]] = {
 }
 
 
-RUNTIME_CHECKS: dict[str, list[tuple[str, Callable[[], None]]]] = {
-    'base': [
-        (base_send_message.NAME, base_send_message.check),
-    ],
+# Imported lazily in `main()` so a check that needs one profile's
+# extras can't break the harness when running a different profile.
+RUNTIME_CHECKS: dict[str, list[str]] = {
+    'base': ['tests.install_smoke.runtime.base_send_message'],
 }
 
 
@@ -124,14 +116,17 @@ def main(argv: list[str]) -> int:
 
     print(f'\nRunning {len(runtime_checks)} runtime check(s):')
     runtime_failures: list[str] = []
-    for name, check in runtime_checks:
+    for module_path in runtime_checks:
+        label = module_path
         try:
-            check()
+            module = importlib.import_module(module_path)
+            label = module.NAME
+            module.check()
         except Exception as e:  # noqa: BLE001, PERF203
-            runtime_failures.append(f'{name}: {type(e).__name__}: {e}')
-            print(f'  - FAIL: {name}')
+            runtime_failures.append(f'{label}: {type(e).__name__}: {e}')
+            print(f'  - FAIL: {label}')
         else:
-            print(f'  - OK:   {name}')
+            print(f'  - OK:   {label}')
 
     if runtime_failures:
         print('\nFAILED runtime checks:')

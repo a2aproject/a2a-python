@@ -12,7 +12,9 @@ import asyncio
 
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor
+from a2a.server.agent_execution.context import RequestContext
 from a2a.server.context import ServerCallContext
+from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.tasks import InMemoryTaskStore
 from a2a.server.tasks.task_updater import TaskUpdater
@@ -32,7 +34,9 @@ NAME = 'DefaultRequestHandler.on_message_send roundtrip'
 
 
 class _HelloAgentExecutor(AgentExecutor):
-    async def execute(self, context, event_queue) -> None:  # type: ignore[no-untyped-def]
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
         task = context.current_task
         if not task:
             assert context.message is not None
@@ -48,7 +52,9 @@ class _HelloAgentExecutor(AgentExecutor):
         )
         await updater.complete()
 
-    async def cancel(self, context, event_queue) -> None:  # type: ignore[no-untyped-def]
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
         pass
 
 
