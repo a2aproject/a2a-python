@@ -25,7 +25,7 @@ For a given install profile (`base`, `http-server`, `grpc`,
    actually call into the SDK. These catch regressions where imports
    succeed but a real call fails.
 
-## Adding a new runtime check
+#### Adding a new runtime check
 
 1. Drop a module under `tests/install_smoke/runtime/` exposing two
    names:
