@@ -88,8 +88,6 @@ for profile in "${PROFILES[@]}"; do
     VIRTUAL_ENV="$venv_dir" uv pip list
 
     echo "--- Running smoke test (imports + runtime checks) ---"
-    # Invoked as `python -m` from REPO_ROOT so the harness package is
-    # importable from the smoke venv (which has no pytest / dev deps).
     if ! "$venv_dir/bin/python" -m tests.install_smoke "$profile"; then
         FAILED_PROFILES+=("$profile")
     fi
