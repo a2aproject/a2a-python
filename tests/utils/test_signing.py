@@ -2,9 +2,6 @@ from typing import Any
 
 import pytest
 
-from cryptography.hazmat.primitives.asymmetric import ec
-from jwt.utils import base64url_encode
-
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -13,6 +10,8 @@ from a2a.types.a2a_pb2 import (
     AgentSkill,
 )
 from a2a.utils import signing
+from cryptography.hazmat.primitives.asymmetric import ec
+from jwt.utils import base64url_encode
 
 
 def create_key_provider(verification_key: Any):

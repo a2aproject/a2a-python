@@ -4,19 +4,6 @@ from unittest import mock
 
 import pytest
 
-from starlette.authentication import (
-    AuthCredentials,
-    AuthenticationBackend,
-    BaseUser,
-    SimpleUser,
-)
-from starlette.middleware import Middleware
-from starlette.middleware.authentication import AuthenticationMiddleware
-from starlette.requests import HTTPConnection
-from starlette.responses import JSONResponse
-from starlette.routing import Route
-from starlette.testclient import TestClient
-
 from a2a.server.jsonrpc_models import (
     InternalError,
     InvalidParamsError,
@@ -46,6 +33,18 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import (
     AGENT_CARD_WELL_KNOWN_PATH,
 )
+from starlette.authentication import (
+    AuthCredentials,
+    AuthenticationBackend,
+    BaseUser,
+    SimpleUser,
+)
+from starlette.middleware import Middleware
+from starlette.middleware.authentication import AuthenticationMiddleware
+from starlette.requests import HTTPConnection
+from starlette.responses import JSONResponse
+from starlette.routing import Route
+from starlette.testclient import TestClient
 
 
 # === TEST SETUP ===

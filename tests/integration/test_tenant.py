@@ -3,9 +3,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from httpx import ASGITransport, AsyncClient
-from starlette.applications import Starlette
-
 from a2a.client import ClientConfig, ClientFactory
 from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.server.context import ServerCallContext
@@ -22,6 +19,8 @@ from a2a.types.a2a_pb2 import (
     Task,
 )
 from a2a.utils.constants import TransportProtocol
+from httpx import ASGITransport, AsyncClient
+from starlette.applications import Starlette
 
 
 class TestTenantDecorator:

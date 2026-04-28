@@ -5,13 +5,12 @@ import grpc
 import grpc.aio
 import pytest
 
-from google.rpc import error_details_pb2, status_pb2
-
 from a2a import types
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers import GrpcHandler, RequestHandler
 from a2a.types import a2a_pb2
+from google.rpc import error_details_pb2, status_pb2
 
 
 # --- Fixtures ---

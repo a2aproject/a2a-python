@@ -3,8 +3,6 @@ from typing import NamedTuple
 import httpx
 import pytest
 
-from starlette.applications import Starlette
-
 from a2a.client.client import Client, ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.helpers.proto_helpers import new_task_from_user_message
@@ -28,6 +26,7 @@ from a2a.types import (
     TaskState,
 )
 from a2a.utils import TransportProtocol
+from starlette.applications import Starlette
 
 
 class MockMutatingAgentExecutor(AgentExecutor):

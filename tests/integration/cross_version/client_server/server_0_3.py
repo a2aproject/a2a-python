@@ -5,13 +5,10 @@ import grpc
 import uvicorn
 
 from a2a.grpc import a2a_pb2_grpc
-from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
-from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
-from fastapi import FastAPI
-from server_common import CustomLoggingMiddleware
-
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
+from a2a.server.apps.jsonrpc.fastapi_app import A2AFastAPIApplication
+from a2a.server.apps.rest.fastapi_app import A2ARESTFastAPIApplication
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers.default_request_handler import (
@@ -37,6 +34,8 @@ from a2a.types import (
     TransportProtocol,
 )
 from a2a.utils.task import new_task
+from fastapi import FastAPI
+from server_common import CustomLoggingMiddleware
 
 
 class MockAgentExecutor(AgentExecutor):

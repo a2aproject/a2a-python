@@ -1,9 +1,6 @@
 import httpx
 import pytest
 
-from fastapi import FastAPI
-from starlette.applications import Starlette
-
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -20,6 +17,8 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
 )
 from a2a.utils.constants import VERSION_HEADER, TransportProtocol
+from fastapi import FastAPI
+from starlette.applications import Starlette
 
 
 class DummyAgentExecutor(AgentExecutor):

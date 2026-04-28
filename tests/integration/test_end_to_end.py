@@ -6,8 +6,6 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from starlette.applications import Starlette
-
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientCallContext, ClientConfig
 from a2a.client.client_factory import ClientFactory
@@ -46,6 +44,7 @@ from a2a.types import (
 )
 from a2a.utils import TransportProtocol
 from a2a.utils.errors import InvalidParamsError
+from starlette.applications import Starlette
 
 
 SUPPORTED_EXTENSION_URIS = [

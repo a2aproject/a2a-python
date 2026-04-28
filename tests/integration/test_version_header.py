@@ -1,8 +1,5 @@
 import pytest
 
-from fastapi import FastAPI
-from starlette.testclient import TestClient
-
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
@@ -15,6 +12,8 @@ from a2a.server.tasks.inmemory_push_notification_config_store import (
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types.a2a_pb2 import AgentCapabilities, AgentCard, Task
 from a2a.utils.constants import VERSION_HEADER
+from fastapi import FastAPI
+from starlette.testclient import TestClient
 
 
 class DummyAgentExecutor(AgentExecutor):

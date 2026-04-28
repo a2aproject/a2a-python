@@ -2,11 +2,10 @@ import asyncio
 
 from typing import Annotated, Any
 
+from a2a.types.a2a_pb2 import StreamResponse
 from fastapi import FastAPI, HTTPException, Path, Request
 from google.protobuf.json_format import MessageToDict, ParseDict
 from pydantic import BaseModel
-
-from a2a.types.a2a_pb2 import StreamResponse
 
 
 class Notification(BaseModel):

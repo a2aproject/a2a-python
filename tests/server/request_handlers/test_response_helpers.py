@@ -1,7 +1,5 @@
 import unittest
 
-from google.protobuf.json_format import MessageToDict
-
 from a2a.server.request_handlers.response_helpers import (
     agent_card_to_dict,
     build_error_response,
@@ -19,6 +17,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from google.protobuf.json_format import MessageToDict
 
 
 class TestResponseHelpers(unittest.TestCase):

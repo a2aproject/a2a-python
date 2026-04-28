@@ -6,8 +6,6 @@ import pytest
 
 from a2a.compat.v0_3 import (
     a2a_v0_3_pb2,
-)
-from a2a.compat.v0_3 import (
     grpc_handler as compat_grpc_handler,
 )
 from a2a.server.request_handlers import RequestHandler

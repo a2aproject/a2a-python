@@ -3,9 +3,6 @@ from unittest.mock import AsyncMock, MagicMock
 import grpc
 import pytest
 
-from google.protobuf import any_pb2
-from google.rpc import error_details_pb2, status_pb2
-
 from a2a.client.client import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
@@ -34,6 +31,8 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.errors import A2A_ERROR_REASONS
+from google.protobuf import any_pb2
+from google.rpc import error_details_pb2, status_pb2
 
 
 @pytest.fixture

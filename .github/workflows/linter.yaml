@@ -7,6 +7,7 @@ on:
       - '**.py'
       - '**.pyi'
       - pyproject.toml
+      - tests/pyproject.toml
       - uv.lock
       - .jscpd.json
       # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
@@ -36,10 +37,6 @@ jobs:
         id: ruff-lint
         run: uv run ruff check --output-format=github
         continue-on-error: true
-      - name: Run Ruff Test Hygiene
-        id: ruff-tests
-        run: uv run ruff check tests --config ruff-tests.toml --output-format=github
-        continue-on-error: true
       - name: Run Ruff Formatter
         id: ruff-format
         run: uv run ruff format --check
@@ -62,7 +59,6 @@ jobs:
         if: always()  # This ensures the step runs even if previous steps failed
         env:
           RUFF_LINT: ${{ steps.ruff-lint.outcome }}
-          RUFF_TESTS: ${{ steps.ruff-tests.outcome }}
           RUFF_FORMAT: ${{ steps.ruff-format.outcome }}
           MYPY: ${{ steps.mypy.outcome }}
           PYRIGHT: ${{ steps.pyright.outcome }}
@@ -70,7 +66,6 @@ jobs:
         run: |-
           failed=()
           [[ "$RUFF_LINT"   == "failure" ]] && failed+=("Ruff Linter")
-          [[ "$RUFF_TESTS"  == "failure" ]] && failed+=("Ruff Test Hygiene")
           [[ "$RUFF_FORMAT" == "failure" ]] && failed+=("Ruff Formatter")
           [[ "$MYPY"        == "failure" ]] && failed+=("MyPy")
           [[ "$PYRIGHT"     == "failure" ]] && failed+=("Pyright")

@@ -1,8 +1,5 @@
 import httpx
 
-from starlette.applications import Starlette
-from starlette.requests import Request
-
 from a2a.auth.user import UnauthenticatedUser, User
 from a2a.helpers.proto_helpers import (
     new_task_from_user_message,
@@ -29,6 +26,8 @@ from a2a.types.a2a_pb2 import (
     Message,
     Task,
 )
+from starlette.applications import Starlette
+from starlette.requests import Request
 
 
 _TEST_USER_HEADER = 'x-test-user'

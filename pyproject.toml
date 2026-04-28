@@ -292,7 +292,6 @@ exclude = [
     "src/a2a/compat/v0_3/*_pb2.py",
     "src/a2a/compat/v0_3/*_pb2.pyi",
     "src/a2a/compat/v0_3/*_pb2_grpc.py",
-    "tests/**",
 ]
 
 [tool.ruff.lint.isort]

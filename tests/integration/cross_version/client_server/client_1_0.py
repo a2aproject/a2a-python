@@ -7,8 +7,6 @@ from uuid import uuid4
 import grpc
 import httpx
 
-from google.protobuf.struct_pb2 import Struct, Value
-
 from a2a.client import ClientConfig, create_client
 from a2a.client.errors import A2AClientError
 from a2a.types import (
@@ -27,6 +25,7 @@ from a2a.types import (
     TaskState,
 )
 from a2a.utils import TransportProtocol
+from google.protobuf.struct_pb2 import Struct, Value
 
 
 async def test_send_message_stream(client):

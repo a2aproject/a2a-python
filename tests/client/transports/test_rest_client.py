@@ -4,10 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import httpx
 import pytest
 
-from google.protobuf import json_format
-from google.protobuf.timestamp_pb2 import Timestamp
-from httpx_sse import EventSource, ServerSentEvent
-
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.rest import RestTransport
@@ -31,6 +27,9 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import A2A_REST_ERROR_MAPPING
+from google.protobuf import json_format
+from google.protobuf.timestamp_pb2 import Timestamp
+from httpx_sse import EventSource, ServerSentEvent
 
 
 @pytest.fixture

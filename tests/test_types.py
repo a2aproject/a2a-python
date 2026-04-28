@@ -6,9 +6,6 @@ patterns like ParseDict, proto constructors, and MessageToDict.
 
 from typing import Any
 
-from google.protobuf.json_format import MessageToDict, ParseDict
-from google.protobuf.struct_pb2 import Struct, Value
-
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
     AgentCapabilities,
@@ -30,6 +27,8 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.struct_pb2 import Struct, Value
 
 
 # --- Helper Data ---

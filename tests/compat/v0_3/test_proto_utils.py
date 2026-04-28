@@ -9,8 +9,7 @@ from unittest import mock
 
 import pytest
 
-from a2a.compat.v0_3 import a2a_v0_3_pb2 as a2a_pb2
-from a2a.compat.v0_3 import proto_utils, types
+from a2a.compat.v0_3 import a2a_v0_3_pb2 as a2a_pb2, proto_utils, types
 from a2a.utils.errors import InvalidParamsError
 
 

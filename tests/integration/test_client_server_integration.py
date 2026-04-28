@@ -9,11 +9,6 @@ import httpx
 import pytest
 import pytest_asyncio
 
-from cryptography.hazmat.primitives.asymmetric import ec
-from google.protobuf.json_format import MessageToDict
-from google.protobuf.timestamp_pb2 import Timestamp
-from starlette.applications import Starlette
-
 from a2a.client import Client, ClientConfig
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
@@ -82,6 +77,10 @@ from a2a.utils.signing import (
     create_agent_card_signer,
     create_signature_verifier,
 )
+from cryptography.hazmat.primitives.asymmetric import ec
+from google.protobuf.json_format import MessageToDict
+from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.applications import Starlette
 
 
 # --- Test Constants ---

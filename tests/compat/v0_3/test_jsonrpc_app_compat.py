@@ -4,33 +4,20 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from starlette.applications import Starlette
-from starlette.testclient import TestClient
-
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_jsonrpc_routes
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
-)
-from a2a.types.a2a_pb2 import (
     Message as Message10,
-)
-from a2a.types.a2a_pb2 import (
     Part as Part10,
-)
-from a2a.types.a2a_pb2 import (
     Role as Role10,
-)
-from a2a.types.a2a_pb2 import (
     Task as Task10,
-)
-from a2a.types.a2a_pb2 import (
     TaskState as TaskState10,
-)
-from a2a.types.a2a_pb2 import (
     TaskStatus as TaskStatus10,
 )
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 
 logger = logging.getLogger(__name__)

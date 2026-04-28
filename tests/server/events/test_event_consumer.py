@@ -5,8 +5,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from pydantic import ValidationError
-
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.events.event_queue import (
     EventQueue,
@@ -24,6 +22,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from pydantic import ValidationError
 
 
 def create_sample_message(message_id: str = '111') -> Message:

@@ -4,10 +4,6 @@ import asyncio
 import grpc
 import uvicorn
 
-from fastapi import FastAPI
-from google.protobuf.struct_pb2 import Struct, Value
-from server_common import CustomLoggingMiddleware
-
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
 from a2a.helpers.proto_helpers import new_task_from_user_message
@@ -31,6 +27,9 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils import TransportProtocol
+from fastapi import FastAPI
+from google.protobuf.struct_pb2 import Struct, Value
+from server_common import CustomLoggingMiddleware
 
 
 class MockAgentExecutor(AgentExecutor):

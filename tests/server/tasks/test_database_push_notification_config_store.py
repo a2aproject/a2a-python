@@ -5,11 +5,10 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from sqlalchemy import insert
-
 from a2a.auth.user import User
 from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
+from sqlalchemy import insert
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -22,18 +21,6 @@ pytest.importorskip(
 import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
-
-# Now safe to import SQLAlchemy-dependent modules
-from cryptography.fernet import Fernet
-from google.protobuf.json_format import MessageToJson
-from google.protobuf.timestamp_pb2 import Timestamp
-from sqlalchemy import select
-from sqlalchemy.ext.asyncio import (
-    async_sessionmaker,
-    create_async_engine,
-)
-from sqlalchemy.inspection import inspect
-
 from a2a.compat.v0_3.model_conversions import (
     core_to_compat_push_notification_config_model,
 )
@@ -48,6 +35,17 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+
+# Now safe to import SQLAlchemy-dependent modules
+from cryptography.fernet import Fernet
+from google.protobuf.json_format import MessageToJson
+from google.protobuf.timestamp_pb2 import Timestamp
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import (
+    async_sessionmaker,
+    create_async_engine,
+)
+from sqlalchemy.inspection import inspect
 
 
 # DSNs for different databases

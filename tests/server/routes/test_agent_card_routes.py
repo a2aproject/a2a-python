@@ -2,11 +2,10 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from starlette.applications import Starlette
-from starlette.testclient import TestClient
-
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.types.a2a_pb2 import AgentCard
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 
 @pytest.fixture

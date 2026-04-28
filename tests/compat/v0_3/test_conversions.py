@@ -3,9 +3,6 @@ import json
 
 import pytest
 
-from cryptography.fernet import Fernet
-from google.protobuf.json_format import ParseDict
-
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.conversions import (
     to_compat_agent_capabilities,
@@ -83,6 +80,8 @@ from a2a.compat.v0_3.model_conversions import (
 )
 from a2a.types import a2a_pb2 as pb2_v10
 from a2a.utils.errors import VersionNotSupportedError
+from cryptography.fernet import Fernet
+from google.protobuf.json_format import ParseDict
 
 
 def test_text_part_conversion():

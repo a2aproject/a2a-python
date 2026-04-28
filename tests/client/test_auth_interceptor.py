@@ -9,8 +9,6 @@ import httpx
 import pytest
 import respx
 
-from google.protobuf import json_format
-
 from a2a.client import (
     AuthInterceptor,
     Client,
@@ -39,6 +37,7 @@ from a2a.types.a2a_pb2 import (
     StringList,
 )
 from a2a.utils.constants import TransportProtocol
+from google.protobuf import json_format
 
 
 def build_success_response(request: httpx.Request) -> httpx.Response:

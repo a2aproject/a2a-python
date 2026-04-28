@@ -5,9 +5,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from starlette.requests import Request
-from starlette.responses import JSONResponse
-
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import rest_dispatcher
@@ -26,6 +23,8 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     UnsupportedOperationError,
 )
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 
 @pytest.fixture
