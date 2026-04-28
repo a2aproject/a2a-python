@@ -1,13 +1,13 @@
 from unittest.mock import AsyncMock
 
 import pytest
-from starlette.applications import Starlette
-from starlette.testclient import TestClient
-from starlette.routing import BaseRoute, Route
 
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.types.a2a_pb2 import AgentCard, Task, ListTasksResponse
+from a2a.types.a2a_pb2 import AgentCard, ListTasksResponse, Task
+from starlette.applications import Starlette
+from starlette.routing import BaseRoute
+from starlette.testclient import TestClient
 
 
 @pytest.fixture

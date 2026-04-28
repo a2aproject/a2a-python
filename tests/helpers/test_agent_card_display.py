@@ -2,6 +2,7 @@
 
 import pytest
 
+from a2a.helpers.agent_card import display_agent_card
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -9,7 +10,6 @@ from a2a.types.a2a_pb2 import (
     AgentProvider,
     AgentSkill,
 )
-from a2a.helpers.agent_card import display_agent_card
 
 
 @pytest.fixture

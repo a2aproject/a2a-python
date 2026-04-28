@@ -6,11 +6,6 @@ This module tests the proto utilities including to_stream_response and dictionar
 import httpx
 import pytest
 
-from google.protobuf.json_format import MessageToDict, Parse
-from google.protobuf.message import Message as ProtobufMessage
-from google.protobuf.timestamp_pb2 import Timestamp
-from starlette.datastructures import QueryParams
-
 from a2a.types.a2a_pb2 import (
     AgentSkill,
     ListTasksRequest,
@@ -26,6 +21,10 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import InvalidParamsError
+from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.message import Message as ProtobufMessage
+from google.protobuf.timestamp_pb2 import Timestamp
+from starlette.datastructures import QueryParams
 
 
 class TestToStreamResponse:

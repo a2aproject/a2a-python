@@ -1,12 +1,11 @@
+from unittest.mock import AsyncMock
+
 import pytest
-from unittest.mock import AsyncMock, MagicMock
 
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.tenant_decorator import TenantTransportDecorator
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     CancelTaskRequest,
-    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetExtendedAgentCardRequest,
     GetTaskPushNotificationConfigRequest,
@@ -18,6 +17,7 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
     StreamResponse,
     SubscribeToTaskRequest,
+    TaskPushNotificationConfig,
 )
 
 

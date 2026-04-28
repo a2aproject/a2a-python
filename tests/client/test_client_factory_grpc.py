@@ -1,10 +1,11 @@
 """Tests for GRPC transport selection in ClientFactory."""
 
 from unittest.mock import MagicMock, patch
+
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
-from a2a.types.a2a_pb2 import AgentCard, AgentInterface, AgentCapabilities
+from a2a.types.a2a_pb2 import AgentCapabilities, AgentCard, AgentInterface
 from a2a.utils.constants import TransportProtocol
 
 

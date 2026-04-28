@@ -1,26 +1,23 @@
 import unittest
-import uuid
-
-from unittest.mock import patch
 
 import pytest
 
+from a2a.helpers.proto_helpers import new_task
 from a2a.types.a2a_pb2 import (
     Artifact,
+    GetTaskRequest,
     Message,
     Part,
     Role,
-    TaskState,
-    GetTaskRequest,
     SendMessageConfiguration,
+    TaskState,
 )
-from a2a.helpers.proto_helpers import new_task
+from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import (
     apply_history_length,
     decode_page_token,
     encode_page_token,
 )
-from a2a.utils.errors import InvalidParamsError
 
 
 class TestTask(unittest.TestCase):

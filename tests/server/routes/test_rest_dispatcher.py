@@ -1,11 +1,9 @@
 import json
+
 from collections.abc import AsyncIterator
-from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
-from starlette.requests import Request
-from starlette.responses import JSONResponse
 
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
@@ -16,18 +14,17 @@ from a2a.server.routes.rest_dispatcher import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    ListTaskPushNotificationConfigsResponse,
+    ListTasksResponse,
     Message,
-    SendMessageResponse,
     Task,
     TaskPushNotificationConfig,
-    ListTasksResponse,
-    ListTaskPushNotificationConfigsResponse,
 )
 from a2a.utils.errors import (
-    ExtendedAgentCardNotConfiguredError,
-    TaskNotFoundError,
     UnsupportedOperationError,
 )
+from starlette.requests import Request
+from starlette.responses import JSONResponse
 
 
 @pytest.fixture
@@ -282,8 +279,6 @@ class TestRestDispatcherStreaming:
         assert 'chunk2' in chunks[1].data
 
     async def test_on_message_send_stream_handler_error(self, mock_handler):
-        from a2a.utils.errors import UnsupportedOperationError
-
         mock_handler.on_message_send_stream.side_effect = (
             UnsupportedOperationError('Mocked error')
         )

@@ -3,12 +3,14 @@ import logging
 import os
 import sqlite3
 import tempfile
+
 from typing import Generator
 from unittest.mock import patch
 
 import pytest
 
 from a2a.a2a_db_cli import run_migrations
+
 
 # Explicitly import the migration module to ensure it is tracked by the coverage tool
 # when Alembic loads it dynamically.
