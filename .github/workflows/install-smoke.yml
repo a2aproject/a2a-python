@@ -8,7 +8,7 @@ on:
       - 'src/**'
       - 'pyproject.toml'
       - 'uv.lock'
-      - 'scripts/test_install_smoke.py'
+      - 'tests/install_smoke/**'
       - 'scripts/test_install_smoke.sh'
       # Self-callout: re-run when this workflow changes so YAML edits are validated in PRs.
       - '.github/workflows/install-smoke.yml'
@@ -58,5 +58,5 @@ jobs:
       - name: List installed packages
         run: VIRTUAL_ENV=.venv-smoke uv pip list
 
-      - name: Run import smoke test
-        run: .venv-smoke/bin/python scripts/test_install_smoke.py ${{ matrix.profile.name }}
+      - name: Run smoke test (imports + runtime checks)
+        run: .venv-smoke/bin/python -m tests.install_smoke ${{ matrix.profile.name }}
