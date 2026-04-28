@@ -2,13 +2,12 @@ import uuid
 
 import pytest
 
-from pydantic import ValidationError
-
 from a2a.server.id_generator import (
     IDGenerator,
     IDGeneratorContext,
     UUIDGenerator,
 )
+from pydantic import ValidationError
 
 
 class TestIDGeneratorContext:

@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict
-
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.base_push_notification_sender import (
@@ -21,6 +19,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from google.protobuf.json_format import MessageToDict
 
 
 # Suppress logging for cleaner test output, can be enabled for debugging

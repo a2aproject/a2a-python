@@ -1,15 +1,12 @@
-import pytest
-
 from a2a.extensions.common import (
-    HTTP_EXTENSION_HEADER,
     find_extension_by_uri,
     get_requested_extensions,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
-    AgentInterface,
     AgentCard,
     AgentExtension,
+    AgentInterface,
 )
 
 

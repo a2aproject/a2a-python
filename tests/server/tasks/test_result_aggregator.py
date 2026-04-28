@@ -4,8 +4,6 @@ import unittest
 from collections.abc import AsyncIterator
 from unittest.mock import ANY, AsyncMock, MagicMock, patch
 
-from typing_extensions import override
-
 from a2a.server.events.event_consumer import EventConsumer
 from a2a.server.tasks.result_aggregator import ResultAggregator
 from a2a.server.tasks.task_manager import TaskManager
@@ -18,6 +16,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from typing_extensions import override
 
 
 # Helper to create a simple message

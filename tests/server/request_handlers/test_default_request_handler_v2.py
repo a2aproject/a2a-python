@@ -3,20 +3,24 @@ import logging
 import time
 import uuid
 
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
+from a2a.helpers.proto_helpers import (
+    new_task_from_user_message,
+    new_text_message,
+)
 from a2a.server.agent_execution import (
-    RequestContextBuilder,
     AgentExecutor,
     RequestContext,
+    RequestContextBuilder,
     SimpleRequestContextBuilder,
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue, InMemoryQueueManager, QueueManager
+from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
@@ -30,8 +34,8 @@ from a2a.types import (
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
-    TaskNotFoundError,
     PushNotificationNotSupportedError,
+    TaskNotFoundError,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -55,10 +59,6 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
-)
-from a2a.helpers.proto_helpers import (
-    new_text_message,
-    new_task_from_user_message,
 )
 
 
