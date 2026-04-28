@@ -1,6 +1,9 @@
 """Drive DefaultRequestHandler.on_message_send end-to-end with no transport.
 
-Uses only base dependencies (no http-server / gRPC transport).
+Exercises the request-validation path that regressed in
+https://github.com/a2aproject/a2a-python/pull/1019: a real proto
+instance flows through `validate_proto_required_fields`, which broke
+on protobuf 7. Pure imports cannot catch this class of regression.
 """
 
 from __future__ import annotations
@@ -84,5 +87,4 @@ async def _run() -> None:
 
 
 def check() -> None:
-    """Run the roundtrip; raises on failure."""
     asyncio.run(_run())

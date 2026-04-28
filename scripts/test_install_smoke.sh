@@ -6,7 +6,7 @@
 # (imports + any per-profile runtime checks). By default runs every
 # known profile; pass a profile name to run just one.
 #
-# Available profiles (must match those in tests/install_smoke/profiles.py):
+# Available profiles (must match those in tests/install_smoke/__main__.py):
 #   base         -- `pip install a2a-sdk`
 #   http-server  -- `pip install a2a-sdk[http-server]`
 #   grpc         -- `pip install a2a-sdk[grpc]`

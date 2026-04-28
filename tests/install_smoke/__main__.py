@@ -1,11 +1,4 @@
-"""Entry point: ``python -m tests.install_smoke <profile>``.
-
-Exit codes:
-    0 - All imports and runtime checks for the profile succeeded.
-    1 - One or more imports or runtime checks failed.
-
-See README.md for design notes and how to add new runtime checks.
-"""
+"""Entry point for the install-smoke harness. See README.md."""
 
 from __future__ import annotations
 
@@ -21,14 +14,10 @@ if TYPE_CHECKING:
     from collections.abc import Callable
 
 
-# Core modules that MUST be importable with only base dependencies.
-# These are the public API surface that every user gets with
-# `pip install a2a-sdk` (no extras).
-#
-# Do NOT add modules here that require optional extras (grpc,
-# http-server, sql, signing, telemetry, vertex, etc.). Those modules
-# are expected to fail without their extras installed and should use
-# try/except ImportError guards internally.
+# Modules under each list MUST be importable with only that profile's
+# extras installed -- no leakage from other extras (grpc, http-server,
+# sql, signing, telemetry, vertex, etc.). Modules that require
+# optional extras must use try/except ImportError guards internally.
 CORE_MODULES = [
     'a2a',
     'a2a.client',
@@ -58,8 +47,6 @@ CORE_MODULES = [
     'a2a.helpers.proto_helpers',
 ]
 
-# Modules that MUST be importable with only the base + `http-server`
-# extras installed (no `grpc`, `sql`, `signing`, `telemetry`, etc.).
 HTTP_SERVER_MODULES = [
     'a2a.server.routes',
     'a2a.server.routes.agent_card_routes',
@@ -70,8 +57,6 @@ HTTP_SERVER_MODULES = [
     'a2a.server.routes.rest_routes',
 ]
 
-# Modules that MUST be importable with only the base + `grpc` extras
-# installed (no `http-server`, `sql`, `signing`, `telemetry`, etc.).
 GRPC_MODULES = [
     'a2a.server.request_handlers.grpc_handler',
     'a2a.client.transports.grpc',
@@ -79,14 +64,10 @@ GRPC_MODULES = [
     'a2a.compat.v0_3.grpc_transport',
 ]
 
-# Modules that MUST be importable with only the base + `telemetry`
-# extras installed.
 TELEMETRY_MODULES = [
     'a2a.utils.telemetry',
 ]
 
-# Modules that MUST be importable with only the base + `sql` extras
-# installed (covers postgresql/mysql/sqlite drivers via SQLAlchemy).
 SQL_MODULES = [
     'a2a.server.models',
     'a2a.server.tasks.database_task_store',
@@ -103,14 +84,6 @@ PROFILES: dict[str, list[str]] = {
 }
 
 
-# Per-profile runtime exercises. Each callable raises on failure and
-# returns None on success. These run after the import smoke succeeds
-# and are meant to invoke real public-API code paths against the
-# dependency versions resolved at install time.
-#
-# To add a new check: drop a module under `tests.install_smoke.runtime`
-# exposing `NAME` and `check()`, then add a tuple here for the
-# profile(s) whose extras it needs. See README.md.
 RUNTIME_CHECKS: dict[str, list[tuple[str, Callable[[], None]]]] = {
     'base': [
         (base_send_message.NAME, base_send_message.check),
