@@ -18,10 +18,10 @@ profile under test.
 For a given install profile (`base`, `http-server`, `grpc`,
 `telemetry`, `sql`) it runs two phases:
 
-1. **Imports** — every module listed for the profile in `__main__.py`
+1. **Imports**: every module listed for the profile in `__main__.py`
    must import cleanly. Catches missing deps and accidental top-level
    imports of optional extras.
-2. **Runtime checks** (`runtime/`) — small public-API exercises that
+2. **Runtime checks**: small public-API exercises that
    actually call into the SDK. These catch regressions where imports
    succeed but a real call fails.
 
