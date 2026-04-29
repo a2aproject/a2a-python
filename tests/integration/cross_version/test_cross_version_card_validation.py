@@ -1,6 +1,7 @@
 import json
 import subprocess
 
+from a2a.client.card_resolver import parse_agent_card
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import (
     APIKeySecurityScheme,
@@ -18,7 +19,6 @@ from a2a.types.a2a_pb2 import (
     SecurityScheme,
     StringList,
 )
-from a2a.client.card_resolver import parse_agent_card
 from google.protobuf.json_format import MessageToDict, ParseDict
 
 

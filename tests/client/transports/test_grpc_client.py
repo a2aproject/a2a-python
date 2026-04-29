@@ -3,14 +3,10 @@ from unittest.mock import AsyncMock, MagicMock
 import grpc
 import pytest
 
-from google.protobuf import any_pb2
-from google.rpc import error_details_pb2, status_pb2
-
 from a2a.client.client import ClientCallContext
 from a2a.client.transports.grpc import GrpcTransport
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
-from a2a.utils.constants import VERSION_HEADER, PROTOCOL_VERSION_CURRENT
-from a2a.utils.errors import A2A_ERROR_REASONS
+from a2a.helpers.proto_helpers import get_text_parts
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -18,14 +14,12 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     Artifact,
     AuthenticationInfo,
-    TaskPushNotificationConfig,
     DeleteTaskPushNotificationConfigRequest,
     GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
     ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
-    TaskPushNotificationConfig,
     Role,
     SendMessageRequest,
     Task,
@@ -35,7 +29,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.helpers.proto_helpers import get_text_parts
+from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
+from a2a.utils.errors import A2A_ERROR_REASONS
+from google.protobuf import any_pb2
+from google.rpc import error_details_pb2, status_pb2
 
 
 @pytest.fixture

@@ -1,7 +1,6 @@
 """Tests for version validation decorators."""
 
 import pytest
-from unittest.mock import MagicMock
 
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants

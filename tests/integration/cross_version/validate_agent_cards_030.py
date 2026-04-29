@@ -7,19 +7,20 @@ Steps:
 3. Print re-serialized AgentCards to stdout.
 """
 
-import sys
 import json
+import sys
+
 from a2a.types import (
-    AgentCard,
+    APIKeySecurityScheme,
     AgentCapabilities,
+    AgentCard,
     AgentInterface,
     AgentSkill,
-    APIKeySecurityScheme,
+    AuthorizationCodeOAuthFlow,
     HTTPAuthSecurityScheme,
     MutualTLSSecurityScheme,
     OAuth2SecurityScheme,
     OAuthFlows,
-    AuthorizationCodeOAuthFlow,
     OpenIdConnectSecurityScheme,
 )
 

@@ -1,0 +1,13 @@
+[tool.ruff]
+extend = "../pyproject.toml"
+exclude = []
+
+[tool.ruff.lint]
+exclude = []
+select = ["F401", "F811", "I001"]
+
+[tool.ruff.lint.isort]
+case-sensitive = true
+combine-as-imports = true
+lines-after-imports = 2
+lines-between-types = 1

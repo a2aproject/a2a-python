@@ -1,27 +1,23 @@
 import logging
 
-from typing import Any
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock
 
 import pytest
-from starlette.testclient import TestClient
 
-from starlette.applications import Starlette
-from a2a.server.routes import create_jsonrpc_routes
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.routes import create_jsonrpc_routes
 from a2a.types.a2a_pb2 import (
-    AgentCard,
     AgentCapabilities,
-    AgentInterface,
+    AgentCard,
     Message as Message10,
     Part as Part10,
     Role as Role10,
     Task as Task10,
-    TaskStatus as TaskStatus10,
     TaskState as TaskState10,
+    TaskStatus as TaskStatus10,
 )
-
-from a2a.compat.v0_3 import a2a_v0_3_pb2
+from starlette.applications import Starlette
+from starlette.testclient import TestClient
 
 
 logger = logging.getLogger(__name__)

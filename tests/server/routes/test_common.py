@@ -1,7 +1,9 @@
 from unittest.mock import MagicMock
 
 import pytest
+
 from starlette.datastructures import Headers
+
 
 try:
     from starlette.authentication import BaseUser as StarletteBaseUser
@@ -12,8 +14,8 @@ from a2a.auth.user import UnauthenticatedUser
 from a2a.extensions.common import HTTP_EXTENSION_HEADER
 from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import (
-    StarletteUser,
     DefaultServerCallContextBuilder,
+    StarletteUser,
 )
 
 

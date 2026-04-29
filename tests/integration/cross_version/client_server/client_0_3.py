@@ -1,30 +1,28 @@
 import argparse
 import asyncio
-import grpc
-import httpx
-import json
+import sys
+import traceback
+
 from uuid import uuid4
 
-from a2a.client import ClientFactory, ClientConfig
+import grpc
+import httpx
+
+from a2a.client import ClientConfig, ClientFactory
 from a2a.types import (
+    DataPart,
+    FilePart,
+    FileWithBytes,
+    FileWithUri,
     Message,
     Part,
     Role,
+    TaskIdParams,
+    TaskQueryParams,
+    TaskState,
     TextPart,
     TransportProtocol,
-    TaskQueryParams,
-    TaskIdParams,
-    TaskState,
-    TaskPushNotificationConfig,
-    PushNotificationConfig,
-    FilePart,
-    FileWithUri,
-    FileWithBytes,
-    DataPart,
 )
-from a2a.client.errors import A2AClientJSONRPCError, A2AClientHTTPError
-import sys
-import traceback
 
 
 async def test_send_message_stream(client):

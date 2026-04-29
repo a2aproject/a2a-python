@@ -1,28 +1,30 @@
 import argparse
 import asyncio
-import grpc
-import httpx
 import sys
+
 from uuid import uuid4
 
+import grpc
+import httpx
+
 from a2a.client import ClientConfig, create_client
-from a2a.utils import TransportProtocol
+from a2a.client.errors import A2AClientError
 from a2a.types import (
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
+    GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
     Message,
     Part,
     Role,
-    GetTaskRequest,
-    CancelTaskRequest,
-    SubscribeToTaskRequest,
-    GetExtendedAgentCardRequest,
     SendMessageRequest,
+    SubscribeToTaskRequest,
     TaskPushNotificationConfig,
-    GetTaskPushNotificationConfigRequest,
-    ListTaskPushNotificationConfigsRequest,
-    DeleteTaskPushNotificationConfigRequest,
     TaskState,
 )
-from a2a.client.errors import A2AClientError
+from a2a.utils import TransportProtocol
 from google.protobuf.struct_pb2 import Struct, Value
 
 
@@ -181,7 +183,6 @@ async def test_subscribe(client, task_id):
 
 async def test_list_tasks(client, server_name):
     from a2a.types import ListTasksRequest
-    from a2a.client.errors import A2AClientError
 
     print('Testing list_tasks...')
     try:

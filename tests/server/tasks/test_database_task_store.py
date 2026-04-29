@@ -1,15 +1,15 @@
 import os
-from datetime import datetime, timezone
-from unittest.mock import MagicMock
 
 from collections.abc import AsyncGenerator
+from datetime import datetime, timezone
+from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
 
 from _pytest.mark.structures import ParameterSet
-from a2a.types.a2a_pb2 import ListTasksRequest
 from a2a.compat.v0_3 import types as types_v03
+from a2a.types.a2a_pb2 import ListTasksRequest
 from sqlalchemy import insert
 
 
@@ -17,17 +17,13 @@ from sqlalchemy import insert
 pytest.importorskip('sqlalchemy', reason='Database tests require SQLAlchemy')
 
 # Now safe to import SQLAlchemy-dependent modules
-from sqlalchemy.ext.asyncio import create_async_engine
-from sqlalchemy.inspection import inspect
-
-from google.protobuf.json_format import MessageToDict
-
+from a2a.auth.user import User
+from a2a.compat.v0_3.model_conversions import core_to_compat_task_model
+from a2a.server.context import ServerCallContext
 from a2a.server.models import Base, TaskModel  # Important: To get Base.metadata
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
-from a2a.compat.v0_3.model_conversions import core_to_compat_task_model
 from a2a.types.a2a_pb2 import (
     Artifact,
-    ListTasksRequest,
     Message,
     Part,
     Role,
@@ -35,10 +31,11 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
-from a2a.auth.user import User
-from a2a.server.context import ServerCallContext
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
+from google.protobuf.json_format import MessageToDict
+from sqlalchemy.ext.asyncio import create_async_engine
+from sqlalchemy.inspection import inspect
 
 
 class SampleUser(User):

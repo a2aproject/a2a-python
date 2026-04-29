@@ -4,8 +4,6 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict
-
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
@@ -18,6 +16,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from google.protobuf.json_format import MessageToDict
 
 
 def _create_sample_task(
