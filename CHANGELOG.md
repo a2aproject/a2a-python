@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.0.3](https://github.com/a2aproject/a2a-python/compare/v1.0.2...v1.0.3) (2026-04-29)
+
+
+### Features
+
+* **helpers:** add non-text Part extractors and artifact update events ([745d998](https://github.com/a2aproject/a2a-python/commit/745d9988beca9b708e24349ec9dfa4138f12d472))
+
+
+### Bug Fixes
+
+* **deps:** cap protobuf below 7 ([#1019](https://github.com/a2aproject/a2a-python/issues/1019)) ([7af6050](https://github.com/a2aproject/a2a-python/commit/7af60502532a44f440885157aaae36c024416b85))
+
 ## [1.0.2](https://github.com/a2aproject/a2a-python/compare/v1.0.1...v1.0.2) (2026-04-24)
 
 
