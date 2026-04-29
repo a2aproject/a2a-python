@@ -5,6 +5,7 @@ from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
 )
+from a2a.server.routes.helpers import add_a2a_routes_to_fastapi
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.routes.rest_routes import create_rest_routes
 
@@ -12,6 +13,7 @@ from a2a.server.routes.rest_routes import create_rest_routes
 __all__ = [
     'DefaultServerCallContextBuilder',
     'ServerCallContextBuilder',
+    'add_a2a_routes_to_fastapi',
     'create_agent_card_routes',
     'create_jsonrpc_routes',
     'create_rest_routes',

@@ -41,6 +41,7 @@ def create_agent_card_routes(
         )
 
     async def _get_agent_card(request: Request) -> Response:
+        """Returns the public AgentCard describing this agent's capabilities, supported transports, and skills."""
         card_to_serve = agent_card
         if card_modifier:
             card_to_serve = await card_modifier(card_to_serve)
