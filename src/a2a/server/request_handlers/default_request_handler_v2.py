@@ -71,9 +71,6 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 
-# TODO: cleanup context_id management
-
-
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandlerV2(RequestHandler):
     """Default request handler for all incoming requests."""
