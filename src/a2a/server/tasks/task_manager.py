@@ -74,12 +74,14 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             dict(new_artifact_data.metadata.items())
         )
     else:
-        # We received a chunk to append, but we don't have an existing artifact.
-        # we will ignore this chunk
-        logger.warning(
-            'Received append=True for nonexistent artifact index %s in task %s. Ignoring chunk.',
-            artifact_id,
-            task.id,
+        # We received a chunk to append, but there is no existing artifact
+        # with this id.  Silently dropping the chunk would hide a real bug
+        # in the caller (e.g. generating a fresh artifact_id on every
+        # add_artifact call instead of pinning one), so we raise.
+        raise ValueError(
+            f'append=True but no artifact with id {artifact_id!r} exists on '
+            f'task {task.id!r}. Create the artifact first (append=False) '
+            f'before appending to it.'
         )
 
 
