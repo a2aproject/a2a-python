@@ -1,7 +1,8 @@
+from unittest.mock import ANY, AsyncMock, MagicMock
+
 import grpc
 import grpc.aio
 import pytest
-from unittest.mock import AsyncMock, MagicMock, ANY
 
 from a2a.compat.v0_3 import (
     a2a_v0_3_pb2,
@@ -9,7 +10,7 @@ from a2a.compat.v0_3 import (
 )
 from a2a.server.request_handlers import RequestHandler
 from a2a.types import a2a_pb2
-from a2a.utils.errors import TaskNotFoundError, InvalidParamsError
+from a2a.utils.errors import InvalidParamsError
 
 
 @pytest.fixture

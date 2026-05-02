@@ -1,16 +1,16 @@
-import httpx
-import pytest
 from typing import NamedTuple
 
-from starlette.applications import Starlette
+import httpx
+import pytest
 
 from a2a.client.client import Client, ClientConfig
 from a2a.client.client_factory import ClientFactory
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
-from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.events import EventQueue
 from a2a.server.events.in_memory_queue_manager import InMemoryQueueManager
 from a2a.server.request_handlers import DefaultRequestHandler
+from a2a.server.routes import create_agent_card_routes, create_jsonrpc_routes
 from a2a.server.tasks import TaskUpdater
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import (
@@ -25,8 +25,8 @@ from a2a.types import (
     SendMessageRequest,
     TaskState,
 )
-from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.utils import TransportProtocol
+from starlette.applications import Starlette
 
 
 class MockMutatingAgentExecutor(AgentExecutor):

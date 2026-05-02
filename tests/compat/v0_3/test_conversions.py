@@ -1,9 +1,7 @@
 import base64
+import json
 
 import pytest
-
-from google.protobuf.json_format import ParseDict
-import json
 
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.conversions import (
@@ -75,15 +73,15 @@ from a2a.compat.v0_3.conversions import (
     to_core_task_status_update_event,
 )
 from a2a.compat.v0_3.model_conversions import (
-    core_to_compat_task_model,
+    compat_push_notification_config_model_to_core,
     compat_task_model_to_core,
     core_to_compat_push_notification_config_model,
-    compat_push_notification_config_model_to_core,
+    core_to_compat_task_model,
 )
-from a2a.server.models import PushNotificationConfigModel, TaskModel
-from cryptography.fernet import Fernet
 from a2a.types import a2a_pb2 as pb2_v10
 from a2a.utils.errors import VersionNotSupportedError
+from cryptography.fernet import Fernet
+from google.protobuf.json_format import ParseDict
 
 
 def test_text_part_conversion():

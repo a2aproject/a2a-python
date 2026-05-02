@@ -2,8 +2,6 @@ from unittest.mock import AsyncMock, MagicMock
 
 import grpc
 
-from starlette.datastructures import Headers
-
 from a2a.compat.v0_3.context_builders import (
     V03GrpcServerCallContextBuilder,
     V03ServerCallContextBuilder,
@@ -15,6 +13,7 @@ from a2a.server.request_handlers.grpc_handler import (
     DefaultGrpcServerCallContextBuilder,
 )
 from a2a.server.routes.common import DefaultServerCallContextBuilder
+from starlette.datastructures import Headers
 
 
 def _make_mock_request(headers=None):

@@ -1,12 +1,11 @@
 import os
 import shutil
+import signal
 import socket
 import subprocess
 import time
 
 import pytest
-import select
-import signal
 
 
 def get_free_port():

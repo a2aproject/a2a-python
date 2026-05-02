@@ -1,5 +1,7 @@
 import collections.abc
+
 from typing import AsyncGenerator
+
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 

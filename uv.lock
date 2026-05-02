@@ -122,7 +122,7 @@ requires-dist = [
     { name = "opentelemetry-sdk", marker = "extra == 'all'", specifier = ">=1.33.0" },
     { name = "opentelemetry-sdk", marker = "extra == 'telemetry'", specifier = ">=1.33.0" },
     { name = "packaging", specifier = ">=24.0" },
-    { name = "protobuf", specifier = ">=5.29.5" },
+    { name = "protobuf", specifier = ">=5.29.5,<7" },
     { name = "pydantic", specifier = ">=2.11.3" },
     { name = "pyjwt", marker = "extra == 'all'", specifier = ">=2.0.0" },
     { name = "pyjwt", marker = "extra == 'signing'", specifier = ">=2.0.0" },

@@ -1,7 +1,5 @@
 import unittest
 
-from google.protobuf.json_format import MessageToDict
-
 from a2a.server.request_handlers.response_helpers import (
     agent_card_to_dict,
     build_error_response,
@@ -19,6 +17,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
 )
+from google.protobuf.json_format import MessageToDict
 
 
 class TestResponseHelpers(unittest.TestCase):
@@ -60,7 +59,6 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertEqual(result['name'], 'Test Agent')
 
     def test_agent_card_to_dict_all_transports_all_versions(self) -> None:
-
         card = AgentCard(
             name='Complex Agent',
             description='Agent with many interfaces',

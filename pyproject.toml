@@ -11,7 +11,7 @@ dependencies = [
   "httpx>=0.28.1",
   "httpx-sse>=0.4.0",
   "pydantic>=2.11.3",
-  "protobuf>=5.29.5",
+  "protobuf>=5.29.5,<7",
   "google-api-core>=1.26.0",
   "json-rpc>=1.15.0",
   "googleapis-common-protos>=1.70.0",
@@ -292,7 +292,6 @@ exclude = [
     "src/a2a/compat/v0_3/*_pb2.py",
     "src/a2a/compat/v0_3/*_pb2.pyi",
     "src/a2a/compat/v0_3/*_pb2_grpc.py",
-    "tests/**",
 ]
 
 [tool.ruff.lint.isort]

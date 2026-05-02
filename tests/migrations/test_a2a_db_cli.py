@@ -1,7 +1,9 @@
 import os
-import argparse
-from unittest.mock import MagicMock, patch
+
+from unittest.mock import patch
+
 import pytest
+
 from a2a.a2a_db_cli import run_migrations
 
 

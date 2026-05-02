@@ -8,9 +8,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from google.protobuf import json_format
-from httpx_sse import EventSource, SSEError
-
 from a2a.client.errors import A2AClientError
 from a2a.client.transports.jsonrpc import JsonRpcTransport
 from a2a.types.a2a_pb2 import (
@@ -33,6 +30,8 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from google.protobuf import json_format
+from httpx_sse import EventSource, SSEError
 
 
 @pytest.fixture

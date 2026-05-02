@@ -1,27 +1,26 @@
 import logging
 
-from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
 
-from fastapi import FastAPI
-from google.protobuf import json_format
-from httpx import ASGITransport, AsyncClient
-from starlette.applications import Starlette
-from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.server.routes import create_agent_card_routes
+from a2a.compat.v0_3 import a2a_v0_3_pb2
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.routes import create_agent_card_routes
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.types.a2a_pb2 import (
     AgentCard,
     Message as Message10,
     Part as Part10,
     Role as Role10,
     Task as Task10,
-    TaskStatus as TaskStatus10,
     TaskState as TaskState10,
+    TaskStatus as TaskStatus10,
 )
-from a2a.compat.v0_3 import a2a_v0_3_pb2
+from fastapi import FastAPI
+from google.protobuf import json_format
+from httpx import ASGITransport, AsyncClient
+from starlette.applications import Starlette
 
 
 logger = logging.getLogger(__name__)

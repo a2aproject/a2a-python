@@ -14,8 +14,6 @@ from uuid import uuid4
 import httpx
 import pytest
 
-from starlette.applications import Starlette
-
 from a2a.client.base_client import BaseClient
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
@@ -35,6 +33,7 @@ from a2a.types import (
     SendMessageRequest,
 )
 from a2a.utils import TransportProtocol
+from starlette.applications import Starlette
 
 
 class _MessageExecutor(AgentExecutor):
