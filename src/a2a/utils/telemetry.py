@@ -204,7 +204,7 @@ def trace_function(  # noqa: PLR0915
             attribute_extractor=attribute_extractor,
         )
 
-    actual_span_name = span_name or f'{func.__module__}.{func.__name__}'
+    actual_span_name = span_name or f'{func.__module__}.{func.__name__}'  # ty:ignore[unresolved-attribute]
 
     is_async_func = inspect.iscoroutinefunction(func)
 

@@ -597,7 +597,7 @@ class JsonRpcDispatcher:
                         'data': json.dumps(error_response),
                     }
 
-            return EventSourceResponse(event_generator(handler_result))
+            return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]
 
         # handler_result is a dict (JSON-RPC response)
         return JSONResponse(handler_result)

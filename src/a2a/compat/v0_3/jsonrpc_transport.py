@@ -408,7 +408,7 @@ class CompatJsonRpcTransport(ClientTransport):
         if isinstance(code, int):
             error_class = _JSON_RPC_ERROR_CODE_TO_A2A_ERROR.get(code)
             if error_class:
-                return error_class(message)  # type: ignore[return-value]
+                return error_class(message)  # ty:ignore[invalid-return-type]
 
         return A2AClientError(message)
 

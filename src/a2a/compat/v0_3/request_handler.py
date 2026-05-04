@@ -151,7 +151,7 @@ class RequestHandler03:
             return typing.cast(
                 'list[types_v03.TaskPushNotificationConfig]',
                 v03_resp.root.result,
-            )
+            )  # ty:ignore[redundant-cast]
         return []
 
     async def on_delete_task_push_notification_config(

@@ -106,7 +106,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         self, error: A2AError, context: grpc.aio.ServicerContext
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
-        code = _ERROR_CODE_MAP.get(type(error))
+        code = _ERROR_CODE_MAP.get(type(error))  # ty:ignore[invalid-argument-type]
         if code:
             await context.abort(
                 code,

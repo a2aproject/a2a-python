@@ -296,7 +296,7 @@ class GrpcTransport(ClientTransport):
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
-        await self.channel.close()
+        await self.channel.close()  # ty:ignore[unresolved-attribute]
 
     def _get_grpc_metadata(
         self, context: ClientCallContext | None
@@ -304,8 +304,8 @@ class GrpcTransport(ClientTransport):
         metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)]
         if context and context.service_parameters:
             for key, value in context.service_parameters.items():
-                metadata.append((key.lower(), value))
-        return metadata
+                metadata.append((key.lower(), value))  # ty:ignore[invalid-argument-type]
+        return metadata  # ty:ignore[invalid-return-type]
 
     def _get_grpc_timeout(
         self, context: ClientCallContext | None

@@ -368,7 +368,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self, error: A2AError, context: grpc.aio.ServicerContext
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
-        code = _ERROR_CODE_MAP.get(type(error))
+        code = _ERROR_CODE_MAP.get(type(error))  # ty:ignore[invalid-argument-type]
 
         if code:
             reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
