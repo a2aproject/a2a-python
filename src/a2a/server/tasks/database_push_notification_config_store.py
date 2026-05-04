@@ -380,10 +380,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             result = await session.execute(stmt)
 
-            if result.rowcount > 0:  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]
+            if result.rowcount > 0:  # ty:ignore[unresolved-attribute]
                 logger.info(
                     'Deleted %s push notification config(s) for task %s, owner %s.',
-                    result.rowcount,  # type: ignore[attr-defined]  # ty:ignore[unresolved-attribute]
+                    result.rowcount,  # ty:ignore[unresolved-attribute]
                     task_id,
                     owner,
                 )
