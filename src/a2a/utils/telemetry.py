@@ -140,7 +140,7 @@ if not otel_installed or not otel_enabled:
     _SpanKind = _NoOp()  # type: ignore
     StatusCode = _NoOp()  # type: ignore
 
-SpanKind = _SpanKind  # type: ignore
+SpanKind = _SpanKind
 __all__ = ['SpanKind']
 
 

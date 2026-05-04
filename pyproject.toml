@@ -153,9 +153,6 @@ exclude = [
   "src/a2a/compat/v0_3/proto_utils.py",
 ]
 
-[tool.ty.rules]
-unused-type-ignore-comment = "ignore"
-
 [tool.coverage.run]
 branch = true
 omit = [
