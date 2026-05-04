@@ -106,7 +106,6 @@ style = "pep440"
 [dependency-groups]
 dev = [
   "fastapi>=0.115.2",
-  "mypy>=1.15.0",
   "PyJWT>=2.0.0",
   "pytest>=8.3.5",
   "pytest-asyncio>=0.26.0",
@@ -122,8 +121,8 @@ dev = [
   "trio",
   "uvicorn>=0.35.0",
   "pytest-timeout>=2.4.0",
-  "pyright",
   "a2a-sdk[all]",
+  "ty>=0.0.34",
 ]
 
 [[tool.uv.index]]
@@ -135,20 +134,12 @@ explicit = true
 [tool.uv.sources]
 a2a-sdk = { workspace = true }
 
-[tool.mypy]
-plugins = ["pydantic.mypy"]
-exclude = ["src/a2a/types/a2a_pb2\\.py", "src/a2a/types/a2a_pb2_grpc\\.py"]
-disable_error_code = [
-  "import-not-found",
-  "annotation-unchecked",
-  "import-untyped",
-]
+[tool.ty]
 
-[[tool.mypy.overrides]]
-module = "examples.*"
-follow_imports = "skip"
+[tool.ty.environment]
+python-version = "3.10"
 
-[tool.pyright]
+[tool.ty.src]
 include = ["src"]
 exclude = [
   "**/__pycache__",
@@ -161,8 +152,9 @@ exclude = [
   "src/a2a/compat/v0_3/*_pb2*.py",
   "src/a2a/compat/v0_3/proto_utils.py",
 ]
-venvPath = "."
-venv = ".venv"
+
+[tool.ty.rules]
+unused-type-ignore-comment = "ignore"
 
 [tool.coverage.run]
 branch = true
