@@ -18,6 +18,7 @@ This module provides helper functions for common proto type operations.
 """
 
 import logging
+
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
@@ -29,17 +30,21 @@ from google.rpc import error_details_pb2
 
 from a2a.utils.errors import InvalidParamsError
 
+
 logger = logging.getLogger(__name__)
 
 # FieldDescriptor.is_repeated was introduced in protobuf 4.0; field.label was
 # removed in protobuf 7.0.  Check once at import time so _is_field_repeated()
 # avoids a per-call hasattr probe on a hot path.
+
 _PROTOBUF_HAS_IS_REPEATED: bool = hasattr(FieldDescriptor, 'is_repeated')
 
 logger.debug(
     'Protobuf %s: using %s API',
     protobuf_version,
-    'field.is_repeated' if _PROTOBUF_HAS_IS_REPEATED else 'deprecated field.label',
+    'field.is_repeated'
+    if _PROTOBUF_HAS_IS_REPEATED
+    else 'deprecated field.label',
 )
 
 
@@ -47,7 +52,7 @@ def _is_field_repeated(field: FieldDescriptor) -> bool:
     """Return True if *field* is a repeated field.
 
     Uses ``field.is_repeated`` (protobuf ≥ 4.0) when available, and falls back
-    to ``field.label == LABEL_REPEATED`` for older versions.
+    to ``field.label == FieldDescriptor.LABEL_REPEATED`` for older versions.
     See https://github.com/a2aproject/a2a-python/issues/1011.
     """
     if _PROTOBUF_HAS_IS_REPEATED:
@@ -63,7 +68,7 @@ else:
     except ImportError:
         QueryParams = Any
 
-from a2a.types.a2a_pb2 import (
+from a2a.types.a2a_pb2 import (  # noqa: E402
     Message,
     StreamResponse,
     Task,
