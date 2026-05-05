@@ -353,18 +353,20 @@ class CompatGrpcTransport(ClientTransport):
 
     async def close(self) -> None:
         """Closes the gRPC channel."""
-        await self.channel.close()  # ty:ignore[unresolved-attribute]
+        await self.channel.close()
 
     def _get_grpc_metadata(
         self, context: ClientCallContext | None = None
     ) -> list[tuple[str, str]]:
         """Creates gRPC metadata for extensions."""
-        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)]
+        metadata: list[tuple[str, str]] = [
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)
+        ]
 
         if context and context.service_parameters:
             params = dict(context.service_parameters)
             add_legacy_extension_header(params)
             for key, value in params.items():
-                metadata.append((key.lower(), value))  # ty:ignore[invalid-argument-type]
+                metadata.append((key.lower(), value))
 
-        return metadata  # ty:ignore[invalid-return-type]
+        return metadata

@@ -82,7 +82,7 @@ def _get_metadata_value(
     ]
 
 
-_ERROR_CODE_MAP = {
+_ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
     types.MethodNotFoundError: grpc.StatusCode.NOT_FOUND,
     types.InvalidParamsError: grpc.StatusCode.INVALID_ARGUMENT,
@@ -368,7 +368,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         self, error: A2AError, context: grpc.aio.ServicerContext
     ) -> None:
         """Sets the grpc errors appropriately in the context."""
-        code = _ERROR_CODE_MAP.get(type(error))  # ty:ignore[invalid-argument-type]
+        code = _ERROR_CODE_MAP.get(type(error))
 
         if code:
             reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')

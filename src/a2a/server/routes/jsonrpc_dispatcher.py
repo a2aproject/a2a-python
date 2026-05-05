@@ -22,9 +22,7 @@ from a2a.server.jsonrpc_models import (
     MethodNotFoundError,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.server.request_handlers.response_helpers import (
-    build_error_response,
-)
+from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
@@ -67,8 +65,8 @@ if TYPE_CHECKING:
         # Starlette v0.48.0
         from starlette.status import HTTP_413_CONTENT_TOO_LARGE
     except ImportError:
-        from starlette.status import (  # type: ignore[no-redef]
-            HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,
+        from starlette.status import (
+            HTTP_413_REQUEST_ENTITY_TOO_LARGE as HTTP_413_CONTENT_TOO_LARGE,  # type: ignore[no-redef]
         )
 
     _package_starlette_installed = True
