@@ -461,6 +461,15 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
         (task,) = (await client.list_tasks(ListTasksRequest())).tasks
         assert task.status.state == TaskState.TASK_STATE_FAILED
 
+        if streaming:
+            with pytest.raises(
+                InvalidParamsError,
+                match='Task .* is already completed',
+            ):
+                await client.subscribe(
+                    SubscribeToTaskRequest(id=task.id)
+                ).__anext__()
+
 
 # Scenario 12/13: Exception after initial event
 @pytest.mark.timeout(2.0)
