@@ -398,9 +398,7 @@ class CompatJsonRpcTransport(ClientTransport):
         """Closes the httpx client."""
         await self.httpx_client.aclose()
 
-    def _create_jsonrpc_error(
-        self, error_dict: dict[str, Any]
-    ) -> A2AClientError:
+    def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Raises a specific error based on jsonrpc error code."""
         code = error_dict.get('code')
         message = error_dict.get('message', 'Unknown Error')
@@ -408,7 +406,7 @@ class CompatJsonRpcTransport(ClientTransport):
         if isinstance(code, int):
             error_class = _JSON_RPC_ERROR_CODE_TO_A2A_ERROR.get(code)
             if error_class:
-                return error_class(message)  # type: ignore[return-value]
+                return error_class(message)
 
         return A2AClientError(message)
 

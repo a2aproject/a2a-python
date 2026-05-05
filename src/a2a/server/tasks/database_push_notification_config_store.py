@@ -114,7 +114,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         self.create_table = create_table
         self._initialized = False
         self.owner_resolver = owner_resolver
-        self.config_model = (
+        self.config_model = (  # ty:ignore[invalid-assignment]
             PushNotificationConfigModel
             if table_name == 'push_notification_configs'
             else create_push_notification_config_model(table_name)
@@ -380,10 +380,10 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
 
             result = await session.execute(stmt)
 
-            if result.rowcount > 0:  # type: ignore[attr-defined]
+            if result.rowcount > 0:  # ty:ignore[unresolved-attribute]
                 logger.info(
                     'Deleted %s push notification config(s) for task %s, owner %s.',
-                    result.rowcount,  # type: ignore[attr-defined]
+                    result.rowcount,  # ty:ignore[unresolved-attribute]
                     task_id,
                     owner,
                 )

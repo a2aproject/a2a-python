@@ -82,7 +82,7 @@ def _get_metadata_value(
     ]
 
 
-_ERROR_CODE_MAP = {
+_ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
     types.MethodNotFoundError: grpc.StatusCode.NOT_FOUND,
     types.InvalidParamsError: grpc.StatusCode.INVALID_ARGUMENT,

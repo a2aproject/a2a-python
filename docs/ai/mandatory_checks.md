@@ -10,8 +10,7 @@ Exact shell commands required to test the project and fix formatting issues.
 
 2. **Type Checking**:
    ```bash
-   uv run mypy src
-   uv run pyright src
+   uv run ty check
    ```
 
 3. **Testing**:
