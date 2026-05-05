@@ -17,15 +17,42 @@
 This module provides helper functions for common proto type operations.
 """
 
+import logging
 from typing import TYPE_CHECKING, Any, TypedDict
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
+from google.protobuf import __version__ as protobuf_version
 from google.protobuf.descriptor import FieldDescriptor
 from google.protobuf.json_format import ParseDict
 from google.protobuf.message import Message as ProtobufMessage
 from google.rpc import error_details_pb2
 
 from a2a.utils.errors import InvalidParamsError
+
+logger = logging.getLogger(__name__)
+
+# FieldDescriptor.is_repeated was introduced in protobuf 4.0; field.label was
+# removed in protobuf 7.0.  Check once at import time so _is_field_repeated()
+# avoids a per-call hasattr probe on a hot path.
+_PROTOBUF_HAS_IS_REPEATED: bool = hasattr(FieldDescriptor, 'is_repeated')
+
+logger.debug(
+    'Protobuf %s: using %s API',
+    protobuf_version,
+    'field.is_repeated' if _PROTOBUF_HAS_IS_REPEATED else 'deprecated field.label',
+)
+
+
+def _is_field_repeated(field: FieldDescriptor) -> bool:
+    """Return True if *field* is a repeated field.
+
+    Uses ``field.is_repeated`` (protobuf ≥ 4.0) when available, and falls back
+    to ``field.label == LABEL_REPEATED`` for older versions.
+    See https://github.com/a2aproject/a2a-python/issues/1011.
+    """
+    if _PROTOBUF_HAS_IS_REPEATED:
+        return field.is_repeated  # type: ignore[attr-defined]
+    return field.label == FieldDescriptor.LABEL_REPEATED  # type: ignore[attr-defined]
 
 
 if TYPE_CHECKING:
@@ -174,10 +201,7 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         field = fields[k]
         v_list = params.getlist(k)
 
-        # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-        # deprecated `field.label` with `field.is_repeated` once the minimum
-        # protobuf version requirement is bumped.
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if _is_field_repeated(field):
             accumulated: list[Any] = []
             for v in v_list:
                 if not v:
@@ -211,10 +235,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label == FieldDescriptor.LABEL_REPEATED:
+    if _is_field_repeated(field):
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -255,10 +276,7 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label != FieldDescriptor.LABEL_REPEATED:
+    if not _is_field_repeated(field):
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
