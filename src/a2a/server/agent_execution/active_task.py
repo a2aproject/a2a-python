@@ -104,36 +104,60 @@ class EventConsumer:
             )
         except Exception as e:
             logger.exception('Consumer[%s]: Failed', self.active_task._task_id)
-            async with self.active_task._lock:
-                await self.active_task._mark_task_as_failed(e)
+
+            updated_task = None
+            task = await self.active_task._task_manager.get_task()
+            if task:
+                handled_event = TaskStatusUpdateEvent(
+                    task_id=task.id,
+                    context_id=task.context_id,
+                    status=TaskStatus(
+                        state=TaskState.TASK_STATE_FAILED,
+                    ),
+                )
+                updated_task = await self._handle_task_event(handled_event)
+
+            await self._enqueue_to_subscribers(cast('Event', e), updated_task)
 
     async def _process_event(self, event: Event) -> None:
         updated_task = None
+        handled_event: (
+            Task
+            | TaskStatusUpdateEvent
+            | TaskArtifactUpdateEvent
+            | PushNotificationEvent
+            | None
+        ) = None
 
-        try:
-            if isinstance(event, _RequestCompleted):
-                logger.debug(
-                    'Consumer[%s]: Request completed', self.active_task._task_id
-                )
-                self.active_task._request_lock.release()
-            elif isinstance(event, _RequestStarted):
-                logger.debug(
-                    'Consumer[%s]: Request started', self.active_task._task_id
-                )
-                self.message_to_save = event.request_context.message
-            elif isinstance(event, Message):
-                self._handle_message_event(event)
-            else:
-                updated_task = await self._handle_task_event(event)
-                if isinstance(event, Task):
-                    event = updated_task
+        if isinstance(event, _RequestCompleted):
+            logger.debug(
+                'Consumer[%s]: Request completed', self.active_task._task_id
+            )
+            self.active_task._request_lock.release()
+        elif isinstance(event, _RequestStarted):
+            logger.debug(
+                'Consumer[%s]: Request started', self.active_task._task_id
+            )
+            self.message_to_save = event.request_context.message
+        elif isinstance(event, BaseException):
+            raise event
+        elif isinstance(event, Message):
+            self._handle_message_event(event)
+        elif isinstance(
+            event,
+            TaskStatusUpdateEvent
+            | TaskArtifactUpdateEvent
+            | PushNotificationEvent
+            | Task,
+        ):
+            updated_task = await self._handle_task_event(event)
+            handled_event = updated_task if isinstance(event, Task) else event
 
-                if updated_task is not None:
-                    await self._update_task_state(updated_task, event)
-                    self.active_task._task_created.set()
+        if updated_task is not None and handled_event is not None:
+            await self._update_task_state(updated_task, handled_event)
+            self.active_task._task_created.set()
 
-        finally:
-            await self._enqueue_to_subscribers(event, updated_task)
+        await self._enqueue_to_subscribers(event, updated_task)
 
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
@@ -286,9 +310,6 @@ class ActiveTask:
     - `self._lock` (asyncio.Lock) ensures mutually exclusive access for critical
       lifecycle state changes, such as starting the task, subscribing, and
       determining if cleanup is safe to trigger.
-
-      mutation to the observable result state (like `_exception`,
-      or `_is_finished`) notifies waiting coroutines (like `wait()`).
     - `self._is_finished` (asyncio.Event) provides a thread-safe, non-blocking way
       for external observers and internal loops to check if the ActiveTask has
       permanently ceased execution and closed its queues.
@@ -348,10 +369,6 @@ class ActiveTask:
         # Tracks how many active SSE/gRPC streams are currently tailing this task.
         # Protected by `_lock`.
         self._reference_count = 0
-
-        # Holds any fatal exception that crashed the producer or consumer.
-        # TODO: Synchronize exception handling (ideally mix it in the queue).
-        self._exception: Exception | None = None
 
         # Queue for incoming requests
         self._request_queue: AsyncQueue[tuple[RequestContext, uuid.UUID]] = (
@@ -481,7 +498,6 @@ class ActiveTask:
                             _RequestStarted(request_id, request_context),
                         )
                     )
-
                     await self._agent_executor.execute(
                         request_context, self._event_queue_agent
                     )
@@ -489,14 +505,10 @@ class ActiveTask:
                         'Producer[%s]: Execution finished successfully',
                         self._task_id,
                     )
-                finally:
-                    logger.debug(
-                        'Producer[%s]: Enqueuing request completed event',
-                        self._task_id,
-                    )
                     await self._event_queue_agent.enqueue_event(
                         cast('Event', _RequestCompleted(request_id))
                     )
+                finally:
                     self._request_queue.task_done()
         except asyncio.CancelledError:
             logger.debug('Producer[%s]: Cancelled', self._task_id)
@@ -516,8 +528,7 @@ class ActiveTask:
                     request_context.context_id or '',
                 )
                 self._task_created.set()
-            async with self._lock:
-                await self._mark_task_as_failed(e)
+            await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
             self._request_queue.shutdown(immediate=True)
@@ -537,7 +548,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(  # noqa: PLR0912, PLR0915
+    async def subscribe(
         self,
         *,
         request: RequestContext | None = None,
@@ -554,12 +565,6 @@ class ActiveTask:
         logger.debug('Subscribe[%s]: New subscriber', self._task_id)
 
         async with self._lock:
-            if self._exception:
-                logger.debug(
-                    'Subscribe[%s]: Failed, exception already set',
-                    self._task_id,
-                )
-                raise self._exception
             if self._is_finished.is_set():
                 raise InvalidParamsError(
                     f'Task {self._task_id} is already completed.'
@@ -585,17 +590,23 @@ class ActiveTask:
 
             while True:
                 try:
-                    if self._exception:
-                        raise self._exception
-
                     dequeued = await tapped_queue.dequeue_event()
                     event, updated_task = cast('Any', dequeued)
                     logger.debug(
-                        'Subscriber[%s]\nDequeued event %s\nUpdated task %s\n',
+                        'Subscriber[%s] Dequeued event [%s]:\n %s\nUpdated task:\n%s\n',
                         self._task_id,
+                        type(event).__name__,
                         event,
                         updated_task,
                     )
+                    if isinstance(event, BaseException):
+                        logger.debug(
+                            'Subscriber[%s]: Raising exception: %s',
+                            self._task_id,
+                            event,
+                        )
+                        raise event
+
                     if replace_status_update_with_task and isinstance(
                         event, TaskStatusUpdateEvent
                     ):
@@ -605,8 +616,6 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
-                    if self._exception:
-                        raise self._exception from None
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None
@@ -629,8 +638,6 @@ class ActiveTask:
                     finally:
                         tapped_queue.task_done()
                 except (QueueShutDown, asyncio.CancelledError):
-                    if self._exception:
-                        raise self._exception from None
                     break
         finally:
             logger.debug('Subscribe[%s]: Unsubscribing', self._task_id)
@@ -714,9 +721,9 @@ class ActiveTask:
                 logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
                 self._on_cleanup(self)
 
-    async def _mark_task_as_failed(self, exception: Exception) -> None:
-        if self._exception is None:
-            self._exception = exception
+    async def _mark_task_as_failed(self, exception: Exception) -> Task | None:
+        logger.debug('Marking task %s as failed: %s', self._task_id, exception)
+        task = None
         if self._task_created.is_set():
             try:
                 task = await self._task_manager.get_task()
@@ -732,10 +739,10 @@ class ActiveTask:
                     )
             except QueueShutDown:
                 pass
+        return task
 
     async def get_task(self) -> Task:
         """Get task from db."""
-        # TODO: THERE IS ZERO CONCURRENCY SAFETY HERE (Except inital task creation).
         await self._task_created.wait()
         task = await self._task_manager.get_task()
         if not task:
