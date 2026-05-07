@@ -19,10 +19,13 @@ else:
 from google.protobuf.json_format import ParseError
 
 from a2a.utils.errors import (
+    A2A_DOMAIN,
     A2A_REST_ERROR_MAPPING,
+    ERROR_INFO_TYPE,
     A2AError,
     InternalError,
     RestErrorMap,
+    build_error_details,
 )
 
 
@@ -33,8 +36,7 @@ def _build_error_payload(
     code: int,
     status: str,
     message: str,
-    reason: str | None = None,
-    metadata: dict[str, Any] | None = None,
+    details: list[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """Helper function to build the JSON error payload."""
     payload: dict[str, Any] = {
@@ -42,15 +44,8 @@ def _build_error_payload(
         'status': status,
         'message': message,
     }
-    if reason:
-        payload['details'] = [
-            {
-                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
-                'reason': reason,
-                'domain': 'a2a-protocol.org',
-                'metadata': metadata if metadata is not None else {},
-            }
-        ]
+    if details:
+        payload['details'] = details
     return {'error': payload}
 
 
@@ -64,22 +59,28 @@ def build_rest_error_payload(error: Exception) -> dict[str, Any]:
         mapping = A2A_REST_ERROR_MAPPING.get(
             type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
         )
-        # SECURITY WARNING: Data attached to A2AError.data is serialized unaltered and exposed publicly to the client in the REST API response.
-        metadata = getattr(error, 'data', None) or {}
+        # SECURITY WARNING: Data attached to A2AError.data is serialized
+        # unaltered and exposed publicly to the client in the REST API
+        # response (as ErrorInfo.metadata).
         return _build_error_payload(
             code=mapping.http_code,
             status=mapping.grpc_status,
             message=getattr(error, 'message', str(error)),
-            reason=mapping.reason,
-            metadata=metadata,
+            details=build_error_details(error),
         )
     if isinstance(error, ParseError):
         return _build_error_payload(
             code=400,
             status='INVALID_ARGUMENT',
             message=str(error),
-            reason='INVALID_REQUEST',
-            metadata={},
+            details=[
+                {
+                    '@type': ERROR_INFO_TYPE,
+                    'reason': 'INVALID_REQUEST',
+                    'domain': A2A_DOMAIN,
+                    'metadata': {},
+                }
+            ],
         )
     return _build_error_payload(
         code=500,

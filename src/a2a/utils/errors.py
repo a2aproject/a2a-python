@@ -4,7 +4,13 @@ This module contains A2A-specific error codes,
 as well as server exception classes.
 """
 
-from typing import NamedTuple
+from typing import Any, NamedTuple
+
+from google.protobuf.json_format import MessageToDict
+
+from a2a.utils.proto_utils import (
+    validation_errors_to_bad_request,
+)
 
 
 class RestErrorMap(NamedTuple):
@@ -94,6 +100,12 @@ class MethodNotFoundError(A2AError):
     message = 'Method not found'
 
 
+class JSONParseError(A2AError):
+    """Exception raised when invalid JSON was received by the server."""
+
+    message = 'Invalid JSON payload'
+
+
 class ExtensionSupportRequiredError(A2AError):
     """Exception raised when extension support is required but not present."""
 
@@ -119,6 +131,7 @@ __all__ = [
     'InvalidAgentResponseError',
     'InvalidParamsError',
     'InvalidRequestError',
+    'JSONParseError',
     'MethodNotFoundError',
     'PushNotificationNotSupportedError',
     'RestErrorMap',
@@ -143,6 +156,7 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
     InternalError: -32603,
+    JSONParseError: -32700,
 }
 
 
@@ -196,3 +210,47 @@ A2A_ERROR_REASONS = {
 A2A_REASON_TO_ERROR = {
     mapping.reason: cls for cls, mapping in A2A_REST_ERROR_MAPPING.items()
 }
+
+
+ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
+BAD_REQUEST_TYPE = 'type.googleapis.com/google.rpc.BadRequest'
+A2A_DOMAIN = 'a2a-protocol.org'
+
+
+def build_error_details(error: A2AError) -> list[dict[str, Any]]:
+    """Build the typed-details array for an A2AError.
+
+    Always emits a leading google.rpc.ErrorInfo carrying the canonical
+    A2A reason and error.data as metadata. For InvalidParamsError whose
+    data contains an errors list of validation details, also appends a
+    google.rpc.BadRequest so all transports surface field-level violations
+    identically.
+    """
+    reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
+    metadata = error.data if isinstance(error.data, dict) else {}
+    details: list[dict[str, Any]] = [
+        {
+            '@type': ERROR_INFO_TYPE,
+            'reason': reason,
+            'domain': A2A_DOMAIN,
+            'metadata': metadata,
+        }
+    ]
+
+    if (
+        isinstance(error, InvalidParamsError)
+        and isinstance(error.data, dict)
+        and error.data.get('errors')
+    ):
+        bad_request_dict = MessageToDict(
+            validation_errors_to_bad_request(error.data['errors']),
+            preserving_proto_field_name=False,
+        )
+        details.append(
+            {
+                '@type': BAD_REQUEST_TYPE,
+                'fieldViolations': bad_request_dict.get('fieldViolations', []),
+            }
+        )
+
+    return details

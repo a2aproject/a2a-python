@@ -42,6 +42,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
     VersionNotSupportedError,
+    build_error_details,
 )
 
 
@@ -135,7 +136,7 @@ def build_error_response(
         jsonrpc_error = model_class(
             code=code,
             message=str(error),
-            data=error.data,
+            data=build_error_details(error),
         )
     else:
         jsonrpc_error = JSONRPCInternalError(message=str(error))

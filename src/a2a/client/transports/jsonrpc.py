@@ -35,7 +35,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import ERROR_INFO_TYPE, JSON_RPC_ERROR_CODE_MAP
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -318,10 +318,19 @@ class JsonRpcTransport(ClientTransport):
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
         code = error_dict.get('code')
         message = error_dict.get('message', str(error_dict))
-        data = error_dict.get('data')
+        raw_data = error_dict.get('data')
+
+        a2a_data: dict[str, Any] | None = None
+        if isinstance(raw_data, list):
+            for d in raw_data:
+                if isinstance(d, dict) and d.get('@type') == ERROR_INFO_TYPE:
+                    a2a_data = d.get('metadata') or None
+                    break
 
         if isinstance(code, int) and code in _JSON_RPC_ERROR_CODE_TO_A2A_ERROR:
-            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](message, data=data)
+            return _JSON_RPC_ERROR_CODE_TO_A2A_ERROR[code](
+                message, data=a2a_data
+            )
 
         # Fallback to general A2AClientError
         return A2AClientError(f'JSON-RPC Error {code}: {message}')
