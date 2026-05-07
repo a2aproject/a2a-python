@@ -15,7 +15,7 @@ echo -e "${BLUE}${BOLD}=== A2A Python Fixed-and-Lint Suite ===${NC}"
 echo -e "Fixing formatting and linting issues, then verifying types...\n"
 
 # 1. Ruff Linter (with fix)
-echo -e "${YELLOW}${BOLD}--- [1/4] Running Ruff Linter (fix) ---${NC}"
+echo -e "${YELLOW}${BOLD}--- [1/3] Running Ruff Linter (fix) ---${NC}"
 if uv run ruff check --fix; then
     echo -e "${GREEN}✓ Ruff Linter passed (and fixed what it could)${NC}"
 else
@@ -24,7 +24,7 @@ else
 fi
 
 # 2. Ruff Formatter
-echo -e "\n${YELLOW}${BOLD}--- [2/4] Running Ruff Formatter (apply) ---${NC}"
+echo -e "\n${YELLOW}${BOLD}--- [2/3] Running Ruff Formatter (apply) ---${NC}"
 if uv run ruff format; then
     echo -e "${GREEN}✓ Ruff Formatter applied${NC}"
 else
@@ -32,21 +32,12 @@ else
     FAILED=1
 fi
 
-# 3. MyPy Type Checker
-echo -e "\n${YELLOW}${BOLD}--- [3/4] Running MyPy Type Checker ---${NC}"
-if uv run mypy src; then
-    echo -e "${GREEN}✓ MyPy passed${NC}"
+# 3. ty Type Checker
+echo -e "\n${YELLOW}${BOLD}--- [3/3] Running ty Type Checker ---${NC}"
+if uv run ty check; then
+    echo -e "${GREEN}✓ ty passed${NC}"
 else
-    echo -e "${RED}✗ MyPy failed${NC}"
-    FAILED=1
-fi
-
-# 4. Pyright Type Checker
-echo -e "\n${YELLOW}${BOLD}--- [4/4] Running Pyright ---${NC}"
-if uv run pyright; then
-    echo -e "${GREEN}✓ Pyright passed${NC}"
-else
-    echo -e "${RED}✗ Pyright failed${NC}"
+    echo -e "${RED}✗ ty failed${NC}"
     FAILED=1
 fi
 

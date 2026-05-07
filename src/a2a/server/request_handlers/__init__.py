@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 try:
     from a2a.server.request_handlers.grpc_handler import (
         DefaultGrpcServerCallContextBuilder,
-        GrpcHandler,  # type: ignore
+        GrpcHandler,
         GrpcServerCallContextBuilder,
     )
 except ImportError as e:
@@ -33,7 +33,7 @@ except ImportError as e:
         _original_error,
     )
 
-    class GrpcHandler:  # type: ignore
+    class GrpcHandler:
         """Placeholder for GrpcHandler when dependencies are not installed."""
 
         def __init__(self, *args, **kwargs):
