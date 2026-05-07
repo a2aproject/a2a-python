@@ -19,12 +19,12 @@ else:
 from google.protobuf.json_format import MessageToDict, ParseError
 
 from a2a.utils.errors import (
+    A2A_ERROR_MAPPING,
     A2A_ERROR_REASONS,
-    A2A_REST_ERROR_MAPPING,
     A2AError,
+    ErrorMapping,
     InternalError,
     InvalidParamsError,
-    RestErrorMap,
 )
 from a2a.utils.proto_utils import validation_errors_to_bad_request
 
@@ -105,8 +105,8 @@ def build_rest_error_payload(error: Exception) -> dict[str, Any]:
         A dict with the error payload in the standard REST error format.
     """
     if isinstance(error, A2AError):
-        mapping = A2A_REST_ERROR_MAPPING.get(
-            type(error), RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR')
+        mapping = A2A_ERROR_MAPPING.get(
+            type(error), ErrorMapping(500, 'INTERNAL', 'INTERNAL_ERROR')
         )
         # SECURITY WARNING: Data attached to A2AError.data is serialized
         # unaltered and exposed publicly to the client in the REST API
