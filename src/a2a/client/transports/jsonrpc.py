@@ -35,7 +35,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import ERROR_INFO_TYPE, JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -44,6 +44,7 @@ logger = logging.getLogger(__name__)
 _JSON_RPC_ERROR_CODE_TO_A2A_ERROR = {
     code: error_type for error_type, code in JSON_RPC_ERROR_CODE_MAP.items()
 }
+_ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -323,7 +324,7 @@ class JsonRpcTransport(ClientTransport):
         a2a_data: dict[str, Any] | None = None
         if isinstance(raw_data, list):
             for d in raw_data:
-                if isinstance(d, dict) and d.get('@type') == ERROR_INFO_TYPE:
+                if isinstance(d, dict) and d.get('@type') == _ERROR_INFO_TYPE:
                     a2a_data = d.get('metadata') or None
                     break
 

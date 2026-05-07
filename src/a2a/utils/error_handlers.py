@@ -16,20 +16,74 @@ else:
         Response = Any
 
 
-from google.protobuf.json_format import ParseError
+from google.protobuf.json_format import MessageToDict, ParseError
 
 from a2a.utils.errors import (
-    A2A_DOMAIN,
+    A2A_ERROR_REASONS,
     A2A_REST_ERROR_MAPPING,
-    ERROR_INFO_TYPE,
     A2AError,
     InternalError,
+    InvalidParamsError,
     RestErrorMap,
-    build_error_details,
 )
+from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 
 logger = logging.getLogger(__name__)
+
+
+ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
+BAD_REQUEST_TYPE = 'type.googleapis.com/google.rpc.BadRequest'
+A2A_DOMAIN = 'a2a-protocol.org'
+
+
+def _error_info(
+    reason: str, metadata: dict[str, Any] | None = None
+) -> dict[str, Any]:
+    """Build a single ``google.rpc.ErrorInfo`` typed-detail object."""
+    return {
+        '@type': ERROR_INFO_TYPE,
+        'reason': reason,
+        'domain': A2A_DOMAIN,
+        'metadata': metadata if metadata is not None else {},
+    }
+
+
+def build_error_details(error: A2AError) -> list[dict[str, Any]]:
+    """Build the typed-details array for an :class:`A2AError`.
+
+    Always emits a leading ``google.rpc.ErrorInfo`` carrying the canonical
+    A2A reason and ``error.data`` as ``metadata``. For
+    :class:`InvalidParamsError` whose ``data`` contains an ``errors`` list of
+    validation details, also appends a ``google.rpc.BadRequest`` so all
+    transports surface field-level violations identically.
+
+    Note:
+        ``error.data`` is serialized verbatim into the ``ErrorInfo.metadata``
+        field and exposed publicly to the client. Callers must not attach
+        sensitive information to ``A2AError.data``.
+    """
+    reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
+    metadata = error.data if isinstance(error.data, dict) else {}
+    details: list[dict[str, Any]] = [_error_info(reason, metadata)]
+
+    if (
+        isinstance(error, InvalidParamsError)
+        and isinstance(error.data, dict)
+        and error.data.get('errors')
+    ):
+        bad_request_dict = MessageToDict(
+            validation_errors_to_bad_request(error.data['errors']),
+            preserving_proto_field_name=False,
+        )
+        details.append(
+            {
+                '@type': BAD_REQUEST_TYPE,
+                'fieldViolations': bad_request_dict.get('fieldViolations', []),
+            }
+        )
+
+    return details
 
 
 def _build_error_payload(
@@ -73,14 +127,7 @@ def build_rest_error_payload(error: Exception) -> dict[str, Any]:
             code=400,
             status='INVALID_ARGUMENT',
             message=str(error),
-            details=[
-                {
-                    '@type': ERROR_INFO_TYPE,
-                    'reason': 'INVALID_REQUEST',
-                    'domain': A2A_DOMAIN,
-                    'metadata': {},
-                }
-            ],
+            details=[_error_info('INVALID_REQUEST')],
         )
     return _build_error_payload(
         code=500,

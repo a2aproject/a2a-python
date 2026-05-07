@@ -26,6 +26,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.types.a2a_pb2 import (
     SendMessageResponse as SendMessageResponseProto,
 )
+from a2a.utils.error_handlers import build_error_details
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
@@ -42,7 +43,6 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
     VersionNotSupportedError,
-    build_error_details,
 )
 
 
