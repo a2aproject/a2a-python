@@ -52,16 +52,11 @@ def _error_info(
 def build_error_details(error: A2AError) -> list[dict[str, Any]]:
     """Build the typed-details array for an :class:`A2AError`.
 
-    Always emits a leading ``google.rpc.ErrorInfo`` carrying the canonical
-    A2A reason and ``error.data`` as ``metadata``. For
-    :class:`InvalidParamsError` whose ``data`` contains an ``errors`` list of
-    validation details, also appends a ``google.rpc.BadRequest`` so all
-    transports surface field-level violations identically.
-
-    Note:
-        ``error.data`` is serialized verbatim into the ``ErrorInfo.metadata``
-        field and exposed publicly to the client. Callers must not attach
-        sensitive information to ``A2AError.data``.
+    Always emits a leading ``google.rpc.ErrorInfo`` carrying the A2A reason
+    and ``error.data`` as ``metadata``. For `InvalidParamsError` whose ``data``
+    contains an ``errors`` list of validation details, also appends
+    a ``google.rpc.BadRequest`` so all transports surface field-level
+    violations identically.
     """
     reason = A2A_ERROR_REASONS.get(type(error), 'UNKNOWN_ERROR')
     metadata = error.data if isinstance(error.data, dict) else {}
