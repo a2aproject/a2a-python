@@ -1,7 +1,7 @@
 # AGENTS.md
 
 Python SDK for the [Agent2Agent (A2A) Protocol](https://a2a-protocol.org/latest/specification/)
-(`a2a` module, `a2a-sdk` distribution).  It handles complex messaging, task management, 
+(`a2a` module, `a2a-sdk` distribution).  It handles complex messaging, task management,
 and communication across different transports (REST, gRPC, JSON-RPC).
 
 ## Technology Stack & Architecture
@@ -34,15 +34,6 @@ You MUST do all of the following:
    When unsure: load the skill. False positives are free; false
    negatives are how the same mistake recurs.
 
-## Layout footguns
-
-- `src/a2a/types/` and `src/a2a/compat/v0_3/*_pb2*` — generated
-  protobuf, **do not hand-edit**. Excluded from `ty`, `ruff`, coverage.
-  Regenerate via `scripts/gen_proto.sh` /
-  `scripts/gen_proto_compat.sh`.
-- `tck/`, `itk/`, `tests/` — subprojects with their own
-  `pyproject.toml`; not part of the main test run.
-- `samples/` is minimal; real samples live in `a2aproject/a2a-samples`.
 
 ## Optional extras
 
