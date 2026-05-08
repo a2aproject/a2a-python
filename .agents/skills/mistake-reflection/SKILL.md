@@ -19,8 +19,9 @@ Trigger on ANY of these, without waiting for the user to ask:
 - You re-read a file or doc and realize a prior statement was wrong
   or unverified.
 - You realize mid-task that you skipped a required step
-  (e.g. didn't read `docs/ai/coding_conventions.md` /
-  `docs/ai/mandatory_checks.md` at task start).
+  (e.g. didn't read `docs/ai/coding_conventions.md`,
+  `docs/ai/mandatory_checks.md`, or `docs/ai/evidence_rules.md` at
+  task start).
 - You stated an inference as a fact without a `file:line` citation
   and later had to walk it back.
 
