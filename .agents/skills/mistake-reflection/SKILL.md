@@ -100,7 +100,7 @@ becoming a write-only graveyard.
 
 ## Repo-specific notes
 
-- `docs/ai/ai_learnings.md` is **gitignored** (`.gitignore:15`).
+- `docs/ai/ai_learnings.md` is **gitignored**.
   Entries are local to the developer's checkout and will not be seen
   by other agents or in CI. The file is for the human developer to
   improve `AGENTS.md` / skills based on patterns.
