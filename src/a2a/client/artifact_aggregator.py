@@ -18,6 +18,15 @@ class ArtifactsAggregator:
     def from_stream(
         cls, stream: AsyncIterator[StreamResponse]
     ) -> 'ArtifactsAggregator':
+        """Create an ArtifactsAggregator from an async stream of StreamResponse events.
+
+        Args:
+            stream: An async iterator of StreamResponse objects, typically obtained
+                from BaseClient.send_message.
+
+        Returns:
+            A new ArtifactsAggregator instance.
+        """
         return cls(stream)
 
     async def get_artifact(self, artifact_id: str) -> Artifact | None:
@@ -45,15 +54,11 @@ class ArtifactsAggregator:
 
             if event.artifact_update.artifact.artifact_id == artifact_id:
                 if artifact is None or not event.artifact_update.append:
-                    artifact = Artifact(
-                        name=event.artifact_update.artifact.name,
-                        description=event.artifact_update.artifact.description,
-                        metadata=event.artifact_update.artifact.metadata,
-                        extensions=event.artifact_update.artifact.extensions,
-                        artifact_id=artifact_id,
-                    )
+                    artifact = Artifact()
+                    artifact.CopyFrom(event.artifact_update.artifact)
+                else:
+                    artifact.parts.extend(event.artifact_update.artifact.parts)
 
-                artifact.parts.extend(event.artifact_update.artifact.parts)
                 if event.artifact_update.last_chunk:
                     break
         return artifact
@@ -82,15 +87,10 @@ class ArtifactsAggregator:
             artifact_id = event.artifact_update.artifact.artifact_id
 
             if artifact_id not in artifacts or not event.artifact_update.append:
-                artifacts[artifact_id] = Artifact(
-                    name=event.artifact_update.artifact.name,
-                    description=event.artifact_update.artifact.description,
-                    metadata=event.artifact_update.artifact.metadata,
-                    extensions=event.artifact_update.artifact.extensions,
-                    artifact_id=artifact_id,
+                artifacts[artifact_id] = Artifact()
+                artifacts[artifact_id].CopyFrom(event.artifact_update.artifact)
+            else:
+                artifacts[artifact_id].parts.extend(
+                    event.artifact_update.artifact.parts
                 )
-
-            artifacts[artifact_id].parts.extend(
-                event.artifact_update.artifact.parts
-            )
         return list(artifacts.values())
