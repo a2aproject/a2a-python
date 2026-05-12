@@ -157,7 +157,7 @@ dev = [
     { name = "ruff", specifier = ">=0.12.8" },
     { name = "trio" },
     { name = "ty", specifier = ">=0.0.34" },
-    { name = "types-protobuf" },
+    { name = "types-protobuf", specifier = "<7" },
     { name = "types-requests" },
     { name = "uv-dynamic-versioning", specifier = ">=0.8.2" },
     { name = "uvicorn", specifier = ">=0.35.0" },
