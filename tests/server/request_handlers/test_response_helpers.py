@@ -258,6 +258,78 @@ class TestResponseHelpers(unittest.TestCase):
             response['error']['message'], specific_jsonrpc_error.message
         )
 
+    def test_build_error_response_data_is_typed_details_array(self) -> None:
+        """error.data must be an array of typed-detail objects, with a
+        leading google.rpc.ErrorInfo carrying the canonical reason."""
+        error = TaskNotFoundError(data={'taskId': 'abc-123'})
+        response = build_error_response('req-typed', error)
+
+        data = response['error']['data']
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 1)
+        self.assertEqual(
+            data[0],
+            {
+                '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                'reason': 'TASK_NOT_FOUND',
+                'domain': 'a2a-protocol.org',
+                'metadata': {'taskId': 'abc-123'},
+            },
+        )
+
+    def test_build_error_response_invalid_params_appends_bad_request(
+        self,
+    ) -> None:
+        """InvalidParamsError carrying validation errors must append a
+        BadRequest typed-detail entry alongside ErrorInfo."""
+        error = InvalidParamsError(
+            message='Validation failed',
+            data={
+                'errors': [
+                    {
+                        'field': 'message.parts',
+                        'message': 'At least one required',
+                    },
+                    {'field': 'message.role', 'message': 'Unknown role'},
+                ]
+            },
+        )
+        response = build_error_response('req-bad', error)
+
+        data = response['error']['data']
+        self.assertEqual(len(data), 2)
+        error_info, bad_request = data
+        self.assertEqual(
+            error_info['@type'],
+            'type.googleapis.com/google.rpc.ErrorInfo',
+        )
+        self.assertEqual(error_info['reason'], 'INVALID_PARAMS')
+        self.assertEqual(
+            bad_request,
+            {
+                '@type': 'type.googleapis.com/google.rpc.BadRequest',
+                'fieldViolations': [
+                    {
+                        'field': 'message.parts',
+                        'description': 'At least one required',
+                    },
+                    {
+                        'field': 'message.role',
+                        'description': 'Unknown role',
+                    },
+                ],
+            },
+        )
+
+    def test_build_error_response_no_data_yields_empty_metadata(self) -> None:
+        """An A2AError with no data still produces a single
+        ErrorInfo entry with an empty metadata dict (per AIP-193)."""
+        error = TaskNotFoundError()
+        response = build_error_response('req-empty', error)
+        data = response['error']['data']
+        self.assertEqual(len(data), 1)
+        self.assertEqual(data[0]['metadata'], {})
+
     def test_build_error_response_with_request_id_string(self) -> None:
         request_id = 'string_id_test'
         error = TaskNotFoundError()

@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import A2A_REST_ERROR_MAPPING
+from a2a.utils.errors import A2A_ERROR_MAPPING
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 from httpx_sse import EventSource, ServerSentEvent
@@ -105,7 +105,7 @@ class TestRestTransport:
 
         assert 'Client Request timed out' in str(exc_info.value)
 
-    @pytest.mark.parametrize('error_cls', list(A2A_REST_ERROR_MAPPING.keys()))
+    @pytest.mark.parametrize('error_cls', list(A2A_ERROR_MAPPING.keys()))
     @pytest.mark.asyncio
     async def test_rest_mapped_errors(
         self,
@@ -129,7 +129,7 @@ class TestRestTransport:
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 500
 
-        reason = A2A_REST_ERROR_MAPPING[error_cls][2]
+        reason = A2A_ERROR_MAPPING[error_cls][2]
 
         mock_response.json.return_value = {
             'error': {
