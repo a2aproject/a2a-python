@@ -26,6 +26,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.types.a2a_pb2 import (
     SendMessageResponse as SendMessageResponseProto,
 )
+from a2a.utils.error_handlers import build_error_details
 from a2a.utils.errors import (
     JSON_RPC_ERROR_CODE_MAP,
     A2AError,
@@ -135,7 +136,7 @@ def build_error_response(
         jsonrpc_error = model_class(
             code=code,
             message=str(error),
-            data=error.data,
+            data=build_error_details(error),
         )
     else:
         jsonrpc_error = JSONRPCInternalError(message=str(error))
