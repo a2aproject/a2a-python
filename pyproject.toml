@@ -115,7 +115,7 @@ dev = [
   "respx>=0.20.2",
   "ruff>=0.12.8",
   "uv-dynamic-versioning>=0.8.2",
-  "types-protobuf<7",
+  "types-protobuf<8",
   "types-requests",
   "pre-commit",
   "trio",
