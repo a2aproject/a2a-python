@@ -149,23 +149,23 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
 A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
     TaskNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
     TaskNotCancelableError: RestErrorMap(
-        409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
+        400, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
     ),
     PushNotificationNotSupportedError: RestErrorMap(
         400,
-        'UNIMPLEMENTED',
+        'FAILED_PRECONDITION',
         'PUSH_NOTIFICATION_NOT_SUPPORTED',
     ),
     UnsupportedOperationError: RestErrorMap(
-        400, 'UNIMPLEMENTED', 'UNSUPPORTED_OPERATION'
+        400, 'FAILED_PRECONDITION', 'UNSUPPORTED_OPERATION'
     ),
     ContentTypeNotSupportedError: RestErrorMap(
-        415,
+        400,
         'INVALID_ARGUMENT',
         'CONTENT_TYPE_NOT_SUPPORTED',
     ),
     InvalidAgentResponseError: RestErrorMap(
-        502, 'INTERNAL', 'INVALID_AGENT_RESPONSE'
+        500, 'INTERNAL', 'INVALID_AGENT_RESPONSE'
     ),
     ExtendedAgentCardNotConfiguredError: RestErrorMap(
         400,
@@ -178,7 +178,7 @@ A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
         'EXTENSION_SUPPORT_REQUIRED',
     ),
     VersionNotSupportedError: RestErrorMap(
-        400, 'UNIMPLEMENTED', 'VERSION_NOT_SUPPORTED'
+        400, 'FAILED_PRECONDITION', 'VERSION_NOT_SUPPORTED'
     ),
     InvalidParamsError: RestErrorMap(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
     InvalidRequestError: RestErrorMap(

@@ -37,7 +37,6 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
-    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
@@ -209,10 +208,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         task_id = cast('str', request_context.task_id)
         context_id = cast('str', request_context.context_id)
 
-        if (
-            self._push_config_store
-            and params.configuration
-            and params.configuration.task_push_notification_config
+        if self._push_config_store and params.configuration.HasField(
+            'task_push_notification_config'
         ):
             await self._push_config_store.set_info(
                 task_id,
@@ -254,13 +251,6 @@ class DefaultRequestHandlerV2(RequestHandler):
                 type(event).__name__,
                 event,
             )
-            if isinstance(event, TaskStatusUpdateEvent):
-                self._validate_task_id_match(task_id, event.task_id)
-                event = await active_task.get_task()
-                logger.debug(
-                    'Replaced TaskStatusUpdateEvent with Task: %s', event
-                )
-
             if isinstance(event, Task) and (
                 params.configuration.return_immediately
                 or event.status.state

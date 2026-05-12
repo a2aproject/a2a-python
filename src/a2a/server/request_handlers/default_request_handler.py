@@ -301,10 +301,8 @@ class LegacyRequestHandler(RequestHandler):
         # dictating the task ID at this layer is useful for tracking running
         # agents.
 
-        if (
-            self._push_config_store
-            and params.configuration
-            and params.configuration.task_push_notification_config
+        if self._push_config_store and params.configuration.HasField(
+            'task_push_notification_config'
         ):
             await self._push_config_store.set_info(
                 task_id,

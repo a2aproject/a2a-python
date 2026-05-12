@@ -316,26 +316,42 @@ class TestActiveTask:
         active_task: ActiveTask,
         agent_executor: Mock,
         request_context: Mock,
+        task_manager: Mock,
     ) -> None:
         """Test exception handling in subscribe."""
-        agent_executor.execute = AsyncMock(
-            side_effect=ValueError('Producer failure')
+        event = asyncio.Event()
+
+        task_manager.get_task.return_value = Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
         )
+
+        async def execute_mock(req, q):
+            await q.enqueue_event(
+                Task(
+                    id='test-task-id',
+                    status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+                )
+            )
+            await event.wait()
+            raise ValueError('Producer failure')
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
 
         await active_task.enqueue_request(request_context)
         await active_task.start(
             call_context=ServerCallContext(), create_task_if_missing=True
         )
 
-        # Give it a moment to fail
-        for _ in range(10):
-            if active_task._exception:
-                break
-            await asyncio.sleep(0.05)
+        subscriber = active_task.subscribe()
+        task = await anext(subscriber)
+        assert task.status.state == TaskState.TASK_STATE_SUBMITTED
+
+        # Now trigger the exception
+        event.set()
 
         with pytest.raises(ValueError, match='Producer failure'):
-            async for _ in active_task.subscribe():
-                pass
+            await anext(subscriber)
 
     @pytest.mark.asyncio
     async def test_active_task_cancel_not_started(
@@ -765,16 +781,6 @@ class TestActiveTask:
         # Explicitly call private _maybe_cleanup to verify it respects finished state
         await active_task._maybe_cleanup()
         on_cleanup.assert_not_called()
-
-    @pytest.mark.asyncio
-    async def test_active_task_subscribe_exception_already_set(
-        self, active_task: ActiveTask
-    ) -> None:
-        """Test subscribe when exception is already set."""
-        active_task._exception = ValueError('Pre-existing error')
-        with pytest.raises(ValueError, match='Pre-existing error'):
-            async for _ in active_task.subscribe():
-                pass
 
     @pytest.mark.asyncio
     async def test_active_task_subscribe_inner_exception(
