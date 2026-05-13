@@ -564,7 +564,7 @@ from a2a.client import ArtifactsAggregator
 
 # Assemble a single artifact by ID
 # Note: each ArtifactsAggregator instance consumes the stream once — create a new instance per operation
-aggregator = ArtifactsAggregator.from_stream(client.send_message(request))
+aggregator = ArtifactsAggregator(client.send_message(request))
 artifact = await aggregator.get_artifact('my-artifact-id')
 if artifact is not None:
     for part in artifact.parts:
@@ -572,7 +572,7 @@ if artifact is not None:
 
 
 # Or assemble all artifacts from the stream — requires a new request and a new aggregator instance
-aggregator = ArtifactsAggregator.from_stream(client.send_message(request))
+aggregator = ArtifactsAggregator(client.send_message(request))
 artifacts = await aggregator.get_all_artifacts()
 ```
 

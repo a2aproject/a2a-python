@@ -14,21 +14,6 @@ class ArtifactsAggregator:
     def __init__(self, stream: AsyncIterator[StreamResponse]) -> None:
         self._stream = stream
 
-    @classmethod
-    def from_stream(
-        cls, stream: AsyncIterator[StreamResponse]
-    ) -> 'ArtifactsAggregator':
-        """Create an ArtifactsAggregator from an async stream of StreamResponse events.
-
-        Args:
-            stream: An async iterator of StreamResponse objects, typically obtained
-                from BaseClient.send_message.
-
-        Returns:
-            A new ArtifactsAggregator instance.
-        """
-        return cls(stream)
-
     async def get_artifact(self, artifact_id: str) -> Artifact | None:
         """Assemble and return a single Artifact by its ID from the stream.
 

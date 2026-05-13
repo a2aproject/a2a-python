@@ -130,7 +130,7 @@ class TestArtifactsAggregator:
 
         request = SendMessageRequest(message=sample_message)
 
-        artifact_aggregator = ArtifactsAggregator.from_stream(
+        artifact_aggregator = ArtifactsAggregator(
             base_client.send_message(request)
         )
         artifact = await artifact_aggregator.get_artifact('artifact-1')
@@ -170,7 +170,7 @@ class TestArtifactsAggregator:
 
         request = SendMessageRequest(message=sample_message)
 
-        artifact_aggregator = ArtifactsAggregator.from_stream(
+        artifact_aggregator = ArtifactsAggregator(
             base_client.send_message(request)
         )
         artifact = await artifact_aggregator.get_artifact('artifact-1')
@@ -235,9 +235,7 @@ class TestArtifactsAggregator:
         mock_transport.send_message_streaming.return_value = create_stream()
 
         request = SendMessageRequest(message=sample_message)
-        aggregator = ArtifactsAggregator.from_stream(
-            base_client.send_message(request)
-        )
+        aggregator = ArtifactsAggregator(base_client.send_message(request))
         artifacts = await aggregator.get_all_artifacts()
 
         assert len(artifacts) == 2
@@ -284,9 +282,7 @@ class TestArtifactsAggregator:
         mock_transport.send_message_streaming.return_value = create_stream()
 
         request = SendMessageRequest(message=sample_message)
-        aggregator = ArtifactsAggregator.from_stream(
-            base_client.send_message(request)
-        )
+        aggregator = ArtifactsAggregator(base_client.send_message(request))
         artifacts = await aggregator.get_all_artifacts()
 
         assert len(artifacts) == 1
@@ -330,9 +326,7 @@ class TestArtifactsAggregator:
         mock_transport.send_message_streaming.return_value = create_stream()
 
         request = SendMessageRequest(message=sample_message)
-        aggregator = ArtifactsAggregator.from_stream(
-            base_client.send_message(request)
-        )
+        aggregator = ArtifactsAggregator(base_client.send_message(request))
         artifact = await aggregator.get_artifact('artifact-1')
 
         assert artifact is not None
@@ -367,9 +361,7 @@ class TestArtifactsAggregator:
         mock_transport.send_message_streaming.return_value = create_stream()
 
         request = SendMessageRequest(message=sample_message)
-        aggregator = ArtifactsAggregator.from_stream(
-            base_client.send_message(request)
-        )
+        aggregator = ArtifactsAggregator(base_client.send_message(request))
         artifact = await aggregator.get_artifact('artifact-1')
 
         assert artifact is None
@@ -414,7 +406,7 @@ class TestArtifactsAggregator:
 
         mock_transport.send_message_streaming.return_value = create_stream()
 
-        aggregator = ArtifactsAggregator.from_stream(
+        aggregator = ArtifactsAggregator(
             base_client.send_message(SendMessageRequest(message=sample_message))
         )
         artifacts = await aggregator.get_all_artifacts()
@@ -463,7 +455,7 @@ class TestArtifactsAggregator:
 
         mock_transport.send_message_streaming.return_value = create_stream()
 
-        aggregator = ArtifactsAggregator.from_stream(
+        aggregator = ArtifactsAggregator(
             base_client.send_message(SendMessageRequest(message=sample_message))
         )
         artifact = await aggregator.get_artifact('artifact-1')
