@@ -1,5 +1,25 @@
 # Changelog
 
+## [1.0.3](https://github.com/a2aproject/a2a-python/compare/v1.0.2...v1.0.3) (2026-05-13)
+
+
+### Features
+
+* **helpers:** add non-text Part extractors and artifact update events ([745d998](https://github.com/a2aproject/a2a-python/commit/745d9988beca9b708e24349ec9dfa4138f12d472))
+
+
+### Bug Fixes
+
+* **deps:** cap protobuf below 7 ([#1019](https://github.com/a2aproject/a2a-python/issues/1019)) ([7af6050](https://github.com/a2aproject/a2a-python/commit/7af60502532a44f440885157aaae36c024416b85))
+* **errors:** align error mappings with A2A spec  ([#1055](https://github.com/a2aproject/a2a-python/issues/1055)) ([4e01a91](https://github.com/a2aproject/a2a-python/commit/4e01a914330b29de110d93f4e5adcbb9ecc49e78))
+* **errors:** emit JSON-RPC error.data as typed-details array per A2A 1.0 spec hot-fix ([#1058](https://github.com/a2aproject/a2a-python/issues/1058)) ([3ce65c5](https://github.com/a2aproject/a2a-python/commit/3ce65c533ab5966cfa0409d7ab18e01c6c0c4d03))
+* Improve task_push_notification_config presence check. ([#1047](https://github.com/a2aproject/a2a-python/issues/1047)) ([94ad594](https://github.com/a2aproject/a2a-python/commit/94ad59435649a6bd56efd2d260bf5193d7e991b4))
+
+
+### Documentation
+
+* high level active task architecture documentation ([#1056](https://github.com/a2aproject/a2a-python/issues/1056)) ([09a2221](https://github.com/a2aproject/a2a-python/commit/09a22212cf7c7a9669f2b4a184157d7a0a252ac9))
+
 ## [1.0.2](https://github.com/a2aproject/a2a-python/compare/v1.0.1...v1.0.2) (2026-04-24)
 
 
