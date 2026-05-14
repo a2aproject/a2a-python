@@ -81,7 +81,7 @@ def default_retry_predicate(error: Exception) -> bool:  # noqa: PLR0911
     if isinstance(cause, httpx.RequestError):
         return True
     if _AioRpcError is not None and isinstance(cause, _AioRpcError):
-        return cause.code() in _RETRYABLE_GRPC_CODES  # pyright: ignore[reportAttributeAccessIssue]
+        return cause.code() in _RETRYABLE_GRPC_CODES  # pyright: ignore[reportAttributeAccessIssue]  # ty: ignore[unresolved-attribute]
     return False
 
 
