@@ -3,7 +3,7 @@
 Non-negotiable rules for code quality and style.
 
 1. **Python Types**: All Python code MUST include type hints. All function definitions MUST include return types.
-2. **Type Safety**: All code MUST pass `mypy` and `pyright` checks.
+2. **Type Safety**: All code MUST pass `ty` checks.
 3. **Formatting & Linting**: All code MUST be formatted with `ruff`.
 
 #### Examples:

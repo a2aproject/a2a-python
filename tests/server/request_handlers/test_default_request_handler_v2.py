@@ -1247,6 +1247,36 @@ async def test_on_message_send_with_push_notification():
     )
 
 
+@pytest.mark.asyncio
+async def test_on_message_send_with_empty_push_notification_config_does_not_call_set_info():
+    task_store = InMemoryTaskStore()
+    push_store = AsyncMock(spec=PushNotificationConfigStore)
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+        agent_card=create_default_agent_card(),
+    )
+    # Use empty SendMessageConfiguration where task_push_notification_config is NOT set explicitly.
+    # Proto3 makes accessing it return a truthy default instance.
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_empty',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(),
+    )
+
+    context = create_server_call_context()
+    result = await request_handler.on_message_send(params, context)
+
+    assert result is not None
+    assert isinstance(result, Task)
+    push_store.set_info.assert_not_called()
+
+
 class MultipleMessagesAgentExecutor(AgentExecutor):
     """Misbehaving agent that yields more than one Message."""
 

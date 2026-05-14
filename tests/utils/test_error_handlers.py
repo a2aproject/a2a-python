@@ -10,10 +10,12 @@ from a2a.types import (
     InternalError,
 )
 from a2a.utils.error_handlers import (
+    build_rest_error_payload,
     rest_error_handler,
     rest_stream_error_handler,
 )
 from a2a.utils.errors import (
+    InvalidParamsError,
     InvalidRequestError,
 )
 
@@ -188,3 +190,61 @@ async def test_rest_stream_error_handler_success():
 
     result = await successful_stream()
     assert result == 'success_stream'
+
+
+def test_build_rest_error_payload_invalid_params_includes_bad_request():
+    """REST error payload for InvalidParamsError with validation errors must
+    include both an ErrorInfo and a BadRequest typed-detail entry, matching
+    the gRPC Status.details shape (see a2aproject/A2A#1627)."""
+    error = InvalidParamsError(
+        message='Validation failed',
+        data={
+            'errors': [
+                {'field': 'message.parts', 'message': 'At least one required'},
+                {'field': 'message.role', 'message': 'Unknown role'},
+            ]
+        },
+    )
+
+    payload = build_rest_error_payload(error)
+
+    assert payload['error']['code'] == 400
+    assert payload['error']['status'] == 'INVALID_ARGUMENT'
+    assert payload['error']['message'] == 'Validation failed'
+
+    details = payload['error']['details']
+    assert len(details) == 2
+
+    error_info, bad_request = details
+    assert error_info == {
+        '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+        'reason': 'INVALID_PARAMS',
+        'domain': 'a2a-protocol.org',
+        'metadata': {
+            'errors': [
+                {'field': 'message.parts', 'message': 'At least one required'},
+                {'field': 'message.role', 'message': 'Unknown role'},
+            ]
+        },
+    }
+    assert bad_request == {
+        '@type': 'type.googleapis.com/google.rpc.BadRequest',
+        'fieldViolations': [
+            {
+                'field': 'message.parts',
+                'description': 'At least one required',
+            },
+            {'field': 'message.role', 'description': 'Unknown role'},
+        ],
+    }
+
+
+def test_build_rest_error_payload_invalid_params_no_validation_errors():
+    """InvalidParamsError without ``data['errors']`` must not append a
+    BadRequest entry — only the canonical ErrorInfo."""
+    error = InvalidParamsError(message='Bad params')
+    payload = build_rest_error_payload(error)
+    assert len(payload['error']['details']) == 1
+    assert payload['error']['details'][0]['@type'] == (
+        'type.googleapis.com/google.rpc.ErrorInfo'
+    )

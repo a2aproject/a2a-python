@@ -7,7 +7,7 @@ as well as server exception classes.
 from typing import NamedTuple
 
 
-class RestErrorMap(NamedTuple):
+class ErrorMapping(NamedTuple):
     """Named tuple mapping HTTP status, gRPC status, and reason strings."""
 
     http_code: int
@@ -94,6 +94,12 @@ class MethodNotFoundError(A2AError):
     message = 'Method not found'
 
 
+class JSONParseError(A2AError):
+    """Exception raised when invalid JSON was received by the server."""
+
+    message = 'Invalid JSON payload'
+
+
 class ExtensionSupportRequiredError(A2AError):
     """Exception raised when extension support is required but not present."""
 
@@ -106,22 +112,21 @@ class VersionNotSupportedError(A2AError):
     message = 'Version not supported'
 
 
-# For backward compatibility if needed, or just aliases for clean refactor
-# We remove the Pydantic models here.
-
 __all__ = [
+    'A2A_ERROR_MAPPING',
     'A2A_ERROR_REASONS',
     'A2A_REASON_TO_ERROR',
     'A2A_REST_ERROR_MAPPING',
     'JSON_RPC_ERROR_CODE_MAP',
+    'ErrorMapping',
     'ExtensionSupportRequiredError',
     'InternalError',
     'InvalidAgentResponseError',
     'InvalidParamsError',
     'InvalidRequestError',
+    'JSONParseError',
     'MethodNotFoundError',
     'PushNotificationNotSupportedError',
-    'RestErrorMap',
     'TaskNotCancelableError',
     'TaskNotFoundError',
     'UnsupportedOperationError',
@@ -143,56 +148,62 @@ JSON_RPC_ERROR_CODE_MAP: dict[type[A2AError], int] = {
     InvalidRequestError: -32600,
     MethodNotFoundError: -32601,
     InternalError: -32603,
+    JSONParseError: -32700,
 }
 
 
-A2A_REST_ERROR_MAPPING: dict[type[A2AError], RestErrorMap] = {
-    TaskNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
-    TaskNotCancelableError: RestErrorMap(
-        409, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
+A2A_ERROR_MAPPING: dict[type[A2AError], ErrorMapping] = {
+    TaskNotFoundError: ErrorMapping(404, 'NOT_FOUND', 'TASK_NOT_FOUND'),
+    TaskNotCancelableError: ErrorMapping(
+        400, 'FAILED_PRECONDITION', 'TASK_NOT_CANCELABLE'
     ),
-    PushNotificationNotSupportedError: RestErrorMap(
+    PushNotificationNotSupportedError: ErrorMapping(
         400,
-        'UNIMPLEMENTED',
+        'FAILED_PRECONDITION',
         'PUSH_NOTIFICATION_NOT_SUPPORTED',
     ),
-    UnsupportedOperationError: RestErrorMap(
-        400, 'UNIMPLEMENTED', 'UNSUPPORTED_OPERATION'
+    UnsupportedOperationError: ErrorMapping(
+        400, 'FAILED_PRECONDITION', 'UNSUPPORTED_OPERATION'
     ),
-    ContentTypeNotSupportedError: RestErrorMap(
-        415,
+    ContentTypeNotSupportedError: ErrorMapping(
+        400,
         'INVALID_ARGUMENT',
         'CONTENT_TYPE_NOT_SUPPORTED',
     ),
-    InvalidAgentResponseError: RestErrorMap(
-        502, 'INTERNAL', 'INVALID_AGENT_RESPONSE'
+    InvalidAgentResponseError: ErrorMapping(
+        500, 'INTERNAL', 'INVALID_AGENT_RESPONSE'
     ),
-    ExtendedAgentCardNotConfiguredError: RestErrorMap(
+    ExtendedAgentCardNotConfiguredError: ErrorMapping(
         400,
         'FAILED_PRECONDITION',
         'EXTENDED_AGENT_CARD_NOT_CONFIGURED',
     ),
-    ExtensionSupportRequiredError: RestErrorMap(
+    ExtensionSupportRequiredError: ErrorMapping(
         400,
         'FAILED_PRECONDITION',
         'EXTENSION_SUPPORT_REQUIRED',
     ),
-    VersionNotSupportedError: RestErrorMap(
-        400, 'UNIMPLEMENTED', 'VERSION_NOT_SUPPORTED'
+    VersionNotSupportedError: ErrorMapping(
+        400, 'FAILED_PRECONDITION', 'VERSION_NOT_SUPPORTED'
     ),
-    InvalidParamsError: RestErrorMap(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
-    InvalidRequestError: RestErrorMap(
+    InvalidParamsError: ErrorMapping(400, 'INVALID_ARGUMENT', 'INVALID_PARAMS'),
+    InvalidRequestError: ErrorMapping(
         400, 'INVALID_ARGUMENT', 'INVALID_REQUEST'
     ),
-    MethodNotFoundError: RestErrorMap(404, 'NOT_FOUND', 'METHOD_NOT_FOUND'),
-    InternalError: RestErrorMap(500, 'INTERNAL', 'INTERNAL_ERROR'),
+    MethodNotFoundError: ErrorMapping(404, 'NOT_FOUND', 'METHOD_NOT_FOUND'),
+    InternalError: ErrorMapping(500, 'INTERNAL', 'INTERNAL_ERROR'),
 }
+
+
+# Deprecated alias kept for backwards compatibility; remove in the next
+# major version.
+A2A_REST_ERROR_MAPPING = A2A_ERROR_MAPPING
 
 
 A2A_ERROR_REASONS = {
-    cls: mapping.reason for cls, mapping in A2A_REST_ERROR_MAPPING.items()
+    cls: mapping.reason for cls, mapping in A2A_ERROR_MAPPING.items()
 }
 
 A2A_REASON_TO_ERROR = {
-    mapping.reason: cls for cls, mapping in A2A_REST_ERROR_MAPPING.items()
+    mapping.reason: cls for cls, mapping in A2A_ERROR_MAPPING.items()
 }

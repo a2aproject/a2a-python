@@ -301,7 +301,9 @@ class GrpcTransport(ClientTransport):
     def _get_grpc_metadata(
         self, context: ClientCallContext | None
     ) -> list[tuple[str, str]]:
-        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)]
+        metadata: list[tuple[str, str]] = [
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_CURRENT)
+        ]
         if context and context.service_parameters:
             for key, value in context.service_parameters.items():
                 metadata.append((key.lower(), value))
