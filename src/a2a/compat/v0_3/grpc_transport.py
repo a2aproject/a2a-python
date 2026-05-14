@@ -359,7 +359,9 @@ class CompatGrpcTransport(ClientTransport):
         self, context: ClientCallContext | None = None
     ) -> list[tuple[str, str]]:
         """Creates gRPC metadata for extensions."""
-        metadata = [(VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)]
+        metadata: list[tuple[str, str]] = [
+            (VERSION_HEADER.lower(), PROTOCOL_VERSION_0_3)
+        ]
 
         if context and context.service_parameters:
             params = dict(context.service_parameters)

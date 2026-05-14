@@ -89,7 +89,7 @@ class DatabaseTaskStore(TaskStore):
         self.core_to_model_conversion = core_to_model_conversion
         self.model_to_core_conversion = model_to_core_conversion
 
-        self.task_model = (
+        self.task_model = (  # ty:ignore[invalid-assignment]
             TaskModel
             if table_name == 'tasks'
             else create_task_model(table_name)
@@ -328,7 +328,7 @@ class DatabaseTaskStore(TaskStore):
             result = await session.execute(stmt)
             # Commit is automatic when using session.begin()
 
-            if result.rowcount > 0:  # type: ignore[attr-defined]
+            if result.rowcount > 0:  # ty:ignore[unresolved-attribute]
                 logger.info(
                     'Task %s deleted successfully for owner %s.', task_id, owner
                 )

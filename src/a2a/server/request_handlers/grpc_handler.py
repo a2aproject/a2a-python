@@ -82,20 +82,20 @@ def _get_metadata_value(
     ]
 
 
-_ERROR_CODE_MAP = {
+_ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
     types.InvalidRequestError: grpc.StatusCode.INVALID_ARGUMENT,
     types.MethodNotFoundError: grpc.StatusCode.NOT_FOUND,
     types.InvalidParamsError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InternalError: grpc.StatusCode.INTERNAL,
     types.TaskNotFoundError: grpc.StatusCode.NOT_FOUND,
     types.TaskNotCancelableError: grpc.StatusCode.FAILED_PRECONDITION,
-    types.PushNotificationNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
-    types.UnsupportedOperationError: grpc.StatusCode.UNIMPLEMENTED,
+    types.PushNotificationNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
+    types.UnsupportedOperationError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ContentTypeNotSupportedError: grpc.StatusCode.INVALID_ARGUMENT,
     types.InvalidAgentResponseError: grpc.StatusCode.INTERNAL,
     types.ExtendedAgentCardNotConfiguredError: grpc.StatusCode.FAILED_PRECONDITION,
     types.ExtensionSupportRequiredError: grpc.StatusCode.FAILED_PRECONDITION,
-    types.VersionNotSupportedError: grpc.StatusCode.UNIMPLEMENTED,
+    types.VersionNotSupportedError: grpc.StatusCode.FAILED_PRECONDITION,
 }
 
 

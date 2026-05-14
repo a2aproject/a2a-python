@@ -334,12 +334,12 @@ async def test_list_tasks_success(
         ),
         (
             types.PushNotificationNotSupportedError(),
-            grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.FAILED_PRECONDITION,
             'PushNotificationNotSupportedError',
         ),
         (
             types.UnsupportedOperationError(),
-            grpc.StatusCode.UNIMPLEMENTED,
+            grpc.StatusCode.FAILED_PRECONDITION,
             'UnsupportedOperationError',
         ),
         (

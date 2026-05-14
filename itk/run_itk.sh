@@ -163,6 +163,24 @@ RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/run \
         "edges": ["0->1", "0->2", "1->0", "2->0"],
         "protocols": ["http_json"],
         "behavior": "push_notification"
+      },
+      {
+        "name": "Resubscribe Test - JSONRPC",
+        "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+        "traversal": "euler",
+        "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+        "protocols": ["jsonrpc"],
+        "streaming": true,
+        "behavior": "resubscribe"
+      },
+      {
+        "name": "Resubscribe Test - Python & Go Non-JSONRPC Protocols",
+        "sdks": ["current", "python_v10", "python_v03", "go_v10"],
+        "traversal": "euler",
+        "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
+        "protocols": ["grpc", "http_json"],
+        "streaming": true,
+        "behavior": "resubscribe"
       }
     ]
   }')

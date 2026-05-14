@@ -684,3 +684,87 @@ class TestExtensions:
         assert mock_kwargs.service_parameters == {
             HTTP_EXTENSION_HEADER: extensions_header_val
         }
+
+
+class TestCreateJsonRpcError:
+    """Unit tests for JsonRpcTransport._create_jsonrpc_error."""
+
+    @pytest.fixture
+    def transport(self, mock_httpx_client, agent_card):
+        return JsonRpcTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=agent_card,
+            url='http://test-agent.example.com',
+        )
+
+    def test_lifts_error_info_metadata_onto_a2a_error_data(
+        self, transport
+    ) -> None:
+        """New spec format: ErrorInfo.metadata is exposed as A2AError.data."""
+        from a2a.utils.errors import TaskNotFoundError
+
+        exc = transport._create_jsonrpc_error(
+            {
+                'code': -32001,
+                'message': 'Task not found',
+                'data': [
+                    {
+                        '@type': ('type.googleapis.com/google.rpc.ErrorInfo'),
+                        'reason': 'TASK_NOT_FOUND',
+                        'domain': 'a2a-protocol.org',
+                        'metadata': {'taskId': 'abc-123'},
+                    }
+                ],
+            }
+        )
+        assert isinstance(exc, TaskNotFoundError)
+        assert exc.message == 'Task not found'
+        assert exc.data == {'taskId': 'abc-123'}
+
+    def test_no_data_field_yields_none_data(self, transport) -> None:
+        from a2a.utils.errors import InternalError
+
+        exc = transport._create_jsonrpc_error(
+            {'code': -32603, 'message': 'oops'}
+        )
+        assert isinstance(exc, InternalError)
+        assert exc.data is None
+
+    def test_array_without_error_info_yields_none_data(self, transport) -> None:
+        """A details array carrying only BadRequest (no ErrorInfo) yields None."""
+        from a2a.utils.errors import InvalidParamsError
+
+        exc = transport._create_jsonrpc_error(
+            {
+                'code': -32602,
+                'message': 'bad params',
+                'data': [
+                    {
+                        '@type': ('type.googleapis.com/google.rpc.BadRequest'),
+                        'fieldViolations': [],
+                    }
+                ],
+            }
+        )
+        assert isinstance(exc, InvalidParamsError)
+        assert exc.data is None
+
+    def test_unknown_code_falls_back_to_a2a_client_error(
+        self, transport
+    ) -> None:
+        exc = transport._create_jsonrpc_error(
+            {'code': -42, 'message': 'who knows'}
+        )
+        assert isinstance(exc, A2AClientError)
+        assert 'JSON-RPC Error -42' in str(exc)
+
+    def test_json_parse_error_is_typed(self, transport) -> None:
+        """JSON-RPC -32700 must map to a typed JSONParseError exception (not
+        the generic A2AClientError fallback)."""
+        from a2a.utils.errors import JSONParseError
+
+        exc = transport._create_jsonrpc_error(
+            {'code': -32700, 'message': 'Invalid JSON payload'}
+        )
+        assert isinstance(exc, JSONParseError)
+        assert exc.message == 'Invalid JSON payload'

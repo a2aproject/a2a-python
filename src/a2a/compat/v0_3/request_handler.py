@@ -1,5 +1,4 @@
 import logging
-import typing
 
 from collections.abc import AsyncIterable
 
@@ -148,10 +147,7 @@ class RequestHandler03:
             v03_resp.root,
             types_v03.ListTaskPushNotificationConfigSuccessResponse,
         ):
-            return typing.cast(
-                'list[types_v03.TaskPushNotificationConfig]',
-                v03_resp.root.result,
-            )
+            return v03_resp.root.result
         return []
 
     async def on_delete_task_push_notification_config(
