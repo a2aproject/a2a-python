@@ -32,11 +32,11 @@ podman system migrate
 
 ### 1. Set Environment Variable
 
-You must set the `A2A_SAMPLES_REVISION` environment variable to specify which revision of the `a2a-samples` repository to use for testing. This can be a branch name, tag, or commit hash.
+You must set the `A2A_ITK_REVISION` environment variable to specify which revision of the `a2a-itk` repository to use for testing. This can be a branch name, tag, or commit hash.
 
 Example:
 ```
-export A2A_SAMPLES_REVISION=itk-v.021-alpha
+export A2A_ITK_REVISION=main
 ```
 
 ### 2. Execute Tests
@@ -48,7 +48,7 @@ Run the test script from this directory:
 ```
 
 The script will:
-- Clone `a2a-samples` (if not already present).
+- Clone `a2a-itk` (if not already present).
 - Checkout the specified revision.
 - Build the ITK service Docker image.
 - Run the tests and output results.
