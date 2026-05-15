@@ -93,7 +93,10 @@ class EventQueue(ABC):
         """
 
 
-@trace_class(kind=SpanKind.SERVER)
+@trace_class(
+    kind=SpanKind.SERVER,
+    exclude_list=['enqueue_event', 'dequeue_event', 'task_done', 'is_closed'],
+)
 class EventQueueLegacy(EventQueue):
     """Event queue for A2A responses from agent.
 
