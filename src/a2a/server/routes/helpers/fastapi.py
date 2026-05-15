@@ -193,4 +193,4 @@ def add_a2a_routes_to_fastapi(
             component_schemas.setdefault(name, sub_schema)
         return schema
 
-    app.openapi = _openapi  # type: ignore[method-assign]
+    app.openapi = _openapi  # type: ignore[method-assign, invalid-assignment]
