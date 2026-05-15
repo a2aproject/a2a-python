@@ -55,14 +55,10 @@ A2A JSON-RPC 2.0 endpoint. The `method` field selects the operation;
 
 def envelope_schema(components: dict[str, Any]) -> dict[str, Any]:
     """Builds the A2ARequest JSON-RPC envelope schema with a oneOf over all method params."""
-    seen_refs: set[str] = set()
-    params_refs: list[dict[str, Any]] = []
-    for cls in METHOD_TYPES.values():
-        ref = message_schema(cls.DESCRIPTOR, components)
-        key = ref.get('$ref', '')
-        if key and key not in seen_refs:
-            seen_refs.add(key)
-            params_refs.append(ref)
+    params_refs = [
+        message_schema(cls.DESCRIPTOR, components)
+        for cls in dict.fromkeys(METHOD_TYPES.values())
+    ]
 
     components['A2ARequest'] = {
         'type': 'object',
