@@ -1,25 +1,14 @@
-### Test and Fix Commands
+# Mandatory Checks
 
-Exact shell commands required to test the project and fix formatting issues.
+Run in this order before declaring any task done — including for
+markdown/comment/whitespace-only changes:
 
-1. **Formatting & Linting**:
-   ```bash
-   uv run ruff check --fix
-   uv run ruff format
-   ```
+```bash
+./scripts/lint.sh        # ruff check --fix, ruff format, ty check
+uv run pytest
 
-2. **Type Checking**:
-   ```bash
-   uv run ty check
-   ```
+# Only before commit, when src/ changed:
+uv run pytest --cov=src --cov-report=term-missing
+```
 
-3. **Testing**:
-   ```bash
-   uv run pytest
-   ```
-
-4. **Coverage**:
-Only run this command after adding new source code and before committing.
-   ```bash
-   uv run pytest --cov=src --cov-report=term-missing
-   ```
+CI enforces `--cov-fail-under=88` on the `a2a` package.
