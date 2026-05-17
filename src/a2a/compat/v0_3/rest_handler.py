@@ -291,15 +291,6 @@ class REST03Handler:
         return MessageToDict(pb2_v03_resp)
 
     @validate_version(constants.PROTOCOL_VERSION_0_3)
-    async def list_tasks(
-        self,
-        request: Request,
-        context: ServerCallContext,
-    ) -> dict[str, Any]:
-        """Handles the 'tasks/list' REST method."""
-        raise NotImplementedError('list tasks not implemented')
-
-    @validate_version(constants.PROTOCOL_VERSION_0_3)
     async def on_get_extended_agent_card(
         self,
         request: Request,
