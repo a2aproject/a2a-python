@@ -8,6 +8,14 @@ updates:
       all:
         patterns:
           - '*'
+    ignore:
+      # Pin to v6.x. Dependabot rewrites pure upper-bound constraints in
+      # pyproject.toml (e.g. `<7` -> `<8`), so we must express this policy
+      # here instead.
+      # TODO: remove this ignore rule once the minimum
+      # protobuf version requirement is bumped.
+      - dependency-name: 'types-protobuf'
+        versions: ['>=7']
   - package-ecosystem: 'github-actions'
     directory: '/'
     schedule:
