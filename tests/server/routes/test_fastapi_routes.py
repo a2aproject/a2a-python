@@ -9,7 +9,7 @@ from a2a.server.routes import (
     create_jsonrpc_routes,
     create_rest_routes,
 )
-from a2a.server.routes.helpers.fastapi import (
+from a2a.server.routes.fastapi_routes import (
     _AGENT_CARD_TAG,
     _JSONRPC_TAG,
     _REST_TAG,

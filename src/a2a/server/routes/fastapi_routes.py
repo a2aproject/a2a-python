@@ -1,19 +1,21 @@
 from typing import TYPE_CHECKING, Any
 
-from a2a.server.routes.helpers._proto_schema import (
-    REST_BODY_TYPES,
-    message_schema,
-)
-from a2a.server.routes.helpers.jsonrpc import (
+from a2a.server.routes._jsonrpc_schema import (
     DESCRIPTION as _JSONRPC_DESCRIPTION,
 )
-from a2a.server.routes.helpers.jsonrpc import (
+from a2a.server.routes._jsonrpc_schema import (
     envelope_schema as _jsonrpc_envelope_schema,
+)
+from a2a.server.routes._proto_schema import (
+    REST_BODY_TYPES,
+    message_schema,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_1_0, VERSION_HEADER
 
 
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from fastapi import FastAPI
     from fastapi.routing import APIRoute as _A2ARoute
     from starlette.routing import BaseRoute, Route
@@ -104,9 +106,9 @@ def _attach_route(
 def add_a2a_routes_to_fastapi(
     app: 'FastAPI',
     *,
-    agent_card_routes: 'list[BaseRoute] | None' = None,
-    jsonrpc_routes: 'list[BaseRoute] | None' = None,
-    rest_routes: 'list[BaseRoute] | None' = None,
+    agent_card_routes: 'Sequence[BaseRoute] | None' = None,
+    jsonrpc_routes: 'Sequence[BaseRoute] | None' = None,
+    rest_routes: 'Sequence[BaseRoute] | None' = None,
 ) -> None:
     """Mounts A2A routes on a FastAPI app and enriches them for ``/docs``.
 
@@ -193,4 +195,4 @@ def add_a2a_routes_to_fastapi(
             component_schemas.setdefault(name, sub_schema)
         return schema
 
-    app.openapi = _openapi  # type: ignore[method-assign, invalid-assignment]
+    app.openapi = _openapi  # type: ignore[method-assign]  # ty: ignore[invalid-assignment]

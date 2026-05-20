@@ -1,10 +1,10 @@
-"""JSON-RPC specific helpers for A2A server routes."""
+"""JSON-RPC envelope schema utilities for A2A server routes."""
 
 from typing import Any
 
 from google.protobuf.message import Message
 
-from a2a.server.routes.helpers._proto_schema import message_schema
+from a2a.server.routes._proto_schema import message_schema
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,

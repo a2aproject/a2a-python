@@ -1,4 +1,4 @@
-"""Proto → JSON Schema helpers shared across transport helpers."""
+"""Proto → JSON Schema utilities for A2A server routes."""
 
 from typing import Any
 

@@ -1,4 +1,4 @@
-from a2a.server.routes.helpers._proto_schema import (
+from a2a.server.routes._proto_schema import (
     REST_BODY_TYPES,
     field_schema,
     message_schema,

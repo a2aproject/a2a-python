@@ -1,4 +1,4 @@
-from a2a.server.routes.helpers.jsonrpc import (
+from a2a.server.routes._jsonrpc_schema import (
     DESCRIPTION,
     METHOD_TYPES,
     envelope_schema,
