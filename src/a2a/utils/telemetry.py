@@ -68,6 +68,7 @@ import functools
 import inspect
 import logging
 import os
+import sys
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
@@ -142,6 +143,17 @@ if not otel_installed or not otel_enabled:
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']
+
+
+if sys.version_info >= (3, 13):
+    from asyncio import QueueShutDown as _QueueShutDown
+else:
+    from culsans import AsyncQueueShutDown as _QueueShutDown
+
+_GRACEFUL_ASYNC_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    asyncio.CancelledError,
+    _QueueShutDown,
+)
 
 
 def trace_function(  # noqa: PLR0915
@@ -233,11 +245,16 @@ def trace_function(  # noqa: PLR0915
                 # Async wrapper, await for the function call to complete.
                 result = await func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-            # asyncio.CancelledError extends from BaseException
-            except asyncio.CancelledError as ce:
+            # Graceful end-of-operation signals (currently asyncio.CancelledError,
+            # QueueShutDown).
+            except _GRACEFUL_ASYNC_EXCEPTIONS as ge:
                 exception = None
-                logger.debug('CancelledError in span %s', actual_span_name)
-                span.record_exception(ce)
+                logger.debug(
+                    '%s in span %s',
+                    type(ge).__name__,
+                    actual_span_name,
+                )
+                span.record_exception(ge)
                 raise
             except Exception as e:
                 exception = e

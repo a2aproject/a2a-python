@@ -266,3 +266,41 @@ def test_env_var_disabled_logs_message(
         in caplog.text
     )
     assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
+
+
+def _graceful_async_exceptions() -> list[type[BaseException]]:
+    """Exception classes the async wrapper must treat as graceful.
+
+    Imported lazily so the module-level collection isn't evaluated until the
+    test runs (keeps import-time side effects out of unrelated tests).
+    """
+    from a2a.server.events.event_queue import QueueShutDown
+
+    return [asyncio.CancelledError, QueueShutDown]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exc_cls', _graceful_async_exceptions())
+async def test_trace_function_async_graceful_exception_does_not_mark_span_error(
+    mock_span: mock.MagicMock,
+    exc_cls: type[BaseException],
+) -> None:
+    """`trace_function` records graceful exceptions but never marks span ERROR.
+
+    Covers `asyncio.CancelledError` and `QueueShutDown`.
+    """
+
+    @trace_function
+    async def graceful() -> NoReturn:
+        await asyncio.sleep(0)
+        raise exc_cls('graceful end-of-operation')
+
+    with pytest.raises(exc_cls):
+        await graceful()
+
+    mock_span.record_exception.assert_called()
+    # The wrapper only passes `description=` when calling
+    # `set_status(StatusCode.ERROR, ...)`. Its absence on every call proves
+    # the span was never marked as failed.
+    for call in mock_span.set_status.call_args_list:
+        assert 'description' not in call.kwargs
