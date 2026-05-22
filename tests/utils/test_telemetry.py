@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 
+from a2a.server.events.event_queue import QueueShutDown
 from a2a.utils.telemetry import trace_class, trace_function
 
 
@@ -268,19 +269,8 @@ def test_env_var_disabled_logs_message(
     assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
 
 
-def _graceful_async_exceptions() -> list[type[BaseException]]:
-    """Exception classes the async wrapper must treat as graceful.
-
-    Imported lazily so the module-level collection isn't evaluated until the
-    test runs (keeps import-time side effects out of unrelated tests).
-    """
-    from a2a.server.events.event_queue import QueueShutDown
-
-    return [asyncio.CancelledError, QueueShutDown]
-
-
 @pytest.mark.asyncio
-@pytest.mark.parametrize('exc_cls', _graceful_async_exceptions())
+@pytest.mark.parametrize('exc_cls', [asyncio.CancelledError, QueueShutDown])
 async def test_trace_function_async_graceful_exception_does_not_mark_span_error(
     mock_span: mock.MagicMock,
     exc_cls: type[BaseException],
