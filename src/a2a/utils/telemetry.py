@@ -68,11 +68,32 @@ import functools
 import inspect
 import logging
 import os
+import sys
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from typing_extensions import Self
+
+# Graceful-shutdown exception allowlist. ``asyncio.CancelledError`` is always
+# treated as non-error.  On Python 3.13+ ``asyncio.QueueShutDown`` is also
+# a graceful signal; on older versions the back-port ``culsans`` exposes it
+# as ``AsyncQueueShutDown``.  Import whichever is available.
+_GRACEFUL_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    asyncio.CancelledError,
+)
+if sys.version_info >= (3, 13):
+    _GRACEFUL_EXCEPTIONS = (
+        asyncio.CancelledError,
+        asyncio.QueueShutDown,  # type: ignore[attr-defined]
+    )
+else:
+    try:
+        from culsans import AsyncQueueShutDown
+
+        _GRACEFUL_EXCEPTIONS = (asyncio.CancelledError, AsyncQueueShutDown)
+    except ImportError:
+        pass  # culsans not installed — fall back to CancelledError only
 
 
 if TYPE_CHECKING:
@@ -233,11 +254,14 @@ def trace_function(  # noqa: PLR0915
                 # Async wrapper, await for the function call to complete.
                 result = await func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-            # asyncio.CancelledError extends from BaseException
-            except asyncio.CancelledError as ce:
+            # Graceful-shutdown exceptions — record but do NOT mark as ERROR.
+            # ``asyncio.CancelledError`` is always included; on Python 3.13+
+            # ``asyncio.QueueShutDown`` (or the culsans back-port) is added
+            # when the queue is closed normally.
+            except _GRACEFUL_EXCEPTIONS as ge:
                 exception = None
-                logger.debug('CancelledError in span %s', actual_span_name)
-                span.record_exception(ce)
+                logger.debug('%s in span %s', type(ge).__name__, actual_span_name)
+                span.record_exception(ge)
                 raise
             except Exception as e:
                 exception = e

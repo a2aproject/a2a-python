@@ -266,3 +266,65 @@ def test_env_var_disabled_logs_message(
         in caplog.text
     )
     assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
+
+
+# ─── Graceful-shutdown exception allowlist ───────────────────────────────
+
+
+class _FakeQueueShutDown(BaseException):
+    """Simulated graceful-shutdown exception matching QueueShutDown semantics."""
+
+
+@pytest.mark.asyncio
+async def test_trace_function_async_cancelled_error_graceful(
+    mock_span: mock.MagicMock,
+) -> None:
+    """CancelledError is recorded but does NOT set span status to ERROR."""
+
+    @trace_function
+    async def raises_cancelled() -> NoReturn:
+        raise asyncio.CancelledError()
+
+    with pytest.raises(asyncio.CancelledError):
+        await raises_cancelled()
+
+    mock_span.record_exception.assert_called()
+    # Should NOT have set ERROR status
+    for call in mock_span.set_status.call_args_list:
+        args, _ = call
+        if args and hasattr(args[0], 'name'):
+            assert args[0].name != 'ERROR', (
+                'CancelledError should not set ERROR status'
+            )
+
+
+@pytest.mark.asyncio
+async def test_trace_function_async_queue_shutdown_graceful(
+    mock_span: mock.MagicMock,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """QueueShutDown (or back-port) is recorded but does NOT set ERROR status."""
+    from a2a.utils import telemetry
+
+    # Patch the graceful-exceptions tuple to include our fake exception
+    monkeypatch.setattr(
+        telemetry,
+        '_GRACEFUL_EXCEPTIONS',
+        (asyncio.CancelledError, _FakeQueueShutDown),
+    )
+
+    @trace_function
+    async def raises_shutdown() -> NoReturn:
+        raise _FakeQueueShutDown('queue closed')
+
+    with pytest.raises(_FakeQueueShutDown):
+        await raises_shutdown()
+
+    mock_span.record_exception.assert_called()
+    # Should NOT have set ERROR status
+    for call in mock_span.set_status.call_args_list:
+        args, _ = call
+        if args and hasattr(args[0], 'name'):
+            assert args[0].name != 'ERROR', (
+                'QueueShutDown should not set ERROR status'
+            )
