@@ -79,19 +79,14 @@ from typing_extensions import Self
 # treated as non-error.  On Python 3.13+ ``asyncio.QueueShutDown`` is also
 # a graceful signal; on older versions the back-port ``culsans`` exposes it
 # as ``AsyncQueueShutDown``.  Import whichever is available.
-_GRACEFUL_EXCEPTIONS: tuple[type[BaseException], ...] = (
-    asyncio.CancelledError,
-)
+_GRACEFUL_EXCEPTIONS: tuple[type[BaseException], ...] = (asyncio.CancelledError,)
 if sys.version_info >= (3, 13):
-    _GRACEFUL_EXCEPTIONS = (
-        asyncio.CancelledError,
-        asyncio.QueueShutDown,  # type: ignore[attr-defined]
-    )
+    _GRACEFUL_EXCEPTIONS += (asyncio.QueueShutDown,)  # type: ignore[attr-defined]
 else:
     try:
         from culsans import AsyncQueueShutDown
 
-        _GRACEFUL_EXCEPTIONS = (asyncio.CancelledError, AsyncQueueShutDown)
+        _GRACEFUL_EXCEPTIONS += (AsyncQueueShutDown,)
     except ImportError:
         pass  # culsans not installed — fall back to CancelledError only
 
