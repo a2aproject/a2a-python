@@ -6,7 +6,7 @@ from typing import Any
 
 
 def dumps(obj: Any) -> str:
-    """Serialize ``obj`` to a JSON-formatted ``str`` with UTF-8 defaults.
+    r"""Serialize ``obj`` to a JSON-formatted ``str`` with UTF-8 defaults.
 
     Use this in SSE/streaming code paths where payloads are serialized
     manually before being written to the wire. Unary HTTP responses do
@@ -14,6 +14,6 @@ def dumps(obj: Any) -> str:
     ``json.dumps(content, ensure_ascii=False, ...)`` internally; this
     helper makes the streaming paths behave identically so non-ASCII
     characters (CJK, emoji, etc.) reach clients as raw UTF-8 rather than
-    ``\\uXXXX`` escape sequences.
+    escape sequences.
     """
     return json.dumps(obj, ensure_ascii=False)
