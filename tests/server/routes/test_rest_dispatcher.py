@@ -318,7 +318,8 @@ class TestRestDispatcherStreaming:
 
         assert len(chunks) == 2
         for chunk in chunks:
-            # chunk.data is the JSON-serialized payload; it must contain the
-            # raw characters, not \uXXXX escape sequences.
-            assert non_ascii_text in chunk.data
-            assert '\\u4f60\\u597d' not in chunk.data
+            payload = getattr(chunk, 'data', chunk)
+            if isinstance(payload, bytes):
+                payload = payload.decode('utf-8')
+            assert non_ascii_text in payload
+            assert '\\u4f60\\u597d' not in payload

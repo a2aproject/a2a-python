@@ -236,6 +236,9 @@ async def test_v03_streaming_does_not_ascii_escape_non_ascii(
         chunks.append(chunk)
 
     assert len(chunks) == 1
-    payload = chunks[0].data if hasattr(chunks[0], 'data') else chunks[0]
+    chunk = chunks[0]
+    payload = getattr(chunk, 'data', chunk)
+    if isinstance(payload, bytes):
+        payload = payload.decode('utf-8')
     assert non_ascii_text in payload
     assert '\\u4f60\\u597d' not in payload

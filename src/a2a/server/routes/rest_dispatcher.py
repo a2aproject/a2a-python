@@ -1,4 +1,3 @@
-import json
 import logging
 
 from collections.abc import AsyncIterator, Awaitable, Callable
@@ -18,7 +17,7 @@ from a2a.types.a2a_pb2 import (
     GetTaskPushNotificationConfigRequest,
     SubscribeToTaskRequest,
 )
-from a2a.utils import constants, proto_utils
+from a2a.utils import constants, json_utils, proto_utils
 from a2a.utils.error_handlers import (
     build_rest_error_payload,
     rest_error_handler,
@@ -140,20 +139,14 @@ class RestDispatcher:
             return EventSourceResponse(iter([]))
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
-            yield ServerSentEvent(
-                data=json.dumps(first_item, ensure_ascii=False)
-            )
+            yield ServerSentEvent(data=json_utils.dumps(first_item))
             try:
                 async for item in stream:
-                    yield ServerSentEvent(
-                        data=json.dumps(item, ensure_ascii=False)
-                    )
+                    yield ServerSentEvent(data=json_utils.dumps(item))
             except Exception as e:
                 logger.exception('Error during REST SSE stream')
                 yield ServerSentEvent(
-                    data=json.dumps(
-                        build_rest_error_payload(e), ensure_ascii=False
-                    ),
+                    data=json_utils.dumps(build_rest_error_payload(e)),
                     event='error',
                 )
 

@@ -1,5 +1,4 @@
 import functools
-import json
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator, Awaitable, Callable
@@ -37,6 +36,7 @@ from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
 )
+from a2a.utils import json_utils
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -94,7 +94,7 @@ class REST03Adapter:
             stream: AsyncIterable[Any],
         ) -> AsyncIterator[str]:
             async for item in stream:
-                yield json.dumps(item, ensure_ascii=False)
+                yield json_utils.dumps(item)
 
         return EventSourceResponse(
             event_generator(method(request, call_context))
