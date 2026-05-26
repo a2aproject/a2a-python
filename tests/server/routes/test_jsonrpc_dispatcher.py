@@ -591,6 +591,65 @@ class TestJsonRpcDispatcherMethodRouting:
         call_context = handler.on_subscribe_to_task.call_args[0][1]
         assert call_context.state['method'] == 'SubscribeToTask'
 
+    @pytest.mark.asyncio
+    async def test_streaming_response_does_not_ascii_escape_non_ascii(
+        self, handler, agent_card
+    ):
+        """Non-ASCII characters (e.g. CJK) must be emitted as raw UTF-8."""
+        non_ascii_text = '你好'
+
+        async def stream_generator():
+            yield TaskArtifactUpdateEvent(
+                artifact=Artifact(
+                    artifact_id='a1',
+                    name='result',
+                    parts=[Part(text=non_ascii_text)],
+                ),
+                task_id='task1',
+                context_id='ctx1',
+                append=False,
+                last_chunk=True,
+            )
+
+        handler.on_message_send_stream = MagicMock(
+            return_value=stream_generator()
+        )
+
+        jsonrpc_routes = create_jsonrpc_routes(
+            request_handler=handler,
+            rpc_url='/',
+        )
+        from starlette.applications import Starlette
+
+        app = Starlette(routes=jsonrpc_routes)
+        client = TestClient(app, headers={'A2A-Version': '1.0'})
+
+        try:
+            with client.stream(
+                'POST',
+                '/',
+                json=_make_jsonrpc_request(
+                    'SendStreamingMessage',
+                    {
+                        'message': {
+                            'messageId': '1',
+                            'role': 'ROLE_USER',
+                            'parts': [{'text': non_ascii_text}],
+                        }
+                    },
+                ),
+            ) as response:
+                assert response.status_code == 200
+                content = b''
+                for chunk in response.iter_bytes():
+                    content += chunk
+        finally:
+            client.close()
+            await asyncio.sleep(0.1)
+
+        assert non_ascii_text.encode('utf-8') in content
+        assert b'\\u4f60\\u597d' not in content
+
 
 if __name__ == '__main__':
     pytest.main([__file__])

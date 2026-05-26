@@ -94,7 +94,7 @@ class REST03Adapter:
             stream: AsyncIterable[Any],
         ) -> AsyncIterator[str]:
             async for item in stream:
-                yield json.dumps(item)
+                yield json.dumps(item, ensure_ascii=False)
 
         return EventSourceResponse(
             event_generator(method(request, call_context))

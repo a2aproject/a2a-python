@@ -573,7 +573,7 @@ class JsonRpcDispatcher:
                 try:
                     async for item in stream:
                         event: dict[str, str] = {
-                            'data': json.dumps(item),
+                            'data': json.dumps(item, ensure_ascii=False),
                         }
                         if 'error' in item:
                             event['event'] = 'error'
@@ -592,7 +592,7 @@ class JsonRpcDispatcher:
                     )
                     yield {
                         'event': 'error',
-                        'data': json.dumps(error_response),
+                        'data': json.dumps(error_response, ensure_ascii=False),
                     }
 
             return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]

@@ -140,14 +140,20 @@ class RestDispatcher:
             return EventSourceResponse(iter([]))
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
-            yield ServerSentEvent(data=json.dumps(first_item))
+            yield ServerSentEvent(
+                data=json.dumps(first_item, ensure_ascii=False)
+            )
             try:
                 async for item in stream:
-                    yield ServerSentEvent(data=json.dumps(item))
+                    yield ServerSentEvent(
+                        data=json.dumps(item, ensure_ascii=False)
+                    )
             except Exception as e:
                 logger.exception('Error during REST SSE stream')
                 yield ServerSentEvent(
-                    data=json.dumps(build_rest_error_payload(e)),
+                    data=json.dumps(
+                        build_rest_error_payload(e), ensure_ascii=False
+                    ),
                     event='error',
                 )
 
