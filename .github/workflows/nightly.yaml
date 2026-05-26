@@ -1,0 +1,38 @@
+name: Nightly ITK
+
+on:
+  schedule:
+    - cron: '0 2 * * *'  # 2:00 AM UTC daily
+  workflow_dispatch:     # Allow manual execution
+
+permissions:
+  contents: write 
+
+jobs:
+  nightly:
+    name: Nightly ITK Run
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v7
+
+      - name: Run Nightly ITK Tests
+        run: bash run_itk.sh
+        working-directory: itk
+        env:
+          A2A_ITK_REVISION: main
+          ITK_NIGHTLY_RUN: "True"
+
+      - name: Upload Results to Rolling Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "nightly-metrics"
+          prerelease: true
+          files: |
+            itk/itk_python.json
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

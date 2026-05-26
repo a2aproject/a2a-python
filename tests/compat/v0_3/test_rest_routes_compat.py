@@ -5,6 +5,7 @@ from unittest.mock import MagicMock
 import pytest
 
 from a2a.compat.v0_3 import a2a_v0_3_pb2
+from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_agent_card_routes
 from a2a.server.routes.rest_routes import create_rest_routes
@@ -164,6 +165,14 @@ async def test_get_task_v03(
     actual_response = a2a_v0_3_pb2.Task()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+@pytest.mark.anyio
+async def test_list_tasks_not_in_v03_adapter_routes(
+    request_handler: RequestHandler,
+) -> None:
+    adapter = REST03Adapter(http_handler=request_handler)
+    assert ('/v1/tasks', 'GET') not in adapter.routes()
 
 
 @pytest.mark.anyio

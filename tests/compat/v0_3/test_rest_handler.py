@@ -357,12 +357,6 @@ async def test_list_push_notifications(
     assert called_req.params.id == 'task-1'
 
 
-@pytest.mark.anyio
-async def test_list_tasks(rest_handler, mock_request, mock_context):
-    with pytest.raises(NotImplementedError):
-        await rest_handler.list_tasks(mock_request, mock_context)
-
-
 # Add our new translation method test
 @pytest.mark.anyio
 async def test_on_get_extended_agent_card_success(

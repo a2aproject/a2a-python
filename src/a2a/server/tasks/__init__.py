@@ -26,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from a2a.server.tasks.database_task_store import (
-        DatabaseTaskStore,  # type: ignore
+        DatabaseTaskStore,
     )
 except ImportError as e:
     _original_error = e
@@ -36,7 +36,7 @@ except ImportError as e:
         e,
     )
 
-    class DatabaseTaskStore:  # type: ignore
+    class DatabaseTaskStore:
         """Placeholder for DatabaseTaskStore when dependencies are not installed."""
 
         def __init__(self, *args, **kwargs):
@@ -48,7 +48,7 @@ except ImportError as e:
 
 try:
     from a2a.server.tasks.database_push_notification_config_store import (
-        DatabasePushNotificationConfigStore,  # type: ignore
+        DatabasePushNotificationConfigStore,
     )
 except ImportError as e:
     _original_error = e
@@ -58,7 +58,7 @@ except ImportError as e:
         e,
     )
 
-    class DatabasePushNotificationConfigStore:  # type: ignore
+    class DatabasePushNotificationConfigStore:
         """Placeholder for DatabasePushNotificationConfigStore when dependencies are not installed."""
 
         def __init__(self, *args, **kwargs):

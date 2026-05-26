@@ -1,0 +1,106 @@
+{
+  "tests": [
+    {
+      "name": "Nightly - JSONRPC - Send Message",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["jsonrpc"],
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - JSONRPC - Send Message (Streaming)",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["jsonrpc"],
+      "streaming": true,
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - JSONRPC - Push Notification",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["jsonrpc"],
+      "behavior": "push_notification",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - JSONRPC - Resubscribe",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["jsonrpc"],
+      "streaming": true,
+      "behavior": "resubscribe",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - GRPC - Send Message",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["grpc"],
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - GRPC - Send Message (Streaming)",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["grpc"],
+      "streaming": true,
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - GRPC - Push Notification",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["grpc"],
+      "behavior": "push_notification",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - GRPC - Resubscribe",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["grpc"],
+      "streaming": true,
+      "behavior": "resubscribe",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - HTTP_JSON - Send Message",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["http_json"],
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - HTTP_JSON - Send Message (Streaming)",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["http_json"],
+      "streaming": true,
+      "behavior": "send_message",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - HTTP_JSON - Push Notification",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["http_json"],
+      "behavior": "push_notification",
+      "build_subtests": true
+    },
+    {
+      "name": "Nightly - HTTP_JSON - Resubscribe",
+      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
+      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
+      "protocols": ["http_json"],
+      "streaming": true,
+      "behavior": "resubscribe",
+      "build_subtests": true
+    }
+  ]
+}

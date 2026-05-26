@@ -75,7 +75,7 @@ def create_agent_card_signer(
             payload=payload_dict,
             key=signing_key,
             algorithm=protected_header.get('alg', 'HS256'),
-            headers=dict(protected_header),
+            headers=dict(protected_header),  # ty:ignore[no-matching-overload]
         )
 
         # The result of jwt.encode is a compact serialization: HEADER.PAYLOAD.SIGNATURE

@@ -12,5 +12,8 @@ except ImportError:
         class Channel:  # type: ignore[no-redef]
             """Stub class for type hinting when grpc.aio is not available."""
 
+            async def close(self, grace: float | None = None) -> None:
+                """Stub for Channel.close."""
+
     else:
         Channel = None  # At runtime, pd will be None if the import failed.

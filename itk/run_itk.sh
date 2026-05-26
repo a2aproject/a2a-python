@@ -14,7 +14,7 @@ cleanup() {
   docker stop itk-service > /dev/null 2>&1 || true
   docker rm itk-service > /dev/null 2>&1 || true
   docker rmi itk_service > /dev/null 2>&1 || true
-  rm -rf a2a-samples > /dev/null 2>&1 || true
+  rm -rf a2a-itk > /dev/null 2>&1 || true
   rm -rf pyproto > /dev/null 2>&1 || true
   rm -f instruction.proto > /dev/null 2>&1 || true
   echo "Done. Final exit code: $RESULT"
@@ -23,24 +23,24 @@ cleanup() {
 # Register cleanup function to run on script exit
 trap cleanup EXIT
 
-# 1. Pull a2a-samples and checkout revision
-: "${A2A_SAMPLES_REVISION:?A2A_SAMPLES_REVISION environment variable must be set}"
+# 1. Pull a2a-itk and checkout revision
+: "${A2A_ITK_REVISION:?A2A_ITK_REVISION environment variable must be set}"
 
-if [ ! -d "a2a-samples" ]; then
-  git clone https://github.com/a2aproject/a2a-samples.git a2a-samples
+if [ ! -d "a2a-itk" ]; then
+  git clone https://github.com/a2aproject/a2a-itk.git a2a-itk
 fi
-cd a2a-samples
+cd a2a-itk
 git fetch origin
-git checkout "$A2A_SAMPLES_REVISION"
+git checkout "$A2A_ITK_REVISION"
 
 # Only pull if it's a branch (not a detached HEAD)
 if git symbolic-ref -q HEAD > /dev/null; then
-  git pull origin "$A2A_SAMPLES_REVISION"
+  git pull origin "$A2A_ITK_REVISION"
 fi
 cd ..
 
-# 2. Copy instruction.proto from a2a-samples
-cp a2a-samples/itk/protos/instruction.proto ./instruction.proto
+# 2. Copy instruction.proto from a2a-itk
+cp a2a-itk/protos/instruction.proto ./instruction.proto
 
 # 3. Build pyproto library
 mkdir -p pyproto
@@ -54,9 +54,9 @@ uv run --with grpcio-tools python -m grpc_tools.protoc \
 # Fix imports in generated file
 sed -i 's/^import instruction_pb2 as instruction__pb2/from . import instruction_pb2 as instruction__pb2/' pyproto/instruction_pb2_grpc.py
 
-# 4. Build jit itk_service docker image from root of a2a-samples/itk
-# We run docker build from the itk directory inside a2a-samples
-docker build -t itk_service a2a-samples/itk
+# 4. Build jit itk_service docker image from root of a2a-itk
+# We run docker build from the root directory of a2a-itk
+docker build -t itk_service a2a-itk
 
 # 5. Start docker service
 # Mounting a2a-python as repo and itk as current agent
@@ -109,68 +109,28 @@ if ! curl -s http://127.0.0.1:8000/ > /dev/null; then
   exit 1
 fi
 
-echo "ITK Service is up! Sending compatibility test request..."
+SCENARIO_FILE="scenarios.json"
+if [ "${ITK_NIGHTLY_RUN^^}" = "TRUE" ]; then
+  SCENARIO_FILE="scenarios_full.json"
+fi
+
+echo "ITK Service is up! Sending compatibility test request using $SCENARIO_FILE..."
 RESPONSE=$(curl -s -X POST http://127.0.0.1:8000/run \
   -H "Content-Type: application/json" \
-  -d '{
-    "tests": [
-      {
-        "name": "Star Topology (Full) - JSONRPC & GRPC",
-        "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-        "protocols": ["jsonrpc", "grpc"],
-        "behavior": "send_message"
-      },
-      {
-        "name": "Star Topology (No Go v03) - HTTP_JSON",
-        "sdks": ["current", "python_v10", "python_v03", "go_v10"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
-        "protocols": ["http_json"],
-        "behavior": "send_message"
-      },
-      {
-        "name": "Star Topology (Full) - JSONRPC & GRPC (Streaming)",
-        "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-        "protocols": ["jsonrpc", "grpc"],
-        "streaming": true,
-        "behavior": "send_message"
-      },
-      {
-        "name": "Star Topology (No Go v03) - HTTP_JSON (Streaming)",
-        "sdks": ["current", "python_v10", "python_v03", "go_v10"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
-        "protocols": ["http_json"],
-        "streaming": true,
-        "behavior": "send_message"
-      },
-      {
-        "name": "Push Notification Test - JSONRPC & GRPC",
-        "sdks": ["current", "python_v10", "python_v03", "go_v03"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "0->3", "1->0", "2->0", "3->0"],
-        "protocols": ["jsonrpc", "grpc"],
-        "behavior": "push_notification"
-      },
-      {
-        "name": "Push Notification Test - HTTP_JSON",
-        "sdks": ["current", "python_v10", "python_v03"],
-        "traversal": "euler",
-        "edges": ["0->1", "0->2", "1->0", "2->0"],
-        "protocols": ["http_json"],
-        "behavior": "push_notification"
-      }
-    ]
-  }')
+  -d "@$SCENARIO_FILE")
 
-echo "--------------------------------------------------------"
-echo "ITK TEST RESULTS:"
-echo "--------------------------------------------------------"
-echo "$RESPONSE" | python3 -c "
+if [ "${ITK_NIGHTLY_RUN^^}" = "TRUE" ]; then
+  echo "Nightly run detected. Saving raw results and running process_results.py..."
+  echo "$RESPONSE" > raw_results.json
+  python3 a2a-itk/scripts/process_results.py \
+    --history_output_file itk_python.json \
+    --history_url https://github.com/a2aproject/a2a-python/releases/download/nightly-metrics/itk_python.json
+  RESULT=$?
+else
+  echo "--------------------------------------------------------"
+  echo "ITK TEST RESULTS:"
+  echo "--------------------------------------------------------"
+  echo "$RESPONSE" | python3 -c "
 import sys, json
 try:
     data = json.load(sys.stdin)
@@ -188,7 +148,8 @@ except Exception as e:
     print(f'Raw response: {data if \"data\" in locals() else \"no data\"}')
     sys.exit(1)
 "
-RESULT=$?
+  RESULT=$?
+fi
 set -e
 
 if [ $RESULT -ne 0 ]; then
