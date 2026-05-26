@@ -101,6 +101,34 @@ class MockCallContextBuilder(GrpcServerCallContextBuilder):
         )
 
 
+class ResumingAgent(AgentExecutor):
+    """Test agent: 'start' -> INPUT_REQUIRED, 'here is input' -> COMPLETED."""
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        message = context.message
+        if message and message.parts and message.parts[0].text == 'start':
+            task = new_task_from_user_message(message)
+            task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
+            await event_queue.enqueue_event(task)
+        elif (
+            message
+            and message.parts
+            and message.parts[0].text == 'here is input'
+        ):
+            task = new_task_from_user_message(message)
+            task.status.state = TaskState.TASK_STATE_COMPLETED
+            await event_queue.enqueue_event(task)
+        else:
+            raise ValueError('Unexpected message')
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
 def agent_card():
     return AgentCard(
         name='Test Agent',
@@ -464,7 +492,7 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
         if streaming:
             with pytest.raises(
                 InvalidParamsError,
-                match='Task .* is already completed',
+                match='Task .* is in terminal state',
             ):
                 await client.subscribe(
                     SubscribeToTaskRequest(id=task.id)
@@ -1087,31 +1115,6 @@ async def test_scenario_return_immediately(use_legacy, streaming):
     'streaming', [False, True], ids=['blocking', 'streaming']
 )
 async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
-    class ResumingAgent(AgentExecutor):
-        async def execute(
-            self, context: RequestContext, event_queue: EventQueue
-        ):
-            message = context.message
-            if message and message.parts and message.parts[0].text == 'start':
-                task = new_task_from_user_message(message)
-                task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
-                await event_queue.enqueue_event(task)
-            elif (
-                message
-                and message.parts
-                and message.parts[0].text == 'here is input'
-            ):
-                task = new_task_from_user_message(message)
-                task.status.state = TaskState.TASK_STATE_COMPLETED
-                await event_queue.enqueue_event(task)
-            else:
-                raise ValueError('Unexpected message')
-
-        async def cancel(
-            self, context: RequestContext, event_queue: EventQueue
-        ):
-            pass
-
     handler = create_handler(ResumingAgent(), use_legacy)
     client = await create_client(
         handler, agent_card=agent_card(), streaming=streaming
@@ -1155,6 +1158,37 @@ async def test_scenario_resumption_from_interrupted(use_legacy, streaming):
     assert [get_state(event) async for event in it2] == [
         TaskState.TASK_STATE_COMPLETED,
     ]
+
+
+def test_input_required_followup_across_per_rpc_event_loops():
+    handler = create_handler(ResumingAgent(), use_legacy=False)
+    call_context = ServerCallContext(user=MockUser())
+
+    msg1 = Message(
+        message_id='msg-start', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    req1 = SendMessageRequest(
+        message=msg1,
+        configuration=SendMessageConfiguration(return_immediately=False),
+    )
+    result1 = asyncio.run(handler.on_message_send(req1, call_context))
+    assert isinstance(result1, Task)
+    assert result1.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    msg2 = Message(
+        task_id=result1.id,
+        context_id=result1.context_id,
+        message_id='msg-resume',
+        role=Role.ROLE_USER,
+        parts=[Part(text='here is input')],
+    )
+    req2 = SendMessageRequest(
+        message=msg2,
+        configuration=SendMessageConfiguration(return_immediately=False),
+    )
+    result2 = asyncio.run(handler.on_message_send(req2, call_context))
+    assert isinstance(result2, Task)
+    assert result2.status.state == TaskState.TASK_STATE_COMPLETED
 
 
 # Scenario: Auth required and side channel unblocking

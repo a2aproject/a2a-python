@@ -302,10 +302,6 @@ class EventConsumer:
             self.active_task._task_id,
             updated_task.status.state,
         )
-        if not self.active_task._is_finished.is_set():
-            async with self.active_task._lock:
-                self.active_task._reference_count -= 1
-
         self.active_task._is_finished.set()
         self.active_task._request_queue.shutdown(immediate=True)
 
@@ -569,6 +565,9 @@ class ActiveTask:
             await self._event_queue_agent.close(immediate=False)
             await self._event_queue_subscribers.close(immediate=False)
             logger.debug('Producer[%s]: Completed', self._task_id)
+            async with self._lock:
+                self._reference_count -= 1
+            await self._maybe_cleanup()
 
     async def _run_consumer(self) -> None:
         """Consumes events from the agent and updates system state."""
