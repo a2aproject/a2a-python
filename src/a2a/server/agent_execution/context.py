@@ -1,5 +1,7 @@
 from typing import Any
 
+from google.protobuf import json_format
+
 from a2a.helpers.proto_helpers import get_message_text
 from a2a.server.context import ServerCallContext
 from a2a.server.id_generator import (
@@ -148,7 +150,10 @@ class RequestContext:
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
         if self._params and self._params.metadata:
-            return dict(self._params.metadata)
+            # metadata is a google.protobuf.Struct,
+            # MessageToDict recurses into nested Struct/ListValue fields;
+            # dict would leak raw protobuf objects to callers.
+            return json_format.MessageToDict(self._params.metadata)
         return {}
 
     @property
