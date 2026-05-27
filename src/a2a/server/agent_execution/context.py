@@ -149,8 +149,7 @@ class RequestContext:
     @property
     def metadata(self) -> dict[str, Any]:
         """Metadata associated with the request, if available."""
-        if self._params and self._params.metadata:
-            # metadata is a google.protobuf.Struct,
+        if self._params:
             # MessageToDict recurses into nested Struct/ListValue fields;
             # dict would leak raw protobuf objects to callers.
             return json_format.MessageToDict(self._params.metadata)
