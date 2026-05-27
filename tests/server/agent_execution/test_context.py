@@ -1,3 +1,4 @@
+import json
 import uuid
 
 from unittest.mock import Mock, patch
@@ -13,6 +14,7 @@ from a2a.types.a2a_pb2 import (
     Task,
 )
 from a2a.utils.errors import InvalidParamsError
+from google.protobuf import struct_pb2
 
 
 class TestRequestContext:
@@ -270,9 +272,26 @@ class TestRequestContext:
 
     def test_metadata_property_with_content(self, mock_params: Mock) -> None:
         """Test metadata property returns the metadata from params."""
-        mock_params.metadata = {'key': 'value'}
+        struct = struct_pb2.Struct()
+        struct['key'] = 'value'
+        mock_params.metadata = struct
         context = RequestContext(ServerCallContext(), request=mock_params)
         assert context.metadata == {'key': 'value'}
+
+    def test_metadata_property_with_real_struct_nested(self) -> None:
+        """Regression: `dict(struct)` leaves nested Struct/ListValue as raw
+        protobuf objects, breaking JSON serialization of the returned dict.
+        """
+        request = SendMessageRequest()
+        request.metadata['flat_str'] = 'value1'
+        request.metadata['nested'] = {'a': 1, 'b': [1, 2, 3]}
+
+        md = RequestContext(ServerCallContext(), request=request).metadata
+
+        assert json.loads(json.dumps(md)) == {
+            'flat_str': 'value1',
+            'nested': {'a': 1.0, 'b': [1.0, 2.0, 3.0]},
+        }
 
     def test_init_with_existing_ids_in_message(
         self, mock_message: Mock, mock_params: Mock
