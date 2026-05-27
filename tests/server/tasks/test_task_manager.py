@@ -18,7 +18,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 
 
 class SampleUser(User):
@@ -429,6 +429,7 @@ def test_append_artifact_to_task():
     assert len(task.artifacts[1].parts) == 1
 
     # Test appending part to a task that does not have a matching artifact
+    # should raise InvalidAgentResponseError instead of silently dropping (#1038)
     non_existing_artifact_with_parts = Artifact(
         artifact_id='artifact-456', parts=[Part(text='Part 1')]
     )
@@ -438,7 +439,5 @@ def test_append_artifact_to_task():
         task_id='123',
         context_id='123',
     )
-    append_artifact_to_task(task, append_event_5)
-    assert len(task.artifacts) == 2
-    assert len(task.artifacts[0].parts) == 2
-    assert len(task.artifacts[1].parts) == 1
+    with pytest.raises(InvalidAgentResponseError, match='append=True for nonexistent artifact_id'):
+        append_artifact_to_task(task, append_event_5)
