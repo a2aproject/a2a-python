@@ -20,6 +20,10 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
+class QueueShutDownNormal(QueueShutDown):
+    """Raised when a sink is closed by a graceful queue shutdown."""
+
+
 @trace_class(kind=SpanKind.SERVER)
 class EventQueueSource(EventQueue):
     """The Parent EventQueue.
@@ -297,6 +301,7 @@ class EventQueueSink(EventQueue):
             maxsize=max_queue_size
         )
         self._is_closed = False
+        self._closed_immediate: bool | None = None
         self._lock = asyncio.Lock()
 
         logger.debug('EventQueueSink initialized.')
@@ -317,7 +322,14 @@ class EventQueueSink(EventQueue):
     async def dequeue_event(self) -> Event:
         """Pulls an event from the sink queue."""
         logger.debug('Attempting to dequeue event (waiting).')
-        event = await self._queue.get()
+        try:
+            event = await self._queue.get()
+        except QueueShutDown as exc:
+            if self._is_closed and self._closed_immediate is False:
+                raise QueueShutDownNormal(
+                    'Queue closed after graceful shutdown.'
+                ) from exc
+            raise
         logger.debug('Dequeued event: %s', event)
         return event
 
@@ -347,6 +359,7 @@ class EventQueueSink(EventQueue):
         logger.debug('Closing EventQueueSink.')
         async with self._lock:
             self._is_closed = True
+            self._closed_immediate = immediate
             self._queue.shutdown(immediate=immediate)
 
         # Ignore KeyError (close have to be idempotent).

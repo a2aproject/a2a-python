@@ -14,6 +14,7 @@ from a2a.server.events.event_queue import (
 from a2a.server.events.event_queue_v2 import (
     EventQueueSink,
     EventQueueSource,
+    QueueShutDownNormal,
 )
 from a2a.server.jsonrpc_models import JSONRPCError
 from a2a.types import (
@@ -231,14 +232,14 @@ async def test_dequeue_event_closed_and_empty(
     event_queue: EventQueueSource,
     expected_queue_closed_exception: type[Exception],
 ) -> None:
-    """Test dequeue_event raises QueueShutDown when closed and empty."""
+    """Test dequeue_event raises normal shutdown when gracefully closed."""
     await event_queue.close()
     assert event_queue.is_closed()
     # Ensure queue is actually empty (e.g. by trying a non-blocking get on internal queue)
     with pytest.raises(expected_queue_closed_exception):
         event_queue.queue.get_nowait()
 
-    with pytest.raises(expected_queue_closed_exception):
+    with pytest.raises(QueueShutDownNormal):
         await event_queue.dequeue_event()
 
 
@@ -377,7 +378,7 @@ async def test_event_queue_dequeue_immediate_false(
     await close_task
 
     # Queue is now empty and closed
-    with pytest.raises(QueueShutDown):
+    with pytest.raises(QueueShutDownNormal):
         await event_queue.dequeue_event()
 
 
@@ -389,8 +390,9 @@ async def test_event_queue_dequeue_immediate_true(
     await event_queue.enqueue_event(msg)
     await event_queue.close(immediate=True)
     # The queue is immediately flushed, so dequeue should raise QueueShutDown
-    with pytest.raises(QueueShutDown):
+    with pytest.raises(QueueShutDown) as exc_info:
         await event_queue.dequeue_event()
+    assert not isinstance(exc_info.value, QueueShutDownNormal)
 
 
 @pytest.mark.asyncio
@@ -401,8 +403,9 @@ async def test_event_queue_enqueue_when_closed(
     msg = create_sample_message()
     await event_queue.enqueue_event(msg)
     # Enqueue should have returned without doing anything
-    with pytest.raises(QueueShutDown):
+    with pytest.raises(QueueShutDown) as exc_info:
         await event_queue.dequeue_event()
+    assert not isinstance(exc_info.value, QueueShutDownNormal)
 
 
 @pytest.mark.asyncio
