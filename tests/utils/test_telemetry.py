@@ -271,22 +271,22 @@ def test_env_var_disabled_logs_message(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('exc_cls', [asyncio.CancelledError, QueueShutDown])
-async def test_trace_function_async_graceful_exception_does_not_mark_span_error(
+async def test_trace_function_async_non_error_exception_does_not_mark_span_error(
     mock_span: mock.MagicMock,
     exc_cls: type[BaseException],
 ) -> None:
-    """`trace_function` records graceful exceptions but never marks span ERROR.
+    """`trace_function` records non-error exceptions but never marks span ERROR.
 
     Covers `asyncio.CancelledError` and `QueueShutDown`.
     """
 
     @trace_function
-    async def graceful() -> NoReturn:
+    async def non_error_exception() -> NoReturn:
         await asyncio.sleep(0)
-        raise exc_cls('graceful end-of-operation')
+        raise exc_cls('operation ended with non-error exception')
 
     with pytest.raises(exc_cls):
-        await graceful()
+        await non_error_exception()
 
     mock_span.record_exception.assert_called()
     # The wrapper only passes `description=` when calling
