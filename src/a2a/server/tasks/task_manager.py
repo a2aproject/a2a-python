@@ -74,7 +74,8 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             dict(new_artifact_data.metadata.items())
         )
     else:
-        # A2A spec (Section 4.22 TaskArtifactUpdateEvent) states:
+        # A2A spec (Section 4.2.2 TaskArtifactUpdateEvent,
+        # https://a2a-protocol.org/v1.0.0/specification/#422-taskartifactupdateevent):
         #   "append — If true, the content of this artifact should be
         #    appended to a previously sent artifact."
         # append=True with no prior artifact of this ID is an agent
