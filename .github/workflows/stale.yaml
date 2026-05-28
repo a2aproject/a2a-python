@@ -27,7 +27,7 @@ jobs:
           days-before-issue-close: 13
           stale-issue-label: "status:stale"
           close-issue-reason: not_planned
-          any-of-labels: "status:awaiting response,status:more data needed"
+          any-of-labels: "status:awaiting response,status:more data needed,question"
           stale-issue-message: >
             Marking this issue as stale since it has been open for 14 days with no activity.
             This issue will be closed if no further activity occurs.
