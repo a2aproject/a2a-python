@@ -302,10 +302,6 @@ class EventConsumer:
             self.active_task._task_id,
             updated_task.status.state,
         )
-        if not self.active_task._is_finished.is_set():
-            async with self.active_task._lock:
-                self.active_task._reference_count -= 1
-
         self.active_task._is_finished.set()
         self.active_task._request_queue.shutdown(immediate=True)
 
@@ -578,7 +574,8 @@ class ActiveTask:
             self._is_finished.set()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
-
+            async with self._lock:
+                self._reference_count -= 1
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 

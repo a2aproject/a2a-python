@@ -288,3 +288,38 @@ class TestRestDispatcherStreaming:
 
         response = await dispatcher.on_message_send_stream(req)
         assert response.status_code == 400
+
+    async def test_streaming_does_not_ascii_escape_non_ascii(
+        self, rest_dispatcher_instance
+    ):
+        """Non-ASCII characters in SSE payloads must pass through as raw UTF-8.
+
+        Regression test for https://github.com/a2aproject/a2a-python/issues/1078.
+        """
+        non_ascii_text = '你好'
+
+        async def stream_with_non_ascii(
+            context: ServerCallContext,
+        ) -> AsyncIterator[dict]:
+            yield {'msg': {'text': non_ascii_text}}
+            yield {'msg': {'text': f'echo: {non_ascii_text}'}}
+
+        # Drive _handle_streaming directly to assert on the serialized bytes
+        # produced by json.dumps, independent of protobuf encoding details.
+        req = make_mock_request(method='POST')
+        response = await rest_dispatcher_instance._handle_streaming(
+            req, stream_with_non_ascii
+        )
+        assert response.status_code == 200
+
+        chunks = []
+        async for chunk in response.body_iterator:
+            chunks.append(chunk)
+
+        assert len(chunks) == 2
+        for chunk in chunks:
+            payload = getattr(chunk, 'data', chunk)
+            if isinstance(payload, bytes):
+                payload = payload.decode('utf-8')
+            assert non_ascii_text in payload
+            assert '\\u4f60\\u597d' not in payload

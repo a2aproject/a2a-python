@@ -1,6 +1,7 @@
 import logging
 
-from unittest.mock import MagicMock
+from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -22,6 +23,8 @@ from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
 from starlette.applications import Starlette
+from starlette.datastructures import Headers
+from starlette.requests import Request
 
 
 logger = logging.getLogger(__name__)
@@ -200,3 +203,42 @@ async def test_cancel_task_v03(
     actual_response = a2a_v0_3_pb2.Task()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+@pytest.mark.anyio
+async def test_v03_streaming_does_not_ascii_escape_non_ascii(
+    request_handler: RequestHandler,
+) -> None:
+    """v0.3 REST streaming must emit raw UTF-8 for non-ASCII characters.
+
+    Regression test for https://github.com/a2aproject/a2a-python/issues/1078.
+    """
+    adapter = REST03Adapter(http_handler=request_handler)
+    non_ascii_text = '你好'
+
+    async def stream_with_non_ascii(
+        request: Request, context: object
+    ) -> AsyncIterator[dict]:
+        yield {'msg': {'text': non_ascii_text}}
+
+    mock_req = MagicMock(spec=Request)
+    mock_req.body = AsyncMock(return_value=b'{}')
+    mock_req.headers = Headers({'a2a-version': '0.3'})
+    mock_req.user = MagicMock(is_authenticated=False)
+    mock_req.auth = None
+    mock_req.scope = {}
+
+    response = await adapter._handle_streaming_request(
+        stream_with_non_ascii, mock_req
+    )
+    chunks = []
+    async for chunk in response.body_iterator:
+        chunks.append(chunk)
+
+    assert len(chunks) == 1
+    chunk = chunks[0]
+    payload = getattr(chunk, 'data', chunk)
+    if isinstance(payload, bytes):
+        payload = payload.decode('utf-8')
+    assert non_ascii_text in payload
+    assert '\\u4f60\\u597d' not in payload
