@@ -439,5 +439,8 @@ def test_append_artifact_to_task():
         task_id='123',
         context_id='123',
     )
-    with pytest.raises(InvalidAgentResponseError, match='append=True for nonexistent artifact_id'):
+    with pytest.raises(
+        InvalidAgentResponseError,
+        match='append=True for nonexistent artifact_id',
+    ):
         append_artifact_to_task(task, append_event_5)
