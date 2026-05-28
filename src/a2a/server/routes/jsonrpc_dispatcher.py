@@ -41,7 +41,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils import constants, proto_utils
+from a2a.utils import constants, json_utils, proto_utils
 from a2a.utils.errors import (
     A2AError,
     TaskNotFoundError,
@@ -573,7 +573,7 @@ class JsonRpcDispatcher:
                 try:
                     async for item in stream:
                         event: dict[str, str] = {
-                            'data': json.dumps(item),
+                            'data': json_utils.dumps(item),
                         }
                         if 'error' in item:
                             event['event'] = 'error'
@@ -592,7 +592,7 @@ class JsonRpcDispatcher:
                     )
                     yield {
                         'event': 'error',
-                        'data': json.dumps(error_response),
+                        'data': json_utils.dumps(error_response),
                     }
 
             return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]
