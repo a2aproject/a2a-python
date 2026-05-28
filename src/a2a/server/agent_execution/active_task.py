@@ -59,7 +59,7 @@ from a2a.server.events.event_queue_v2 import (
     Event,
     EventQueueSource,
     QueueShutDown,
-    _create_async_queue,
+    create_async_queue,
 )
 from a2a.server.tasks import PushNotificationEvent
 from a2a.types.a2a_pb2 import (
@@ -402,7 +402,7 @@ class ActiveTask:
 
         # Queue for incoming requests
         self._request_queue: AsyncQueue[tuple[RequestContext, uuid.UUID]] = (
-            _create_async_queue()
+            create_async_queue()
         )
 
     @property

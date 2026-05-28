@@ -74,6 +74,8 @@ from typing import TYPE_CHECKING, Any
 
 from typing_extensions import Self
 
+from a2a.utils._async_queue_compat import QueueShutDown
+
 
 if TYPE_CHECKING:
     from opentelemetry.trace import (
@@ -142,6 +144,12 @@ if not otel_installed or not otel_enabled:
 
 SpanKind = _SpanKind
 __all__ = ['SpanKind']
+
+
+_NON_ERROR_EXCEPTIONS: tuple[type[BaseException], ...] = (
+    asyncio.CancelledError,
+    QueueShutDown,
+)
 
 
 def trace_function(  # noqa: PLR0915
@@ -233,11 +241,14 @@ def trace_function(  # noqa: PLR0915
                 # Async wrapper, await for the function call to complete.
                 result = await func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-            # asyncio.CancelledError extends from BaseException
-            except asyncio.CancelledError as ce:
+            except _NON_ERROR_EXCEPTIONS as ge:
                 exception = None
-                logger.debug('CancelledError in span %s', actual_span_name)
-                span.record_exception(ce)
+                logger.debug(
+                    '%s in span %s',
+                    type(ge).__name__,
+                    actual_span_name,
+                )
+                span.record_exception(ge)
                 raise
             except Exception as e:
                 exception = e

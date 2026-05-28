@@ -8,6 +8,7 @@ from unittest import mock
 
 import pytest
 
+from a2a.server.events.event_queue import QueueShutDown
 from a2a.utils.telemetry import trace_class, trace_function
 
 
@@ -266,3 +267,30 @@ def test_env_var_disabled_logs_message(
         in caplog.text
     )
     assert 'OTEL_INSTRUMENTATION_A2A_SDK_ENABLED' in caplog.text
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('exc_cls', [asyncio.CancelledError, QueueShutDown])
+async def test_trace_function_async_non_error_exception_does_not_mark_span_error(
+    mock_span: mock.MagicMock,
+    exc_cls: type[BaseException],
+) -> None:
+    """`trace_function` records non-error exceptions but never marks span ERROR.
+
+    Covers `asyncio.CancelledError` and `QueueShutDown`.
+    """
+
+    @trace_function
+    async def non_error_exception() -> NoReturn:
+        await asyncio.sleep(0)
+        raise exc_cls('operation ended with non-error exception')
+
+    with pytest.raises(exc_cls):
+        await non_error_exception()
+
+    mock_span.record_exception.assert_called()
+    # The wrapper only passes `description=` when calling
+    # `set_status(StatusCode.ERROR, ...)`. Its absence on every call proves
+    # the span was never marked as failed.
+    for call in mock_span.set_status.call_args_list:
+        assert 'description' not in call.kwargs

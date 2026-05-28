@@ -1,6 +1,5 @@
 import asyncio
 import logging
-import sys
 import warnings
 
 from abc import ABC, abstractmethod
@@ -9,32 +8,16 @@ from typing import Any, cast
 
 from typing_extensions import Self
 
-
-if sys.version_info >= (3, 13):
-    from asyncio import Queue as AsyncQueue
-    from asyncio import QueueShutDown
-
-    def _create_async_queue(maxsize: int = 0) -> AsyncQueue[Any]:
-        """Create a backwards-compatible queue object."""
-        return AsyncQueue(maxsize=maxsize)
-else:
-    import culsans
-
-    from culsans import AsyncQueue  # type: ignore[no-redef]
-    from culsans import (
-        AsyncQueueShutDown as QueueShutDown,  # type: ignore[no-redef]
-    )
-
-    def _create_async_queue(maxsize: int = 0) -> AsyncQueue[Any]:
-        """Create a backwards-compatible queue object."""
-        return culsans.Queue(maxsize=maxsize).async_q  # type: ignore[no-any-return]
-
-
 from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
+)
+from a2a.utils._async_queue_compat import (
+    AsyncQueue,
+    QueueShutDown,
+    create_async_queue,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -101,7 +84,7 @@ class EventQueueLegacy(EventQueue):
         if max_queue_size <= 0:
             raise ValueError('max_queue_size must be greater than 0')
 
-        self._queue: AsyncQueue[Event] = _create_async_queue(
+        self._queue: AsyncQueue[Event] = create_async_queue(
             maxsize=max_queue_size
         )
         self._children: list[EventQueueLegacy] = []
