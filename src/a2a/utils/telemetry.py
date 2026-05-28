@@ -68,12 +68,13 @@ import functools
 import inspect
 import logging
 import os
-import sys
 
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
 from typing_extensions import Self
+
+from a2a.utils._async_queue_compat import QueueShutDown
 
 
 if TYPE_CHECKING:
@@ -145,14 +146,9 @@ SpanKind = _SpanKind
 __all__ = ['SpanKind']
 
 
-if sys.version_info >= (3, 13):
-    from asyncio import QueueShutDown as _QueueShutDown
-else:
-    from culsans import AsyncQueueShutDown as _QueueShutDown
-
-_GRACEFUL_ASYNC_EXCEPTIONS: tuple[type[BaseException], ...] = (
+_NON_ERROR_EXCEPTIONS: tuple[type[BaseException], ...] = (
     asyncio.CancelledError,
-    _QueueShutDown,
+    QueueShutDown,
 )
 
 
@@ -245,9 +241,7 @@ def trace_function(  # noqa: PLR0915
                 # Async wrapper, await for the function call to complete.
                 result = await func(*args, **kwargs)
                 span.set_status(StatusCode.OK)
-            # Graceful end-of-operation signals (currently asyncio.CancelledError,
-            # QueueShutDown).
-            except _GRACEFUL_ASYNC_EXCEPTIONS as ge:
+            except _NON_ERROR_EXCEPTIONS as ge:
                 exception = None
                 logger.debug(
                     '%s in span %s',
