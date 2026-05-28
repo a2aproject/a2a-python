@@ -12,7 +12,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 from a2a.utils.telemetry import trace_function
 
 
@@ -74,12 +74,16 @@ def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
             dict(new_artifact_data.metadata.items())
         )
     else:
-        # We received a chunk to append, but we don't have an existing artifact.
-        # we will ignore this chunk
-        logger.warning(
-            'Received append=True for nonexistent artifact index %s in task %s. Ignoring chunk.',
-            artifact_id,
-            task.id,
+        # A2A spec (Section 4.2.2 TaskArtifactUpdateEvent,
+        # https://a2a-protocol.org/v1.0.0/specification/#422-taskartifactupdateevent):
+        #   "append — If true, the content of this artifact should be
+        #    appended to a previously sent artifact."
+        # append=True with no prior artifact of this ID is an agent
+        # protocol violation (#1038).
+        raise InvalidAgentResponseError(
+            f'append=True for nonexistent artifact_id={artifact_id!r} '
+            f'in task {task.id!r}. The artifact must be created (append=False) '
+            f'before appending parts to it.'
         )
 
 
