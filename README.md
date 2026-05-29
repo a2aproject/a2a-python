@@ -69,7 +69,7 @@ Install the core SDK and any desired extras using your preferred package manager
 | **Core SDK**             | `uv add a2a-sdk`                           | `pip install a2a-sdk`                        |
 | **All Extras**           | `uv add "a2a-sdk[all]"`                    | `pip install "a2a-sdk[all]"`                 |
 | **HTTP Server**          | `uv add "a2a-sdk[http-server]"`            | `pip install "a2a-sdk[http-server]"`         |
-| **FastAPI**              | `uv add "a2a-sdk[fastapi]"`                | `pip install "a2a-sdk[fastapi]"`             |
+| **FastAPI Integration**  | `uv add "a2a-sdk[fastapi]"`                | `pip install "a2a-sdk[fastapi]"`             |
 | **gRPC Support**         | `uv add "a2a-sdk[grpc]"`                   | `pip install "a2a-sdk[grpc]"`                |
 | **OpenTelemetry Tracing**| `uv add "a2a-sdk[telemetry]"`              | `pip install "a2a-sdk[telemetry]"`           |
 | **Encryption**           | `uv add "a2a-sdk[encryption]"`             | `pip install "a2a-sdk[encryption]"`          |

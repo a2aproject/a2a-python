@@ -9,6 +9,7 @@
 # Available profiles (must match those in tests/install_smoke/__main__.py):
 #   base         -- `pip install a2a-sdk`
 #   http-server  -- `pip install a2a-sdk[http-server]`
+#   fastapi      -- `pip install a2a-sdk[fastapi]`
 #   grpc         -- `pip install a2a-sdk[grpc]`
 #   telemetry    -- `pip install a2a-sdk[telemetry]`
 #   sql          -- `pip install a2a-sdk[sql]`
@@ -27,7 +28,7 @@ set -o pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$REPO_ROOT"
 
-ALL_PROFILES=(base http-server grpc telemetry sql)
+ALL_PROFILES=(base http-server fastapi grpc telemetry sql)
 
 PROFILE_ARG="${1:-}"
 PYTHON_VERSION="${2:-}"
@@ -42,6 +43,7 @@ extras_for_profile() {
     case "$1" in
         base)        echo "" ;;
         http-server) echo "[http-server]" ;;
+        fastapi)     echo "[fastapi]" ;;
         grpc)        echo "[grpc]" ;;
         telemetry)   echo "[telemetry]" ;;
         sql)         echo "[sql]" ;;

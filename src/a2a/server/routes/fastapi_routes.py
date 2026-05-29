@@ -135,8 +135,8 @@ def add_a2a_routes_to_fastapi(
     if not _package_fastapi_installed:
         raise ImportError(
             'The `fastapi` package is required to use '
-            '`add_a2a_routes_to_fastapi`. It can be installed as part of '
-            '`a2a-sdk` optional dependencies, `a2a-sdk[fastapi]`.'
+            '`add_a2a_routes_to_fastapi`. Install it via '
+            '`a2a-sdk[fastapi]`.'
         )
 
     components: dict[str, Any] = {}
