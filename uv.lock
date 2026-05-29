@@ -27,6 +27,7 @@ dependencies = [
 all = [
     { name = "alembic" },
     { name = "cryptography" },
+    { name = "fastapi" },
     { name = "grpcio" },
     { name = "grpcio-reflection" },
     { name = "grpcio-status" },
@@ -43,6 +44,11 @@ db-cli = [
 ]
 encryption = [
     { name = "cryptography" },
+]
+fastapi = [
+    { name = "fastapi" },
+    { name = "sse-starlette" },
+    { name = "starlette" },
 ]
 grpc = [
     { name = "grpcio" },
@@ -103,6 +109,8 @@ requires-dist = [
     { name = "cryptography", marker = "extra == 'all'", specifier = ">=43.0.0" },
     { name = "cryptography", marker = "extra == 'encryption'", specifier = ">=43.0.0" },
     { name = "culsans", marker = "python_full_version < '3.13'", specifier = ">=0.11.0" },
+    { name = "fastapi", marker = "extra == 'all'", specifier = ">=0.115.2" },
+    { name = "fastapi", marker = "extra == 'fastapi'", specifier = ">=0.115.2" },
     { name = "google-api-core", specifier = ">=1.26.0" },
     { name = "googleapis-common-protos", specifier = ">=1.70.0" },
     { name = "grpcio", marker = "extra == 'all'", specifier = ">=1.60" },
@@ -135,11 +143,13 @@ requires-dist = [
     { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'postgresql'", specifier = ">=2.0.0" },
     { name = "sqlalchemy", extras = ["asyncio", "postgresql-asyncpg"], marker = "extra == 'sql'", specifier = ">=2.0.0" },
     { name = "sse-starlette", marker = "extra == 'all'" },
+    { name = "sse-starlette", marker = "extra == 'fastapi'" },
     { name = "sse-starlette", marker = "extra == 'http-server'" },
     { name = "starlette", marker = "extra == 'all'" },
+    { name = "starlette", marker = "extra == 'fastapi'" },
     { name = "starlette", marker = "extra == 'http-server'" },
 ]
-provides-extras = ["all", "db-cli", "encryption", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
+provides-extras = ["all", "db-cli", "encryption", "fastapi", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
 [package.metadata.requires-dev]
 dev = [
