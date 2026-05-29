@@ -35,6 +35,7 @@ classifiers = [
 
 [project.optional-dependencies]
 http-server = ["sse-starlette", "starlette"]
+fastapi = ["a2a-sdk[http-server]", "fastapi>=0.115.2"]
 encryption = ["cryptography>=43.0.0"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio-status>=1.60", "grpcio_reflection>=1.7.0"]
 telemetry = ["opentelemetry-api>=1.33.0", "opentelemetry-sdk>=1.33.0"]
@@ -48,6 +49,7 @@ sql = ["a2a-sdk[postgresql,mysql,sqlite]"]
 
 all = [
   "a2a-sdk[http-server]",
+  "a2a-sdk[fastapi]",
   "a2a-sdk[sql]",
   "a2a-sdk[encryption]",
   "a2a-sdk[grpc]",

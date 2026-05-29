@@ -49,6 +49,10 @@ HTTP_SERVER_MODULES = [
     'a2a.server.routes.rest_routes',
 ]
 
+FASTAPI_MODULES = [
+    'a2a.server.routes.fastapi_routes',
+]
+
 GRPC_MODULES = [
     'a2a.server.request_handlers.grpc_handler',
     'a2a.client.transports.grpc',
@@ -70,6 +74,7 @@ SQL_MODULES = [
 PROFILES: dict[str, list[str]] = {
     'base': CORE_MODULES,
     'http-server': CORE_MODULES + HTTP_SERVER_MODULES,
+    'fastapi': CORE_MODULES + HTTP_SERVER_MODULES + FASTAPI_MODULES,
     'grpc': CORE_MODULES + GRPC_MODULES,
     'telemetry': CORE_MODULES + TELEMETRY_MODULES,
     'sql': CORE_MODULES + SQL_MODULES,
