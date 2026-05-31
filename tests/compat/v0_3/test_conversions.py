@@ -203,6 +203,27 @@ def test_message_conversion():
     assert v03_restored == v03_msg
 
 
+def test_message_content_alias():
+    """Test that Message accepts 'content' as alias for 'parts' (v0.3 compatibility)."""
+    # Test with 'content' key (legacy v0.3 wire format)
+    legacy_json = {
+        'messageId': 'msg-123',
+        'role': 'user',
+        'content': [{'kind': 'text', 'text': 'hello'}],
+    }
+    msg = types_v03.Message.model_validate(legacy_json)
+    assert msg.parts == [types_v03.Part(root=types_v03.TextPart(text='hello'))]
+
+    # Test with 'parts' key (modern format)
+    modern_json = {
+        'messageId': 'msg-456',
+        'role': 'agent',
+        'parts': [{'kind': 'text', 'text': 'response'}],
+    }
+    msg2 = types_v03.Message.model_validate(modern_json)
+    assert msg2.parts == [types_v03.Part(root=types_v03.TextPart(text='response'))]
+
+
 def test_message_conversion_minimal():
     v03_msg = types_v03.Message(
         message_id='m1',

@@ -233,6 +233,35 @@ async def test_compat_rest_transport_send_message_streaming(transport):
     assert events[1] == StreamResponse(message=Message(message_id='msg-123'))
 
 
+@pytest.mark.asyncio
+async def test_compat_rest_transport_stream_url_has_alt_sse_param(transport):
+    """Test that streaming endpoints include ?alt=sse parameter."""
+    captured_paths = []
+
+    async def mock_send_stream_request(method, path, context=None, json=None):
+        captured_paths.append(path)
+        task = Task(id='task-123')
+        task.status.message.role = Role.ROLE_AGENT
+        yield StreamResponse(task=task)
+
+    transport._send_stream_request = mock_send_stream_request
+
+    # Test send_message_streaming
+    req = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER)
+    )
+    _ = [event async for event in transport.send_message_streaming(req)]
+
+    assert captured_paths[-1] == '/v1/message:stream?alt=sse'
+
+    # Test subscribe
+    captured_paths.clear()
+    sub_req = SubscribeToTaskRequest(id='task-123')
+    _ = [event async for event in transport.subscribe(sub_req)]
+
+    assert captured_paths[-1] == '/v1/tasks/task-123:subscribe?alt=sse'
+
+
 def create_405_error():
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 405
