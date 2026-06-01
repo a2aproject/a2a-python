@@ -38,7 +38,7 @@ _PROTO_SCALAR_SCHEMAS: dict[int, dict[str, Any]] = {
 def _is_required(field: FieldDescriptor) -> bool:
     """Returns True if the field carries google.api.field_behavior = REQUIRED."""
     try:
-        return _fb.REQUIRED in field.GetOptions().Extensions[_fb.field_behavior]
+        return _fb.REQUIRED in field.GetOptions().Extensions[_fb.field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
     except KeyError:
         return False
 
