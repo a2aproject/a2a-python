@@ -171,6 +171,32 @@ def test_field_schema_required_message_is_not_nullable():
     assert 'oneOf' not in schema
 
 
+def test_field_schema_repeated_optional_message_is_array_not_nullable():
+    # Repeated non-REQUIRED message fields must be wrapped as an array, not
+    # returned early as a nullable oneOf — the is_repeated check must come after.
+    from unittest.mock import MagicMock
+
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
+    msg_type = MagicMock()
+    msg_type.GetOptions.return_value.map_entry = False
+    msg_type.name = 'Dummy'
+    msg_type.full_name = 'test.Dummy'
+    msg_type.oneofs = []
+    msg_type.fields = []
+
+    field = MagicMock()
+    field.message_type = msg_type
+    field.type = FD.TYPE_MESSAGE
+    field.is_repeated = True
+    field.GetOptions.return_value.Extensions = {}  # not REQUIRED
+
+    components = {'Dummy': {'type': 'object', 'properties': {}}}
+    schema = field_schema(field, components)
+    assert schema['type'] == 'array'
+    assert 'oneOf' not in schema
+
+
 def test_message_schema_oneof_example_uses_first_variant_only():
     components = {}
     message_schema(Part.DESCRIPTOR, components)

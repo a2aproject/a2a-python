@@ -69,7 +69,9 @@ def field_schema(
         item = message_schema(field.message_type, components)
         # Well-known types return an inline schema (no $ref); don't wrap them as
         # nullable — they're already inlined as their JSON-Schema equivalent.
-        if not _is_required(field) and '$ref' in item:
+        # Repeated fields must not return early here — they fall through to the
+        # array-wrapping block below.
+        if not field.is_repeated and not _is_required(field) and '$ref' in item:
             return {'oneOf': [item, {'type': 'null'}], 'example': None}
     elif field.type == FieldDescriptor.TYPE_ENUM:
         values = [v.name for v in field.enum_type.values]
@@ -156,10 +158,23 @@ def message_schema(
     # Provide a single concrete example using the first oneof variant so Swagger
     # doesn't expand every branch into separate array items.
     first_oneof_field = real_oneofs[0].fields[0]
-    schema['example'] = {
-        first_oneof_field.name: first_oneof_field.name
-        if _is_required(first_oneof_field)
-        else ''
-    }
+    first_field_schema = field_schema(first_oneof_field, components)
+    if 'example' in first_field_schema:
+        first_example: Any = first_field_schema['example']
+    elif '$ref' in first_field_schema:
+        ref_name = first_field_schema['$ref'].split('/')[-1]
+        first_example = components.get(ref_name, {}).get('example')
+    else:
+        _type_defaults: dict[str, Any] = {
+            'integer': 0,
+            'number': 0.0,
+            'boolean': False,
+            'array': [],
+            'object': {},
+        }
+        first_example = _type_defaults.get(
+            first_field_schema.get('type', 'string'), ''
+        )
+    schema['example'] = {first_oneof_field.name: first_example}
     components[name] = schema
     return ref
