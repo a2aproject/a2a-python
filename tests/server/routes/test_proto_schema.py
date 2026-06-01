@@ -120,6 +120,79 @@ def test_field_schema_enum():
     assert 'ROLE_AGENT' in schema['enum']
 
 
+def test_field_schema_enum_example_skips_unspecified():
+    role_field = Message.DESCRIPTOR.fields_by_name['role']
+    schema = field_schema(role_field, {})
+    assert schema['example'] == 'ROLE_USER'
+
+
+def test_field_schema_string_example_is_empty():
+    context_id_field = Message.DESCRIPTOR.fields_by_name['context_id']
+    schema = field_schema(context_id_field, {})
+    assert schema['example'] == ''
+
+
+def test_field_schema_string_required_uses_field_name():
+    # REQUIRED string fields must be non-empty; the field name is the placeholder.
+    message_id_field = Message.DESCRIPTOR.fields_by_name['message_id']
+    schema = field_schema(message_id_field, {})
+    assert schema['example'] == 'message_id'
+
+
+def test_field_schema_bool_example_is_false():
+    from a2a.types.a2a_pb2 import SendMessageConfiguration
+
+    field = SendMessageConfiguration.DESCRIPTOR.fields_by_name[
+        'return_immediately'
+    ]
+    schema = field_schema(field, {})
+    assert schema['example'] is False
+
+
+def test_field_schema_optional_message_is_nullable():
+    # Non-REQUIRED message fields default to null so Swagger doesn't pre-fill them
+    # with empty sub-fields that trigger server-side required-field validation.
+    from a2a.types.a2a_pb2 import SendMessageConfiguration
+
+    field = SendMessageConfiguration.DESCRIPTOR.fields_by_name[
+        'task_push_notification_config'
+    ]
+    schema = field_schema(field, {})
+    assert schema['example'] is None
+    assert any(v == {'type': 'null'} for v in schema['oneOf'])
+
+
+def test_field_schema_required_message_is_not_nullable():
+    from a2a.types.a2a_pb2 import SendMessageRequest
+
+    field = SendMessageRequest.DESCRIPTOR.fields_by_name['message']
+    schema = field_schema(field, {})
+    assert '$ref' in schema
+    assert 'oneOf' not in schema
+
+
+def test_message_schema_oneof_example_uses_first_variant_only():
+    components = {}
+    message_schema(Part.DESCRIPTOR, components)
+    example = components['Part']['example']
+    assert example == {'text': ''}
+    # base properties (metadata, filename, media_type) must not appear in the
+    # example — they are objects/strings that would be wrong if sent as "".
+    assert 'metadata' not in example
+    assert 'filename' not in example
+
+
+def test_field_schema_repeated_ref_example_propagated():
+    components = {}
+    msg_descriptor = SendMessageRequest.DESCRIPTOR.fields_by_name[
+        'message'
+    ].message_type
+    parts_field = msg_descriptor.fields_by_name['parts']
+    schema = field_schema(parts_field, components)
+    assert schema['type'] == 'array'
+    assert schema['example'] == [{'text': ''}]
+
+
 def test_field_schema_map_entry():
     metadata_field = SendMessageRequest.DESCRIPTOR.fields_by_name['metadata']
     schema = field_schema(metadata_field, {})
