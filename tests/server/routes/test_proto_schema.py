@@ -219,6 +219,86 @@ def test_field_schema_repeated_ref_example_propagated():
     assert schema['example'] == [{'text': ''}]
 
 
+def _mock_scalar_field(name, ftype):
+    from unittest.mock import MagicMock
+
+    f = MagicMock()
+    f.name = name
+    f.message_type = None
+    f.type = ftype
+    f.is_repeated = False
+    f.GetOptions.return_value.Extensions = {}  # not REQUIRED
+    return f
+
+
+def _mock_oneof_descriptor(full_name, name, fields):
+    from unittest.mock import MagicMock
+
+    oneof = MagicMock()
+    oneof.fields = fields
+    descriptor = MagicMock()
+    descriptor.full_name = full_name
+    descriptor.name = name
+    descriptor.oneofs = [oneof]
+    descriptor.fields = fields
+    return descriptor
+
+
+def test_message_schema_oneof_example_non_string_first_variant_uses_type_default():
+    # When the first oneof variant is a non-string scalar (no example emitted),
+    # the example falls back to the JSON-Schema type default (integer -> 0).
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
+    descriptor = _mock_oneof_descriptor(
+        'test.IntFirstOneof',
+        'IntFirstOneof',
+        [
+            _mock_scalar_field('count', FD.TYPE_INT32),
+            _mock_scalar_field('label', FD.TYPE_STRING),
+        ],
+    )
+    components = {}
+    message_schema(descriptor, components)
+    assert components['IntFirstOneof']['example'] == {'count': 0}
+
+
+def test_message_schema_oneof_example_message_first_variant_resolves_ref():
+    # When the first oneof variant is a (REQUIRED) message type, the example is
+    # resolved from the referenced component schema rather than assumed a string.
+    from unittest.mock import MagicMock
+
+    from google.api import field_behavior_pb2 as fb
+    from google.protobuf.descriptor import FieldDescriptor as FD
+
+    inner = MagicMock()
+    inner.GetOptions.return_value.map_entry = False
+    inner.name = 'Inner'
+    inner.full_name = 'test.Inner'
+    inner.oneofs = []
+    inner.fields = []
+
+    msg_field = MagicMock()
+    msg_field.name = 'payload'
+    msg_field.message_type = inner
+    msg_field.type = FD.TYPE_MESSAGE
+    msg_field.is_repeated = False
+    # REQUIRED so field_schema returns a bare $ref (not a nullable oneOf).
+    msg_field.GetOptions.return_value.Extensions = {
+        fb.field_behavior: [fb.REQUIRED]
+    }
+
+    descriptor = _mock_oneof_descriptor(
+        'test.MsgFirstOneof',
+        'MsgFirstOneof',
+        [msg_field, _mock_scalar_field('note', FD.TYPE_STRING)],
+    )
+    components = {}
+    message_schema(descriptor, components)
+    # Inner has no example of its own, so $ref resolution yields None.
+    assert components['MsgFirstOneof']['example'] == {'payload': None}
+    assert 'Inner' in components
+
+
 def test_field_schema_map_entry():
     metadata_field = SendMessageRequest.DESCRIPTOR.fields_by_name['metadata']
     schema = field_schema(metadata_field, {})
