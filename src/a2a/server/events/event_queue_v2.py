@@ -12,7 +12,7 @@ from a2a.server.events.event_queue import (
     Event,
     EventQueue,
     QueueShutDown,
-    _create_async_queue,
+    create_async_queue,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -37,7 +37,7 @@ class EventQueueSource(EventQueue):
         if max_queue_size <= 0:
             raise ValueError('max_queue_size must be greater than 0')
 
-        self._incoming_queue: AsyncQueue[Event] = _create_async_queue(
+        self._incoming_queue: AsyncQueue[Event] = create_async_queue(
             maxsize=max_queue_size
         )
         self._lock = asyncio.Lock()
@@ -293,7 +293,7 @@ class EventQueueSink(EventQueue):
             raise ValueError('max_queue_size must be greater than 0')
 
         self._parent = parent
-        self._queue: AsyncQueue[Event] = _create_async_queue(
+        self._queue: AsyncQueue[Event] = create_async_queue(
             maxsize=max_queue_size
         )
         self._is_closed = False

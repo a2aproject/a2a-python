@@ -465,6 +465,30 @@ app = FastAPI(routes=routes)
 uvicorn.run(app, host=host, port=port)
 ```
 
+`FastAPI(routes=routes)` mounts the A2A endpoints correctly, but FastAPI's OpenAPI generator only enumerates routes that are `fastapi.routing.APIRoute` instances, so the A2A endpoints will not appear in `/docs` or `/openapi.json`. To make them visible in the auto-generated OpenAPI schema — grouped into Agent Card, JSON-RPC, and REST sections — use the `add_a2a_routes_to_fastapi` helper:
+
+```python
+from fastapi import FastAPI
+import uvicorn
+
+from a2a.server.routes import (
+    add_a2a_routes_to_fastapi,
+    create_agent_card_routes,
+    create_jsonrpc_routes,
+    create_rest_routes,
+)
+
+app = FastAPI()
+add_a2a_routes_to_fastapi(
+    app,
+    agent_card_routes=create_agent_card_routes(agent_card),
+    jsonrpc_routes=create_jsonrpc_routes(request_handler, rpc_url='/'),
+    rest_routes=create_rest_routes(request_handler),
+)
+
+uvicorn.run(app, host=host, port=port)
+```
+
 > **Example**: [`a2a-mcp-without-framework/server/__main__.py` in PR #509](https://github.com/a2aproject/a2a-samples/pull/509/files#diff-d15d39ae64c3d4e3a36cc6fb442302caf4e32a6dbd858792e7a4bed180a625ac)
 
 ---

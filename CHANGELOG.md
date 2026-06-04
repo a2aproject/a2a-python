@@ -1,5 +1,32 @@
 # Changelog
 
+## [1.1.0](https://github.com/a2aproject/a2a-python/compare/v1.0.3...v1.1.0) (2026-05-29)
+
+
+### Features
+
+* **server:** restore FastAPI /docs visibility for A2A routes ([#1024](https://github.com/a2aproject/a2a-python/issues/1024)) ([1122d4e](https://github.com/a2aproject/a2a-python/commit/1122d4e92e49f6eaadb5dbd94c67352adb13bf44))
+
+
+### Bug Fixes
+
+* **compat:** remove ListTasks from v0.3 REST adapter ([#1043](https://github.com/a2aproject/a2a-python/issues/1043)) ([#1068](https://github.com/a2aproject/a2a-python/issues/1068)) ([5c88793](https://github.com/a2aproject/a2a-python/commit/5c8879341a3ee7d14b1875a9131101bf9a234522))
+* properly convert metadata to dict in `RequestContext.metadata` ([#1081](https://github.com/a2aproject/a2a-python/issues/1081)) ([d2f2e18](https://github.com/a2aproject/a2a-python/commit/d2f2e18702dd6940ecec020cddd76161174574c1))
+* raise on append=True for unknown artifact_id ([#1038](https://github.com/a2aproject/a2a-python/issues/1038)) ([#1077](https://github.com/a2aproject/a2a-python/issues/1077)) ([fe1f24b](https://github.com/a2aproject/a2a-python/commit/fe1f24b3de8b7ca7941bde35c9eb4a423fda72c0))
+* release reference count on non-terminal exit to prevent stale registry entries ([#1079](https://github.com/a2aproject/a2a-python/issues/1079)) ([501255c](https://github.com/a2aproject/a2a-python/commit/501255c467c998867de92e9928ee64d0d2cf9145))
+* **server:** preserve non-ASCII characters in streaming JSON responses ([#1080](https://github.com/a2aproject/a2a-python/issues/1080)) ([d46c6f9](https://github.com/a2aproject/a2a-python/commit/d46c6f94bd26c898f6092e0ec97c2a19cbaa2853))
+* **telemetry:** don't mark QueueShutDown as an error span ([#1075](https://github.com/a2aproject/a2a-python/issues/1075)) ([54a485c](https://github.com/a2aproject/a2a-python/commit/54a485ccb709f5caab2e477f1c44acd3bee0a890))
+
+
+### Documentation
+
+* clarify `EventQueue` usage ([#1066](https://github.com/a2aproject/a2a-python/issues/1066)) ([11dd68a](https://github.com/a2aproject/a2a-python/commit/11dd68ad4745fc320470e81e4b7029ccdbf6fc84))
+
+
+### Miscellaneous Chores
+
+* release 1.1.0 ([#1088](https://github.com/a2aproject/a2a-python/issues/1088)) ([3058a33](https://github.com/a2aproject/a2a-python/commit/3058a33eb98b7c06b79ee3ce599e9e58f2b744bd))
+
 ## [1.0.3](https://github.com/a2aproject/a2a-python/compare/v1.0.2...v1.0.3) (2026-05-13)
 
 

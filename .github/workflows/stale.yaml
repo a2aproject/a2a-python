@@ -20,14 +20,14 @@ jobs:
       actions: write
 
     steps:
-      - uses: actions/stale@b5d41d4e1d5dceea10e7104786b73624c18a190f # v10
+      - uses: actions/stale@eb5cf3af3ac0a1aa4c9c45633dd1ae542a27a899 # v10
         with:
           repo-token: ${{ secrets.GITHUB_TOKEN }}
           days-before-issue-stale: 14
           days-before-issue-close: 13
           stale-issue-label: "status:stale"
           close-issue-reason: not_planned
-          any-of-labels: "status:awaiting response,status:more data needed"
+          any-of-labels: "status:awaiting response,status:more data needed,question"
           stale-issue-message: >
             Marking this issue as stale since it has been open for 14 days with no activity.
             This issue will be closed if no further activity occurs.

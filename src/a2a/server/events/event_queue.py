@@ -1,6 +1,6 @@
 import asyncio
 import logging
-import sys
+import warnings
 
 from abc import ABC, abstractmethod
 from types import TracebackType
@@ -8,32 +8,16 @@ from typing import Any, cast
 
 from typing_extensions import Self
 
-
-if sys.version_info >= (3, 13):
-    from asyncio import Queue as AsyncQueue
-    from asyncio import QueueShutDown
-
-    def _create_async_queue(maxsize: int = 0) -> AsyncQueue[Any]:
-        """Create a backwards-compatible queue object."""
-        return AsyncQueue(maxsize=maxsize)
-else:
-    import culsans
-
-    from culsans import AsyncQueue  # type: ignore[no-redef]
-    from culsans import (
-        AsyncQueueShutDown as QueueShutDown,  # type: ignore[no-redef]
-    )
-
-    def _create_async_queue(maxsize: int = 0) -> AsyncQueue[Any]:
-        """Create a backwards-compatible queue object."""
-        return culsans.Queue(maxsize=maxsize).async_q  # type: ignore[no-any-return]
-
-
 from a2a.types.a2a_pb2 import (
     Message,
     Task,
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
+)
+from a2a.utils._async_queue_compat import (
+    AsyncQueue,
+    QueueShutDown,
+    create_async_queue,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -48,38 +32,28 @@ DEFAULT_MAX_QUEUE_SIZE = 1024
 
 
 class EventQueue(ABC):
-    """Base class and factory for EventQueueSource.
+    """Producer-side interface passed to `AgentExecutor.execute`/`cancel`.
 
-    EventQueue provides an abstraction for a queue of events that can be tapped
-    by multiple consumers.
-    EventQueue maintain main queue and source and maintain child queues in sync.
-    GUARANTEE: All sinks (including the default one) will receive events in the exact same order.
+    Exposes only `enqueue_event`. The consumer is framework-managed
+    and not part of the public surface.
 
-    WARNING (Concurrency): All events from all sinks (both the default queue and any
-    tapped child queues) must be regularly consumed and marked as done. If any single
-    consumer stops processing and its queue reaches capacity, it can block the event
-    dispatcher and stall the entire system, causing a widespread deadlock.
-
-    WARNING (Memory Leak): Event queues spawn background tasks. To prevent memory
-    and task leaks, all queue objects (both source and sinks) MUST be explicitly
-    closed via `await queue.close()` or by using the async context manager (`async with queue:`).
-    Child queues are automatically closed when parent queue is closed, but you
-    should still close them explicitly to prevent queues from reaching capacity by
-    unconsumed events.
-
-    Typical usage:
-    queue = EventQueue()
-    child_queue1 = await queue.tap()
-    child_queue2 = await queue.tap()
-
-    async for event in child_queue1:
-        do_some_work(event)
-        child_queue1.task_done()
+    Default request handlers construct the queue and pass it in; executors
+    should accept it and not construct one. To run an executor outside the
+    framework, write a custom subclass or use `EventQueueLegacy` (deprecated,
+    will be removed in a future release).
     """
 
     def __new__(cls, *args: Any, **kwargs: Any) -> Self:
-        """Redirects instantiation to EventQueueLegacy for backwards compatibility."""
+        """Deprecated: redirects bare `EventQueue(...)` to `EventQueueLegacy(...)`."""
         if cls is EventQueue:
+            warnings.warn(
+                'EventQueue is an abstract interface; instantiating it '
+                'directly is deprecated. The redirect to EventQueueLegacy '
+                '(and EventQueueLegacy itself) will be removed in a future '
+                'release.',
+                DeprecationWarning,
+                stacklevel=2,
+            )
             instance = EventQueueLegacy.__new__(EventQueueLegacy)
             EventQueueLegacy.__init__(instance, *args, **kwargs)
             return cast('Self', instance)
@@ -110,7 +84,7 @@ class EventQueueLegacy(EventQueue):
         if max_queue_size <= 0:
             raise ValueError('max_queue_size must be greater than 0')
 
-        self._queue: AsyncQueue[Event] = _create_async_queue(
+        self._queue: AsyncQueue[Event] = create_async_queue(
             maxsize=max_queue_size
         )
         self._children: list[EventQueueLegacy] = []

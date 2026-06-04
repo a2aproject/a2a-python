@@ -19,6 +19,7 @@ from a2a.client import Client, ClientConfig, create_client
 from a2a.client.errors import A2AClientError
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.compat.v0_3.types import Role as LegacyRole
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.routes import (
@@ -34,7 +35,7 @@ from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
-from a2a.types import a2a_pb2_grpc
+from a2a.types import Role, a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -100,7 +101,20 @@ def extract_instruction(
                 continue
             else:
                 return inst
+
     return None
+
+
+def _get_text_from_part(part: Any) -> str | None:
+    """Safely extracts text string from a Part object supporting protobuf, pydantic, and raw dict."""
+    if not part:
+        return None
+    if hasattr(part, 'HasField') and part.HasField('text'):
+        return part.text
+    root = getattr(part, 'root', part)
+    if isinstance(root, dict):
+        return root.get('text')
+    return getattr(root, 'text', None)
 
 
 def _extract_text_from_event(event: Any) -> list[str]:
@@ -128,7 +142,7 @@ def _extract_text_from_event(event: Any) -> list[str]:
     return results
 
 
-async def _handle_call_agent_with_resubscribe(
+async def _handle_call_agent_with_resubscribe(  # noqa: PLR0912, PLR0915
     client: Client, request: SendMessageRequest
 ) -> list[str]:
     """Handles the send-disconnect-resubscribe flow."""
@@ -154,8 +168,31 @@ async def _handle_call_agent_with_resubscribe(
     finished = False
     async for event in resub_agen:
         logger.info('Event after re-subscribe: %s', event)
-        if hasattr(event, 'HasField') and event.HasField('task'):
+        if isinstance(event, Task):
+            task_obj = event
+        elif hasattr(event, 'HasField') and event.HasField('task'):
             task_obj = event.task
+
+        if task_obj and hasattr(task_obj, 'history'):
+            for msg in task_obj.history:
+                if msg.role in (
+                    Role.ROLE_AGENT,
+                    LegacyRole.agent,
+                    'ROLE_AGENT',
+                ):
+                    for part in msg.parts:
+                        text = _get_text_from_part(part)
+                        if text and 'task-finished' in text:
+                            logger.info(
+                                'Found task-finished in history, breaking loop!'
+                            )
+                            results.append(text.replace('task-finished', ''))
+                            finished = True
+                            break
+                if finished:
+                    break
+        if finished:
+            break
 
         extracted_text = _extract_text_from_event(event)
         for text in extracted_text:
@@ -171,14 +208,13 @@ async def _handle_call_agent_with_resubscribe(
     if not results and task_obj and hasattr(task_obj, 'history'):
         logger.info('Results empty after loop, reading from history.')
         for msg in task_obj.history:
-            # Check stringified role to support protobuf enums (2 for ROLE_AGENT in v0.3 and v1.0)
-            # as well as string descriptors from dict/JSON forms.
-            if str(msg.role) in {'2', 'ROLE_AGENT', 'agent'}:
-                results.extend(
-                    part.text.replace('task-finished', '')
-                    for part in msg.parts
-                    if part.text
-                )
+            # Check role using SDK schemas for v1.0 (protobuf enum Role.ROLE_AGENT)
+            # and v0.3 (pydantic enum LegacyRole.agent), as well as string forms.
+            if msg.role in (Role.ROLE_AGENT, LegacyRole.agent, 'ROLE_AGENT'):
+                for part in msg.parts:
+                    text = _get_text_from_part(part)
+                    if text:
+                        results.append(text.replace('task-finished', ''))
 
     if not finished:
         logger.info('Canceling task %s after retrieval.', task_id)
