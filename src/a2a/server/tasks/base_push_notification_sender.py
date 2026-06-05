@@ -82,9 +82,7 @@ class BasePushNotificationSender(PushNotificationSender):
     ) -> bool:
         url = push_info.url
         try:
-            headers = None
-            if push_info.token:
-                headers = {'X-A2A-Notification-Token': push_info.token}
+            headers = self._build_headers(push_info)
 
             response = await self._client.post(
                 url,
@@ -103,3 +101,23 @@ class BasePushNotificationSender(PushNotificationSender):
             )
             return False
         return True
+
+    @staticmethod
+    def _authorization_header(
+        push_info: TaskPushNotificationConfig,
+    ) -> str | None:
+        auth = push_info.authentication
+        if not auth.scheme or not auth.credentials:
+            return None
+        return f'{auth.scheme} {auth.credentials}'
+
+    def _build_headers(
+        self, push_info: TaskPushNotificationConfig
+    ) -> dict[str, str] | None:
+        headers: dict[str, str] = {}
+        if push_info.token:
+            headers['X-A2A-Notification-Token'] = push_info.token
+        authorization = self._authorization_header(push_info)
+        if authorization:
+            headers['Authorization'] = authorization
+        return headers or None

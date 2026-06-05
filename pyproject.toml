@@ -17,6 +17,7 @@ dependencies = [
   "googleapis-common-protos>=1.70.0",
   "culsans>=0.11.0 ; python_full_version < '3.13'",
   "packaging>=24.0",
+  "typing-extensions>=4.0.0",
 ]
 
 classifiers = [

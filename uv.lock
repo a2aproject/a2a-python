@@ -21,6 +21,7 @@ dependencies = [
     { name = "packaging" },
     { name = "protobuf" },
     { name = "pydantic" },
+    { name = "typing-extensions" },
 ]
 
 [package.optional-dependencies]
@@ -148,6 +149,7 @@ requires-dist = [
     { name = "starlette", marker = "extra == 'all'" },
     { name = "starlette", marker = "extra == 'fastapi'" },
     { name = "starlette", marker = "extra == 'http-server'" },
+    { name = "typing-extensions", specifier = ">=4.0.0" },
 ]
 provides-extras = ["all", "db-cli", "encryption", "fastapi", "grpc", "http-server", "mysql", "postgresql", "signing", "sql", "sqlite", "telemetry"]
 
