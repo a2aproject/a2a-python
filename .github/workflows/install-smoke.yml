@@ -17,25 +17,13 @@ permissions:
 
 jobs:
   install-smoke:
-    name: Verify ${{ matrix.profile.name }} install
+    name: Verify install (py${{ matrix.python-version }})
     runs-on: ubuntu-latest
     if: github.repository == 'a2aproject/a2a-python'
     strategy:
+      fail-fast: false
       matrix:
         python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
-        profile:
-          - name: base
-            extras: ''
-          - name: http-server
-            extras: '[http-server]'
-          - name: fastapi
-            extras: '[fastapi]'
-          - name: grpc
-            extras: '[grpc]'
-          - name: telemetry
-            extras: '[telemetry]'
-          - name: sql
-            extras: '[sql]'
     steps:
       - name: Checkout code
         uses: actions/checkout@v6
@@ -45,20 +33,8 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
 
-      - name: Build package
-        run: uv build --wheel
-
-      - name: Install with ${{ matrix.profile.name }} dependencies only
-        run: |
-          uv venv .venv-smoke
-          # Install only the built wheel + the profile's extras -- no
-          # dev deps. This simulates what an end-user gets with
-          # `pip install a2a-sdk${{ matrix.profile.extras }}`.
-          WHEEL=$(ls dist/*.whl)
-          VIRTUAL_ENV=.venv-smoke uv pip install "${WHEEL}${{ matrix.profile.extras }}"
-
-      - name: List installed packages
-        run: VIRTUAL_ENV=.venv-smoke uv pip list
-
-      - name: Run smoke test (imports + runtime checks)
-        run: .venv-smoke/bin/python -m tests.install_smoke ${{ matrix.profile.name }}
+      # Builds the wheel once, then installs + smoke-tests every profile
+      # in its own clean venv. Same script developers run locally, so CI
+      # and local repro stay in sync. Aggregates per-profile failures.
+      - name: Verify all install profiles
+        run: scripts/test_install_smoke.sh '' ${{ matrix.python-version }}
