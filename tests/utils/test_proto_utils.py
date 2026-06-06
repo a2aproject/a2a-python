@@ -264,6 +264,25 @@ class TestValidateProtoRequiredFields:
 
         assert {e['field'] for e in errors} == {'message_id', 'role', 'parts'}
 
+    def test_repeated_nested_message_validation(self):
+        """Test _recurse_validation for repeated message fields (Task.history)."""
+        task = Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            history=[Message()],  # empty message — missing required fields
+        )
+        with pytest.raises(InvalidParamsError) as exc_info:
+            proto_utils.validate_proto_required_fields(task)
+
+        err = exc_info.value
+        errors = err.data.get('errors', []) if err.data else []
+
+        fields = [e['field'] for e in errors]
+        assert 'history[0].message_id' in fields
+        assert 'history[0].role' in fields
+        assert 'history[0].parts' in fields
+
     def test_nested_required_fields(self):
         """Test nested required fields inside TaskStatus."""
         # Task Status requires 'state'
