@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from google.api import field_behavior_pb2 as _fb
+from google.api import field_behavior_pb2 as fb
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.message import Message
 
@@ -37,10 +37,7 @@ _PROTO_SCALAR_SCHEMAS: dict[int, dict[str, Any]] = {
 
 def _is_required(field: FieldDescriptor) -> bool:
     """Returns True if the field carries google.api.field_behavior = REQUIRED."""
-    try:
-        return _fb.REQUIRED in field.GetOptions().Extensions[_fb.field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
-    except KeyError:
-        return False
+    return fb.REQUIRED in field.GetOptions().Extensions[fb.field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
 
 
 _WELL_KNOWN_SCHEMAS: dict[str, dict[str, Any]] = {

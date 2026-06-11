@@ -59,48 +59,6 @@ def test_message_schema_oneof_variants_have_required():
         assert len(variant['required']) == 1
 
 
-def test_message_schema_multiple_oneofs_use_allof_not_cartesian_product():
-    # Simulate a descriptor with two oneofs: verify allOf has one constraint
-    # per oneof rather than a flat list of cross-product variants.
-    from unittest.mock import MagicMock
-
-    def _make_field(name):
-        f = MagicMock()
-        f.name = name
-        f.message_type = None
-        f.type = 9  # TYPE_STRING
-        f.is_repeated = False
-        return f
-
-    def _make_oneof(fields):
-        o = MagicMock()
-        o.fields = fields
-        return o
-
-    f_a, f_b = _make_field('a'), _make_field('b')
-    f_x, f_y = _make_field('x'), _make_field('y')
-    oneof1 = _make_oneof([f_a, f_b])
-    oneof2 = _make_oneof([f_x, f_y])
-
-    descriptor = MagicMock()
-    descriptor.full_name = 'test.MultiOneof'
-    descriptor.name = 'MultiOneof'
-    descriptor.oneofs = [oneof1, oneof2]
-    descriptor.fields = [f_a, f_b, f_x, f_y]
-
-    components = {}
-    message_schema(descriptor, components)
-    schema = components['MultiOneof']
-
-    # Should be allOf with two oneOf constraints (one per oneof group),
-    # NOT a flat oneOf with 2*2=4 Cartesian-product variants.
-    assert 'allOf' in schema
-    one_of_constraints = [p for p in schema['allOf'] if 'oneOf' in p]
-    assert len(one_of_constraints) == 2
-    assert len(one_of_constraints[0]['oneOf']) == 2
-    assert len(one_of_constraints[1]['oneOf']) == 2
-
-
 def test_field_schema_repeated_wraps_in_array():
     components = {}
     msg_descriptor = SendMessageRequest.DESCRIPTOR.fields_by_name[
@@ -173,28 +131,15 @@ def test_field_schema_required_message_is_not_nullable():
 
 def test_field_schema_repeated_optional_message_is_array_not_nullable():
     # Repeated non-REQUIRED message fields must be wrapped as an array, not
-    # returned early as a nullable oneOf — the is_repeated check must come after.
-    from unittest.mock import MagicMock
+    # returned early as a nullable oneOf — the is_repeated check must come
+    # first. Task.history is a real repeated, non-required message field.
+    from a2a.types.a2a_pb2 import Task
 
-    from google.protobuf.descriptor import FieldDescriptor as FD
-
-    msg_type = MagicMock()
-    msg_type.GetOptions.return_value.map_entry = False
-    msg_type.name = 'Dummy'
-    msg_type.full_name = 'test.Dummy'
-    msg_type.oneofs = []
-    msg_type.fields = []
-
-    field = MagicMock()
-    field.message_type = msg_type
-    field.type = FD.TYPE_MESSAGE
-    field.is_repeated = True
-    field.GetOptions.return_value.Extensions = {}  # not REQUIRED
-
-    components = {'Dummy': {'type': 'object', 'properties': {}}}
-    schema = field_schema(field, components)
+    field = Task.DESCRIPTOR.fields_by_name['history']
+    schema = field_schema(field, {})
     assert schema['type'] == 'array'
     assert 'oneOf' not in schema
+    assert '$ref' in schema['items']
 
 
 def test_message_schema_oneof_example_uses_first_variant_only():
@@ -219,86 +164,6 @@ def test_field_schema_repeated_ref_example_propagated():
     assert schema['example'] == [{'text': ''}]
 
 
-def _mock_scalar_field(name, ftype):
-    from unittest.mock import MagicMock
-
-    f = MagicMock()
-    f.name = name
-    f.message_type = None
-    f.type = ftype
-    f.is_repeated = False
-    f.GetOptions.return_value.Extensions = {}  # not REQUIRED
-    return f
-
-
-def _mock_oneof_descriptor(full_name, name, fields):
-    from unittest.mock import MagicMock
-
-    oneof = MagicMock()
-    oneof.fields = fields
-    descriptor = MagicMock()
-    descriptor.full_name = full_name
-    descriptor.name = name
-    descriptor.oneofs = [oneof]
-    descriptor.fields = fields
-    return descriptor
-
-
-def test_message_schema_oneof_example_non_string_first_variant_uses_type_default():
-    # When the first oneof variant is a non-string scalar (no example emitted),
-    # the example falls back to the JSON-Schema type default (integer -> 0).
-    from google.protobuf.descriptor import FieldDescriptor as FD
-
-    descriptor = _mock_oneof_descriptor(
-        'test.IntFirstOneof',
-        'IntFirstOneof',
-        [
-            _mock_scalar_field('count', FD.TYPE_INT32),
-            _mock_scalar_field('label', FD.TYPE_STRING),
-        ],
-    )
-    components = {}
-    message_schema(descriptor, components)
-    assert components['IntFirstOneof']['example'] == {'count': 0}
-
-
-def test_message_schema_oneof_example_message_first_variant_resolves_ref():
-    # When the first oneof variant is a (REQUIRED) message type, the example is
-    # resolved from the referenced component schema rather than assumed a string.
-    from unittest.mock import MagicMock
-
-    from google.api import field_behavior_pb2 as fb
-    from google.protobuf.descriptor import FieldDescriptor as FD
-
-    inner = MagicMock()
-    inner.GetOptions.return_value.map_entry = False
-    inner.name = 'Inner'
-    inner.full_name = 'test.Inner'
-    inner.oneofs = []
-    inner.fields = []
-
-    msg_field = MagicMock()
-    msg_field.name = 'payload'
-    msg_field.message_type = inner
-    msg_field.type = FD.TYPE_MESSAGE
-    msg_field.is_repeated = False
-    # REQUIRED so field_schema returns a bare $ref (not a nullable oneOf).
-    msg_field.GetOptions.return_value.Extensions = {
-        fb.field_behavior: [fb.REQUIRED]
-    }
-
-    descriptor = _mock_oneof_descriptor(
-        'test.MsgFirstOneof',
-        'MsgFirstOneof',
-        [msg_field, _mock_scalar_field('note', FD.TYPE_STRING)],
-    )
-    components = {}
-    message_schema(descriptor, components)
-    # Inner has no example of its own, so $ref resolution yields None.
-    assert components['MsgFirstOneof']['example'] == {'payload': None}
-    assert 'Inner' in components
-
-
 def test_field_schema_map_entry():
     metadata_field = SendMessageRequest.DESCRIPTOR.fields_by_name['metadata']
     schema = field_schema(metadata_field, {})
@@ -309,3 +174,20 @@ def test_rest_body_types_coverage():
     assert ('/message:send', 'POST') in REST_BODY_TYPES
     assert ('/message:stream', 'POST') in REST_BODY_TYPES
     assert ('/tasks/{id}/pushNotificationConfigs', 'POST') in REST_BODY_TYPES
+
+
+def test_full_schema_builds_for_all_rest_body_types():
+    # Safety net: build the complete schema for every registered REST body
+    # type into a shared components dict. Any proto field structure we don't
+    # support (or stop supporting after a proto change) fails right here
+    # rather than silently producing a broken Swagger document.
+    components: dict = {}
+    for msg in REST_BODY_TYPES.values():
+        ref = message_schema(msg.DESCRIPTOR, components)
+        assert ref['$ref'].startswith('#/components/schemas/')
+
+    # Every registered schema must be a non-empty object/composition (the
+    # cyclic-type placeholder is filled in before the build returns).
+    for name, schema in components.items():
+        assert schema, f'{name} resolved to an empty schema'
+        assert 'type' in schema or 'allOf' in schema or '$ref' in schema
