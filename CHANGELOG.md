@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.1](https://github.com/a2aproject/a2a-python/compare/v1.1.0...v1.1.1) (2026-06-12)
+
+
+### Bug Fixes
+
+* **server:** improve Swagger /docs example annotations for A2A routes ([#1092](https://github.com/a2aproject/a2a-python/issues/1092)) ([46b292b](https://github.com/a2aproject/a2a-python/commit/46b292b433a5df5a9721d6227cb53753f2978437))
+
 ## [1.1.0](https://github.com/a2aproject/a2a-python/compare/v1.0.3...v1.1.0) (2026-05-29)
 
 
