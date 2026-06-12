@@ -2,6 +2,7 @@
 
 from typing import Any
 
+from google.api import field_behavior_pb2 as fb
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.message import Message
 
@@ -33,6 +34,12 @@ _PROTO_SCALAR_SCHEMAS: dict[int, dict[str, Any]] = {
     FieldDescriptor.TYPE_SINT64: {'type': 'string'},
 }
 
+
+def _is_required(field: FieldDescriptor) -> bool:
+    """Returns True if the field carries google.api.field_behavior = REQUIRED."""
+    return fb.REQUIRED in field.GetOptions().Extensions[fb.field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
+
+
 _WELL_KNOWN_SCHEMAS: dict[str, dict[str, Any]] = {
     'google.protobuf.Timestamp': {'type': 'string', 'format': 'date-time'},
     'google.protobuf.Duration': {'type': 'string'},
@@ -57,16 +64,46 @@ def field_schema(
 
     if field.type == FieldDescriptor.TYPE_MESSAGE:
         item = message_schema(field.message_type, components)
+        # Well-known types return an inline schema (no $ref); don't wrap them as
+        # nullable — they're already inlined as their JSON-Schema equivalent.
+        # Repeated fields must not return early here — they fall through to the
+        # array-wrapping block below.
+        if not field.is_repeated and not _is_required(field) and '$ref' in item:
+            return {'oneOf': [item, {'type': 'null'}], 'example': None}
     elif field.type == FieldDescriptor.TYPE_ENUM:
-        item = {
-            'type': 'string',
-            'enum': [v.name for v in field.enum_type.values],
-        }
+        values = [v.name for v in field.enum_type.values]
+        example = next(
+            (
+                v
+                for v in values
+                if 'UNSPECIFIED' not in v and 'UNKNOWN' not in v
+            ),
+            values[0] if values else None,
+        )
+        item: dict[str, Any] = {'type': 'string', 'enum': values}
+        if example:
+            item['example'] = example
     else:
         item = dict(_PROTO_SCALAR_SCHEMAS.get(field.type, {'type': 'string'}))
+        if field.type == FieldDescriptor.TYPE_STRING:
+            # REQUIRED fields must be non-empty; use the field name as a
+            # recognisable placeholder. All other strings default to "".
+            item['example'] = field.name if _is_required(field) else ''
+        elif field.type == FieldDescriptor.TYPE_BOOL:
+            item['example'] = False
 
     if field.is_repeated:
-        return {'type': 'array', 'items': item}
+        array_schema: dict[str, Any] = {'type': 'array', 'items': item}
+        # Propagate the item example to the array so Swagger pre-fills one entry
+        # instead of generating one entry per oneOf branch.
+        item_example = (
+            components.get(item['$ref'].split('/')[-1], {}).get('example')
+            if '$ref' in item
+            else item.get('example')
+        )
+        if item_example is not None:
+            array_schema['example'] = [item_example]
+        return array_schema
     return item
 
 
@@ -114,5 +151,27 @@ def message_schema(
     if base_properties:
         parts.append({'type': 'object', 'properties': base_properties})
     parts.extend(oneof_constraints)
-    components[name] = parts[0] if len(parts) == 1 else {'allOf': parts}
+    schema: dict[str, Any] = parts[0] if len(parts) == 1 else {'allOf': parts}
+    # Provide a single concrete example using the first oneof variant so Swagger
+    # doesn't expand every branch into separate array items.
+    first_oneof_field = real_oneofs[0].fields[0]
+    first_field_schema = field_schema(first_oneof_field, components)
+    if 'example' in first_field_schema:
+        first_example: Any = first_field_schema['example']
+    elif '$ref' in first_field_schema:
+        ref_name = first_field_schema['$ref'].split('/')[-1]
+        first_example = components.get(ref_name, {}).get('example')
+    else:
+        _type_defaults: dict[str, Any] = {
+            'integer': 0,
+            'number': 0.0,
+            'boolean': False,
+            'array': [],
+            'object': {},
+        }
+        first_example = _type_defaults.get(
+            first_field_schema.get('type', 'string'), ''
+        )
+    schema['example'] = {first_oneof_field.name: first_example}
+    components[name] = schema
     return ref
