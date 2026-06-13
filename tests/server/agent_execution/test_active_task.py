@@ -895,3 +895,90 @@ async def test_active_task_subscribe_request_parameter():
     assert len(events) == 0
 
     await active_task.cancel(request_context)
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_reaps_background_tasks():
+    """aclose() drains a live producer and consumer."""
+    agent_executor = Mock()
+    task_manager = Mock()
+    request_context = Mock(spec=RequestContext)
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    async def slow_execute(req, q):
+        await asyncio.sleep(10)
+
+    agent_executor.execute = AsyncMock(side_effect=slow_execute)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    await active_task.aclose()
+
+    assert active_task._producer_task is not None
+    assert active_task._producer_task.done()
+    assert active_task._consumer_task is not None
+    assert active_task._consumer_task.done()
+    assert active_task._is_finished.is_set()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_force_closes_undrained_subscriber():
+    """aclose() unblocks past an undrained subscriber sink.
+
+    Reproduces issue #1101: a graceful close(immediate=False) would block
+    forever on the leaked sink's join().
+    """
+    agent_executor = Mock()
+    task_manager = Mock()
+    request_context = Mock(spec=RequestContext)
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    async def slow_execute(req, q):
+        await asyncio.sleep(10)
+
+    agent_executor.execute = AsyncMock(side_effect=slow_execute)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    # Leak a subscriber sink and push an event into it without draining it.
+    leaked = await active_task._event_queue_subscribers.tap()
+    await active_task._event_queue_subscribers.enqueue_event(Message())
+    await asyncio.sleep(0.05)
+
+    await active_task.aclose()
+
+    assert active_task._producer_task is not None
+    assert active_task._producer_task.done()
+    assert leaked.is_closed()

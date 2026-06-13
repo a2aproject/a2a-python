@@ -729,6 +729,43 @@ class ActiveTask:
             raise RuntimeError('Task should have been created')
         return task
 
+    async def aclose(self) -> None:
+        """Force-closes the task's queues and drains its background tasks.
+
+        Provides a bounded, public teardown for the producer and consumer
+        ``asyncio.Task``s spawned in ``start()``. Without it, a producer
+        wedged in its ``finally`` closing an abandoned subscriber sink can
+        survive until event-loop shutdown and surface as
+        ``Task was destroyed but it is pending!``.
+
+        Always forces: the queues are closed with ``immediate=True`` and the
+        background tasks are cancelled, so teardown is bounded even when a
+        subscriber sink was never drained. It is safe to call multiple times.
+        """
+        await self._event_queue_agent.close(immediate=True)
+        await self._event_queue_subscribers.close(immediate=True)
+        # Set `_is_finished` and collect the background tasks under `_lock` so
+        # this is mutually exclusive with `start()`, which refuses to spawn
+        # once `_is_finished` is set. The lock is released before awaiting the
+        # tasks, because their teardown re-acquires it.
+        async with self._lock:
+            self._is_finished.set()
+            background_tasks = [
+                task
+                for task in (self._producer_task, self._consumer_task)
+                if task is not None
+            ]
+            for task in background_tasks:
+                task.cancel()
+        if background_tasks:
+            results = await asyncio.gather(
+                *background_tasks, return_exceptions=True
+            )
+            for result in results:
+                # CancelledError is a BaseException, so it is excluded here.
+                if isinstance(result, Exception):
+                    logger.error('Error during aclose', exc_info=result)
+
     async def _maybe_cleanup(self) -> None:
         """Triggers cleanup if task is finished and has no subscribers.
 
