@@ -1557,3 +1557,37 @@ async def test_on_get_task_push_notification_config_is_owner_scoped():
             ),
             _ctx('bob'),
         )
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_aclose_drains_registry():
+    """aclose() drains the active-task registry on shutdown."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    await handler._active_task_registry.get_or_create(
+        'task-1',
+        call_context=ServerCallContext(user=UnauthenticatedUser()),
+        create_task_if_missing=True,
+    )
+
+    await handler.aclose()
+
+    assert await handler._active_task_registry.get('task-1') is None
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_aclose_is_idempotent_and_handles_empty():
+    """aclose() is safe with no active tasks and when called twice."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    await handler.aclose()
+    await handler.aclose()
