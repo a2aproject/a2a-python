@@ -260,11 +260,20 @@ class EventConsumer:
         )
 
         if self.message_to_save is not None:
-            updated_task = self.active_task._task_manager.update_with_message(
-                self.message_to_save,
-                updated_task,
+            message_already_saved = any(
+                message == self.message_to_save
+                for message in updated_task.history
             )
-            await self.active_task._task_manager.save_task_event(updated_task)
+            if not message_already_saved:
+                updated_task = (
+                    self.active_task._task_manager.update_with_message(
+                        self.message_to_save,
+                        updated_task,
+                    )
+                )
+                await self.active_task._task_manager.save_task_event(
+                    updated_task
+                )
             self.message_to_save = None
 
         self.active_task._task_manager.context_id = event.context_id
@@ -551,12 +560,17 @@ class ActiveTask:
                 'Producer[%s]: Execution failed',
                 self._task_id,
             )
-            # Create task and mark as failed.
+            # Persist the failure directly instead of relying on the closing
+            # event queue to carry a final status update.
             if request_context:
-                await self._task_manager.ensure_task_id(
+                task = await self._task_manager.ensure_task_id(
                     self._task_id,
                     request_context.context_id or '',
                 )
+                task.status.CopyFrom(
+                    TaskStatus(state=TaskState.TASK_STATE_FAILED)
+                )
+                await self._task_manager.save_task_event(task)
                 self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
