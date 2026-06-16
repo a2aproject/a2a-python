@@ -261,7 +261,7 @@ class EventConsumer:
 
         if self.message_to_save is not None:
             message_already_saved = any(
-                message == self.message_to_save
+                message.message_id == self.message_to_save.message_id
                 for message in updated_task.history
             )
             if not message_already_saved:
@@ -567,9 +567,7 @@ class ActiveTask:
                     self._task_id,
                     request_context.context_id or '',
                 )
-                task.status.CopyFrom(
-                    TaskStatus(state=TaskState.TASK_STATE_FAILED)
-                )
+                task.status.state = TaskState.TASK_STATE_FAILED
                 await self._task_manager.save_task_event(task)
                 self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
