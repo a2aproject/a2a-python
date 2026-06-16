@@ -1148,7 +1148,7 @@ async def test_on_message_send_limit_history():
 
 
 @pytest.mark.asyncio
-async def test_on_message_send_early_producer_exception_marks_task_failed():
+async def test_on_message_send_early_producer_exception_marks_task_failed_and_preserves_originating_message():
     task_store = InMemoryTaskStore()
     request_handler = DefaultRequestHandlerV2(
         agent_executor=HelloAgentExecutor(),
@@ -1178,6 +1178,9 @@ async def test_on_message_send_early_producer_exception_marks_task_failed():
     stored_task = await task_store.get(params.message.task_id, context)
     assert stored_task is not None
     assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert len(stored_task.history) == 1
+    assert stored_task.history[0].message_id == 'msg_early_failure_state'
+    assert stored_task.history[0].parts[0].text == 'Hi'
 
 
 @pytest.mark.asyncio
