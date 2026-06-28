@@ -15,6 +15,7 @@ from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandler, GrpcHandler
 from a2a.server.routes import (
+    add_a2a_routes_to_fastapi,
     create_agent_card_routes,
     create_jsonrpc_routes,
     create_rest_routes,
@@ -220,9 +221,12 @@ async def serve(
         agent_card=agent_card,
     )
     app = FastAPI()
-    app.routes.extend(jsonrpc_routes)
-    app.routes.extend(agent_card_routes)
-    app.routes.extend(rest_routes)
+    add_a2a_routes_to_fastapi(
+        app,
+        agent_card_routes=agent_card_routes,
+        jsonrpc_routes=jsonrpc_routes,
+        rest_routes=rest_routes,
+    )
 
     grpc_server = grpc.aio.server()
     grpc_server.add_insecure_port(f'{host}:{grpc_port}')

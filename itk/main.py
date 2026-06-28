@@ -544,9 +544,10 @@ async def main_async(http_port: int, grpc_port: int) -> None:
     app = FastAPI()
     app.mount(
         '/jsonrpc',
-        FastAPI(routes=jsonrpc_routes + agent_card_routes),
+        FastAPI(routes=jsonrpc_routes),
     )
-    app.mount('/rest', FastAPI(routes=rest_routes + agent_card_routes))
+    app.mount('/rest', FastAPI(routes=rest_routes))
+    app.routes.extend(agent_card_routes)
 
     server = grpc.aio.server()
 
