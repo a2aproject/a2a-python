@@ -75,6 +75,16 @@ class TestSanitizePathId:
         with pytest.raises(InvalidRequestError, match='invalid characters'):
             sanitize_path_id('abc\\def')
 
+    def test_dot_rejected(self) -> None:
+        """Single dot is rejected as a path traversal risk."""
+        with pytest.raises(InvalidRequestError, match='cannot be "." or ".."'):
+            sanitize_path_id('.')
+
+    def test_double_dot_rejected(self) -> None:
+        """Double dot is rejected as a path traversal risk."""
+        with pytest.raises(InvalidRequestError, match='cannot be "." or ".."'):
+            sanitize_path_id('..')
+
     def test_path_traversal_rejected(self) -> None:
         """Path traversal sequence raises InvalidRequestError."""
         with pytest.raises(InvalidRequestError, match='invalid characters'):
