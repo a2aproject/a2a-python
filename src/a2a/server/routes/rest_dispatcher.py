@@ -27,6 +27,7 @@ from a2a.utils.errors import (
     InvalidRequestError,
     TaskNotFoundError,
 )
+from a2a.utils.sanitizers import sanitize_path_id
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -200,7 +201,7 @@ class RestDispatcher:
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(context: ServerCallContext) -> a2a_pb2.Task:
-            task_id = request.path_params['id']
+            task_id = sanitize_path_id(request.path_params['id'])
             task = await self.request_handler.on_cancel_task(
                 CancelTaskRequest(id=task_id), context
             )
@@ -216,7 +217,7 @@ class RestDispatcher:
         self, request: Request
     ) -> EventSourceResponse:
         """Handles the 'SubscribeToTask' REST method."""
-        task_id = request.path_params['id']
+        task_id = sanitize_path_id(request.path_params['id'])
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(
@@ -238,7 +239,7 @@ class RestDispatcher:
         async def _handler(context: ServerCallContext) -> a2a_pb2.Task:
             params = a2a_pb2.GetTaskRequest()
             proto_utils.parse_params(request.query_params, params)
-            params.id = request.path_params['id']
+            params.id = sanitize_path_id(request.path_params['id'])
             task = await self.request_handler.on_get_task(params, context)
             if task:
                 return task
@@ -255,8 +256,10 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.TaskPushNotificationConfig:
-            task_id = request.path_params['id']
-            push_id = request.path_params['push_id']
+            task_id = sanitize_path_id(request.path_params['id'])
+            push_id = sanitize_path_id(
+                request.path_params['push_id'], 'push_id'
+            )
             params = GetTaskPushNotificationConfigRequest(
                 task_id=task_id, id=push_id
             )
@@ -275,8 +278,10 @@ class RestDispatcher:
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(context: ServerCallContext) -> None:
-            task_id = request.path_params['id']
-            push_id = request.path_params['push_id']
+            task_id = sanitize_path_id(request.path_params['id'])
+            push_id = sanitize_path_id(
+                request.path_params['push_id'], 'push_id'
+            )
             params = a2a_pb2.DeleteTaskPushNotificationConfigRequest(
                 task_id=task_id, id=push_id
             )
@@ -298,7 +303,7 @@ class RestDispatcher:
             body = await request.body()
             params = a2a_pb2.TaskPushNotificationConfig()
             Parse(body, params)
-            params.task_id = request.path_params['id']
+            params.task_id = sanitize_path_id(request.path_params['id'])
             return await self.request_handler.on_create_task_push_notification_config(
                 params, context
             )
@@ -316,7 +321,7 @@ class RestDispatcher:
         ) -> a2a_pb2.ListTaskPushNotificationConfigsResponse:
             params = a2a_pb2.ListTaskPushNotificationConfigsRequest()
             proto_utils.parse_params(request.query_params, params)
-            params.task_id = request.path_params['id']
+            params.task_id = sanitize_path_id(request.path_params['id'])
             return await self.request_handler.on_list_task_push_notification_configs(
                 params, context
             )

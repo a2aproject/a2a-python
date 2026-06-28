@@ -323,3 +323,91 @@ class TestRestDispatcherStreaming:
                 payload = payload.decode('utf-8')
             assert non_ascii_text in payload
             assert '\\u4f60\\u597d' not in payload
+
+
+@pytest.mark.asyncio
+class TestPathIdSanitization:
+    """Regression tests for https://github.com/a2aproject/a2a-python/issues/805.
+
+    Verify that malicious path parameters (null bytes, control characters,
+    path traversal) are rejected at the REST dispatcher layer.
+    """
+
+    @pytest.fixture
+    def dispatcher(self, mock_handler: AsyncMock) -> RestDispatcher:
+        return RestDispatcher(request_handler=mock_handler)
+
+    async def test_get_task_rejects_null_byte_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Null byte in task ID must be rejected."""
+        req = make_mock_request(method='GET', path_params={'id': 'abc\x00def'})
+        response = await dispatcher.on_get_task(req)
+        assert response.status_code == 400
+
+    async def test_get_task_rejects_newline_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Newline in task ID must be rejected."""
+        req = make_mock_request(method='GET', path_params={'id': 'abc\ndef'})
+        response = await dispatcher.on_get_task(req)
+        assert response.status_code == 400
+
+    async def test_get_task_rejects_path_traversal_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Path traversal in task ID must be rejected."""
+        req = make_mock_request(
+            method='GET', path_params={'id': '../../etc/passwd'}
+        )
+        response = await dispatcher.on_get_task(req)
+        assert response.status_code == 400
+
+    async def test_get_task_rejects_space_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Space in task ID must be rejected."""
+        req = make_mock_request(method='GET', path_params={'id': 'abc def'})
+        response = await dispatcher.on_get_task(req)
+        assert response.status_code == 400
+
+    async def test_cancel_task_rejects_null_byte_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Null byte in task ID on cancel must be rejected."""
+        req = make_mock_request(method='POST', path_params={'id': 'abc\x00def'})
+        response = await dispatcher.on_cancel_task(req)
+        assert response.status_code == 400
+
+    async def test_get_push_notification_rejects_malicious_ids(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Malicious task_id and push_id must be rejected."""
+        req = make_mock_request(
+            method='GET',
+            path_params={'id': 'abc\x00def', 'push_id': 'valid-id'},
+        )
+        response = await dispatcher.get_push_notification(req)
+        assert response.status_code == 400
+
+    async def test_get_push_notification_rejects_malicious_push_id(
+        self, dispatcher: RestDispatcher
+    ) -> None:
+        """Malicious push_id must be rejected even with valid task_id."""
+        req = make_mock_request(
+            method='GET',
+            path_params={'id': 'valid-task-id', 'push_id': '../evil'},
+        )
+        response = await dispatcher.get_push_notification(req)
+        assert response.status_code == 400
+
+    async def test_valid_id_passes(
+        self, dispatcher: RestDispatcher, mock_handler: AsyncMock
+    ) -> None:
+        """Valid task ID passes sanitization and reaches the handler."""
+        req = make_mock_request(
+            method='GET', path_params={'id': 'valid-task-123'}
+        )
+        response = await dispatcher.on_get_task(req)
+        # Handler returns a task, so status should be 200
+        assert response.status_code == 200
