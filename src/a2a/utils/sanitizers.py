@@ -42,6 +42,11 @@ def sanitize_path_id(value: str, param_name: str = 'id') -> str:
         raise InvalidRequestError(
             message=f'{param_name} must not be empty',
         )
+    # Reject bare dot and double-dot to prevent path traversal.
+    if value in ('.', '..'):
+        raise InvalidRequestError(
+            message=f'{param_name} cannot be "." or ".."',
+        )
     # Reject null bytes and other control characters (0x00-0x1F, 0x7F).
     if any(
         ord(c) < _MAX_PRINTABLE_ASCII or ord(c) == _DEL_ASCII for c in value
