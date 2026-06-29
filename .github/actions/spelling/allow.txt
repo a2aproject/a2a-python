@@ -131,6 +131,7 @@ RUF
 SECP256R1
 SFIXED
 SLF
+sanitizers
 socio
 sse
 starlette
