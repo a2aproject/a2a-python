@@ -138,6 +138,7 @@ Rundgren
 SECP256R1
 SFIXED
 SLF
+sanitizers
 socio
 sourced
 sse
