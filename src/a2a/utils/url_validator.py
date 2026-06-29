@@ -38,17 +38,22 @@ Key design decisions:
 
 import asyncio
 import contextlib
+import inspect
 import ipaddress
 import socket
 
 from abc import ABC, abstractmethod
-from collections.abc import Callable, Sequence
+from collections.abc import Awaitable, Callable, Sequence
 from dataclasses import dataclass
+from typing import cast
 from urllib.parse import SplitResult, urlsplit
 
 
 IPAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
-Resolver = Callable[[str, int | None], Sequence[IPAddress | str]]
+Resolver = Callable[
+    [str, int | None],
+    Sequence[IPAddress | str] | Awaitable[Sequence[IPAddress | str]],
+]
 
 
 class InvalidUrlError(ValueError):
@@ -215,7 +220,13 @@ class UrlValidator:
 
         try:
             if self._resolver is not None:
-                resolved = self._resolver(host, port)
+                result = self._resolver(host, port)
+                # Support async resolvers (e.g. aiodns) that return
+                # coroutines / awaitables.
+                if inspect.isawaitable(result):
+                    resolved = cast('Sequence[IPAddress | str]', await result)
+                else:
+                    resolved = result
             else:
                 loop = asyncio.get_running_loop()
                 address_info = await loop.getaddrinfo(
@@ -231,20 +242,30 @@ class UrlValidator:
 
         # Normalise resolver output: accept both str and IPAddress
         # instances (fixes review comment on PR #1114).
-        addresses = tuple(
-            dict.fromkeys(
-                addr
-                if isinstance(
-                    addr, (ipaddress.IPv4Address, ipaddress.IPv6Address)
+        try:
+            addresses = tuple(
+                dict.fromkeys(
+                    addr
+                    if isinstance(
+                        addr, (ipaddress.IPv4Address, ipaddress.IPv6Address)
+                    )
+                    else ipaddress.ip_address(addr)
+                    for addr in resolved
                 )
-                else ipaddress.ip_address(addr)
-                for addr in resolved
             )
-        )
+        except ValueError as exc:
+            raise InvalidUrlError(
+                f'Resolver returned invalid address for {host!r}: {exc}'
+            ) from exc
         if not addresses:
             raise InvalidUrlError(f'URL host {host!r} did not resolve.')
         return addresses
 
 
 def _normalize_host(host: str) -> str:
-    return host.rstrip('.').lower()
+    """Normalize a hostname for comparison.
+
+    Strips trailing dots, lowercases, and removes surrounding square
+    brackets from IPv6 literals (e.g. ``[::1]`` → ``::1``).
+    """
+    return host.strip('[]').rstrip('.').lower()

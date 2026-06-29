@@ -374,6 +374,23 @@ async def test_block_private_networks_allow_host_is_case_insensitive() -> None:
     assert result.addresses == (ipaddress.ip_address('127.0.0.1'),)
 
 
+@pytest.mark.asyncio
+async def test_block_private_networks_allow_ipv6_with_brackets() -> None:
+    """allow_hosts strips surrounding brackets from IPv6 literals."""
+
+    def resolver(host: str, port: int | None) -> list[str]:
+        return ['::1']
+
+    validator = UrlValidator(
+        [BlockPrivateNetworks(allow_hosts=['[::1]'])],
+        resolver=resolver,
+    )
+
+    result = await validator.validate('http://[::1]/callback')
+
+    assert result.addresses == (ipaddress.ip_address('::1'),)
+
+
 # ---------------------------------------------------------------------------
 # Resolver returning IPAddress objects (PR #1114 review fix)
 # ---------------------------------------------------------------------------
@@ -391,6 +408,35 @@ async def test_resolver_returning_ipaddress_objects() -> None:
     result = await validator.validate('http://example.com/')
 
     assert result.addresses == (ipaddress.ip_address('93.184.216.34'),)
+
+
+@pytest.mark.asyncio
+async def test_async_resolver_is_awaited() -> None:
+    """Custom resolvers may return awaitables (e.g. aiodns)."""
+
+    async def resolver(host: str, port: int | None) -> list[str]:
+        return ['93.184.216.34']
+
+    validator = UrlValidator(resolver=resolver)
+
+    result = await validator.validate('http://example.com/')
+
+    assert result.addresses == (ipaddress.ip_address('93.184.216.34'),)
+
+
+@pytest.mark.asyncio
+async def test_resolver_returning_invalid_address_raises_invalid_url_error() -> (
+    None
+):
+    """Resolver returning non-IP strings raises InvalidUrlError."""
+
+    def resolver(host: str, port: int | None) -> list[str]:
+        return ['not-an-ip-address']
+
+    validator = UrlValidator(resolver=resolver)
+
+    with pytest.raises(InvalidUrlError, match='invalid address'):
+        await validator.validate('http://example.com/')
 
 
 # ---------------------------------------------------------------------------
