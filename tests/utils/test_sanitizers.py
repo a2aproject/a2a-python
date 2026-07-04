@@ -90,6 +90,17 @@ class TestSanitizePathId:
         with pytest.raises(InvalidRequestError, match='invalid characters'):
             sanitize_path_id('../../etc/passwd')
 
+    def test_dot_and_double_dot_rejected(self) -> None:
+        """Single dot and double dot are rejected as path traversal risks."""
+        with pytest.raises(
+            InvalidRequestError, match=r'cannot be "\." or "\.\."'
+        ):
+            sanitize_path_id('.')
+        with pytest.raises(
+            InvalidRequestError, match=r'cannot be "\." or "\.\."'
+        ):
+            sanitize_path_id('..')
+
     def test_custom_param_name_in_error(self) -> None:
         """Custom param_name appears in error messages."""
         with pytest.raises(InvalidRequestError, match='push_id'):
