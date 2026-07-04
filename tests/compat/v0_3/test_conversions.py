@@ -221,7 +221,9 @@ def test_message_content_alias():
         'parts': [{'kind': 'text', 'text': 'response'}],
     }
     msg2 = types_v03.Message.model_validate(modern_json)
-    assert msg2.parts == [types_v03.Part(root=types_v03.TextPart(text='response'))]
+    assert msg2.parts == [
+        types_v03.Part(root=types_v03.TextPart(text='response'))
+    ]
 
 
 def test_message_conversion_minimal():
