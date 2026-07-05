@@ -582,7 +582,11 @@ class ActiveTask:
                 except asyncio.CancelledError:
                     pass
                 except Exception as e:
-                    logger.debug('Consumer[%s]: Awaited producer_task raised %r', self._task_id, e)
+                    logger.debug(
+                        'Consumer[%s]: Awaited producer_task raised %r',
+                        self._task_id,
+                        e,
+                    )
 
             async with self._lock:
                 self._reference_count -= 1
