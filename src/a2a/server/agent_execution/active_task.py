@@ -577,8 +577,12 @@ class ActiveTask:
             await self._event_queue_agent.close(immediate=True)
 
             if self._producer_task and not self._producer_task.done():
-                with contextlib.suppress(asyncio.CancelledError):
+                try:
                     await self._producer_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:
+                    logger.debug('Consumer[%s]: Awaited producer_task raised %r', self._task_id, e)
 
             async with self._lock:
                 self._reference_count -= 1
