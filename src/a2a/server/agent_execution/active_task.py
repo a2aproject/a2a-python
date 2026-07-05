@@ -36,7 +36,6 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
-import contextlib
 import logging
 import uuid
 
@@ -581,7 +580,7 @@ class ActiveTask:
                     await self._producer_task
                 except asyncio.CancelledError:
                     pass
-                except Exception as e:
+                except Exception as e:  # noqa: BLE001
                     logger.debug(
                         'Consumer[%s]: Awaited producer_task raised %r',
                         self._task_id,
