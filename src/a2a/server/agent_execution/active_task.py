@@ -584,7 +584,7 @@ class ActiveTask:
             # Without this, the producer could still be parked on
             # _request_queue.get() or inside its finally block when
             # _maybe_cleanup() releases the ActiveTask reference,
-            # causing the still-pending task to be GC'd.
+            # causing the still-pending task to be garbage-collected.
             if self._producer_task and not self._producer_task.done():
                 self._producer_task.cancel()
                 with contextlib.suppress(asyncio.CancelledError):
