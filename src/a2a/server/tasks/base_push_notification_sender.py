@@ -82,9 +82,22 @@ class BasePushNotificationSender(PushNotificationSender):
     ) -> bool:
         url = push_info.url
         try:
-            headers = None
+            headers: dict[str, str] | None = None
             if push_info.token:
                 headers = {'X-A2A-Notification-Token': push_info.token}
+
+            # Add Authorization header when authentication is configured.
+            # The A2A spec requires servers to authenticate push notifications
+            # when the client provides an authentication scheme in
+            # PushNotificationConfig.
+            if push_info.HasField('authentication'):
+                auth = push_info.authentication
+                scheme = auth.scheme
+                credentials = auth.credentials
+                if scheme and credentials:
+                    if headers is None:
+                        headers = {}
+                    headers['Authorization'] = f'{scheme} {credentials}'
 
             response = await self._client.post(
                 url,

@@ -8,6 +8,7 @@ from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
+    AuthenticationInfo,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -226,5 +227,115 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),
+            headers=None,
+        )
+
+    async def test_send_notification_with_bearer_auth(self) -> None:
+        """Push notification includes Authorization header for Bearer scheme."""
+        task_id = 'task_bearer_auth'
+        task_data = _create_sample_task(task_id=task_id)
+        config = TaskPushNotificationConfig(
+            id='cfg1',
+            url='http://notify.me/here',
+            authentication=AuthenticationInfo(
+                scheme='Bearer',
+                credentials='secret-token-abc',
+            ),
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=task_data)),
+            headers={'Authorization': 'Bearer secret-token-abc'},
+        )
+
+    async def test_send_notification_with_token_and_bearer_auth(self) -> None:
+        """Both X-A2A-Notification-Token and Authorization headers are sent."""
+        task_id = 'task_token_and_auth'
+        task_data = _create_sample_task(task_id=task_id)
+        config = TaskPushNotificationConfig(
+            id='cfg1',
+            url='http://notify.me/here',
+            token='notification-token-xyz',
+            authentication=AuthenticationInfo(
+                scheme='Bearer',
+                credentials='secret-token-abc',
+            ),
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=task_data)),
+            headers={
+                'X-A2A-Notification-Token': 'notification-token-xyz',
+                'Authorization': 'Bearer secret-token-abc',
+            },
+        )
+
+    async def test_send_notification_auth_no_scheme_no_header(self) -> None:
+        """Authentication with empty scheme should not add Authorization header."""
+        task_id = 'task_auth_no_scheme'
+        task_data = _create_sample_task(task_id=task_id)
+        config = TaskPushNotificationConfig(
+            id='cfg1',
+            url='http://notify.me/here',
+            authentication=AuthenticationInfo(
+                scheme='',
+                credentials='secret',
+            ),
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=task_data)),
+            headers=None,
+        )
+
+    async def test_send_notification_auth_no_credentials_no_header(
+        self,
+    ) -> None:
+        """Authentication with empty credentials should not add Authorization header."""
+        task_id = 'task_auth_no_creds'
+        task_data = _create_sample_task(task_id=task_id)
+        config = TaskPushNotificationConfig(
+            id='cfg1',
+            url='http://notify.me/here',
+            authentication=AuthenticationInfo(
+                scheme='Bearer',
+                credentials='',
+            ),
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=task_data)),
             headers=None,
         )
