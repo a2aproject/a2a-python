@@ -987,3 +987,65 @@ async def test_producer_cancelled_on_normal_completion():
     assert cleanup_called, (
         'on_cleanup should be called after producer is drained'
     )
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_cancel_restores_call_context():
+    """Verify cancel() restores _call_context after completion.
+
+    Regression test: cancel() temporarily sets _call_context to its
+    own call_context for task operations, then restores the original
+    value to prevent races with the producer loop.
+    """
+    agent_executor = Mock()
+    task_manager = Mock()
+    task_manager.get_task = AsyncMock()
+    original_context = ServerCallContext()
+    task_manager._call_context = original_context
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+    )
+
+    stop_event = asyncio.Event()
+
+    async def execute_mock(req, q):
+        await stop_event.wait()
+
+    agent_executor.execute = AsyncMock(side_effect=execute_mock)
+    agent_executor.cancel = AsyncMock()
+    task_manager.get_task.side_effect = [
+        Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    ] * 20
+    task_manager.save_task_event = AsyncMock()
+    task_manager.ensure_task_id = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+    task_manager.process = AsyncMock(side_effect=lambda x: x)
+
+    request_context = Mock(spec=RequestContext)
+    request_context.call_context = original_context
+    request_context.context_id = 'test-context'
+    request_context.message = None
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=original_context, create_task_if_missing=True
+    )
+    await asyncio.sleep(0.1)
+
+    cancel_context = ServerCallContext()
+    await active_task.cancel(cancel_context)
+    stop_event.set()
+
+    # Verify call_context was restored
+    assert task_manager._call_context is original_context
