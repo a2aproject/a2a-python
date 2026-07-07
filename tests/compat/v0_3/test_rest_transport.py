@@ -635,6 +635,7 @@ async def test_compat_rest_transport_send_stream_request(
         'http://example.com/test',
         transport._handle_http_error,
         json=None,
+        params=None,
         headers={'a2a-version': '0.3'},
     )
 
@@ -664,3 +665,37 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+@pytest.mark.asyncio
+@patch('a2a.compat.v0_3.rest_transport.send_http_stream_request')
+async def test_compat_rest_transport_extra_params(
+    mock_send_http_stream_request: AsyncMock,
+    mock_httpx_client: AsyncMock,
+    agent_card: AgentCard,
+) -> None:
+    """Verify extra_params are passed to stream requests in CompatRestTransport."""
+    transport = CompatRestTransport(
+        httpx_client=mock_httpx_client,
+        agent_card=agent_card,
+        url='http://example.com',
+        extra_params={'alt': 'sse'},
+    )
+    request = SendMessageRequest(
+        message=Message(message_id='msg-1', role=Role.ROLE_USER),
+    )
+
+    async def mock_generator():
+        yield b'{"task": {"id": "task-123"}}'
+
+    mock_send_http_stream_request.return_value = mock_generator()
+
+    events = [
+        event
+        async for event in transport.send_message_streaming(request=request)
+    ]
+    assert len(events) == 1
+
+    mock_send_http_stream_request.assert_called_once()
+    _, kwargs = mock_send_http_stream_request.call_args_list[0]
+    assert kwargs.get('params') == {'alt': 'sse'}
