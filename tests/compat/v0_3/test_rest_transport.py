@@ -699,3 +699,48 @@ async def test_compat_rest_transport_extra_params(
     mock_send_http_stream_request.assert_called_once()
     _, kwargs = mock_send_http_stream_request.call_args_list[0]
     assert kwargs.get('params') == {'alt': 'sse'}
+
+
+@pytest.mark.asyncio
+async def test_compat_rest_transport_extra_params_dict_isolation(
+    mock_httpx_client: AsyncMock,
+    agent_card: AgentCard,
+) -> None:
+    """Verify mutating extra_params dict after init does not affect CompatRestTransport."""
+    original_params = {'alt': 'sse'}
+    transport = CompatRestTransport(
+        httpx_client=mock_httpx_client,
+        agent_card=agent_card,
+        url='http://example.com',
+        extra_params=original_params,
+    )
+    original_params['alt'] = 'mutated'
+    original_params['new'] = 'value'
+
+    assert transport._extra_params == {'alt': 'sse'}
+    assert 'new' not in transport._extra_params
+
+
+@pytest.mark.asyncio
+@patch('a2a.compat.v0_3.rest_transport.send_http_request')
+async def test_compat_rest_transport_extra_params_non_streaming(
+    mock_send_http_request: AsyncMock,
+    mock_httpx_client: AsyncMock,
+    agent_card: AgentCard,
+) -> None:
+    """Verify extra_params are passed to non-streaming requests in CompatRestTransport."""
+    transport = CompatRestTransport(
+        httpx_client=mock_httpx_client,
+        agent_card=agent_card,
+        url='http://example.com',
+        extra_params={'alt': 'sse'},
+    )
+    mock_send_http_request.return_value = {}
+    mock_request = httpx.Request('GET', 'http://example.com')
+    transport.httpx_client.build_request.return_value = mock_request
+
+    await transport._execute_request('GET', '/test')
+
+    transport.httpx_client.build_request.assert_called_once()
+    _, kwargs = transport.httpx_client.build_request.call_args
+    assert kwargs.get('params') == {'alt': 'sse'}

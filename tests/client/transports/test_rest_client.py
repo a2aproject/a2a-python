@@ -858,3 +858,87 @@ class TestRestTransportTenant:
 
         _, kwargs = mock_aconnect_sse.call_args
         assert kwargs.get('params') is None
+
+    def test_extra_params_passed_to_non_streaming_request(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ) -> None:
+        """Verify extra_params are passed to non-streaming request URLs."""
+        extra_params = {'alt': 'sse'}
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+            extra_params=extra_params,
+        )
+        request = GetTaskRequest(id='task-123')
+
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        import asyncio
+
+        asyncio.run(client.get_task(request=request))
+
+        args, kwargs = mock_httpx_client.build_request.call_args
+        assert kwargs.get('params') == extra_params
+
+    def test_extra_params_dict_isolation(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ) -> None:
+        """Verify that mutating the original dict after init does not affect the transport."""
+        original_params = {'alt': 'sse'}
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+            extra_params=original_params,
+        )
+        # Mutate the original dict — should not affect transport
+        original_params['alt'] = 'mutated'
+        original_params['new'] = 'value'
+
+        assert client._extra_params == {'alt': 'sse'}
+        assert 'new' not in client._extra_params
+
+    def test_extra_params_merged_with_method_params(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ) -> None:
+        """Verify extra_params are merged with per-request params in non-streaming calls."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+            extra_params={'alt': 'sse', 'shared': 'from_extra'},
+        )
+        request = GetTaskRequest(id='task-123')
+
+        mock_httpx_client.build_request.return_value = MagicMock(
+            spec=httpx.Request
+        )
+        mock_httpx_client.send.return_value = AsyncMock(
+            spec=httpx.Response,
+            status_code=200,
+            json=MagicMock(return_value={}),
+        )
+
+        import asyncio
+
+        asyncio.run(client.get_task(request=request))
+
+        args, kwargs = mock_httpx_client.build_request.call_args
+        merged = kwargs.get('params')
+        assert merged is not None
+        assert merged['alt'] == 'sse'
+        assert merged['shared'] == 'from_extra'

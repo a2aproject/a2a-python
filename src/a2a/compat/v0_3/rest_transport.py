@@ -84,7 +84,7 @@ class CompatRestTransport(ClientTransport):
         self.agent_card = agent_card
         self._subscribe_method_override = subscribe_method_override
         self._subscribe_auto_method_override = subscribe_method_override is None
-        self._extra_params = extra_params or {}
+        self._extra_params = dict(extra_params) if extra_params else {}
 
     async def send_message(
         self,
@@ -431,11 +431,21 @@ class CompatRestTransport(ClientTransport):
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
         add_legacy_extension_header(http_kwargs['headers'])
 
+        # Merge global extra_params with per-request params.
+        # Per-request params take precedence over extra_params.
+        merged_params: dict[str, Any] | None = None
+        if self._extra_params:
+            merged_params = dict(self._extra_params)
+            if params:
+                merged_params.update(params)
+        elif params:
+            merged_params = params
+
         request = self.httpx_client.build_request(
             method,
             f'{self.url}{path}',
             json=json,
-            params=params,
+            params=merged_params,
             **http_kwargs,
         )
         return await self._send_request(request)
