@@ -768,6 +768,11 @@ class ActiveTask:
         background tasks are cancelled, so teardown is bounded even when a
         subscriber sink was never drained. It is safe to call multiple times.
         """
+        # Shut down the request queue first, mirroring the producer's
+        # ``finally``. If `start()` was never called, the producer/consumer
+        # ``finally`` blocks never run, and without this a caller parked in
+        # `enqueue_request()` would wait forever.
+        self._request_queue.shutdown(immediate=True)
         await self._event_queue_agent.close(immediate=True)
         await self._event_queue_subscribers.close(immediate=True)
         # Set `_is_finished` and collect the background tasks under `_lock` so

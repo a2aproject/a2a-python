@@ -1067,3 +1067,38 @@ async def test_active_task_aclose_force_closes_undrained_subscriber():
     assert active_task._producer_task is not None
     assert active_task._producer_task.done()
     assert leaked.is_closed()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_never_started_shuts_down_request_queue():
+    """aclose() on a never-started task shuts down the request queue.
+
+    If start() was never called, the producer and consumer `finally` blocks
+    that normally shut down `_request_queue` never run, so without this a
+    caller parked in `enqueue_request()` would never be released.
+    """
+    active_task = ActiveTask(
+        agent_executor=Mock(),
+        task_id='test-task-id',
+        task_manager=Mock(),
+        push_sender=Mock(),
+    )
+
+    # Swap in a bounded queue and fill it so the next enqueue_request parks.
+    active_task._request_queue = create_async_queue(maxsize=1)
+    await active_task.enqueue_request(Mock(spec=RequestContext))
+    waiter = asyncio.create_task(
+        active_task.enqueue_request(Mock(spec=RequestContext))
+    )
+    await asyncio.sleep(0.05)
+    assert not waiter.done()
+
+    await active_task.aclose()
+
+    # The parked waiter is released with the shutdown error, and any
+    # subsequent enqueue fails fast instead of hanging.
+    with pytest.raises(QueueShutDown):
+        await waiter
+    with pytest.raises(QueueShutDown):
+        await active_task.enqueue_request(Mock(spec=RequestContext))
