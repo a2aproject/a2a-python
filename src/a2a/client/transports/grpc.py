@@ -10,11 +10,9 @@ from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
-
-    from grpc_status import rpc_status
 except ImportError as e:
     raise ImportError(
-        'A2AGrpcClient requires grpcio, grpcio-tools, and grpcio-status to be installed. '
+        'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
         'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
@@ -22,6 +20,7 @@ except ImportError as e:
 
 from google.rpc import (  # type: ignore[reportMissingModuleSource]
     error_details_pb2,
+    status_pb2,
 )
 
 from a2a.client.client import ClientConfig
@@ -55,13 +54,35 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
+def _from_call(call: grpc.Call) -> status_pb2.Status | None:
+    """Extracts a google.rpc.status.Status message from a grpc.Call instance."""
+    if not hasattr(call, 'trailing_metadata'):
+        return None
+    trailing_metadata = call.trailing_metadata()
+    if not trailing_metadata:
+        return None
+    for k, v in trailing_metadata:
+        if k == 'grpc-status-details-bin':
+            status = status_pb2.Status()
+            status.ParseFromString(v)
 
+            if call.code().value[0] != status.code:
+                raise ValueError(
+                    f'Mismatched status code: proto={status.code}, call={call.code()}'
+                )
+            if call.details() != status.message:
+                raise ValueError(
+                    f'Mismatched status message: proto={status.message!r}, call={call.details()!r}'
+                )
+            return status
+    return None
+
+
+def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
         raise A2AClientTimeoutError('Client Request timed out') from e
 
-    # Use grpc_status to cleanly extract the rich Status from the call
-    status = rpc_status.from_call(cast('grpc.Call', e))
+    status = _from_call(cast('grpc.Call', e))
     data = None
 
     if status is not None:
@@ -321,7 +342,6 @@ class GrpcTransport(ClientTransport):
         context: ClientCallContext | None,
         **kwargs: Any,
     ) -> Any:
-
         return await method(
             request,
             metadata=self._get_grpc_metadata(context),
@@ -336,7 +356,6 @@ class GrpcTransport(ClientTransport):
         context: ClientCallContext | None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
-
         stream = method(
             request,
             metadata=self._get_grpc_metadata(context),

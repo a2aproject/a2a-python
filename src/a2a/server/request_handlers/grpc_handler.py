@@ -3,17 +3,15 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
-from typing import TypeVar
+from typing import NamedTuple, TypeVar
 
 
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
     import grpc.aio  # type: ignore[reportMissingModuleSource]
-
-    from grpc_status import rpc_status
 except ImportError as e:
     raise ImportError(
-        'GrpcHandler requires grpcio, grpcio-tools, and grpcio-status to be installed. '
+        'GrpcHandler requires grpcio and grpcio-tools to be installed. '
         'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
@@ -35,6 +33,29 @@ from a2a.types import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.proto_utils import validation_errors_to_bad_request
+
+
+class GrpcStatus(NamedTuple):
+    """Represents the gRPC status code, details, and trailing metadata."""
+
+    code: grpc.StatusCode
+    details: str
+    trailing_metadata: tuple
+
+
+def _to_status(status: status_pb2.Status) -> GrpcStatus:
+    """Converts a google.rpc.status.Status message into its gRPC components."""
+    for x in grpc.StatusCode:
+        if x.value[0] == status.code:
+            grpc_code = x
+            break
+    else:
+        raise ValueError(f'Invalid status code {status.code}')
+
+    bin_data = status.SerializeToString()
+    metadata = (('grpc-status-details-bin', bin_data),)
+
+    return GrpcStatus(grpc_code, status.message, metadata)
 
 
 logger = logging.getLogger(__name__)
@@ -400,8 +421,8 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 )
                 status.details.append(bad_request_detail)
 
-            # Use grpc_status to safely generate standard trailing metadata
-            rich_status = rpc_status.to_status(status)
+            # Use local helper to safely generate standard trailing metadata
+            rich_status = _to_status(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
             trailing = context.trailing_metadata()
