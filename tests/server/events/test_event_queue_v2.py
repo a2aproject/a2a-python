@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from typing import Any
+from unittest import mock
 
 import pytest
 import pytest_asyncio
@@ -264,6 +265,26 @@ async def test_close_idempotent(event_queue: EventQueueSource) -> None:
     assert event_queue.is_closed() is True
     await event_queue.close()
     assert event_queue.is_closed() is True
+
+
+@pytest.mark.asyncio
+async def test_sink_close_idempotent_does_not_record_exception() -> None:
+    span = mock.MagicMock()
+    tracer = mock.MagicMock()
+    tracer.start_as_current_span.return_value.__enter__.return_value = span
+    tracer.start_as_current_span.return_value.__exit__.return_value = False
+
+    with mock.patch('opentelemetry.trace.get_tracer', return_value=tracer):
+        event_queue = EventQueueSource(create_default_sink=False)
+        sink = await event_queue.tap()
+
+        await sink.close(immediate=True)
+        await sink.close(immediate=True)
+        await event_queue.close(immediate=True)
+
+    span.record_exception.assert_not_called()
+    for call in span.set_status.call_args_list:
+        assert 'description' not in call.kwargs
 
 
 @pytest.mark.asyncio
