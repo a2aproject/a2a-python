@@ -9,7 +9,6 @@ requires-python = ">=3.10"
 keywords = ["A2A", "A2A SDK", "A2A Protocol", "Agent2Agent", "Agent 2 Agent"]
 dependencies = [
   "httpx>=0.28.1",
-  "httpx-sse>=0.4.0",
   "pydantic>=2.11.3",
   "protobuf>=5.29.5,<7",
   "google-api-core>=1.26.0",
@@ -94,7 +93,7 @@ filterwarnings = [
   # ResourceWarnings from asyncio event loop/socket cleanup during garbage collection
   # These appear intermittently between tests due to pytest-asyncio and sse-starlette timing
   "ignore:unclosed event loop:ResourceWarning",
-  "ignore:unclosed transport:ResourceWarning", 
+  "ignore:unclosed transport:ResourceWarning",
   "ignore:unclosed <socket.socket:ResourceWarning",
 ]
 
