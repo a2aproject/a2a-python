@@ -282,6 +282,7 @@ async def test_sink_close_idempotent_does_not_record_exception() -> None:
         await sink.close(immediate=True)
         await event_queue.close(immediate=True)
 
+    tracer.start_as_current_span.assert_called()
     span.record_exception.assert_not_called()
     for call in span.set_status.call_args_list:
         assert 'description' not in call.kwargs
