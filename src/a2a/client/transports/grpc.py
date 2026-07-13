@@ -20,7 +20,6 @@ except ImportError as e:
 
 from google.rpc import (  # type: ignore[reportMissingModuleSource]
     error_details_pb2,
-    status_pb2,
 )
 
 from a2a.client.client import ClientConfig
@@ -47,6 +46,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.errors import A2A_REASON_TO_ERROR, A2AError
+from a2a.utils.grpc_status import status_from_call
 from a2a.utils.proto_utils import bad_request_to_validation_errors
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -54,35 +54,11 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-def _status_from_call(call: grpc.Call) -> status_pb2.Status | None:
-    """Extracts a google.rpc.status.Status message from a grpc.Call instance."""
-    if not hasattr(call, 'trailing_metadata'):
-        return None
-    trailing_metadata = call.trailing_metadata()
-    if not trailing_metadata:
-        return None
-    for k, v in trailing_metadata:
-        if k == 'grpc-status-details-bin':
-            status = status_pb2.Status()
-            status.ParseFromString(v)
-
-            if call.code().value[0] != status.code:
-                raise ValueError(
-                    f'Mismatched status code: proto={status.code}, call={call.code()}'
-                )
-            if call.details() != status.message:
-                raise ValueError(
-                    f'Mismatched status message: proto={status.message!r}, call={call.details()!r}'
-                )
-            return status
-    return None
-
-
 def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
         raise A2AClientTimeoutError('Client Request timed out') from e
 
-    status = _status_from_call(cast('grpc.Call', e))
+    status = status_from_call(cast('grpc.Call', e))
     data = None
 
     if status is not None:

@@ -3,7 +3,7 @@ import logging
 
 from abc import ABC, abstractmethod
 from collections.abc import AsyncIterable, Awaitable, Callable
-from typing import NamedTuple, TypeVar
+from typing import TypeVar
 
 
 try:
@@ -32,30 +32,8 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
+from a2a.utils.grpc_status import status_to_grpc
 from a2a.utils.proto_utils import validation_errors_to_bad_request
-
-
-class GrpcStatus(NamedTuple):
-    """Represents the gRPC status code, details, and trailing metadata."""
-
-    code: grpc.StatusCode
-    details: str
-    trailing_metadata: tuple
-
-
-def _to_status(status: status_pb2.Status) -> GrpcStatus:
-    """Converts a google.rpc.status.Status message into its gRPC components."""
-    for x in grpc.StatusCode:
-        if x.value[0] == status.code:
-            grpc_code = x
-            break
-    else:
-        raise ValueError(f'Invalid status code {status.code}')
-
-    bin_data = status.SerializeToString()
-    metadata = (('grpc-status-details-bin', bin_data),)
-
-    return GrpcStatus(grpc_code, status.message, metadata)
 
 
 logger = logging.getLogger(__name__)
@@ -421,7 +399,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 )
                 status.details.append(bad_request_detail)
 
-            rich_status = _to_status(status)
+            rich_status = status_to_grpc(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
             trailing = context.trailing_metadata()
