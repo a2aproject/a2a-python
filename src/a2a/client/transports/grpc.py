@@ -54,7 +54,7 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-def _from_call(call: grpc.Call) -> status_pb2.Status | None:
+def _status_from_call(call: grpc.Call) -> status_pb2.Status | None:
     """Extracts a google.rpc.status.Status message from a grpc.Call instance."""
     if not hasattr(call, 'trailing_metadata'):
         return None
@@ -82,7 +82,7 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
         raise A2AClientTimeoutError('Client Request timed out') from e
 
-    status = _from_call(cast('grpc.Call', e))
+    status = _status_from_call(cast('grpc.Call', e))
     data = None
 
     if status is not None:

@@ -421,7 +421,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 )
                 status.details.append(bad_request_detail)
 
-            # Use local helper to safely generate standard trailing metadata
             rich_status = _to_status(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
