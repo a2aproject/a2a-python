@@ -29,7 +29,6 @@ all = [
     { name = "fastapi" },
     { name = "grpcio" },
     { name = "grpcio-reflection" },
-    { name = "grpcio-status" },
     { name = "grpcio-tools" },
     { name = "opentelemetry-api" },
     { name = "opentelemetry-sdk" },
@@ -52,7 +51,6 @@ fastapi = [
 grpc = [
     { name = "grpcio" },
     { name = "grpcio-reflection" },
-    { name = "grpcio-status" },
     { name = "grpcio-tools" },
 ]
 http-server = [
@@ -116,8 +114,6 @@ requires-dist = [
     { name = "grpcio", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-reflection", marker = "extra == 'all'", specifier = ">=1.7.0" },
     { name = "grpcio-reflection", marker = "extra == 'grpc'", specifier = ">=1.7.0" },
-    { name = "grpcio-status", marker = "extra == 'all'", specifier = ">=1.60" },
-    { name = "grpcio-status", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'all'", specifier = ">=1.60" },
     { name = "grpcio-tools", marker = "extra == 'grpc'", specifier = ">=1.60" },
     { name = "httpx", specifier = ">=0.28.1" },
@@ -996,20 +992,6 @@ dependencies = [
 sdist = { url = "https://files.pythonhosted.org/packages/c2/98/39a6972bb9a90750e32daabacaab7b4418e4384f7f2f686ff5af3d69094b/grpcio_reflection-1.81.0.tar.gz", hash = "sha256:5191db7aa6cab1b6981b0879fa44fdcdd43ba644f0301c40b976f813eb4eff06", size = 19192, upload-time = "2026-06-01T06:00:33.419Z" }
 wheels = [
     { url = "https://files.pythonhosted.org/packages/d5/61/e472357ff5484f67c802568e70b3182df3d8eb1d0c2de38199d9a9a28bb2/grpcio_reflection-1.81.0-py3-none-any.whl", hash = "sha256:85322a9c1ab62d9823b1262a9d78d653b1710b99b5764cdcef2673cfe352b9c1", size = 22907, upload-time = "2026-06-01T06:00:16.714Z" },
-]
-
-[[package]]
-name = "grpcio-status"
-version = "1.81.0"
-source = { registry = "https://pypi.org/simple" }
-dependencies = [
-    { name = "googleapis-common-protos" },
-    { name = "grpcio" },
-    { name = "protobuf" },
-]
-sdist = { url = "https://files.pythonhosted.org/packages/01/b6/cdc177114997d15c887fb09ccfd16705c8ceb8b4ca2487902b54a7bfd1af/grpcio_status-1.81.0.tar.gz", hash = "sha256:b6fe9788cfdd1f0f63c0528a1e0bfdb41e8ff0583e920d2d8e8888598c01bb69", size = 13900, upload-time = "2026-06-01T06:00:32.638Z" }
-wheels = [
-    { url = "https://files.pythonhosted.org/packages/f3/b7/5aa346bf1cdecd4ed64b86c10a4d5a089ce3da89145f8328caf0b22b240d/grpcio_status-1.81.0-py3-none-any.whl", hash = "sha256:10eb4c2309db902dc26c1873e80a821bf794be772c10dfd83030f7f59f165fab", size = 14634, upload-time = "2026-06-01T06:00:13.345Z" },
 ]
 
 [[package]]
