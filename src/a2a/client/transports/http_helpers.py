@@ -154,14 +154,18 @@ async def send_http_stream_request(
 
 
 class _SSEEventSource:
-    """Class-based replacement for ``httpx_sse.aconnect_sse``.
+    """Class-based context manager for managing streaming HTTP connections.
 
-    ``aconnect_sse`` is an ``@asynccontextmanager`` whose internal async
-    generator gets tracked by the event loop. When the enclosing async
-    generator is abandoned, the event loop's generator cleanup collides
-    with the cascading cleanup — see https://bugs.python.org/issue38559.
+    Using a class with `__aenter__` and `__aexit__` instead of an
+    `@asynccontextmanager` decorated function prevents event loop finalization
+    crashes (specifically `RuntimeError: GeneratorExit thrown into an active
+    generator`).
 
-    Plain ``__aenter__``/``__aexit__`` coroutines avoid this entirely.
+    This error occurs when an outer async generator (e.g., streaming reader)
+    is abandoned early, causing the Python event loop to concurrently throw
+    GeneratorExit into the nested context manager's suspended generator.
+    Coroutine-based context managers are not async generators and avoid this
+    collision (see https://bugs.python.org/issue38559).
     """
 
     def __init__(
