@@ -2,6 +2,7 @@
 
 import json
 
+from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 from uuid import uuid4
 
@@ -31,7 +32,14 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
 from google.protobuf import json_format
-from httpx_sse import EventSource, SSEError
+
+
+async def async_iterable_from_list(
+    items: list[str],
+) -> AsyncGenerator[str, None]:
+    """Helper to create an async iterable from a list."""
+    for item in items:
+        yield item
 
 
 @pytest.fixture
@@ -439,17 +447,17 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_event_source = AsyncMock()
-        mock_event_source.response.raise_for_status = MagicMock()
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.aiter_sse = MagicMock(
-            side_effect=SSEError('Simulated SSE error')
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            [
+                'event: error',
+                'data: Simulated SSE error',
+                '',
+            ]
         )
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError):
             async for _ in transport.send_message_streaming(request):
@@ -463,19 +471,13 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_event_source = AsyncMock()
-        mock_event_source.response.raise_for_status = MagicMock()
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.aiter_sse = MagicMock(
-            side_effect=httpx.RequestError(
-                'Simulated request error', request=MagicMock()
-            )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.side_effect = httpx.RequestError(
+            'Simulated request error', request=MagicMock()
         )
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError):
             async for _ in transport.send_message_streaming(request):
@@ -489,17 +491,13 @@ class TestStreamingErrors:
         transport: JsonRpcTransport,
     ):
         request = create_send_message_request()
-        mock_event_source = AsyncMock()
-        mock_event_source.response.raise_for_status = MagicMock()
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.aiter_sse = MagicMock(
-            side_effect=httpx.TimeoutException('Timeout')
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.side_effect = httpx.TimeoutException(
+            'Timeout'
         )
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError, match='timed out'):
             async for _ in transport.send_message_streaming(request):
@@ -574,24 +572,16 @@ class TestExtensions:
         )
         request = create_send_message_request(text='Error stream')
 
-        mock_event_source = AsyncMock(spec=EventSource)
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 403
+        mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
             'Forbidden',
             request=httpx.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-        mock_event_source.response = mock_response
-
-        async def empty_aiter():
-            if False:
-                yield
-
-        mock_event_source.aiter_sse = MagicMock(return_value=empty_aiter())
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
             async for _ in client.send_message_streaming(request=request):

@@ -29,7 +29,6 @@ from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import A2A_ERROR_MAPPING
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
-from httpx_sse import EventSource, ServerSentEvent
 
 
 @pytest.fixture
@@ -52,8 +51,8 @@ def mock_agent_card() -> MagicMock:
 
 
 async def async_iterable_from_list(
-    items: list[ServerSentEvent],
-) -> AsyncGenerator[ServerSentEvent, None]:
+    items: list[str],
+) -> AsyncGenerator[str, None]:
     """Helper to create an async iterable from a list."""
     for item in items:
         yield item
@@ -84,18 +83,13 @@ class TestRestTransport:
         params = SendMessageRequest(
             message=new_text_message(text='Hello stream')
         )
-        mock_event_source = AsyncMock(spec=EventSource)
-        mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.response.raise_for_status.return_value = None
-        mock_event_source.aiter_sse.side_effect = httpx.TimeoutException(
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.raise_for_status.return_value = None
+        mock_response.aiter_lines.side_effect = httpx.TimeoutException(
             'Read timed out'
         )
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
             _ = [
@@ -290,15 +284,11 @@ class TestRestTransportExtensions:
             message=new_text_message(text='Hello stream')
         )
 
-        mock_event_source = AsyncMock(spec=EventSource)
-        mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.aiter_sse.return_value = async_iterable_from_list([])
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.raise_for_status.return_value = None
+        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         context = ClientCallContext(
             service_parameters={
@@ -339,24 +329,16 @@ class TestRestTransportExtensions:
             message=new_text_message(text='Error stream')
         )
 
-        mock_event_source = AsyncMock(spec=EventSource)
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 403
+        mock_response.headers = {'content-type': 'text/event-stream'}
         mock_response.raise_for_status.side_effect = httpx.HTTPStatusError(
             'Forbidden',
             request=httpx.Request('POST', 'http://test.url'),
             response=mock_response,
         )
-
-        async def empty_aiter():
-            if False:
-                yield
-
-        mock_event_source.response = mock_response
-        mock_event_source.aiter_sse = MagicMock(return_value=empty_aiter())
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         with pytest.raises(A2AClientError) as exc_info:
             async for _ in client.send_message_streaming(request=request):
@@ -706,21 +688,11 @@ class TestRestTransportTenant:
         method = getattr(client, method_name)
 
         # 2. Setup mocks
-        mock_event_source = AsyncMock(spec=EventSource)
-        mock_event_source.response = MagicMock(spec=httpx.Response)
-        mock_event_source.response.headers = {
-            'content-type': 'text/event-stream'
-        }
-        mock_event_source.response.raise_for_status.return_value = None
-
-        async def empty_aiter():
-            if False:
-                yield
-
-        mock_event_source.aiter_sse.return_value = empty_aiter()
-        mock_aconnect_sse.return_value.__aenter__.return_value = (
-            mock_event_source
-        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.raise_for_status.return_value = None
+        mock_response.aiter_lines.return_value = async_iterable_from_list([])
+        mock_aconnect_sse.return_value.__aenter__.return_value = mock_response
 
         # 3. Call the method
         async for _ in method(request=request_obj):
