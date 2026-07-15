@@ -1102,3 +1102,55 @@ async def test_active_task_aclose_never_started_shuts_down_request_queue():
         await waiter
     with pytest.raises(QueueShutDown):
         await active_task.enqueue_request(Mock(spec=RequestContext))
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_subscriber_taps_are_evict_on_full():
+    """Subscriber sinks opt into evict-on-full dispatch.
+
+    A subscriber can be abandoned (non-blocking send whose response already
+    returned), so its sink must never wedge dispatch for other subscribers.
+    """
+    agent_executor = Mock()
+    task_manager = Mock()
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    async def slow_execute(req, q):
+        await asyncio.sleep(10)
+
+    agent_executor.execute = AsyncMock(side_effect=slow_execute)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+    await active_task.enqueue_request(Mock(spec=RequestContext))
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    subscriber = active_task.subscribe(include_initial_task=True)
+    task = await anext(subscriber)
+    assert task.id == 'test-task-id'
+
+    sinks = active_task._event_queue_subscribers._sinks
+    assert sinks, 'subscribe should have tapped a sink'
+    assert all(sink._evict_on_full for sink in sinks)
+
+    await subscriber.aclose()
+    background = [
+        t
+        for t in (active_task._producer_task, active_task._consumer_task)
+        if t is not None
+    ]
+    for t in background:
+        t.cancel()
+    await asyncio.gather(*background, return_exceptions=True)
