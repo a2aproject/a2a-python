@@ -7,6 +7,11 @@
 
 * **server:** improve Swagger /docs example annotations for A2A routes ([#1092](https://github.com/a2aproject/a2a-python/issues/1092)) ([46b292b](https://github.com/a2aproject/a2a-python/commit/46b292b433a5df5a9721d6227cb53753f2978437))
 
+### Miscellaneous Chores
+
+* **grpc:** eliminate third-party grpcio-status dependency ([#1130](https://github.com/a2aproject/a2a-python/issues/1130)) ([723880e](https://github.com/a2aproject/a2a-python/commit/723880e679310a249a287657476852a0fa30ba95))
+* **http:** eliminate httpx-sse dependency ([#1132](https://github.com/a2aproject/a2a-python/issues/1132)) ([0d82ab9](https://github.com/a2aproject/a2a-python/commit/0d82ab985ffbac381a38adb5bd160674fa05eb18))
+
 ## [1.1.0](https://github.com/a2aproject/a2a-python/compare/v1.0.3...v1.1.0) (2026-05-29)
 
 
