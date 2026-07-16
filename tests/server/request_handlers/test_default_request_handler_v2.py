@@ -31,6 +31,7 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
     InternalError,
     InvalidAgentResponseError,
@@ -310,6 +311,28 @@ class HelloAgentExecutor(AgentExecutor):
 class EarlyFailingAgentExecutor(AgentExecutor):
     async def execute(self, context: RequestContext, event_queue: EventQueue):
         raise RuntimeError('early producer failure')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class LateFailingTerminalAgentExecutor(AgentExecutor):
+    def __init__(
+        self, terminal_state: TaskState, terminal_state_persisted: asyncio.Event
+    ) -> None:
+        self.terminal_state = terminal_state
+        self.terminal_state_persisted = terminal_state_persisted
+        self.raised = asyncio.Event()
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(self.terminal_state)
+        await self.terminal_state_persisted.wait()
+        self.raised.set()
+        raise RuntimeError('late producer failure')
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
@@ -1181,6 +1204,54 @@ async def test_on_message_send_early_producer_exception_marks_task_failed_and_pr
     assert len(stored_task.history) == 1
     assert stored_task.history[0].message_id == 'msg_early_failure_state'
     assert stored_task.history[0].parts[0].text == 'Hi'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'terminal_state',
+    [
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_CANCELED,
+    ],
+)
+async def test_on_message_send_late_producer_exception_preserves_persisted_terminal_state(
+    terminal_state: TaskState,
+):
+    task_store = InMemoryTaskStore()
+    terminal_state_persisted = asyncio.Event()
+    agent_executor = LateFailingTerminalAgentExecutor(
+        terminal_state, terminal_state_persisted
+    )
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_late_failure_terminal_state',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_save_task = TaskManager._save_task
+
+    async def save_task_and_signal_terminal_state(self, task):
+        await original_save_task(self, task)
+        if task.status.state == terminal_state:
+            terminal_state_persisted.set()
+
+    with patch.object(
+        TaskManager, '_save_task', save_task_and_signal_terminal_state
+    ):
+        await request_handler.on_message_send(params, context)
+        await agent_executor.raised.wait()
+        await asyncio.sleep(0)
+
+    stored_task = await task_store.get(params.message.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == terminal_state
 
 
 @pytest.mark.asyncio

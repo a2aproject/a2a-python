@@ -141,7 +141,7 @@ class EventConsumer:
 
             updated_task = None
             task = await self.active_task._task_manager.get_task()
-            if task:
+            if task and task.status.state not in TERMINAL_TASK_STATES:
                 handled_event = TaskStatusUpdateEvent(
                     task_id=task.id,
                     context_id=task.context_id,
@@ -567,8 +567,9 @@ class ActiveTask:
                     self._task_id,
                     request_context.context_id or '',
                 )
-                task.status.state = TaskState.TASK_STATE_FAILED
-                await self._task_manager.save_task_event(task)
+                if task.status.state not in TERMINAL_TASK_STATES:
+                    task.status.state = TaskState.TASK_STATE_FAILED
+                    await self._task_manager.save_task_event(task)
                 self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
