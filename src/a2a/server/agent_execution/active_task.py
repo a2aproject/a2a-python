@@ -36,6 +36,7 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 
@@ -577,6 +578,18 @@ class ActiveTask:
             async with self._lock:
                 self._reference_count -= 1
             logger.debug('Consumer[%s]: Finishing', self._task_id)
+
+            # Cancel and await the producer before cleanup to prevent
+            # asyncio "Task was destroyed but it is pending!" warnings.
+            # Without this, the producer could still be parked on
+            # _request_queue.get() or inside its finally block when
+            # _maybe_cleanup() releases the ActiveTask reference,
+            # causing the still-pending task to be garbage-collected.
+            if self._producer_task and not self._producer_task.done():
+                self._producer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._producer_task
+
             await self._maybe_cleanup()
 
     async def subscribe(
