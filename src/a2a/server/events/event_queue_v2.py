@@ -86,7 +86,17 @@ class EventQueueSource(EventQueue):
         The ``full()`` pre-check is race-free: this dispatcher is the only
         writer to a sink queue and consumers only read, so the queue cannot
         grow between the check and the put.
+
+        A sink that closed after the dispatch snapshot was taken (e.g. a
+        graceful ``close(immediate=False)`` whose consumer is still
+        draining) is skipped: treating its full queue as an abandoned
+        consumer would upgrade the close to immediate and discard the
+        events the consumer is draining. The check is best-effort — a
+        close landing after it is harmless, because the put below
+        tolerates a shut-down queue.
         """
+        if sink.is_closed():
+            return
         if sink._evict_on_full and sink.queue.full():  # noqa: SLF001
             logger.warning(
                 'Evicting event queue sink %r: its queue is full and the '

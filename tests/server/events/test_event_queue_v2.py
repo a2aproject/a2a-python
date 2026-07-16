@@ -948,3 +948,43 @@ async def test_default_tap_keeps_backpressure() -> None:
     assert stuck_sink in queue._sinks  # noqa: SLF001
 
     await queue.close(immediate=True)
+
+
+@pytest.mark.asyncio
+async def test_graceful_close_not_upgraded_to_immediate_by_eviction() -> None:
+    """A sink mid-graceful-close is skipped, never force-closed by eviction.
+
+    ``close(immediate=False)`` marks the sink closed and waits for the
+    consumer to drain the remaining events, but the dispatcher may still
+    hold the sink in an ``active_sinks`` snapshot taken before the close
+    removed it. Delivering to that sink while its queue is full must not
+    trip the evict-on-full path (``close(immediate=True)``), which would
+    discard the events the consumer is still draining.
+    """
+    queue = EventQueueSource()
+    sink = await queue.tap(max_queue_size=1, evict_on_full=True)
+
+    # Fill the sink so the evict-on-full branch would be reachable.
+    await sink._put_internal(create_sample_message('0'))  # noqa: SLF001
+
+    # Start a graceful close: it marks the sink closed, then blocks in
+    # queue.join() until the pending event is consumed.
+    close_task = asyncio.create_task(sink.close(immediate=False))
+    while not sink.is_closed():
+        await asyncio.sleep(0)
+
+    # Simulate the dispatcher delivering from a stale snapshot: the sink
+    # is full and marked closed. It must be skipped, not evicted.
+    await queue._deliver_to_sink(  # noqa: SLF001
+        sink, create_sample_message('1')
+    )
+
+    # The pending event survived the delivery attempt and the consumer
+    # finishes draining, which lets the graceful close complete.
+    event = await sink.dequeue_event()
+    assert isinstance(event, Message)
+    assert event.message_id == '0'
+    sink.task_done()
+    await asyncio.wait_for(close_task, timeout=2.0)
+
+    await queue.close(immediate=True)
