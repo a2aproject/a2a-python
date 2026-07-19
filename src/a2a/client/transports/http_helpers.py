@@ -6,8 +6,6 @@ from typing import Any, NoReturn
 
 import httpx
 
-from httpx_sse import EventSource, SSEError
-
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 
@@ -36,10 +34,6 @@ def handle_http_exceptions(
         if status_error_handler:
             status_error_handler(e)
         raise A2AClientError(f'HTTP Error {e.response.status_code}: {e}') from e
-    except SSEError as e:
-        raise A2AClientError(
-            f'Invalid SSE response or protocol error: {e}'
-        ) from e
     except httpx.RequestError as e:
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
@@ -69,6 +63,46 @@ async def send_http_request(
         return response.json()
 
 
+async def parse_sse_stream(
+    response: httpx.Response,
+) -> AsyncGenerator[tuple[str, str], None]:
+    """Yields (event_name, data) from a streaming httpx.Response.
+
+    Conforms to the W3C Server-Sent Events specification.
+    """
+    event_name = 'message'
+    payload_chunks: list[str] = []
+
+    async for line in response.aiter_lines():
+        raw_line = line.rstrip('\r\n')
+
+        # Empty line denotes the completion of the current event block
+        if not raw_line:
+            if payload_chunks:
+                yield event_name, '\n'.join(payload_chunks)
+            event_name = 'message'
+            payload_chunks = []
+            continue
+
+        # Ignore comment lines
+        if raw_line.startswith(':'):
+            continue
+
+        # Split key and value by first colon
+        parts = raw_line.split(':', 1)
+        key = parts[0]
+        val = parts[1] if len(parts) > 1 else ''
+
+        # Strip a single optional leading space
+        if val.startswith(' '):
+            val = val[1:]
+
+        if key == 'event':
+            event_name = val
+        elif key == 'data':
+            payload_chunks.append(val)
+
+
 async def send_http_stream_request(
     httpx_client: httpx.AsyncClient,
     method: str,
@@ -94,40 +128,44 @@ async def send_http_stream_request(
     with handle_http_exceptions(status_error_handler):
         async with _SSEEventSource(
             httpx_client, method, url, **kwargs
-        ) as event_source:
+        ) as response:
             try:
-                event_source.response.raise_for_status()
+                response.raise_for_status()
             except httpx.HTTPStatusError as e:
                 # Read upfront streaming error content immediately, otherwise lower-level handlers
                 # (e.g. response.json()) crash with 'ResponseNotRead' Access errors.
-                await event_source.response.aread()
+                await response.aread()
                 raise e
 
             # If the response is not a stream, read it standardly (e.g., upfront JSON-RPC error payload)
-            if 'text/event-stream' not in event_source.response.headers.get(
+            if 'text/event-stream' not in response.headers.get(
                 'content-type', ''
             ):
-                content = await event_source.response.aread()
+                content = await response.aread()
                 yield content.decode('utf-8')
                 return
 
-            async for sse in event_source.aiter_sse():
-                if not sse.data:
+            async for event_name, data in parse_sse_stream(response):
+                if not data:
                     continue
-                if sse.event == 'error':
-                    sse_error_handler(sse.data)
-                yield sse.data
+                if event_name == 'error':
+                    sse_error_handler(data)
+                yield data
 
 
 class _SSEEventSource:
-    """Class-based replacement for ``httpx_sse.aconnect_sse``.
+    """Class-based context manager for managing streaming HTTP connections.
 
-    ``aconnect_sse`` is an ``@asynccontextmanager`` whose internal async
-    generator gets tracked by the event loop. When the enclosing async
-    generator is abandoned, the event loop's generator cleanup collides
-    with the cascading cleanup — see https://bugs.python.org/issue38559.
+    Using a class with `__aenter__` and `__aexit__` instead of an
+    `@asynccontextmanager` decorated function prevents event loop finalization
+    crashes (specifically `RuntimeError: GeneratorExit thrown into an active
+    generator`).
 
-    Plain ``__aenter__``/``__aexit__`` coroutines avoid this entirely.
+    This error occurs when an outer async generator (e.g., streaming reader)
+    is abandoned early, causing the Python event loop to concurrently throw
+    GeneratorExit into the nested context manager's suspended generator.
+    Coroutine-based context managers are not async generators and avoid this
+    collision (see https://bugs.python.org/issue38559).
     """
 
     def __init__(
@@ -146,9 +184,9 @@ class _SSEEventSource:
         self._client = client
         self._response: httpx.Response | None = None
 
-    async def __aenter__(self) -> EventSource:
+    async def __aenter__(self) -> httpx.Response:
         self._response = await self._client.send(self._request, stream=True)
-        return EventSource(self._response)
+        return self._response
 
     async def __aexit__(self, *args: object) -> None:
         if self._response is not None:
