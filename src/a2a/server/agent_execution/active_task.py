@@ -36,6 +36,7 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import uuid
 
@@ -577,6 +578,18 @@ class ActiveTask:
             async with self._lock:
                 self._reference_count -= 1
             logger.debug('Consumer[%s]: Finishing', self._task_id)
+
+            # Cancel and await the producer before cleanup to prevent
+            # asyncio "Task was destroyed but it is pending!" warnings.
+            # Without this, the producer could still be parked on
+            # _request_queue.get() or inside its finally block when
+            # _maybe_cleanup() releases the ActiveTask reference,
+            # causing the still-pending task to be garbage-collected.
+            if self._producer_task and not self._producer_task.done():
+                self._producer_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await self._producer_task
+
             await self._maybe_cleanup()
 
     async def subscribe(
@@ -688,43 +701,49 @@ class ActiveTask:
         """
         logger.debug('Cancel[%s]: Cancelling task', self._task_id)
 
-        # TODO: Conflicts with call_context on the pending request.
-        self._task_manager._call_context = call_context
+        # Save and restore _call_context to avoid races with the producer
+        # loop which also sets _call_context for incoming requests.
+        # See the TODO at the producer loop line ~512.
+        saved_call_context = self._task_manager._call_context
+        try:
+            self._task_manager._call_context = call_context
 
-        task = await self._task_manager.get_task()
-        request_context = RequestContext(
-            call_context=call_context,
-            task_id=self._task_id,
-            context_id=task.context_id if task else None,
-            task=task,
-        )
+            task = await self._task_manager.get_task()
+            request_context = RequestContext(
+                call_context=call_context,
+                task_id=self._task_id,
+                context_id=task.context_id if task else None,
+                task=task,
+            )
 
-        async with self._lock:
-            if not self._is_finished.is_set() and self._producer_task:
-                logger.debug(
-                    'Cancel[%s]: Cancelling producer task', self._task_id
-                )
-                self._producer_task.cancel()
-                try:
-                    await self._agent_executor.cancel(
-                        request_context, self._event_queue_agent
+            async with self._lock:
+                if not self._is_finished.is_set() and self._producer_task:
+                    logger.debug(
+                        'Cancel[%s]: Cancelling producer task', self._task_id
                     )
-                except Exception as e:
-                    logger.exception(
-                        'Cancel[%s]: Agent cancel failed', self._task_id
+                    self._producer_task.cancel()
+                    try:
+                        await self._agent_executor.cancel(
+                            request_context, self._event_queue_agent
+                        )
+                    except Exception as e:
+                        logger.exception(
+                            'Cancel[%s]: Agent cancel failed', self._task_id
+                        )
+                        await self._mark_task_as_failed(e)
+                        raise
+                else:
+                    logger.debug(
+                        'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',
+                        self._task_id,
+                        self._is_finished.is_set(),
+                        self._producer_task,
                     )
-                    await self._mark_task_as_failed(e)
-                    raise
-            else:
-                logger.debug(
-                    'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',
-                    self._task_id,
-                    self._is_finished.is_set(),
-                    self._producer_task,
-                )
 
-        await self._is_finished.wait()
-        task = await self._task_manager.get_task()
+            await self._is_finished.wait()
+            task = await self._task_manager.get_task()
+        finally:
+            self._task_manager._call_context = saved_call_context
         if not task:
             raise RuntimeError('Task should have been created')
         return task
