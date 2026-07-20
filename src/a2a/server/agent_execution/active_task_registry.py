@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import PushNotificationSender
     from a2a.server.tasks.task_store import TaskStore
+    from a2a.types.a2a_pb2 import Message
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.tasks.task_manager import TaskManager
@@ -41,6 +42,7 @@ class ActiveTaskRegistry:
         call_context: ServerCallContext,
         context_id: str | None = None,
         create_task_if_missing: bool = False,
+        initial_message: Message | None = None,
     ) -> ActiveTask:
         """Retrieves an existing ActiveTask or creates a new one."""
         async with self._lock:
@@ -51,7 +53,7 @@ class ActiveTaskRegistry:
                 task_id=task_id,
                 context_id=context_id,
                 task_store=self._task_store,
-                initial_message=None,
+                initial_message=initial_message,
                 context=call_context,
             )
 

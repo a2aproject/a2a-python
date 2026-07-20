@@ -222,6 +222,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             context_id=context_id,
             call_context=call_context,
             create_task_if_missing=True,
+            initial_message=request_context.message,
         )
 
         return active_task, request_context
