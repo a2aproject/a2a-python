@@ -1,106 +1,392 @@
 {
   "tests": [
     {
-      "name": "Nightly - JSONRPC - Send Message",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["jsonrpc"],
-      "behavior": "send_message",
-      "build_subtests": true
+      "name": "Current vs Python v10 - Send Message (Non-Streaming)",
+      "sdks": ["current", "python_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - JSONRPC - Send Message (Streaming)",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["jsonrpc"],
+      "name": "Current vs Python v10 - Send Message (Streaming)",
+      "sdks": ["current", "python_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "send_message",
-      "build_subtests": true
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - JSONRPC - Push Notification",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["jsonrpc"],
-      "behavior": "push_notification",
-      "build_subtests": true
+      "name": "Current vs Python v10 - Push Notification",
+      "sdks": ["current", "python_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
     },
     {
-      "name": "Nightly - JSONRPC - Resubscribe",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["jsonrpc"],
+      "name": "Current vs Python v10 - Resubscribe",
+      "sdks": ["current", "python_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "resubscribe",
-      "build_subtests": true
+      "behavior": "resubscribe"
     },
     {
-      "name": "Nightly - GRPC - Send Message",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["grpc"],
-      "behavior": "send_message",
-      "build_subtests": true
+      "name": "Current vs Python v03 - Send Message (Non-Streaming)",
+      "sdks": ["current", "python_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - GRPC - Send Message (Streaming)",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["grpc"],
+      "name": "Current vs Python v03 - Send Message (Streaming)",
+      "sdks": ["current", "python_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "send_message",
-      "build_subtests": true
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - GRPC - Push Notification",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["grpc"],
-      "behavior": "push_notification",
-      "build_subtests": true
+      "name": "Current vs Python v03 - Push Notification",
+      "sdks": ["current", "python_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
     },
     {
-      "name": "Nightly - GRPC - Resubscribe",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["grpc"],
+      "name": "Current vs Python v03 - Resubscribe",
+      "sdks": ["current", "python_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "resubscribe",
-      "build_subtests": true
+      "behavior": "resubscribe"
     },
     {
-      "name": "Nightly - HTTP_JSON - Send Message",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["http_json"],
-      "behavior": "send_message",
-      "build_subtests": true
+      "name": "Current vs Go v10 - Send Message (Non-Streaming)",
+      "sdks": ["current", "go_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - HTTP_JSON - Send Message (Streaming)",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["http_json"],
+      "name": "Current vs Go v10 - Send Message (Streaming)",
+      "sdks": ["current", "go_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "send_message",
-      "build_subtests": true
+      "behavior": "send_message"
     },
     {
-      "name": "Nightly - HTTP_JSON - Push Notification",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["http_json"],
-      "behavior": "push_notification",
-      "build_subtests": true
+      "name": "Current vs Go v10 - Push Notification",
+      "sdks": ["current", "go_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
     },
     {
-      "name": "Nightly - HTTP_JSON - Resubscribe",
-      "sdks": ["current", "python_v10", "python_v03", "go_v10", "go_v03"],
-      "edges": ["0->1", "0->2", "0->3", "0->4", "1->0", "2->0", "3->0", "4->0"],
-      "protocols": ["http_json"],
+      "name": "Current vs Go v10 - Resubscribe",
+      "sdks": ["current", "go_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
       "streaming": true,
-      "behavior": "resubscribe",
-      "build_subtests": true
+      "behavior": "resubscribe"
+    },
+    {
+      "name": "Current vs Go v03 - Send Message (Non-Streaming)",
+      "sdks": ["current", "go_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc"
+      ],
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Go v03 - Send Message (Streaming)",
+      "sdks": ["current", "go_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc"
+      ],
+      "streaming": true,
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Go v03 - Push Notification",
+      "sdks": ["current", "go_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc"
+      ],
+      "behavior": "push_notification"
+    },
+    {
+      "name": "Current vs Go v03 - Resubscribe",
+      "sdks": ["current", "go_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc"
+      ],
+      "streaming": true,
+      "behavior": "resubscribe"
+    },
+    {
+      "name": "Current vs TS v10 - Send Message (Non-Streaming)",
+      "sdks": ["current", "ts_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs TS v10 - Send Message (Streaming)",
+      "sdks": ["current", "ts_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs TS v10 - Push Notification",
+      "sdks": ["current", "ts_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
+    },
+    {
+      "name": "Current vs TS v10 - Resubscribe",
+      "sdks": ["current", "ts_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "resubscribe"
+    },
+    {
+      "name": "Current vs TS v03 - Send Message (Non-Streaming)",
+      "sdks": ["current", "ts_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc"
+      ],
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs TS v03 - Send Message (Streaming)",
+      "sdks": ["current", "ts_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc"
+      ],
+      "streaming": true,
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs TS v03 - Push Notification",
+      "sdks": ["current", "ts_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc"
+      ],
+      "behavior": "push_notification"
+    },
+    {
+      "name": "Current vs TS v03 - Resubscribe",
+      "sdks": ["current", "ts_v03"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc"
+      ],
+      "streaming": true,
+      "behavior": "resubscribe"
+    },
+    {
+      "name": "Current vs Rust v10 - Send Message (Non-Streaming)",
+      "sdks": ["current", "rust_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Rust v10 - Send Message (Streaming)",
+      "sdks": ["current", "rust_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Rust v10 - Push Notification",
+      "sdks": ["current", "rust_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
+    },
+    {
+      "name": "Current vs Rust v10 - Resubscribe",
+      "sdks": ["current", "rust_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "resubscribe"
+    },
+    {
+      "name": "Current vs Java v10 - Send Message (Non-Streaming)",
+      "sdks": ["current", "java_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Java v10 - Send Message (Streaming)",
+      "sdks": ["current", "java_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "send_message"
+    },
+    {
+      "name": "Current vs Java v10 - Push Notification",
+      "sdks": ["current", "java_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "behavior": "push_notification"
+    },
+    {
+      "name": "Current vs Java v10 - Resubscribe",
+      "sdks": ["current", "java_v10"],
+      "traversal": "euler",
+      "edges": ["0->1", "1->0"],
+      "protocols": [
+        "jsonrpc",
+        "grpc",
+        "http_json"
+      ],
+      "streaming": true,
+      "behavior": "resubscribe"
     }
   ]
 }
