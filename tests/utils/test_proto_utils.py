@@ -241,6 +241,31 @@ class TestRestParams:
         ).url.params
 
 
+class TestIsFieldRepeated:
+    """Tests for _is_field_repeated helper."""
+
+    def test_scalar_field_not_repeated(self):
+        field = Message.DESCRIPTOR.fields_by_name['message_id']
+        assert proto_utils._is_field_repeated(field) is False
+
+    def test_repeated_field(self):
+        field = AgentSkill.DESCRIPTOR.fields_by_name['tags']
+        assert proto_utils._is_field_repeated(field) is True
+
+    def test_fallback_when_is_repeated_missing(self, monkeypatch):
+        field = AgentSkill.DESCRIPTOR.fields_by_name['tags']
+
+        def raise_attribute_error(_self):
+            raise AttributeError('is_repeated')
+
+        monkeypatch.setattr(
+            type(field),
+            'is_repeated',
+            property(raise_attribute_error),
+        )
+        assert proto_utils._is_field_repeated(field) is True
+
+
 class TestValidateProtoRequiredFields:
     """Tests for validate_proto_required_fields function."""
 
