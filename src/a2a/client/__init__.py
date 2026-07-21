@@ -7,6 +7,14 @@ from a2a.client.auth import (
 )
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.card_validators import (
+    CardValidator,
+    InvalidAgentCardError,
+    reject_non_https_urls,
+    reject_private_urls,
+    require_supported_interfaces,
+    validate_card,
+)
 from a2a.client.client import (
     Client,
     ClientCallContext,
@@ -32,6 +40,7 @@ __all__ = [
     'AgentCardResolutionError',
     'AuthInterceptor',
     'BaseClient',
+    'CardValidator',
     'Client',
     'ClientCallContext',
     'ClientCallInterceptor',
@@ -39,6 +48,11 @@ __all__ = [
     'ClientFactory',
     'CredentialService',
     'InMemoryContextCredentialStore',
+    'InvalidAgentCardError',
     'create_client',
     'minimal_agent_card',
+    'reject_non_https_urls',
+    'reject_private_urls',
+    'require_supported_interfaces',
+    'validate_card',
 ]

@@ -11,6 +11,7 @@ from packaging.version import InvalidVersion, Version
 
 from a2a.client.base_client import BaseClient
 from a2a.client.card_resolver import A2ACardResolver
+from a2a.client.card_validators import CardValidator, validate_card
 from a2a.client.client import Client, ClientConfig
 from a2a.client.transports.base import ClientTransport
 from a2a.client.transports.jsonrpc import JsonRpcTransport
@@ -76,6 +77,7 @@ class ClientFactory:
     def __init__(
         self,
         config: ClientConfig | None = None,
+        card_validators: list[CardValidator] | None = None,
     ):
         config = config or ClientConfig()
         httpx_client = config.httpx_client or httpx.AsyncClient()
@@ -85,6 +87,7 @@ class ClientFactory:
 
         self._config = config
         self._httpx_client = httpx_client
+        self._card_validators = card_validators or []
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
@@ -319,6 +322,7 @@ class ClientFactory:
           If there is no valid matching of the client configuration with the
           server configuration, a `ValueError` is raised.
         """
+        validate_card(card, self._card_validators)
         client_set = self._config.supported_protocol_bindings or [
             TransportProtocol.JSONRPC
         ]
@@ -371,6 +375,7 @@ async def create_client(  # noqa: PLR0913
     relative_card_path: str | None = None,
     resolver_http_kwargs: dict[str, Any] | None = None,
     signature_verifier: Callable[[AgentCard], None] | None = None,
+    card_validators: list[CardValidator] | None = None,
 ) -> Client:
     """Create a `Client` for an agent from a URL or `AgentCard`.
 
@@ -390,11 +395,13 @@ async def create_client(  # noqa: PLR0913
         httpx client when resolving the agent card.
       signature_verifier: A callable used to verify the agent card's
         signatures.
+      card_validators: Optional hooks run on resolved cards before a
+        client is created.
 
     Returns:
       A `Client` object.
     """
-    factory = ClientFactory(client_config)
+    factory = ClientFactory(client_config, card_validators=card_validators)
     if isinstance(agent, str):
         return await factory.create_from_url(
             agent,
