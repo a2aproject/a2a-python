@@ -21,6 +21,7 @@ from a2a.server.agent_execution import (
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
+from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
     InMemoryPushNotificationConfigStore,
@@ -30,6 +31,7 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
     InternalError,
     InvalidAgentResponseError,
@@ -304,6 +306,48 @@ class HelloAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
+
+class EarlyFailingAgentExecutor(AgentExecutor):
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        raise RuntimeError('early producer failure')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class LateFailingTerminalAgentExecutor(AgentExecutor):
+    def __init__(
+        self, terminal_state: TaskState, terminal_state_persisted: asyncio.Event
+    ) -> None:
+        self.terminal_state = terminal_state
+        self.terminal_state_persisted = terminal_state_persisted
+        self.raised = asyncio.Event()
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(self.terminal_state)
+        await self.terminal_state_persisted.wait()
+        self.raised.set()
+        raise RuntimeError('late producer failure')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+async def send_message_with_early_failure(
+    request_handler: DefaultRequestHandlerV2,
+    params: SendMessageRequest,
+    context: ServerCallContext,
+) -> Message | Task | None:
+    try:
+        return await request_handler.on_message_send(params, context)
+    except RuntimeError as e:
+        assert str(e) == 'early producer failure'
+        return None
 
 
 @pytest.mark.asyncio
@@ -1127,6 +1171,117 @@ async def test_on_message_send_limit_history():
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_early_producer_exception_marks_task_failed_and_preserves_originating_message():
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_early_failure_state',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_enqueue_event = EventQueueSource.enqueue_event
+
+    async def fail_before_request_started(self, event):
+        if type(event).__name__ == '_RequestStarted':
+            raise RuntimeError('early producer failure')
+        return await original_enqueue_event(self, event)
+
+    with patch.object(
+        EventQueueSource, 'enqueue_event', fail_before_request_started
+    ):
+        await send_message_with_early_failure(request_handler, params, context)
+
+    stored_task = await task_store.get(params.message.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert len(stored_task.history) == 1
+    assert stored_task.history[0].message_id == 'msg_early_failure_state'
+    assert stored_task.history[0].parts[0].text == 'Hi'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'terminal_state',
+    [
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_CANCELED,
+    ],
+)
+async def test_on_message_send_late_producer_exception_preserves_persisted_terminal_state(
+    terminal_state: TaskState,
+):
+    task_store = InMemoryTaskStore()
+    terminal_state_persisted = asyncio.Event()
+    agent_executor = LateFailingTerminalAgentExecutor(
+        terminal_state, terminal_state_persisted
+    )
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_late_failure_terminal_state',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_save_task = TaskManager._save_task
+
+    async def save_task_and_signal_terminal_state(self, task):
+        await original_save_task(self, task)
+        if task.status.state == terminal_state:
+            terminal_state_persisted.set()
+
+    with patch.object(
+        TaskManager, '_save_task', save_task_and_signal_terminal_state
+    ):
+        await request_handler.on_message_send(params, context)
+        await agent_executor.raised.wait()
+        await asyncio.sleep(0)
+
+    stored_task = await task_store.get(params.message.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == terminal_state
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_early_producer_exception_preserves_originating_message():
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=EarlyFailingAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_early_failure_history',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+
+    await send_message_with_early_failure(request_handler, params, context)
+
+    stored_task = await task_store.get(params.message.task_id, context)
+    assert stored_task is not None
+    assert stored_task.history is not None
+    assert len(stored_task.history) == 1
+    assert stored_task.history[0].message_id == 'msg_early_failure_history'
+    assert stored_task.history[0].parts[0].text == 'Hi'
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_stream_task_id_mismatch():
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_agent_executor = AsyncMock(spec=AgentExecutor)
@@ -1557,3 +1712,37 @@ async def test_on_get_task_push_notification_config_is_owner_scoped():
             ),
             _ctx('bob'),
         )
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_aclose_drains_registry():
+    """aclose() drains the active-task registry on shutdown."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    await handler._active_task_registry.get_or_create(
+        'task-1',
+        call_context=ServerCallContext(user=UnauthenticatedUser()),
+        create_task_if_missing=True,
+    )
+
+    await handler.aclose()
+
+    assert await handler._active_task_registry.get('task-1') is None
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_aclose_is_idempotent_and_handles_empty():
+    """aclose() is safe with no active tasks and when called twice."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    await handler.aclose()
+    await handler.aclose()

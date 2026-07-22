@@ -141,7 +141,7 @@ class EventConsumer:
 
             updated_task = None
             task = await self.active_task._task_manager.get_task()
-            if task:
+            if task and task.status.state not in TERMINAL_TASK_STATES:
                 handled_event = TaskStatusUpdateEvent(
                     task_id=task.id,
                     context_id=task.context_id,
@@ -260,11 +260,20 @@ class EventConsumer:
         )
 
         if self.message_to_save is not None:
-            updated_task = self.active_task._task_manager.update_with_message(
-                self.message_to_save,
-                updated_task,
+            message_already_saved = any(
+                message.message_id == self.message_to_save.message_id
+                for message in updated_task.history
             )
-            await self.active_task._task_manager.save_task_event(updated_task)
+            if not message_already_saved:
+                updated_task = (
+                    self.active_task._task_manager.update_with_message(
+                        self.message_to_save,
+                        updated_task,
+                    )
+                )
+                await self.active_task._task_manager.save_task_event(
+                    updated_task
+                )
             self.message_to_save = None
 
         self.active_task._task_manager.context_id = event.context_id
@@ -551,12 +560,16 @@ class ActiveTask:
                 'Producer[%s]: Execution failed',
                 self._task_id,
             )
-            # Create task and mark as failed.
+            # Persist the failure directly instead of relying on the closing
+            # event queue to carry a final status update.
             if request_context:
-                await self._task_manager.ensure_task_id(
+                task = await self._task_manager.ensure_task_id(
                     self._task_id,
                     request_context.context_id or '',
                 )
+                if task.status.state not in TERMINAL_TASK_STATES:
+                    task.status.state = TaskState.TASK_STATE_FAILED
+                    await self._task_manager.save_task_event(task)
                 self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
@@ -574,6 +587,19 @@ class ActiveTask:
             self._is_finished.set()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
+
+            if self._producer_task and not self._producer_task.done():
+                try:
+                    await self._producer_task
+                except asyncio.CancelledError:
+                    pass
+                except Exception as e:  # noqa: BLE001
+                    logger.debug(
+                        'Consumer[%s]: Awaited producer_task raised %r',
+                        self._task_id,
+                        e,
+                    )
+
             async with self._lock:
                 self._reference_count -= 1
             logger.debug('Consumer[%s]: Finishing', self._task_id)
@@ -728,6 +754,48 @@ class ActiveTask:
         if not task:
             raise RuntimeError('Task should have been created')
         return task
+
+    async def aclose(self) -> None:
+        """Force-closes the task's queues and drains its background tasks.
+
+        Provides a bounded, public teardown for the producer and consumer
+        ``asyncio.Task``s spawned in ``start()``. Without it, a producer
+        wedged in its ``finally`` closing an abandoned subscriber sink can
+        survive until event-loop shutdown and surface as
+        ``Task was destroyed but it is pending!``.
+
+        Always forces: the queues are closed with ``immediate=True`` and the
+        background tasks are cancelled, so teardown is bounded even when a
+        subscriber sink was never drained. It is safe to call multiple times.
+        """
+        # Shut down the request queue first, mirroring the producer's
+        # ``finally``. If `start()` was never called, the producer/consumer
+        # ``finally`` blocks never run, and without this a caller parked in
+        # `enqueue_request()` would wait forever.
+        self._request_queue.shutdown(immediate=True)
+        await self._event_queue_agent.close(immediate=True)
+        await self._event_queue_subscribers.close(immediate=True)
+        # Set `_is_finished` and collect the background tasks under `_lock` so
+        # this is mutually exclusive with `start()`, which refuses to spawn
+        # once `_is_finished` is set. The lock is released before awaiting the
+        # tasks, because their teardown re-acquires it.
+        async with self._lock:
+            self._is_finished.set()
+            background_tasks = [
+                task
+                for task in (self._producer_task, self._consumer_task)
+                if task is not None
+            ]
+            for task in background_tasks:
+                task.cancel()
+        if background_tasks:
+            results = await asyncio.gather(
+                *background_tasks, return_exceptions=True
+            )
+            for result in results:
+                # CancelledError is a BaseException, so it is excluded here.
+                if isinstance(result, Exception):
+                    logger.error('Error during aclose', exc_info=result)
 
     async def _maybe_cleanup(self) -> None:
         """Triggers cleanup if task is finished and has no subscribers.

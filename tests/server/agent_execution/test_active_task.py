@@ -20,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils._async_queue_compat import QueueShutDown, create_async_queue
 from a2a.utils.errors import InvalidParamsError
 
 
@@ -895,3 +896,209 @@ async def test_active_task_subscribe_request_parameter():
     assert len(events) == 0
 
     await active_task.cancel(request_context)
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_producer_awaited_on_normal_completion():
+    """Verify producer is awaited before cleanup to prevent GC warnings.
+
+    Regression test for #1121: when the consumer finishes first (normal
+    completion path), the producer must be awaited before
+    _maybe_cleanup() releases the ActiveTask reference, otherwise asyncio
+    logs "Task was destroyed but it is pending!".
+    """
+    agent_executor = Mock()
+    task_manager = Mock()
+    cleanup_called = False
+
+    def on_cleanup(_task: ActiveTask) -> None:
+        nonlocal cleanup_called
+        cleanup_called = True
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        on_cleanup=on_cleanup,
+    )
+
+    execute_started = asyncio.Event()
+    execute_barrier = asyncio.Event()
+
+    async def execute_mock(req, q):
+        execute_started.set()
+        await execute_barrier.wait()
+
+    agent_executor.execute = AsyncMock(side_effect=execute_mock)
+    agent_executor.cancel = AsyncMock()
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+    task_manager.save_task_event = AsyncMock()
+    task_manager.ensure_task_id = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+    task_manager.process = AsyncMock(side_effect=lambda x: x)
+
+    request_context = Mock(spec=RequestContext)
+    request_context.call_context = ServerCallContext()
+    request_context.context_id = 'test-context'
+    request_context.message = None
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    await execute_started.wait()
+
+    if active_task._consumer_task:
+        active_task._consumer_task.cancel()
+
+        # Release the producer so it can finish its work and loop back
+        # to get(), where it will receive QueueShutDown.
+        execute_barrier.set()
+
+        try:
+            await active_task._consumer_task
+        except asyncio.CancelledError:
+            pass
+
+    await active_task._is_finished.wait()
+
+    assert active_task._producer_task is not None
+    assert active_task._producer_task.done(), (
+        'Producer task should be done after consumer teardown'
+    )
+    assert cleanup_called, (
+        'on_cleanup should be called after producer is drained'
+    )
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_reaps_background_tasks():
+    """aclose() drains a live producer and consumer."""
+    agent_executor = Mock()
+    task_manager = Mock()
+    request_context = Mock(spec=RequestContext)
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    async def slow_execute(req, q):
+        await asyncio.sleep(10)
+
+    agent_executor.execute = AsyncMock(side_effect=slow_execute)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    await active_task.aclose()
+
+    assert active_task._producer_task is not None
+    assert active_task._producer_task.done()
+    assert active_task._consumer_task is not None
+    assert active_task._consumer_task.done()
+    assert active_task._is_finished.is_set()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_force_closes_undrained_subscriber():
+    """aclose() unblocks past an undrained subscriber sink.
+
+    Reproduces issue #1101: a graceful close(immediate=False) would block
+    forever on the leaked sink's join().
+    """
+    agent_executor = Mock()
+    task_manager = Mock()
+    request_context = Mock(spec=RequestContext)
+
+    active_task = ActiveTask(
+        agent_executor=agent_executor,
+        task_id='test-task-id',
+        task_manager=task_manager,
+        push_sender=Mock(),
+    )
+
+    async def slow_execute(req, q):
+        await asyncio.sleep(10)
+
+    agent_executor.execute = AsyncMock(side_effect=slow_execute)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+
+    await active_task.enqueue_request(request_context)
+    await active_task.start(
+        call_context=ServerCallContext(), create_task_if_missing=True
+    )
+
+    # Leak a subscriber sink and push an event into it without draining it.
+    leaked = await active_task._event_queue_subscribers.tap()
+    await active_task._event_queue_subscribers.enqueue_event(Message())
+    await asyncio.sleep(0.05)
+
+    await active_task.aclose()
+
+    assert active_task._producer_task is not None
+    assert active_task._producer_task.done()
+    assert leaked.is_closed()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_active_task_aclose_never_started_shuts_down_request_queue():
+    """aclose() on a never-started task shuts down the request queue.
+
+    If start() was never called, the producer and consumer `finally` blocks
+    that normally shut down `_request_queue` never run, so without this a
+    caller parked in `enqueue_request()` would never be released.
+    """
+    active_task = ActiveTask(
+        agent_executor=Mock(),
+        task_id='test-task-id',
+        task_manager=Mock(),
+        push_sender=Mock(),
+    )
+
+    # Swap in a bounded queue and fill it so the next enqueue_request parks.
+    active_task._request_queue = create_async_queue(maxsize=1)
+    await active_task.enqueue_request(Mock(spec=RequestContext))
+    waiter = asyncio.create_task(
+        active_task.enqueue_request(Mock(spec=RequestContext))
+    )
+    await asyncio.sleep(0.05)
+    assert not waiter.done()
+
+    await active_task.aclose()
+
+    # The parked waiter is released with the shutdown error, and any
+    # subsequent enqueue fails fast instead of hanging.
+    with pytest.raises(QueueShutDown):
+        await waiter
+    with pytest.raises(QueueShutDown):
+        await active_task.enqueue_request(Mock(spec=RequestContext))

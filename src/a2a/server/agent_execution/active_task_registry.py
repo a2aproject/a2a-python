@@ -11,6 +11,7 @@ if TYPE_CHECKING:
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import PushNotificationSender
     from a2a.server.tasks.task_store import TaskStore
+    from a2a.types.a2a_pb2 import Message
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.tasks.task_manager import TaskManager
@@ -34,6 +35,7 @@ class ActiveTaskRegistry:
         self._active_tasks: dict[str, ActiveTask] = {}
         self._lock = asyncio.Lock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
+        self._closed = False
 
     async def get_or_create(
         self,
@@ -41,9 +43,12 @@ class ActiveTaskRegistry:
         call_context: ServerCallContext,
         context_id: str | None = None,
         create_task_if_missing: bool = False,
+        initial_message: Message | None = None,
     ) -> ActiveTask:
         """Retrieves an existing ActiveTask or creates a new one."""
         async with self._lock:
+            if self._closed:
+                raise RuntimeError('ActiveTaskRegistry is closed')
             if task_id in self._active_tasks:
                 return self._active_tasks[task_id]
 
@@ -51,7 +56,7 @@ class ActiveTaskRegistry:
                 task_id=task_id,
                 context_id=context_id,
                 task_store=self._task_store,
-                initial_message=None,
+                initial_message=initial_message,
                 context=call_context,
             )
 
@@ -86,3 +91,39 @@ class ActiveTaskRegistry:
         """Retrieves an existing task."""
         async with self._lock:
             return self._active_tasks.get(task_id)
+
+    async def aclose(self) -> None:
+        """Closes the registry and drains all active tasks.
+
+        Marks the registry closed so ``get_or_create`` refuses new work, then
+        force-closes every registered ``ActiveTask`` and awaits the in-flight
+        ``_remove_task`` cleanup tasks they schedule, so no SDK-owned
+        ``asyncio.Task`` is left pending at event-loop shutdown. Safe to call
+        multiple times.
+
+        The close flag is set and the active-task snapshot is taken under
+        ``_lock``, and the lock is then released before awaiting, because
+        ``_remove_task`` re-acquires ``_lock``; holding it while draining
+        would deadlock. Marking closed under the same lock prevents a
+        concurrent ``get_or_create`` from registering a task that the drain
+        would miss.
+        """
+        async with self._lock:
+            self._closed = True
+            active_tasks = list(self._active_tasks.values())
+
+        if active_tasks:
+            results = await asyncio.gather(
+                *(task.aclose() for task in active_tasks),
+                return_exceptions=True,
+            )
+            for result in results:
+                if isinstance(result, Exception):
+                    logger.error('Error draining active task', exc_info=result)
+
+        cleanup_tasks = list(self._cleanup_tasks)
+        if cleanup_tasks:
+            await asyncio.gather(*cleanup_tasks, return_exceptions=True)
+
+        async with self._lock:
+            self._active_tasks.clear()
