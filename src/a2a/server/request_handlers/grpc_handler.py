@@ -9,11 +9,9 @@ from typing import TypeVar
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
     import grpc.aio  # type: ignore[reportMissingModuleSource]
-
-    from grpc_status import rpc_status
 except ImportError as e:
     raise ImportError(
-        'GrpcHandler requires grpcio, grpcio-tools, and grpcio-status to be installed. '
+        'GrpcHandler requires grpcio and grpcio-tools to be installed. '
         'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
@@ -34,6 +32,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.utils import proto_utils
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
+from a2a.utils.grpc_status import status_to_grpc
 from a2a.utils.proto_utils import validation_errors_to_bad_request
 
 
@@ -400,8 +399,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 )
                 status.details.append(bad_request_detail)
 
-            # Use grpc_status to safely generate standard trailing metadata
-            rich_status = rpc_status.to_status(status)
+            rich_status = status_to_grpc(status)
 
             new_metadata: list[tuple[str, str | bytes]] = []
             trailing = context.trailing_metadata()
