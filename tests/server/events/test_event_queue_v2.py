@@ -615,6 +615,54 @@ async def test_dispatch_task_failed(event_queue: EventQueueSource) -> None:
 
 
 @pytest.mark.asyncio
+async def test_close_immediate_awaits_dispatcher_without_sinks() -> None:
+    """A subscriber-less source must not leave its dispatcher pending on close.
+
+    Regression: a source created with create_default_sink=False and no taps has
+    no sinks for close()'s gather to await. close(immediate=True) cancels the
+    dispatcher task, so with nothing else to await it used to return while the
+    cancelled dispatcher was still pending, producing "Task was destroyed but it
+    is pending!". close() must await its own cancelled dispatcher task.
+    """
+    source = EventQueueSource(create_default_sink=False)
+    assert not source._dispatcher_task.done()
+
+    await source.close(immediate=True)
+
+    assert source._dispatcher_task.done()
+
+
+@pytest.mark.asyncio
+async def test_close_does_not_propagate_dispatcher_crash() -> None:
+    """close() awaits its dispatcher without surfacing a non-cancel crash.
+
+    close() is teardown (reachable from __aexit__) and must not raise, and
+    _dispatch_loop already logs its own exceptions. If the dispatcher died with a
+    non-cancel error, awaiting it in close() must not re-raise that error.
+    """
+    source = EventQueueSource(create_default_sink=False)
+
+    # Retire the real dispatcher, then stand in a task that has already failed
+    # with a non-cancel error, simulating a _dispatch_loop crash.
+    real = source._dispatcher_task
+    real.cancel()
+    try:
+        await real
+    except asyncio.CancelledError:
+        pass
+
+    async def crashed() -> None:
+        raise RuntimeError('dispatcher boom')
+
+    source._dispatcher_task = asyncio.ensure_future(crashed())
+    await asyncio.sleep(0.01)  # let it fail so the exception is stored
+
+    # Must return cleanly, not re-raise the dispatcher's RuntimeError.
+    await source.close(immediate=True)
+    assert source._dispatcher_task.done()
+
+
+@pytest.mark.asyncio
 async def test_concurrent_close_immediate_false() -> None:
     """Test that concurrent close(immediate=False) calls both wait for join() deterministically."""
     queue = EventQueueSource()

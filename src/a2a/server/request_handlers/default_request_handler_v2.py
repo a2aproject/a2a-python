@@ -112,6 +112,15 @@ class DefaultRequestHandlerV2(RequestHandler):
         )
         self._background_tasks = set()
 
+    async def aclose(self) -> None:
+        """Shuts down the handler, draining all active tasks.
+
+        Drains the ``ActiveTaskRegistry`` so a server shutdown leaves no
+        pending ``asyncio.Task``. Intended to be wired into an ASGI
+        ``lifespan`` / ``on_shutdown`` hook. Safe to call multiple times.
+        """
+        await self._active_task_registry.aclose()
+
     @validate_request_params
     async def on_get_task(  # noqa: D102
         self,
@@ -222,6 +231,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             context_id=context_id,
             call_context=call_context,
             create_task_if_missing=True,
+            initial_message=request_context.message,
         )
 
         return active_task, request_context
