@@ -32,9 +32,9 @@ from a2a.helpers.proto_helpers import (
     new_url_part,
 )
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
+from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
 from a2a.server.routes.jsonrpc_routes import create_jsonrpc_routes
 from a2a.server.routes.rest_routes import create_rest_routes
-from a2a.server.routes.fastapi_routes import add_a2a_routes_to_fastapi
 
 
 __all__ = [
