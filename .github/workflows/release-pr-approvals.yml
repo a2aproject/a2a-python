@@ -1,0 +1,78 @@
+name: release-pr-approvals
+
+# Requires N approvals before a release-please PR can be merged. Publishes a
+# commit status (context "release-pr-approvals") so it can be added as a
+# required status check on the protected branch. Normal PRs pass immediately.
+#
+# A PR counts as a release PR if ANY signal matches: head branch prefix, author,
+# or an autorelease label. Matching on any one is deliberate — missing a real
+# release PR reopens the accidental-merge gap, while over-matching only asks for
+# a second approval.
+#
+# Uses pull_request_target (not pull_request) so the status can be written on
+# PRs opened from forks; this job never checks out or executes PR code, so the
+# usual pull_request_target risk does not apply.
+
+on:
+  pull_request_target:
+    types: [opened, reopened, synchronize]
+  pull_request_review:
+    types: [submitted, dismissed, edited]
+
+permissions:
+  contents: read
+  pull-requests: read
+  statuses: write
+
+concurrency:
+  group: release-pr-approvals-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  approvals:
+    runs-on: ubuntu-latest
+    env:
+      REQUIRED_APPROVALS: "2"
+      RELEASE_BRANCH_PREFIX: "release-please--"
+      RELEASE_AUTHOR: "a2a-bot"
+      RELEASE_LABEL_PREFIX: "autorelease:"
+    steps:
+      - uses: actions/github-script@3a2844b7e9c422d3c10d287c895573f7108da1b3 # v9.0.0
+        with:
+          script: |
+            const CONTEXT = 'release-pr-approvals';
+            const required = Number(process.env.REQUIRED_APPROVALS);
+            const pr = context.payload.pull_request;
+            const { owner, repo } = context.repo;
+
+            const setStatus = (state, description) =>
+              github.rest.repos.createCommitStatus({
+                owner, repo, sha: pr.head.sha, context: CONTEXT, state, description,
+              });
+
+            const labels = (pr.labels ?? []).map((l) => l.name);
+            const isRelease =
+              pr.head.ref.startsWith(process.env.RELEASE_BRANCH_PREFIX) ||
+              pr.user?.login === process.env.RELEASE_AUTHOR ||
+              labels.some((n) => n.startsWith(process.env.RELEASE_LABEL_PREFIX));
+
+            if (!isRelease) {
+              await setStatus('success', 'Not a release PR');
+              return;
+            }
+
+            const reviews = await github.paginate(github.rest.pulls.listReviews, {
+              owner, repo, pull_number: pr.number, per_page: 100,
+            });
+
+            // Latest decisive review per user; COMMENTED does not change approval state.
+            const latest = new Map();
+            for (const r of reviews) {
+              if (!r.user || r.state === 'COMMENTED') continue;
+              latest.set(r.user.id, r.state);
+            }
+            const approvals = [...latest.values()].filter((s) => s === 'APPROVED').length;
+
+            const description = `${approvals}/${required} approvals`;
+            await setStatus(approvals >= required ? 'success' : 'failure', description);
+            core.info(description);
