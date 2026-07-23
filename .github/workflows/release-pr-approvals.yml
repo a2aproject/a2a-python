@@ -5,11 +5,7 @@ name: release-pr-approvals
 # be added as a required status check on the protected branch; the job itself
 # stays green. Normal PRs pass immediately.
 #
-# A PR counts as a release PR if ANY signal matches: head branch prefix, author,
-# or an autorelease label. Matching on any one is deliberate - missing a real
-# release PR reopens the accidental-merge gap, while over-matching only asks for
-# a second approval.
-
+# A PR counts as a release PR based on the branch name and author.
 on:
   pull_request_target:
     types: [opened, reopened, synchronize]
@@ -46,7 +42,6 @@ jobs:
                 owner, repo, sha: pr.head.sha, context: CONTEXT, state, description,
               });
 
-            const labels = (pr.labels ?? []).map((l) => l.name);
             const isRelease =
               pr.head.ref.startsWith(process.env.RELEASE_BRANCH_PREFIX) &&
               pr.user?.login === process.env.RELEASE_AUTHOR;
