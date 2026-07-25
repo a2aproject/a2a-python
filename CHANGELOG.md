@@ -1,5 +1,30 @@
 # Changelog
 
+## [1.1.2](https://github.com/a2aproject/a2a-python/compare/v1.1.1...v1.1.2) (2026-07-20)
+
+
+### Features
+
+* **server:** add aclose() to drain ActiveTask background tasks ([#1101](https://github.com/a2aproject/a2a-python/issues/1101)) ([#1105](https://github.com/a2aproject/a2a-python/issues/1105)) ([9801f46](https://github.com/a2aproject/a2a-python/commit/9801f4637fc0689b461dd3db00968bec496cd7ac))
+
+
+### Bug Fixes
+
+* **agent_execution:** resolve ActiveTask 'destroyed but pending' warning during teardown ([#1122](https://github.com/a2aproject/a2a-python/issues/1122)) ([d19c4d2](https://github.com/a2aproject/a2a-python/commit/d19c4d260e375d52175eec4bbd9018edb3eb270b))
+* persist early producer failure as FAILED with originating message ([#1106](https://github.com/a2aproject/a2a-python/issues/1106)) ([4e3d724](https://github.com/a2aproject/a2a-python/commit/4e3d7249e2316859fe8e9b85fd688d6d4525d690))
+
+## [1.1.1](https://github.com/a2aproject/a2a-python/compare/v1.1.0...v1.1.1) (2026-07-15)
+
+
+### Bug Fixes
+
+* **server:** improve Swagger /docs example annotations for A2A routes ([#1092](https://github.com/a2aproject/a2a-python/issues/1092)) ([46b292b](https://github.com/a2aproject/a2a-python/commit/46b292b433a5df5a9721d6227cb53753f2978437))
+
+### Miscellaneous Chores
+
+* **grpc:** eliminate third-party grpcio-status dependency ([#1130](https://github.com/a2aproject/a2a-python/issues/1130)) ([723880e](https://github.com/a2aproject/a2a-python/commit/723880e679310a249a287657476852a0fa30ba95))
+* **http:** eliminate httpx-sse dependency ([#1132](https://github.com/a2aproject/a2a-python/issues/1132)) ([0d82ab9](https://github.com/a2aproject/a2a-python/commit/0d82ab985ffbac381a38adb5bd160674fa05eb18))
+
 ## [1.1.0](https://github.com/a2aproject/a2a-python/compare/v1.0.3...v1.1.0) (2026-05-29)
 
 

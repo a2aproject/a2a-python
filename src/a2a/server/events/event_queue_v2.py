@@ -239,6 +239,21 @@ class EventQueueSource(EventQueue):
                 *(sink.close(immediate=False) for sink in sinks_to_close)
             )
 
+        # Both branches above cancel the dispatcher task, but the sink gather
+        # only awaits the sinks. Await the cancelled dispatcher here so it is
+        # never left pending when close() returns -- e.g. a source created with
+        # create_default_sink=False and no taps has no sinks for the gather to
+        # await, which would otherwise leave the cancelled dispatcher pending
+        # and trigger "Task was destroyed but it is pending!".
+        #
+        # Suppress the expected CancelledError and any error the dispatcher
+        # raised while shutting down: close() is teardown (reachable from
+        # __aexit__) and must not raise, and _dispatch_loop already logs its own
+        # exceptions, so a dispatcher failure stays observable without
+        # propagating out of close().
+        with contextlib.suppress(asyncio.CancelledError, Exception):
+            await self._dispatcher_task
+
     def is_closed(self) -> bool:
         """[DEPRECATED] Checks if the queue is closed.
 

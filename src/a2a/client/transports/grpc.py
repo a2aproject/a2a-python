@@ -10,11 +10,9 @@ from a2a.client.errors import A2AClientError, A2AClientTimeoutError
 
 try:
     import grpc  # type: ignore[reportMissingModuleSource]
-
-    from grpc_status import rpc_status
 except ImportError as e:
     raise ImportError(
-        'A2AGrpcClient requires grpcio, grpcio-tools, and grpcio-status to be installed. '
+        'A2AGrpcClient requires grpcio and grpcio-tools to be installed. '
         'Install with: '
         "'pip install a2a-sdk[grpc]'"
     ) from e
@@ -48,6 +46,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
 from a2a.utils.errors import A2A_REASON_TO_ERROR, A2AError
+from a2a.utils.grpc_status import status_from_call
 from a2a.utils.proto_utils import bad_request_to_validation_errors
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -56,12 +55,10 @@ logger = logging.getLogger(__name__)
 
 
 def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
-
     if e.code() == grpc.StatusCode.DEADLINE_EXCEEDED:
         raise A2AClientTimeoutError('Client Request timed out') from e
 
-    # Use grpc_status to cleanly extract the rich Status from the call
-    status = rpc_status.from_call(cast('grpc.Call', e))
+    status = status_from_call(cast('grpc.Call', e))
     data = None
 
     if status is not None:
@@ -321,7 +318,6 @@ class GrpcTransport(ClientTransport):
         context: ClientCallContext | None,
         **kwargs: Any,
     ) -> Any:
-
         return await method(
             request,
             metadata=self._get_grpc_metadata(context),
@@ -336,7 +332,6 @@ class GrpcTransport(ClientTransport):
         context: ClientCallContext | None,
         **kwargs: Any,
     ) -> AsyncGenerator[StreamResponse]:
-
         stream = method(
             request,
             metadata=self._get_grpc_metadata(context),
