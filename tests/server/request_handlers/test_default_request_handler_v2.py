@@ -20,7 +20,7 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue
+from a2a.server.events import EventQueue, InMemoryQueueManager
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
@@ -138,6 +138,36 @@ def test_init_default_dependencies():
         is False
     )
     assert handler._request_context_builder._task_store == task_store
+
+
+def test_init_warns_when_queue_manager_passed(caplog):
+    """A caller-supplied queue_manager is not honored in v2, so passing one
+    must emit a warning instead of being silently ignored (issue #1135)."""
+    queue_manager = InMemoryQueueManager()
+    with caplog.at_level(logging.WARNING):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+            queue_manager=queue_manager,
+        )
+    assert any(
+        'queue_manager' in record.message and record.levelno == logging.WARNING
+        for record in caplog.records
+    )
+
+
+def test_init_no_warning_without_queue_manager(caplog):
+    """No warning is emitted when queue_manager is omitted."""
+    with caplog.at_level(logging.WARNING):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+        )
+    assert not any(
+        'queue_manager' in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio

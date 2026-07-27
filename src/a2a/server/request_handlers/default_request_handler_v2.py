@@ -82,7 +82,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         task_store: TaskStore,
         agent_card: AgentCard,
         queue_manager: Any
-        | None = None,  # Kept for backward compat in signature
+        | None = None,  # Accepted for signature compat; ignored in v2 (warns)
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
@@ -92,6 +92,15 @@ class DefaultRequestHandlerV2(RequestHandler):
         ]
         | None = None,
     ) -> None:
+        if queue_manager is not None:
+            logger.warning(
+                'A queue_manager was passed to DefaultRequestHandlerV2, but it '
+                'is not used: v2 delegates event streaming to an in-memory '
+                'ActiveTaskRegistry, so custom or distributed QueueManager '
+                'implementations are ignored. For multi-replica event '
+                'streaming, either use LegacyRequestHandler or route '
+                'subscription requests to the replica holding the task.'
+            )
         self.agent_executor = agent_executor
         self.task_store = task_store
         self._agent_card = agent_card
