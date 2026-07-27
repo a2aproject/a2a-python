@@ -37,6 +37,19 @@ jobs:
             const pr = context.payload.pull_request;
             const { owner, repo } = context.repo;
 
+            // pull_request_review runs on a fork PR get a read-only GITHUB_TOKEN,
+            // so createCommitStatus would 403. Release PRs are always created in
+            // this repo (release-please pushes release-please--* to the base repo,
+            // never a fork), so their review events keep a write token. Every other
+            // PR already gets its status from the pull_request_target run, which
+            // has a write token even for forks. So skip fork review events.
+            const isReviewEvent = context.eventName === 'pull_request_review';
+            const isFork = pr.head.repo?.full_name !== `${owner}/${repo}`;
+            if (isReviewEvent && isFork) {
+              core.info('Fork review event has a read-only token; status handled by pull_request_target.');
+              return;
+            }
+
             const setStatus = (state, description) =>
               github.rest.repos.createCommitStatus({
                 owner, repo, sha: pr.head.sha, context: CONTEXT, state, description,
