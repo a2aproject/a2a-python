@@ -250,14 +250,20 @@ async def test_compat_rest_transport_stream_url_has_alt_sse_param(transport):
     req = SendMessageRequest(
         message=Message(message_id='msg-1', role=Role.ROLE_USER)
     )
-    _ = [event async for event in transport.send_message_streaming(req)]
+    events = [event async for event in transport.send_message_streaming(req)]
+    assert len(events) == 1
+    assert isinstance(events[0], StreamResponse)
+    assert events[0].task.id == 'task-123'
 
     assert captured_paths[-1] == '/v1/message:stream?alt=sse'
 
     # Test subscribe
     captured_paths.clear()
     sub_req = SubscribeToTaskRequest(id='task-123')
-    _ = [event async for event in transport.subscribe(sub_req)]
+    events = [event async for event in transport.subscribe(sub_req)]
+    assert len(events) == 1
+    assert isinstance(events[0], StreamResponse)
+    assert events[0].task.id == 'task-123'
 
     assert captured_paths[-1] == '/v1/tasks/task-123:subscribe?alt=sse'
 
