@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/a2aproject/a2a-python/compare/v1.1.2...v1.1.3) (2026-08-03)
+
+
+### Documentation
+
+* **security:** use GitHub Security Advisories for reporting ([#1160](https://github.com/a2aproject/a2a-python/issues/1160)) ([1f965bb](https://github.com/a2aproject/a2a-python/commit/1f965bb9da382f50b3275ff2055685d313c8b384))
+
 ## [1.1.2](https://github.com/a2aproject/a2a-python/compare/v1.1.1...v1.1.2) (2026-07-20)
 
 
