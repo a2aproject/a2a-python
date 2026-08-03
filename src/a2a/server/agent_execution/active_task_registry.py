@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import threading
 
 from typing import TYPE_CHECKING
 
@@ -33,7 +34,7 @@ class ActiveTaskRegistry:
         self._task_store = task_store
         self._push_sender = push_sender
         self._active_tasks: dict[str, ActiveTask] = {}
-        self._lock = asyncio.Lock()
+        self._lock = threading.RLock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
         self._closed = False
 
@@ -46,7 +47,7 @@ class ActiveTaskRegistry:
         initial_message: Message | None = None,
     ) -> ActiveTask:
         """Retrieves an existing ActiveTask or creates a new one."""
-        async with self._lock:
+        with self._lock:
             if self._closed:
                 raise RuntimeError('ActiveTaskRegistry is closed')
             if task_id in self._active_tasks:
@@ -83,13 +84,13 @@ class ActiveTaskRegistry:
         task.add_done_callback(self._cleanup_tasks.discard)
 
     async def _remove_task(self, task_id: str) -> None:
-        async with self._lock:
+        with self._lock:
             self._active_tasks.pop(task_id, None)
             logger.debug('Removed active task for %s from registry', task_id)
 
     async def get(self, task_id: str) -> ActiveTask | None:
         """Retrieves an existing task."""
-        async with self._lock:
+        with self._lock:
             return self._active_tasks.get(task_id)
 
     async def aclose(self) -> None:
@@ -102,13 +103,11 @@ class ActiveTaskRegistry:
         multiple times.
 
         The close flag is set and the active-task snapshot is taken under
-        ``_lock``, and the lock is then released before awaiting, because
-        ``_remove_task`` re-acquires ``_lock``; holding it while draining
-        would deadlock. Marking closed under the same lock prevents a
-        concurrent ``get_or_create`` from registering a task that the drain
-        would miss.
+        ``_lock``, then the lock is released before awaiting the drain. Marking
+        closed under the same lock prevents a concurrent ``get_or_create`` from
+        registering a task that the drain would miss.
         """
-        async with self._lock:
+        with self._lock:
             self._closed = True
             active_tasks = list(self._active_tasks.values())
 
@@ -125,5 +124,5 @@ class ActiveTaskRegistry:
         if cleanup_tasks:
             await asyncio.gather(*cleanup_tasks, return_exceptions=True)
 
-        async with self._lock:
+        with self._lock:
             self._active_tasks.clear()
