@@ -67,6 +67,14 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         self.config_store = InMemoryPushNotificationConfigStore()
+        # Keep DNS hermetic: pretend every test URL resolves to a public IP
+        # (push-URL SSRF validation is on by default now).
+        getaddrinfo_patch = patch(
+            'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo',
+            return_value=[(2, 1, 6, '', ('93.184.216.34', 80))],
+        )
+        self.addCleanup(getaddrinfo_patch.stop)
+        getaddrinfo_patch.start()
         self.notifier = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.config_store,
@@ -446,6 +454,14 @@ class TestPushNotificationDispatchAcrossOwners(
 
         self.config_store = InMemoryPushNotificationConfigStore()
 
+        # Keep DNS hermetic: pretend every test URL resolves to a public IP
+        # (push-URL SSRF validation is on by default now).
+        getaddrinfo_patch = patch(
+            'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo',
+            return_value=[(2, 1, 6, '', ('93.184.216.34', 80))],
+        )
+        self.addCleanup(getaddrinfo_patch.stop)
+        getaddrinfo_patch.start()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.config_store,

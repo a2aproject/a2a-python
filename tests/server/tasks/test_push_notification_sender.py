@@ -42,6 +42,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
         self.mock_config_store = AsyncMock()
+        # Keep DNS hermetic: pretend every test URL resolves to a public IP.
+        getaddrinfo_patch = patch(
+            'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo',
+            return_value=[(2, 1, 6, '', ('93.184.216.34', 80))],
+        )
+        self.addCleanup(getaddrinfo_patch.stop)
+        getaddrinfo_patch.start()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
@@ -228,3 +235,78 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             json=MessageToDict(StreamResponse(artifact_update=event)),
             headers=None,
         )
+
+
+_GAI = 'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo'
+
+
+def _gai_result(ip: str, port: int = 80):
+    return [(2, 1, 6, '', (ip, port))]
+
+
+class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
+    """SSRF hardening: client-supplied push URLs must not reach non-public
+    destinations unless the operator explicitly opts out."""
+
+    def setUp(self) -> None:
+        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_config_store = AsyncMock()
+        self.sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.mock_config_store,
+        )
+
+    async def _dispatch(self, url: str) -> None:
+        task = _create_sample_task()
+        config = _create_sample_push_config(url=url)
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+        await self.sender.send_notification(task.id, task)
+
+    async def test_metadata_endpoint_blocked(self) -> None:
+        with patch(_GAI, return_value=_gai_result('169.254.169.254')):
+            await self._dispatch('http://metadata.google.internal/latest')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_loopback_blocked(self) -> None:
+        with patch(_GAI, return_value=_gai_result('127.0.0.1')):
+            await self._dispatch('http://localhost:8080/admin')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_private_range_blocked(self) -> None:
+        with patch(_GAI, return_value=_gai_result('10.0.0.5')):
+            await self._dispatch('http://internal-service/endpoint')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_non_http_scheme_blocked(self) -> None:
+        await self._dispatch('ftp://example.com/file')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_unresolvable_host_blocked_fail_closed(self) -> None:
+        import socket as _socket
+
+        with patch(_GAI, side_effect=_socket.gaierror('no DNS')):
+            await self._dispatch('http://does-not-resolve.invalid/')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_public_host_allowed(self) -> None:
+        with patch(_GAI, return_value=_gai_result('93.184.216.34')):
+            await self._dispatch('http://notify.me/here')
+        self.mock_httpx_client.post.assert_awaited_once()
+
+    async def test_allow_private_opt_out(self) -> None:
+        sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.mock_config_store,
+            allow_private_push_urls=True,
+        )
+        task = _create_sample_task()
+        config = _create_sample_push_config(url='http://localhost:9000/hook')
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+        await sender.send_notification(task.id, task)
+        self.mock_httpx_client.post.assert_awaited_once()
