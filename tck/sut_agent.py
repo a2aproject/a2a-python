@@ -165,11 +165,11 @@ def serve(task_store: TaskStore) -> None:
             ),
             AgentInterface(
                 url=f'http://localhost:{http_port}{REST_URL}',
-                protocol_binding='REST',
+                protocol_binding='HTTP+JSON',
                 protocol_version='1.0.0',
             ),
             AgentInterface(
-                url=f'http://localhost:{grpc_port}',
+                url=f'localhost:{grpc_port}',
                 protocol_binding='GRPC',
                 protocol_version='1.0.0',
             ),
