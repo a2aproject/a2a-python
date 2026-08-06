@@ -14,6 +14,7 @@ import a2a.compat.v0_3.a2a_v0_3_pb2_grpc as a2a_v0_3_grpc
 import a2a.types.a2a_pb2_grpc as a2a_grpc
 
 from a2a.compat.v0_3.grpc_handler import CompatGrpcHandler
+from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.events.event_queue import EventQueue
@@ -86,6 +87,13 @@ class SUTAgentExecutor(AgentExecutor):
         context_id = context.context_id
 
         self.running_tasks.add(task_id)
+
+        # 1.0 semantics: the Task itself must be enqueued before any
+        # TaskStatusUpdateEvent (the SDK enforces this ordering).
+        task = context.current_task
+        if not task:
+            task = new_task_from_user_message(user_message)
+            await event_queue.enqueue_event(task)
 
         logger.info(
             '[SUTAgentExecutor] Processing message %s for task %s (context: %s)',
