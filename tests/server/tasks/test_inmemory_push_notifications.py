@@ -66,6 +66,7 @@ MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_httpx_client.follow_redirects = False
         self.config_store = InMemoryPushNotificationConfigStore()
         # Keep DNS hermetic: pretend every test URL resolves to a public IP
         # (push-URL SSRF validation is on by default now).
@@ -448,6 +449,7 @@ class TestPushNotificationDispatchAcrossOwners(
 
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_httpx_client.follow_redirects = False
         mock_response = AsyncMock(spec=httpx.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response

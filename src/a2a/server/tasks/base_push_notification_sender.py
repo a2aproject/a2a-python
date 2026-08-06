@@ -47,6 +47,23 @@ def push_url_validation_error(url: str) -> str | None:
     (e.g. 169.254.169.254 cloud metadata, internal services). A host
     that cannot be resolved is rejected: the POST would fail anyway,
     and failing closed avoids treating resolution errors as a bypass.
+
+    IPv4-mapped IPv6 forms (e.g. ``::ffff:127.0.0.1``) are covered:
+    ``ipaddress`` maps them to the underlying IPv4 address, so the
+    ``is_private``/``is_loopback`` checks apply to the mapped value.
+
+    Known limitations:
+      * Validation covers the initial URL only. Redirect responses are
+        not re-validated, so this check is only sound with
+        ``follow_redirects=False`` (the httpx default, and the value
+        ``BasePushNotificationSender`` now asserts on its client).
+      * DNS rebinding (TOCTOU): validation and the actual connection
+        resolve the hostname separately, so a hostile DNS server can
+        answer the validation query with a public address and the
+        connection query with a private one. Fully closing this would
+        require pinning the validated address in the HTTP transport;
+        until then, operators should treat this as defense-in-depth
+        and keep network-level egress controls in place.
     """
     try:
         parsed = urllib.parse.urlparse(url)
@@ -98,6 +115,14 @@ class BasePushNotificationSender(PushNotificationSender):
               time and non-public targets are dropped. Set this to True
               only in deployments whose legitimate webhooks live on
               private networks (validation is then skipped entirely).
+
+        Note:
+            URL validation covers the initial request URL only. If the
+            client follows redirects, a validated public URL can
+            redirect to an internal address unchecked, so
+            ``follow_redirects`` must stay disabled (the httpx
+            default). This constructor rejects clients configured
+            otherwise.
         """
         if context is not None:
             logger.warning(
@@ -108,6 +133,14 @@ class BasePushNotificationSender(PushNotificationSender):
                 'PushNotificationConfigStore.get_info_for_dispatch; the '
                 'caller identity is not carried into dispatch. Drop the '
                 'context argument from the constructor call.'
+            )
+        if httpx_client.follow_redirects:
+            raise ValueError(
+                'BasePushNotificationSender validates the initial push URL '
+                'only; a client with follow_redirects=True would dispatch '
+                'redirect targets without re-validation (redirect-based '
+                'SSRF). Construct the client with follow_redirects=False '
+                '(the default).'
             )
         self._client = httpx_client
         self._config_store = config_store

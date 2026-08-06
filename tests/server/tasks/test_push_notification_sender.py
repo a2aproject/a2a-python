@@ -41,6 +41,8 @@ def _create_sample_push_config(
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        # The sender rejects clients with follow_redirects enabled.
+        self.mock_httpx_client.follow_redirects = False
         self.mock_config_store = AsyncMock()
         # Keep DNS hermetic: pretend every test URL resolves to a public IP.
         getaddrinfo_patch = patch(
@@ -57,6 +59,18 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def test_constructor_stores_client_and_config_store(self) -> None:
         self.assertEqual(self.sender._client, self.mock_httpx_client)
         self.assertEqual(self.sender._config_store, self.mock_config_store)
+
+    def test_constructor_rejects_redirect_following_client(self) -> None:
+        # Redirect targets are dispatched without re-validation, so a
+        # redirect-following client reopens the SSRF hole the URL
+        # validation closes.
+        redirecting_client = AsyncMock(spec=httpx.AsyncClient)
+        redirecting_client.follow_redirects = True
+        with self.assertRaises(ValueError):
+            BasePushNotificationSender(
+                httpx_client=redirecting_client,
+                config_store=self.mock_config_store,
+            )
 
     async def test_send_notification_success(self) -> None:
         task_id = 'task_send_success'
@@ -250,6 +264,8 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
 
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        # The sender rejects clients with follow_redirects enabled.
+        self.mock_httpx_client.follow_redirects = False
         self.mock_config_store = AsyncMock()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
