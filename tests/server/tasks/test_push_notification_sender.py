@@ -228,3 +228,73 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             json=MessageToDict(StreamResponse(artifact_update=event)),
             headers=None,
         )
+
+    async def _assert_url_blocked(self, url: str) -> None:
+        task_id = 'task_blocked_url'
+        event = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url=url)
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        await self.sender.send_notification(task_id, event)
+
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
+        )
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_send_notification_blocks_private_ip(self) -> None:
+        await self._assert_url_blocked('http://10.0.0.1/callback')
+
+    async def test_send_notification_allows_loopback_ip(self) -> None:
+        task_id = 'task_loopback_ip'
+        event = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(
+            url='http://127.0.0.1:8080/callback'
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, event)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=event)),
+            headers=None,
+        )
+
+    async def test_send_notification_blocks_link_local_ip(self) -> None:
+        await self._assert_url_blocked(
+            'http://169.254.169.254/latest/meta-data/'
+        )
+
+    async def test_send_notification_blocks_cloud_metadata_hostname(
+        self,
+    ) -> None:
+        await self._assert_url_blocked('http://metadata.google.internal/')
+
+    async def test_send_notification_blocks_non_http_scheme(self) -> None:
+        await self._assert_url_blocked('ftp://notify.me/callback')
+
+    async def test_send_notification_blocks_url_without_hostname(self) -> None:
+        await self._assert_url_blocked('http:///callback')
+
+    async def test_send_notification_allows_public_ip(self) -> None:
+        task_id = 'task_public_ip'
+        event = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(url='http://93.184.216.34/callback')
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, event)
+
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=event)),
+            headers=None,
+        )
