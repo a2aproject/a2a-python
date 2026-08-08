@@ -2253,3 +2253,120 @@ async def test_scenario_context_id_visibility(use_legacy, streaming):
     # Verify that agent can see context_id the same as in task_1 and different task id
     assert agent_context2_id == agent_context1_id
     assert agent_task2_id != agent_task1_id
+
+
+# Scenario 19: cancel must close the task out when the executor does not.
+#
+# The empty-cancel scenario above only passes because its executor
+# hand-enqueues a CANCELED event, next to a "TODO: this should be done
+# automatically by the framework ?" comment. These two use an executor whose
+# cancel() really is empty, which is the shape InputRequiredAgent, SlowAgent
+# and DummyAgentExecutor all use in this file.
+_TERMINAL_STATES = {
+    TaskState.TASK_STATE_CANCELED,
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
+}
+
+
+async def _start_task(client, text):
+    it = client.send_message(
+        SendMessageRequest(
+            message=Message(
+                message_id='test-msg',
+                role=Role.ROLE_USER,
+                parts=[Part(text=text)],
+            ),
+            configuration=SendMessageConfiguration(return_immediately=True),
+        )
+    )
+    res = await it.__anext__()
+    return res.task.id if res.HasField('task') else res.status_update.task_id
+
+
+@pytest.mark.timeout(5.0)
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason='https://github.com/a2aproject/a2a-python/issues/1170 - '
+    'ActiveTask.cancel cancels the producer before awaiting the executor '
+    'cancel, so nothing writes a terminal state',
+)
+async def test_scenario_19_mid_run_cancel_reaches_a_terminal_state():
+    """A caller who cancels should at least be able to stop polling."""
+    started = asyncio.Event()
+    hang = asyncio.Event()
+
+    class SilentCancelAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            task = new_task_from_user_message(context.message)
+            task.status.state = TaskState.TASK_STATE_WORKING
+            await event_queue.enqueue_event(task)
+            started.set()
+            await hang.wait()
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    client = await create_client(
+        create_handler(SilentCancelAgent(), use_legacy=False),
+        agent_card=agent_card(),
+        streaming=True,
+    )
+    task_id = await _start_task(client, 'hello')
+    await asyncio.wait_for(started.wait(), timeout=1.0)
+
+    await client.cancel_task(CancelTaskRequest(id=task_id))
+    task_after = await client.get_task(GetTaskRequest(id=task_id))
+
+    assert task_after.status.state in _TERMINAL_STATES
+
+
+@pytest.mark.timeout(5.0)
+@pytest.mark.asyncio
+@pytest.mark.xfail(
+    strict=True,
+    reason='https://github.com/a2aproject/a2a-python/issues/1170 - '
+    'V2 on_cancel_task dropped the V1 post-check, so cancelling a parked '
+    'task reports success with the task unchanged',
+)
+async def test_scenario_19_cancel_of_parked_task_does_not_silently_succeed():
+    """input-required is non-terminal, so cancel should either work or raise
+    TaskNotCancelableError. Reporting success and changing nothing is the one
+    outcome a caller cannot act on."""
+
+    class ParkingAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            task = new_task_from_user_message(context.message)
+            task.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
+            await event_queue.enqueue_event(task)
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    client = await create_client(
+        create_handler(ParkingAgent(), use_legacy=False),
+        agent_card=agent_card(),
+        streaming=True,
+    )
+    task_id = await _start_task(client, 'start')
+
+    for _ in range(50):
+        parked = await client.get_task(GetTaskRequest(id=task_id))
+        if parked.status.state == TaskState.TASK_STATE_INPUT_REQUIRED:
+            break
+        await asyncio.sleep(0.02)
+    assert parked.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    result = await client.cancel_task(CancelTaskRequest(id=task_id))
+
+    assert result.status.state != TaskState.TASK_STATE_INPUT_REQUIRED
