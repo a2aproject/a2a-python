@@ -730,7 +730,11 @@ class ActiveTask:
                 logger.debug(
                     'Cancel[%s]: Cancelling producer task', self._task_id
                 )
-                self._producer_task.cancel()
+                # Await the executor's cancel before cancelling the producer,
+                # so the component that owns the task's terminal state can
+                # still write to the still-open event queue. Cancelling the
+                # producer first can tear the queue down first and drop that
+                # write. Mirrors the V1 handler ordering.
                 try:
                     await self._agent_executor.cancel(
                         request_context, self._event_queue_agent
@@ -739,8 +743,10 @@ class ActiveTask:
                     logger.exception(
                         'Cancel[%s]: Agent cancel failed', self._task_id
                     )
+                    self._producer_task.cancel()
                     await self._mark_task_as_failed(e)
                     raise
+                self._producer_task.cancel()
             else:
                 logger.debug(
                     'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',
@@ -753,6 +759,15 @@ class ActiveTask:
         task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
+        # A cleanup-only executor.cancel() may not write a terminal state, and
+        # a task parked in a non-terminal state (e.g. input-required) has no
+        # running producer to write one either. Close it out as CANCELED so a
+        # caller that cancelled is never left polling a live task. Mirrors the
+        # V1 handler, which made a non-cancelled outcome visible instead of
+        # reporting success and changing nothing.
+        if task.status.state not in TERMINAL_TASK_STATES:
+            task.status.state = TaskState.TASK_STATE_CANCELED
+            await self._task_manager.save_task_event(task)
         return task
 
     async def aclose(self) -> None:
