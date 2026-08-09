@@ -165,6 +165,15 @@ class DefaultRequestHandlerV2(RequestHandler):
     ) -> Task | None:
         task_id = params.id
 
+        # Owner-aware isolation: mirror on_get_task / _setup_active_task and
+        # consult the owner-scoped store before resolving the live task from
+        # the registry, which keys on task_id alone. Without this a non-owner
+        # who knows the uuid4 task_id could cancel another user's live task
+        # (issue #1159, CWE-639). Mask a partition mismatch as not-found so
+        # existence is not leaked.
+        if not await self.task_store.get(task_id, context):
+            raise TaskNotFoundError
+
         try:
             active_task = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
@@ -394,6 +403,13 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
         task_id = params.id
+
+        # Owner-aware isolation before resolving the live task from the
+        # registry (which is keyed on task_id alone); see on_cancel_task.
+        # Prevents a non-owner from subscribing to another user's live
+        # task stream (issue #1159, CWE-639).
+        if not await self.task_store.get(task_id, context):
+            raise TaskNotFoundError
 
         active_task = await self._active_task_registry.get_or_create(
             task_id,
