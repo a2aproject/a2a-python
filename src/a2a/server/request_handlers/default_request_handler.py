@@ -105,6 +105,7 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        allow_private_push_urls: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -119,6 +120,7 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
+            allow_private_push_urls: Skip SSRF screening of push-notification URLs at config creation. For local development and tests only. Defaults to False.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -126,6 +128,9 @@ class LegacyRequestHandler(RequestHandler):
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        # Opt-in for local development/tests only: skips SSRF screening of
+        # push-notification URLs at config creation.
+        self._allow_private_push_urls = allow_private_push_urls
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -530,7 +535,9 @@ class LegacyRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
-        if url_error := push_url_validation_error(params.url):
+        if not self._allow_private_push_urls and (
+            url_error := push_url_validation_error(params.url)
+        ):
             raise InvalidParamsError(
                 message=f'Invalid push notification URL: {url_error}'
             )

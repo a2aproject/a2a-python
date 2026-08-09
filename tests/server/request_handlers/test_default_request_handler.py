@@ -1233,9 +1233,7 @@ async def test_on_message_send_stream_with_push_notification(agent_card):
         agent_card=agent_card,
     )
 
-    push_config = TaskPushNotificationConfig(
-        url='http://example.com/push'
-    )
+    push_config = TaskPushNotificationConfig(url='http://example.com/push')
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
@@ -3146,7 +3144,9 @@ async def test_on_get_task_push_notification_config_is_owner_scoped(
 
 
 @pytest.mark.asyncio
-async def test_on_create_task_push_notification_config_rejects_invalid_url(agent_card):
+async def test_on_create_task_push_notification_config_rejects_invalid_url(
+    agent_card,
+):
     """Test on_create_task_push_notification_config rejects non-public URLs."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
@@ -3162,7 +3162,9 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(agent
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1', id='config_id', url='http://127.0.0.1/hook'
     )
-    with pytest.raises(InvalidParamsError, match='Invalid push notification URL'):
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
         await request_handler.on_create_task_push_notification_config(
             set_config_params, context
         )
@@ -3170,7 +3172,9 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(agent
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1', id='config_id', url='file:///etc/passwd'
     )
-    with pytest.raises(InvalidParamsError, match='Invalid push notification URL'):
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
         await request_handler.on_create_task_push_notification_config(
             set_config_params, context
         )
