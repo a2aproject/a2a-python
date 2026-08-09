@@ -60,7 +60,7 @@ def push_url_validation_error(url: str) -> str | None:
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror:
+    except OSError:
         return f"host '{host}' could not be resolved"
     for info in infos:
         if _ip_is_blocked(info[4][0]):

@@ -5,9 +5,6 @@ import logging
 
 from typing import TYPE_CHECKING, Any, cast
 
-from a2a.server.tasks.base_push_notification_sender import (
-    push_url_validation_error,
-)
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -23,6 +20,9 @@ from a2a.server.request_handlers.request_handler import (
     RequestHandler,
     validate,
     validate_request_params,
+)
+from a2a.server.tasks.base_push_notification_sender import (
+    push_url_validation_error,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from a2a.server.agent_execution.active_task import ActiveTask
     from a2a.server.context import ServerCallContext
     from a2a.server.events import Event
-from a2a.server.tasks import (
+    from a2a.server.tasks import (
         PushNotificationConfigStore,
         PushNotificationSender,
         TaskStore,
