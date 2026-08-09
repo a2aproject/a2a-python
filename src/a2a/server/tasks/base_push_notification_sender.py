@@ -1,5 +1,8 @@
 import asyncio
+import ipaddress
 import logging
+import socket
+import urllib.parse
 
 import httpx
 
@@ -18,6 +21,51 @@ from a2a.utils.proto_utils import to_stream_response
 
 
 logger = logging.getLogger(__name__)
+
+
+def _ip_is_blocked(ip_str: str) -> bool:
+    """Whether an address is not a public unicast destination."""
+    try:
+        addr = ipaddress.ip_address(ip_str.split('%', maxsplit=1)[0])
+    except ValueError:
+        return True
+    return (
+        addr.is_private
+        or addr.is_loopback
+        or addr.is_link_local
+        or addr.is_multicast
+        or addr.is_reserved
+        or addr.is_unspecified
+    )
+
+
+def push_url_validation_error(url: str) -> str | None:
+    """Return an error string if a push-notification URL is not safe.
+
+    Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
+    link-local, private, reserved, multicast, or unspecified addresses
+    (e.g. 169.254.169.254 cloud metadata, internal services). A host
+    that cannot be resolved is rejected: the POST would fail anyway,
+    and failing closed avoids treating resolution errors as a bypass.
+    """
+    try:
+        parsed = urllib.parse.urlparse(url)
+    except ValueError:
+        return 'unparseable URL'
+    if parsed.scheme not in ('http', 'https'):
+        return f"scheme '{parsed.scheme}' is not http/https"
+    host = parsed.hostname
+    if not host:
+        return 'no hostname'
+    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    try:
+        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+    except socket.gaierror:
+        return f"host '{host}' could not be resolved"
+    for info in infos:
+        if _ip_is_blocked(info[4][0]):
+            return f"host '{host}' resolves to a non-public address"
+    return None
 
 
 class BasePushNotificationSender(PushNotificationSender):

@@ -5,6 +5,9 @@ import logging
 
 from typing import TYPE_CHECKING, Any, cast
 
+from a2a.server.tasks.base_push_notification_sender import (
+    push_url_validation_error,
+)
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -60,7 +63,7 @@ if TYPE_CHECKING:
     from a2a.server.agent_execution.active_task import ActiveTask
     from a2a.server.context import ServerCallContext
     from a2a.server.events import Event
-    from a2a.server.tasks import (
+from a2a.server.tasks import (
         PushNotificationConfigStore,
         PushNotificationSender,
         TaskStore,
@@ -344,6 +347,11 @@ class DefaultRequestHandlerV2(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        if url_error := push_url_validation_error(params.url):
+            raise InvalidParamsError(
+                message=f'Invalid push notification URL: {url_error}'
+            )
 
         await self._push_config_store.set_info(
             task_id,

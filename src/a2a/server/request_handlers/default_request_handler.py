@@ -31,6 +31,9 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
+from a2a.server.tasks.base_push_notification_sender import (
+    push_url_validation_error,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -526,6 +529,11 @@ class LegacyRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        if url_error := push_url_validation_error(params.url):
+            raise InvalidParamsError(
+                message=f'Invalid push notification URL: {url_error}'
+            )
 
         await self._push_config_store.set_info(
             task_id,
