@@ -1916,6 +1916,21 @@ async def test_on_cancel_of_parked_task_is_owner_scoped():
     await asyncio.wait_for(agent.parked.wait(), timeout=5)
     assert await handler._active_task_registry.get(task_id) is not None
 
+    # update_status enqueues the input-required transition; wait until it is
+    # persisted to the store before the cross-tenant cancel so the assertions
+    # below do not race the event pipeline.
+    alice_view = None
+    for _ in range(500):
+        alice_view = await store.get(task_id, alice)
+        if (
+            alice_view is not None
+            and alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert alice_view is not None
+    assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
     # Bob (non-owner) is rejected...
     with pytest.raises(TaskNotFoundError):
         await handler.on_cancel_task(CancelTaskRequest(id=task_id), bob)
