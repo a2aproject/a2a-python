@@ -111,9 +111,7 @@ class TestValidateTaskId(unittest.TestCase):
 
 class TestValidateMessageContent(unittest.TestCase):
     def _message(self, parts: list[Part]) -> Message:
-        return Message(
-            message_id='m1', role=Role.ROLE_USER, parts=parts
-        )
+        return Message(message_id='m1', role=Role.ROLE_USER, parts=parts)
 
     def test_message_with_text_part_passes(self):
         validate_message_content(self._message([Part(text='hello')]))
