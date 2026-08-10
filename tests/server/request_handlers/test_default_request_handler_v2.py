@@ -1086,9 +1086,7 @@ async def test_on_get_task_history_length_too_large_error():
         task_store=mock_task_store,
         agent_card=create_default_agent_card(),
     )
-    params = GetTaskRequest(
-        id='task1', history_length=MAX_HISTORY_LENGTH + 1
-    )
+    params = GetTaskRequest(id='task1', history_length=MAX_HISTORY_LENGTH + 1)
     context = create_server_call_context()
     with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_get_task(params, context)

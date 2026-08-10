@@ -100,7 +100,9 @@ class TestValidateHistoryLength(unittest.TestCase):
         validate_history_length(GetTaskRequest(history_length=0))
 
     def test_boundary_max_passes(self):
-        validate_history_length(GetTaskRequest(history_length=MAX_HISTORY_LENGTH))
+        validate_history_length(
+            GetTaskRequest(history_length=MAX_HISTORY_LENGTH)
+        )
 
     def test_negative_raises(self):
         with pytest.raises(InvalidParamsError) as excinfo:
