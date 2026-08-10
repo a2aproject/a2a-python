@@ -707,6 +707,12 @@ class ActiveTask:
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
 
+        The returned task carries a terminal state, which is written to the
+        task store. That write is not guaranteed to reach an active subscriber
+        stream: by the time cancel writes it the event queues may already be
+        closed, so a client that was streaming may have to re-read the task to
+        observe the terminal state.
+
         Concurrency Guarantee:
         Uses `_lock` to ensure we don't attempt to cancel a producer that is
         already winding down or hasn't started. It fires the cancellation signal
@@ -772,8 +778,15 @@ class ActiveTask:
         # V1 handler, which made a non-cancelled outcome visible instead of
         # reporting success and changing nothing.
         if task.status.state not in TERMINAL_TASK_STATES:
-            task.status.state = TaskState.TASK_STATE_CANCELED
-            await self._task_manager.save_task_event(task)
+            # Write a copy rather than mutating the task in place: get_task()
+            # returns the shared _task_manager._current_task, which may already
+            # have been yielded to a subscriber, and that reference must not
+            # change under the reader.
+            updated = Task()
+            updated.CopyFrom(task)
+            updated.status.state = TaskState.TASK_STATE_CANCELED
+            await self._task_manager.save_task_event(updated)
+            task = updated
         return task
 
     async def aclose(self) -> None:

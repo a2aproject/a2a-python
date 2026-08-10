@@ -191,6 +191,48 @@ class TestActiveTask:
         await active_task.aclose()
 
     @pytest.mark.asyncio
+    async def test_active_task_cancel_does_not_mutate_shared_task(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """cancel() must not write the terminal state onto the shared task.
+
+        get_task() returns _task_manager._current_task, which may already have
+        been yielded to a subscriber. The terminal write goes onto a copy so
+        that reference does not change under the reader.
+        """
+        stop_event = asyncio.Event()
+
+        async def execute_mock(req, q):
+            await stop_event.wait()
+
+        shared = Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock()
+        task_manager.get_task = AsyncMock(return_value=shared)
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)
+
+        result = await active_task.cancel(request_context)
+
+        # The returned task is CANCELED...
+        assert result.status.state == TaskState.TASK_STATE_CANCELED
+        # ...but the shared object get_task handed out is untouched.
+        assert result is not shared
+        assert shared.status.state == TaskState.TASK_STATE_WORKING
+        stop_event.set()
+
+    @pytest.mark.asyncio
     async def test_active_task_interrupted_auth(
         self,
         active_task: ActiveTask,
