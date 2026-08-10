@@ -572,3 +572,81 @@ class TestPushNotificationDispatchAcrossOwners(
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestPushConfigPerTaskLimit(unittest.IsolatedAsyncioTestCase):
+    """set_info must not allow unbounded configs per task (BUG-42)."""
+
+    def setUp(self) -> None:
+        self.config_store = InMemoryPushNotificationConfigStore()
+
+    async def test_can_store_up_to_limit(self) -> None:
+        from a2a.server.tasks.inmemory_push_notification_config_store import (
+            MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK,
+        )
+
+        limit = MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK
+        for i in range(limit):
+            await self.config_store.set_info(
+                'task-limit',
+                _create_sample_push_config(
+                    url=f'http://example.com/cb/{i}', config_id=f'cfg-{i}'
+                ),
+                MINIMAL_CALL_CONTEXT,
+            )
+        retrieved = await self.config_store.get_info(
+            'task-limit', MINIMAL_CALL_CONTEXT
+        )
+        self.assertEqual(len(retrieved), limit)
+
+    async def test_exceeding_limit_raises_invalid_params(self) -> None:
+        from a2a.server.tasks.inmemory_push_notification_config_store import (
+            MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK,
+        )
+        from a2a.utils.errors import InvalidParamsError
+
+        limit = MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK
+        for i in range(limit):
+            await self.config_store.set_info(
+                'task-limit',
+                _create_sample_push_config(
+                    url=f'http://example.com/cb/{i}', config_id=f'cfg-{i}'
+                ),
+                MINIMAL_CALL_CONTEXT,
+            )
+        with self.assertRaises(InvalidParamsError):
+            await self.config_store.set_info(
+                'task-limit',
+                _create_sample_push_config(
+                    url='http://example.com/cb/overflow',
+                    config_id='cfg-overflow',
+                ),
+                MINIMAL_CALL_CONTEXT,
+            )
+
+    async def test_updating_existing_config_is_not_limited(self) -> None:
+        from a2a.server.tasks.inmemory_push_notification_config_store import (
+            MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK,
+        )
+
+        limit = MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK
+        for i in range(limit):
+            await self.config_store.set_info(
+                'task-limit',
+                _create_sample_push_config(
+                    url=f'http://example.com/cb/{i}', config_id=f'cfg-{i}'
+                ),
+                MINIMAL_CALL_CONTEXT,
+            )
+        # Overwriting an existing config id must still succeed beyond the cap.
+        await self.config_store.set_info(
+            'task-limit',
+            _create_sample_push_config(
+                url='http://example.com/cb/updated', config_id='cfg-0'
+            ),
+            MINIMAL_CALL_CONTEXT,
+        )
+        retrieved = await self.config_store.get_info(
+            'task-limit', MINIMAL_CALL_CONTEXT
+        )
+        self.assertEqual(len(retrieved), limit)
