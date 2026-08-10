@@ -572,3 +572,43 @@ class TestPushNotificationDispatchAcrossOwners(
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestPushNotificationConfigStoreContract(unittest.TestCase):
+    """The dispatch read path must be implemented explicitly (BUG-48)."""
+
+    def test_get_info_for_dispatch_is_abstract(self):
+        """A store that forgets get_info_for_dispatch cannot be instantiated.
+
+        Previously the base class silently fell back to an owner-scoped
+        get_info call that drops every notification in multi-owner
+        deployments; now the method is abstract so the failure is loud.
+        """
+        from a2a.server.tasks.push_notification_config_store import (
+            PushNotificationConfigStore,
+        )
+
+        class IncompleteStore(PushNotificationConfigStore):
+            async def set_info(self, task_id, notification_config, context):
+                pass
+
+            async def get_info(self, task_id, context):
+                return []
+
+            async def delete_info(self, task_id, context, config_id=None):
+                pass
+
+        with self.assertRaises(TypeError):
+            IncompleteStore()
+
+    def test_builtin_stores_implement_dispatch_read_path(self):
+        """Both shipped stores provide the cross-owner dispatch read path."""
+        from a2a.server.tasks.inmemory_push_notification_config_store import (
+            InMemoryPushNotificationConfigStore,
+        )
+
+        store = InMemoryPushNotificationConfigStore()
+        self.assertTrue(
+            hasattr(store, 'get_info_for_dispatch')
+            and callable(store.get_info_for_dispatch)
+        )
