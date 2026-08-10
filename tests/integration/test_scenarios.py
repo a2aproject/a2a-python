@@ -1028,8 +1028,9 @@ async def test_scenario_19_no_parallel_executions(use_legacy, streaming):
 
     # Verify that both calls for clients finished.
     if use_legacy and not streaming:
-        # Legacy handler fails on first execution.
-        with pytest.raises(A2AClientError, match='NoTaskQueue'):
+        # Legacy handler fails on first execution; the failure is
+        # sanitized server-side (internal details are logged, not exposed).
+        with pytest.raises(A2AError, match='Internal error'):
             await task1
     else:
         await task1
