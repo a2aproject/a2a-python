@@ -40,10 +40,7 @@ def validate_state_transition(
         InvalidAgentResponseError: If the transition moves a task away from
             a terminal state.
     """
-    if (
-        current_state in TERMINAL_TASK_STATES
-        and new_state != current_state
-    ):
+    if current_state in TERMINAL_TASK_STATES and new_state != current_state:
         raise InvalidAgentResponseError(
             message=(
                 f'Illegal state transition from terminal state '
