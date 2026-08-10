@@ -10,6 +10,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    read_request_body_with_limit,
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -34,16 +35,20 @@ from a2a.utils.version_validator import validate_version
 if TYPE_CHECKING:
     from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
+    from starlette.exceptions import HTTPException
     from starlette.requests import Request
     from starlette.responses import JSONResponse, Response
+    from starlette.status import HTTP_413_CONTENT_TOO_LARGE
 
     _package_starlette_installed = True
 else:
     try:
         from sse_starlette.event import ServerSentEvent
         from sse_starlette.sse import EventSourceResponse
+        from starlette.exceptions import HTTPException
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
+        from starlette.status import HTTP_413_CONTENT_TOO_LARGE
 
         _package_starlette_installed = True
     except ImportError:
@@ -52,6 +57,8 @@ else:
         Request = Any
         JSONResponse = Any
         Response = Any
+        HTTPException = Any
+        HTTP_413_CONTENT_TOO_LARGE = Any
 
         _package_starlette_installed = False
 
@@ -98,6 +105,19 @@ class RestDispatcher:
             call_context.tenant = request.path_params['tenant']
         return call_context
 
+    async def _read_request_body(self, request: Request) -> bytes:
+        """Reads a request body with the size limit enforced.
+
+        Raises:
+            InvalidRequestError: If the body exceeds the configured limit.
+        """
+        try:
+            return await read_request_body_with_limit(request)
+        except HTTPException as e:
+            if e.status_code == HTTP_413_CONTENT_TOO_LARGE:
+                raise InvalidRequestError(message='Payload too large') from e
+            raise
+
     async def _handle_non_streaming(
         self,
         request: Request,
@@ -117,7 +137,7 @@ class RestDispatcher:
         # This is required because Starlette's request.body() can only be consumed once,
         # and attempting to consume it after EventSourceResponse starts causes deadlock
         try:
-            await request.body()
+            await self._read_request_body(request)
         except (ValueError, RuntimeError, OSError) as e:
             raise InvalidRequestError(
                 message=f'Failed to pre-consume request body: {e}'
@@ -136,7 +156,11 @@ class RestDispatcher:
         try:
             first_item = await anext(stream)
         except StopAsyncIteration:
-            return EventSourceResponse(iter([]))
+            return EventSourceResponse(
+                iter([]),
+                ping=constants.SSE_PING_INTERVAL_SECONDS,
+                send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
+            )
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
             yield ServerSentEvent(data=json_utils.dumps(first_item))
@@ -150,7 +174,11 @@ class RestDispatcher:
                     event='error',
                 )
 
-        return EventSourceResponse(event_generator())
+        return EventSourceResponse(
+            event_generator(),
+            ping=constants.SSE_PING_INTERVAL_SECONDS,
+            send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
+        )
 
     @rest_error_handler
     async def on_message_send(self, request: Request) -> Response:
@@ -160,7 +188,7 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.SendMessageResponse:
-            body = await request.body()
+            body = await self._read_request_body(request)
             params = a2a_pb2.SendMessageRequest()
             Parse(body, params)
             task_or_message = await self.request_handler.on_message_send(
@@ -183,7 +211,7 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> AsyncIterator[dict[str, Any]]:
-            body = await request.body()
+            body = await self._read_request_body(request)
             params = a2a_pb2.SendMessageRequest()
             Parse(body, params)
             async for event in self.request_handler.on_message_send_stream(
@@ -295,7 +323,7 @@ class RestDispatcher:
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.TaskPushNotificationConfig:
-            body = await request.body()
+            body = await self._read_request_body(request)
             params = a2a_pb2.TaskPushNotificationConfig()
             Parse(body, params)
             params.task_id = request.path_params['id']
