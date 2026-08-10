@@ -12,7 +12,6 @@ from a2a.auth.user import User
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.client.errors import A2AClientError
-from a2a.utils.errors import A2AError
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
@@ -50,6 +49,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import TransportProtocol
 from a2a.utils.errors import (
+    A2AError,
     InvalidAgentResponseError,
     InvalidParamsError,
     TaskNotCancelableError,
