@@ -50,9 +50,7 @@ async def read_request_body_with_limit(request: Request) -> bytes:
     if content_length:
         try:
             if int(content_length) > MAX_REQUEST_BODY_SIZE:
-                raise HTTPException(
-                    status_code=HTTP_413_CONTENT_TOO_LARGE
-                )
+                raise HTTPException(status_code=HTTP_413_CONTENT_TOO_LARGE)
         except ValueError:
             pass
 
