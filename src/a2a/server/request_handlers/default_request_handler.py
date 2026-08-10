@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -76,6 +77,14 @@ TERMINAL_TASK_STATES = {
 }
 
 
+@dataclass
+class _CancelLockEntry:
+    """Per-task cancel lock plus its in-flight user count."""
+
+    lock: asyncio.Lock
+    refs: int = 0
+
+
 @trace_class(kind=SpanKind.SERVER)
 class LegacyRequestHandler(RequestHandler):
     """Default request handler for all incoming requests.
@@ -138,7 +147,7 @@ class LegacyRequestHandler(RequestHandler):
         # user_count tracks how many concurrent on_cancel_task calls are
         # using the lock so entries can be garbage-collected safely once
         # the last caller finishes. Both are protected by _cancel_locks_guard.
-        self._cancel_locks: dict[str, list[asyncio.Lock | int]] = {}
+        self._cancel_locks: dict[str, _CancelLockEntry] = {}
         self._cancel_locks_guard = asyncio.Lock()
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
@@ -205,20 +214,20 @@ class LegacyRequestHandler(RequestHandler):
         async with self._cancel_locks_guard:
             entry = self._cancel_locks.get(task_id)
             if entry is None:
-                entry = [asyncio.Lock(), 0]
+                entry = _CancelLockEntry(lock=asyncio.Lock())
                 self._cancel_locks[task_id] = entry
-            entry[1] += 1
+            entry.refs += 1
 
         try:
-            async with entry[0]:
+            async with entry.lock:
                 return await self._cancel_task_locked(task_id, context)
         finally:
             async with self._cancel_locks_guard:
-                entry[1] -= 1
+                entry.refs -= 1
                 # Only drop the entry when no other caller is waiting on it;
                 # otherwise a new caller could grab a fresh lock and bypass
                 # the serialization.
-                if entry[1] == 0 and self._cancel_locks.get(task_id) is entry:
+                if entry.refs == 0 and self._cancel_locks.get(task_id) is entry:
                     del self._cancel_locks[task_id]
 
     async def _cancel_task_locked(
