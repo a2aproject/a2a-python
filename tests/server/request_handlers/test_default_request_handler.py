@@ -3143,3 +3143,79 @@ async def test_on_get_task_push_notification_config_is_owner_scoped(
             ),
             _ctx('bob'),
         )
+
+
+@pytest.mark.asyncio
+async def test_on_cancel_task_serializes_concurrent_cancels(agent_card):
+    """Concurrent cancels of the same task must be serialized (BUG-44).
+
+    The second cancel's terminal-state check must observe the outcome of the
+    first cancel instead of racing past it.
+    """
+    task_id = 'toctou_task'
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(task_id=task_id)
+
+    mock_queue_manager = AsyncMock(spec=QueueManager)
+    mock_event_queue = AsyncMock(spec=EventQueueLegacy)
+    mock_queue_manager.tap.return_value = mock_event_queue
+
+    # The first cancel blocks inside agent_executor.cancel until released;
+    # once released, the task is considered canceled in the store.
+    release_first = asyncio.Event()
+    calls = 0
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+
+    async def blocking_cancel(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            await release_first.wait()
+        mock_task_store.get.return_value = create_sample_task(
+            task_id=task_id, status_state=TaskState.TASK_STATE_CANCELED
+        )
+
+    mock_agent_executor.cancel.side_effect = blocking_cancel
+
+    mock_result_aggregator_instance = AsyncMock(spec=ResultAggregator)
+    mock_result_aggregator_instance.consume_all.return_value = (
+        create_sample_task(
+            task_id=task_id, status_state=TaskState.TASK_STATE_CANCELED
+        )
+    )
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        queue_manager=mock_queue_manager,
+        agent_card=agent_card,
+    )
+
+    context = create_server_call_context()
+    params = CancelTaskRequest(id=task_id)
+
+    with patch(
+        'a2a.server.request_handlers.default_request_handler.ResultAggregator',
+        return_value=mock_result_aggregator_instance,
+    ):
+        first = asyncio.create_task(
+            request_handler.on_cancel_task(params, context)
+        )
+        await asyncio.sleep(0)  # let the first cancel reach the executor
+        second = asyncio.create_task(
+            request_handler.on_cancel_task(params, context)
+        )
+        await asyncio.sleep(0)  # let the second cancel block on the lock
+        release_first.set()
+        first_result = await first
+
+        # The second cancel re-checks state under the per-task lock and must
+        # observe the terminal state left by the first cancel.
+        with pytest.raises(TaskNotCancelableError):
+            await second
+
+    assert first_result.status.state == TaskState.TASK_STATE_CANCELED
+    # The second cancel must never reach the executor.
+    assert calls == 1
+    # The per-task lock entry is cleaned up once no caller is using it.
+    assert task_id not in request_handler._cancel_locks
