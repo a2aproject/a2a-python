@@ -14,9 +14,11 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import (
+    MAX_HISTORY_LENGTH,
     apply_history_length,
     decode_page_token,
     encode_page_token,
+    validate_history_length,
 )
 
 
@@ -87,6 +89,36 @@ class TestApplyHistoryLength(unittest.TestCase):
             self.task, SendMessageConfiguration(history_length=0)
         )
         self.assertEqual(len(result.history), 0)
+
+
+class TestValidateHistoryLength(unittest.TestCase):
+    def test_none_config_passes(self):
+        # Does not raise
+        validate_history_length(None)
+
+    def test_zero_passes(self):
+        validate_history_length(GetTaskRequest(history_length=0))
+
+    def test_boundary_max_passes(self):
+        validate_history_length(GetTaskRequest(history_length=MAX_HISTORY_LENGTH))
+
+    def test_negative_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_history_length(GetTaskRequest(history_length=-1))
+        assert 'non-negative' in str(excinfo.value)
+
+    def test_over_max_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_history_length(
+                GetTaskRequest(history_length=MAX_HISTORY_LENGTH + 1)
+            )
+        assert str(MAX_HISTORY_LENGTH) in str(excinfo.value)
+
+    def test_over_max_raises_for_send_configuration(self):
+        with pytest.raises(InvalidParamsError):
+            validate_history_length(
+                SendMessageConfiguration(history_length=MAX_HISTORY_LENGTH + 1)
+            )
 
 
 if __name__ == '__main__':
