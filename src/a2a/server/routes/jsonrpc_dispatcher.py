@@ -177,7 +177,9 @@ class JsonRpcDispatcher:
             A `JSONResponse` object formatted as a JSON-RPC error response.
         """
         if not isinstance(error, A2AError | JSONRPCError):
-            error = InternalError(message=str(error))
+            # Never leak internal exception details to the client; the
+            # original error was logged by the caller.
+            error = InternalError()
 
         response_data = build_error_response(request_id, error)
         error_info = response_data.get('error', {})
@@ -251,11 +253,11 @@ class JsonRpcDispatcher:
                             message="Invalid request: 'jsonrpc' must be exactly '2.0'"
                         ),
                     )
-            except Exception as e:
+            except Exception:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    InvalidRequestError(data=str(e)),
+                    InvalidRequestError(),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
@@ -289,11 +291,11 @@ class JsonRpcDispatcher:
                 # Parse the params field into the proto message type
                 params = body.get('params', {})
                 specific_request = ParseDict(params, model_class())
-            except Exception as e:
+            except Exception:
                 logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    InvalidParamsError(data=str(e)),
+                    InvalidParamsError(),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
@@ -335,10 +337,10 @@ class JsonRpcDispatcher:
             raise e
         except A2AError as e:
             return self._generate_error_response(request_id, e)
-        except Exception as e:
+        except Exception:
             logger.exception('Unhandled exception')
             return self._generate_error_response(
-                request_id, InternalError(message=str(e))
+                request_id, InternalError()
             )
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
@@ -585,7 +587,7 @@ class JsonRpcDispatcher:
                     rpc_error: A2AError | JSONRPCError = (
                         e
                         if isinstance(e, A2AError | JSONRPCError)
-                        else InternalError(message=str(e))
+                        else InternalError()
                     )
                     error_response = build_error_response(
                         context.state.get('request_id'), rpc_error
