@@ -339,9 +339,7 @@ class JsonRpcDispatcher:
             return self._generate_error_response(request_id, e)
         except Exception:
             logger.exception('Unhandled exception')
-            return self._generate_error_response(
-                request_id, InternalError()
-            )
+            return self._generate_error_response(request_id, InternalError())
 
     @validate_version(constants.PROTOCOL_VERSION_1_0)
     async def _process_streaming_request(
