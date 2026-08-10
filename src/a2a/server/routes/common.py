@@ -30,7 +30,7 @@ from a2a.utils.constants import MAX_REQUEST_BODY_SIZE
 try:
     from starlette.status import HTTP_413_CONTENT_TOO_LARGE
 except ImportError:
-    HTTP_413_CONTENT_TOO_LARGE = Any
+    HTTP_413_CONTENT_TOO_LARGE = 413
 
 
 async def read_request_body_with_limit(request: Request) -> bytes:

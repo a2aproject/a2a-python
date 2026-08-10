@@ -596,8 +596,8 @@ class JsonRpcDispatcher:
                         'data': json_utils.dumps(error_response),
                     }
 
-            return EventSourceResponse(  # ty:ignore[invalid-argument-type]
-                event_generator(handler_result),
+            return EventSourceResponse(
+                event_generator(handler_result),  # ty: ignore[invalid-argument-type]
                 ping=constants.SSE_PING_INTERVAL_SECONDS,
                 send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
             )
