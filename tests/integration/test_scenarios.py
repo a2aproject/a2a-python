@@ -615,7 +615,9 @@ async def test_scenario_14_error_in_cancel(use_legacy, streaming):
 
     await asyncio.wait_for(started_event.wait(), timeout=1.0)
 
-    with pytest.raises(A2AClientError, match='TEST_ERROR_IN_CANCEL'):
+    # Agent exceptions are sanitized server-side; clients receive the
+    # generic error.
+    with pytest.raises(A2AError, match='Internal error'):
         await client.cancel_task(CancelTaskRequest(id=task_id))
 
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
