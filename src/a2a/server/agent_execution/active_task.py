@@ -734,7 +734,13 @@ class ActiveTask:
                 # so the component that owns the task's terminal state can
                 # still write to the still-open event queue. Cancelling the
                 # producer first can tear the queue down first and drop that
-                # write. Mirrors the V1 handler ordering.
+                # write. Mirrors the V1 handler ordering. The producer cancel
+                # is in a finally so it still runs when executor.cancel() raises
+                # a BaseException such as asyncio.CancelledError, which
+                # `except Exception` does not catch; otherwise the producer
+                # would leak as a pending task. Cancelling after
+                # _mark_task_as_failed also keeps the FAILED write ahead of the
+                # queue teardown, so it is not dropped as QueueShutDown.
                 try:
                     await self._agent_executor.cancel(
                         request_context, self._event_queue_agent
@@ -743,10 +749,10 @@ class ActiveTask:
                     logger.exception(
                         'Cancel[%s]: Agent cancel failed', self._task_id
                     )
-                    self._producer_task.cancel()
                     await self._mark_task_as_failed(e)
                     raise
-                self._producer_task.cancel()
+                finally:
+                    self._producer_task.cancel()
             else:
                 logger.debug(
                     'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',

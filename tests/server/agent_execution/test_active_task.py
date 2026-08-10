@@ -130,6 +130,67 @@ class TestActiveTask:
         stop_event.set()
 
     @pytest.mark.asyncio
+    async def test_active_task_cancel_producer_cancelled_on_cancellederror(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Regression: executor.cancel() raising asyncio.CancelledError must
+        still cancel the producer task.
+
+        asyncio.CancelledError is a BaseException, so `except Exception` does
+        not catch it. The producer cancel therefore lives in a `finally`;
+        without it the producer would leak as a pending task on this path.
+        """
+        hang = asyncio.Event()
+        producer_cancelled = asyncio.Event()
+
+        async def execute_mock(req, q):
+            try:
+                await hang.wait()
+            except asyncio.CancelledError:
+                producer_cancelled.set()
+                raise
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock(side_effect=asyncio.CancelledError)
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)  # let the producer reach `await hang.wait()`
+        assert active_task._producer_task is not None
+
+        # The CancelledError from executor.cancel propagates out of cancel()...
+        with pytest.raises(asyncio.CancelledError):
+            await active_task.cancel(request_context)
+        agent_executor.cancel.assert_awaited_once()
+
+        # ...but the producer must have received the cancellation, not been
+        # left blocked on `hang.wait()`. `_run_producer` swallows the
+        # CancelledError and returns, so the executor's coroutine seeing it is
+        # the signal that `_producer_task.cancel()` actually fired. Without the
+        # `finally` this event never sets and the producer leaks pending.
+        for _ in range(50):
+            if producer_cancelled.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert producer_cancelled.is_set(), (
+            'producer was never cancelled -> it leaked as a pending task'
+        )
+        hang.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
     async def test_active_task_interrupted_auth(
         self,
         active_task: ActiveTask,
