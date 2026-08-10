@@ -69,10 +69,24 @@ class ActiveTaskRegistry:
             )
             self._active_tasks[task_id] = active_task
 
-        await active_task.start(
-            call_context=call_context,
-            create_task_if_missing=create_task_if_missing,
-        )
+        try:
+            await active_task.start(
+                call_context=call_context,
+                create_task_if_missing=create_task_if_missing,
+            )
+        except Exception:
+            # Remove the entry synchronously instead of relying on the
+            # fire-and-forget _on_active_task_cleanup path scheduled by
+            # ActiveTask.start() on failure. That cleanup runs in a separate
+            # task and may not execute before another request checks the
+            # registry, leaving a zombie entry for a task that never started.
+            async with self._lock:
+                self._active_tasks.pop(task_id, None)
+                logger.debug(
+                    'Removed failed active task for %s from registry',
+                    task_id,
+                )
+            raise
         return active_task
 
     def _on_active_task_cleanup(self, active_task: ActiveTask) -> None:
