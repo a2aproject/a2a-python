@@ -14,9 +14,12 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import (
+    MAX_TASK_ID_LENGTH,
     apply_history_length,
     decode_page_token,
     encode_page_token,
+    validate_message_content,
+    validate_task_id,
 )
 
 
@@ -87,6 +90,51 @@ class TestApplyHistoryLength(unittest.TestCase):
             self.task, SendMessageConfiguration(history_length=0)
         )
         self.assertEqual(len(result.history), 0)
+
+
+class TestValidateTaskId(unittest.TestCase):
+    def test_valid_task_id_passes(self):
+        # Does not raise
+        validate_task_id('task-123')
+        validate_task_id('a' * MAX_TASK_ID_LENGTH)
+
+    def test_empty_task_id_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_task_id('')
+        assert 'non-empty' in str(excinfo.value)
+
+    def test_overlong_task_id_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_task_id('a' * (MAX_TASK_ID_LENGTH + 1))
+        assert str(MAX_TASK_ID_LENGTH) in str(excinfo.value)
+
+
+class TestValidateMessageContent(unittest.TestCase):
+    def _message(self, parts: list[Part]) -> Message:
+        return Message(
+            message_id='m1', role=Role.ROLE_USER, parts=parts
+        )
+
+    def test_message_with_text_part_passes(self):
+        validate_message_content(self._message([Part(text='hello')]))
+
+    def test_message_with_url_part_passes(self):
+        validate_message_content(self._message([Part(url='http://x.com/f')]))
+
+    def test_message_with_data_part_passes(self):
+        part = Part()
+        part.data.string_value = 'x'
+        validate_message_content(self._message([part]))
+
+    def test_message_without_parts_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_message_content(self._message([]))
+        assert 'at least one part' in str(excinfo.value)
+
+    def test_message_with_empty_part_raises(self):
+        with pytest.raises(InvalidParamsError) as excinfo:
+            validate_message_content(self._message([Part(media_type='text')]))
+        assert 'not be empty' in str(excinfo.value)
 
 
 if __name__ == '__main__':

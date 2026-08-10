@@ -1746,3 +1746,107 @@ async def test_aclose_is_idempotent_and_handles_empty():
 
     await handler.aclose()
     await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_on_get_task_overlong_task_id_error():
+    """A task ID longer than the limit is rejected with InvalidParamsError."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = GetTaskRequest(id='a' * 1001)
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError):
+        await request_handler.on_get_task(params, context)
+    mock_task_store.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_cancel_task_overlong_task_id_error():
+    """A task ID longer than the limit is rejected before touching the store."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = CancelTaskRequest(id='a' * 1001)
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError):
+        await request_handler.on_cancel_task(params, context)
+    mock_task_store.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_empty_parts_error():
+    """A message with no parts is rejected with InvalidParamsError."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg1',
+            parts=[],
+        ),
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError):
+        await request_handler.on_message_send(params, context)
+    mock_task_store.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_empty_part_error():
+    """A message whose only part is empty is rejected with InvalidParamsError."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg1',
+            parts=[Part(media_type='text/plain')],
+        ),
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_message_send(params, context)
+
+    assert 'not be empty' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_overlong_task_id_error():
+    """A message targeting an over-long task ID is rejected."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg1',
+            task_id='a' * 1001,
+            parts=[Part(text='hello')],
+        ),
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError):
+        await request_handler.on_message_send(params, context)

@@ -61,7 +61,9 @@ from a2a.utils.errors import (
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
+    validate_message_content,
     validate_page_size,
+    validate_task_id,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -146,6 +148,7 @@ class LegacyRequestHandler(RequestHandler):
     ) -> Task | None:
         """Default handler for 'tasks/get'."""
         validate_history_length(params)
+        validate_task_id(params.id)
 
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -187,6 +190,7 @@ class LegacyRequestHandler(RequestHandler):
         Attempts to cancel the task managed by the `AgentExecutor`.
         """
         task_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -265,6 +269,9 @@ class LegacyRequestHandler(RequestHandler):
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
+        if task_id:
+            validate_task_id(task_id)
+        validate_message_content(params.message)
         context_id = params.message.context_id or None
         task_manager = TaskManager(
             task_id=task_id,
@@ -523,6 +530,7 @@ class LegacyRequestHandler(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -555,6 +563,7 @@ class LegacyRequestHandler(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -585,6 +594,7 @@ class LegacyRequestHandler(RequestHandler):
         Requires the task and its queue to still be active.
         """
         task_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -635,6 +645,7 @@ class LegacyRequestHandler(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -667,6 +678,7 @@ class LegacyRequestHandler(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError

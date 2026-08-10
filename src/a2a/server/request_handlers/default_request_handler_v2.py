@@ -49,7 +49,9 @@ from a2a.utils.errors import (
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
+    validate_message_content,
     validate_page_size,
+    validate_task_id,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 
@@ -128,6 +130,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> Task | None:
         validate_history_length(params)
+        validate_task_id(params.id)
 
         task_id = params.id
         task: Task | None = await self.task_store.get(task_id, context)
@@ -164,6 +167,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> Task | None:
         task_id = params.id
+        validate_task_id(task_id)
 
         try:
             active_task = await self._active_task_registry.get_or_create(
@@ -197,6 +201,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_history_length(params.configuration)
 
         original_task_id = params.message.task_id or None
+        if original_task_id:
+            validate_task_id(original_task_id)
+        validate_message_content(params.message)
         original_context_id = params.message.context_id or None
 
         if original_task_id:
@@ -341,6 +348,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -369,6 +377,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -394,6 +403,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> AsyncGenerator[Event, None]:
         task_id = params.id
+        validate_task_id(task_id)
 
         active_task = await self._active_task_registry.get_or_create(
             task_id,
@@ -419,6 +429,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
@@ -447,6 +458,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
+        validate_task_id(task_id)
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
