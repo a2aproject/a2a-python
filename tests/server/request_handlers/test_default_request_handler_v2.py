@@ -926,6 +926,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -939,13 +940,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
@@ -965,6 +960,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -978,13 +974,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(InvalidParamsError) as exc_info:
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
@@ -993,6 +983,50 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.message
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
+async def test_on_message_send_terminal_task_skips_push_config_persistence(
+    terminal_state,
+):
+    """Push config must not be persisted for a task already in a terminal state.
+
+    Regression test for BUG-41: the config was previously written to the
+    store before the terminal-state check ran inside ActiveTask.start().
+    """
+    state_name = TaskState.Name(terminal_state)
+    task_id = f'terminal_push_task_{state_name}'
+    terminal_task = create_sample_task(
+        task_id=task_id, status_state=terminal_state
+    )
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_config_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_terminal_push',
+            parts=[Part(text='hello')],
+            task_id=task_id,
+        ),
+        configuration=SendMessageConfiguration(
+            task_push_notification_config=TaskPushNotificationConfig(
+                url='http://example.com/cb'
+            )
+        ),
+    )
+    with pytest.raises(InvalidParamsError):
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+    push_config_store.set_info.assert_not_awaited()
 
 
 @pytest.mark.asyncio

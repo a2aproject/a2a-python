@@ -203,6 +203,17 @@ class DefaultRequestHandlerV2(RequestHandler):
             task = await self.task_store.get(original_task_id, call_context)
             if not task:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
+            # Reject terminal tasks before persisting anything (e.g. the push
+            # notification config below). Previously the terminal-state check
+            # only happened inside ActiveTask.start(), after set_info() had
+            # already written the config for an already-completed task.
+            if task.status.state in TERMINAL_TASK_STATES:
+                raise InvalidParamsError(
+                    message=(
+                        f'Task {task.id} is in terminal state: '
+                        f'{task.status.state}'
+                    )
+                )
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
