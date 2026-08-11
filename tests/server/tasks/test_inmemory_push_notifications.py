@@ -575,7 +575,7 @@ if __name__ == '__main__':
 
 
 class TestPushConfigPerTaskLimit(unittest.IsolatedAsyncioTestCase):
-    """set_info must not allow unbounded configs per task (BUG-42)."""
+    """set_info must not allow unbounded configs per task."""
 
     def setUp(self) -> None:
         self.config_store = InMemoryPushNotificationConfigStore()
