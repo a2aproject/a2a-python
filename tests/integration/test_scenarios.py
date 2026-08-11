@@ -2255,10 +2255,13 @@ async def test_scenario_context_id_visibility(use_legacy, streaming):
     assert agent_task2_id != agent_task1_id
 
 
-# Scenario 19 (issue #1170): cancel must leave the task in a state a caller can
-# act on. Both executors below define cancel() as an empty teardown, which is
-# what InputRequiredAgent, SlowAgent and DummyAgentExecutor use in this file and
-# what a real cleanup-only executor looks like.
+# Cancel-terminal-state (issue #1170): cancel must leave the task in a state a
+# caller can act on. These two scenarios are @technicalpickles' repro from
+# https://github.com/a2aproject/a2a-python/pull/1171, folded in here verbatim
+# with the strict-xfail markers dropped since this PR fixes what they pin. Both
+# executors below define cancel() as an empty teardown, which is what
+# InputRequiredAgent, SlowAgent and DummyAgentExecutor use in this file and what
+# a real cleanup-only executor looks like.
 _TERMINAL_STATES = {
     TaskState.TASK_STATE_CANCELED,
     TaskState.TASK_STATE_COMPLETED,
