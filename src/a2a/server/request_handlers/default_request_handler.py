@@ -203,7 +203,7 @@ class LegacyRequestHandler(RequestHandler):
 
         The terminal-state check and the cancel call are serialized with a
         per-task lock so concurrent cancels cannot both pass the check
-        (TOCTOU, BUG-44). V2's ``ActiveTaskRegistry`` already serializes
+        (TOCTOU). V2's ``ActiveTaskRegistry`` already serializes
         cancels per ``ActiveTask`` and is not affected.
         """
         task_id = params.id

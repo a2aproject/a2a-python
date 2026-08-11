@@ -3147,7 +3147,7 @@ async def test_on_get_task_push_notification_config_is_owner_scoped(
 
 @pytest.mark.asyncio
 async def test_on_cancel_task_serializes_concurrent_cancels(agent_card):
-    """Concurrent cancels of the same task must be serialized (BUG-44).
+    """Concurrent cancels of the same task must be serialized.
 
     The second cancel's terminal-state check must observe the outcome of the
     first cancel instead of racing past it.
