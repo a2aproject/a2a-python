@@ -575,7 +575,7 @@ if __name__ == '__main__':
 
 
 class TestPushNotificationConfigStoreContract(unittest.TestCase):
-    """The dispatch read path must be implemented explicitly (BUG-48)."""
+    """The dispatch read path must be implemented explicitly."""
 
     def test_get_info_for_dispatch_is_abstract(self):
         """A store that forgets get_info_for_dispatch cannot be instantiated.
