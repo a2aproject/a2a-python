@@ -992,7 +992,7 @@ async def test_on_message_send_terminal_task_skips_push_config_persistence(
 ):
     """Push config must not be persisted for a task already in a terminal state.
 
-    Regression test for BUG-41: the config was previously written to the
+    Regression test for terminal-state persistence guard: the config was previously written to the
     store before the terminal-state check ran inside ActiveTask.start().
     """
     state_name = TaskState.Name(terminal_state)
