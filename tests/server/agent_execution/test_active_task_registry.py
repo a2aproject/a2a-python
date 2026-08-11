@@ -177,7 +177,7 @@ async def test_get_or_create_cache_hit_is_owner_scoped():
 async def test_get_or_create_failed_start_removes_zombie_entry():
     """A failed start() must not leave a zombie registry entry.
 
-    Regression test for BUG-45: the entry was inserted before start(), and
+    Regression test for zombie-entry cleanup: the entry was inserted before start(), and
     the cleanup on failure was fire-and-forget, so a subsequent registry
     lookup could still see the never-started task.
     """
