@@ -754,7 +754,7 @@ async def test_unhandled_exception_is_sanitized(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """A non-A2A exception must not leak its message to the client (BUG-46)."""
+    """A non-A2A exception must not leak its message to the client."""
     mock_request_handler.on_get_task.side_effect = RuntimeError(
         'internal detail: /secret/path'
     )
@@ -775,7 +775,7 @@ async def test_unknown_a2a_error_type_is_sanitized(
     mock_request_handler: AsyncMock,
     mock_grpc_context: AsyncMock,
 ) -> None:
-    """An A2AError outside the mapping must not leak details (BUG-46)."""
+    """An A2AError outside the mapping must not leak details."""
     from a2a.utils.errors import A2AError
 
     class CustomError(A2AError):

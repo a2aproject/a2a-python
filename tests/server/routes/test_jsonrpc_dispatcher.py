@@ -655,7 +655,7 @@ if __name__ == '__main__':
     pytest.main([__file__])
 
 
-# --- Error sanitization (BUG-12 / BUG-46) ---
+# --- Error sanitization ---
 
 
 class TestErrorSanitization:
