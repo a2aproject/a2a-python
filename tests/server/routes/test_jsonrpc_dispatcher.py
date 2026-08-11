@@ -655,7 +655,7 @@ if __name__ == '__main__':
     pytest.main([__file__])
 
 
-# --- Transport hardening (BUG-09 / BUG-10) ---
+# --- Transport hardening ---
 
 
 class TestTransportHardening:
