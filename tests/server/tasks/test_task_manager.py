@@ -486,7 +486,7 @@ def test_validate_state_transition_allows_legal_transitions(current, new):
 async def test_save_task_event_blocks_terminal_overwrite():
     """save_task_event must reject a terminal -> non-terminal status update.
 
-    Regression test for BUG-43: the status was blindly overwritten, so a
+    Regression test for terminal-state protection: the status was blindly overwritten, so a
     misbehaving agent could move a completed task back to SUBMITTED.
     """
     from a2a.server.tasks import InMemoryTaskStore
