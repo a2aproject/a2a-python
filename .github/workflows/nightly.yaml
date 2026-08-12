@@ -20,12 +20,37 @@ jobs:
       - name: Install uv
         uses: astral-sh/setup-uv@v7
 
+      - name: Clone a2a-itk
+        working-directory: itk
+        run: git clone -b main --depth 1 https://github.com/a2aproject/a2a-itk.git a2a-itk
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build itk_service image (GHA layer cache)
+        uses: docker/build-push-action@v6
+        with:
+          context: itk/a2a-itk
+          tags: itk_service:latest
+          load: true
+          cache-from: type=gha,scope=itk_service
+          cache-to: type=gha,mode=max,scope=itk_service
+
+      - name: Cache launcher peer-SDK checkouts + build outputs
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/a2a-itk-launcher
+          key: itk-launcher-${{ runner.os }}-${{ github.sha }}
+          restore-keys: |
+            itk-launcher-${{ runner.os }}-
+
       - name: Run Nightly ITK Tests
         run: bash run_itk.sh
         working-directory: itk
         env:
           A2A_ITK_REVISION: main
           ITK_NIGHTLY_RUN: "True"
+          ITK_SKIP_BUILD: "1"
 
       - name: Upload Results to Rolling Release
         uses: softprops/action-gh-release@v3
