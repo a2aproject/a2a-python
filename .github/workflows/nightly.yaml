@@ -21,8 +21,11 @@ jobs:
         uses: astral-sh/setup-uv@v7
 
       - name: Clone a2a-itk
-        working-directory: itk
-        run: git clone -b main --depth 1 https://github.com/a2aproject/a2a-itk.git a2a-itk
+        uses: actions/checkout@v6
+        with:
+          repository: a2aproject/a2a-itk
+          ref: main
+          path: itk/a2a-itk
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
