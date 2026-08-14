@@ -1,7 +1,6 @@
 # Security Policy
 
-To report a security issue, please use [g.co/vulnz](https://g.co/vulnz).
+To report a security issue, please use GitHub Security Advisories:
+[Security Advisories · a2aproject/a2a-python](https://github.com/a2aproject/a2a-python/security/advisories)
 
-The Google Security Team will respond within 5 working days of your report on g.co/vulnz.
-
-We use g.co/vulnz for our intake, and do coordination and disclosure here using GitHub Security Advisory to privately discuss and fix the issue.
+We use GitHub Security Advisories for private intake, coordination, and disclosure.

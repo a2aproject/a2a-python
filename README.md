@@ -11,7 +11,7 @@
 </a>
 
 <div align="center">
-   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a-logo-black.svg" width="256" alt="A2A Logo"/>
+   <img src="https://raw.githubusercontent.com/a2aproject/A2A/refs/heads/main/docs/assets/a2a_logo/color/SVG/a2a_color.svg" width="800" alt="Agent2Agent Protocol Logo"/>
    <h3>
       A Python library for running agentic applications as A2A Servers, following the <a href="https://a2a-protocol.org">Agent2Agent (A2A) Protocol</a>.
    </h3>
