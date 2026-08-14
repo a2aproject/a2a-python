@@ -2,6 +2,7 @@ import asyncio
 import logging
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
+from dataclasses import dataclass
 from typing import cast
 
 from a2a.server.agent_execution import (
@@ -76,6 +77,14 @@ TERMINAL_TASK_STATES = {
 }
 
 
+@dataclass
+class _CancelLockEntry:
+    """Per-task cancel lock plus its in-flight user count."""
+
+    lock: asyncio.Lock
+    refs: int = 0
+
+
 @trace_class(kind=SpanKind.SERVER)
 class LegacyRequestHandler(RequestHandler):
     """Default request handler for all incoming requests.
@@ -134,6 +143,12 @@ class LegacyRequestHandler(RequestHandler):
         # TODO: Likely want an interface for managing this, like AgentExecutionManager.
         self._running_agents = {}
         self._running_agents_lock = asyncio.Lock()
+        # Per-task cancellation locks. Each value is [lock, user_count].
+        # user_count tracks how many concurrent on_cancel_task calls are
+        # using the lock so entries can be garbage-collected safely once
+        # the last caller finishes. Both are protected by _cancel_locks_guard.
+        self._cancel_locks: dict[str, _CancelLockEntry] = {}
+        self._cancel_locks_guard = asyncio.Lock()
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
@@ -185,8 +200,40 @@ class LegacyRequestHandler(RequestHandler):
         """Default handler for 'tasks/cancel'.
 
         Attempts to cancel the task managed by the `AgentExecutor`.
+
+        The terminal-state check and the cancel call are serialized with a
+        per-task lock so concurrent cancels cannot both pass the check
+        (TOCTOU). V2's ``ActiveTaskRegistry`` already serializes
+        cancels per ``ActiveTask`` and is not affected.
         """
         task_id = params.id
+
+        # Acquire (or create) the per-task lock and bump its user count.
+        # The guard section is synchronous (no await), so the count is
+        # updated atomically with respect to other coroutines.
+        async with self._cancel_locks_guard:
+            entry = self._cancel_locks.get(task_id)
+            if entry is None:
+                entry = _CancelLockEntry(lock=asyncio.Lock())
+                self._cancel_locks[task_id] = entry
+            entry.refs += 1
+
+        try:
+            async with entry.lock:
+                return await self._cancel_task_locked(task_id, context)
+        finally:
+            async with self._cancel_locks_guard:
+                entry.refs -= 1
+                # Only drop the entry when no other caller is waiting on it;
+                # otherwise a new caller could grab a fresh lock and bypass
+                # the serialization.
+                if entry.refs == 0 and self._cancel_locks.get(task_id) is entry:
+                    del self._cancel_locks[task_id]
+
+    async def _cancel_task_locked(
+        self, task_id: str, context: ServerCallContext
+    ) -> Task | None:
+        """Cancels a task; callers must hold the per-task cancel lock."""
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
