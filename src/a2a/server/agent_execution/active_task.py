@@ -391,6 +391,8 @@ class ActiveTask:
 
         # `_request_lock` protects parallel request processing.
         self._request_lock = asyncio.Lock()
+        # `_snapshot_lock` serializes cache reads with request-boundary refreshes.
+        self._snapshot_lock = asyncio.Lock()
 
         # _task_created is set when initial version of task is stored in DB.
         self._task_created = asyncio.Event()
@@ -419,6 +421,14 @@ class ActiveTask:
         """The ID of the task."""
         return self._task_id
 
+    @staticmethod
+    def _raise_if_task_terminal(task: Task) -> None:
+        """Rejects operations that would restart a terminal task."""
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise InvalidParamsError(
+                message=f'Task {task.id} is in terminal state: {task.status.state}'
+            )
+
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:
@@ -435,12 +445,13 @@ class ActiveTask:
         An ``ActiveTask`` remains registered while a task waits for
         human-in-the-loop input,
         so another process may persist a newer task snapshot in the meantime.
-        Refreshing only while the producer/consumer reference is idle avoids
-        replacing the task object during an active streaming request, where
-        artifact chunks may still be appended to the in-memory snapshot.
+        The request lock, rather than the subscriber count, defines whether
+        execution is idle. A subscriber may detach before background artifact
+        streaming finishes, while passive subscribers may remain after the
+        previous request is fully persisted.
         """
-        async with self._lock:
-            if self._reference_count <= 1:
+        async with self._snapshot_lock, self._lock:
+            if not self._request_lock.locked():
                 self._task_manager._call_context = call_context
                 self._task_manager._current_task = None
 
@@ -485,10 +496,7 @@ class ActiveTask:
 
                 if task:
                     self._task_created.set()
-                    if task.status.state in TERMINAL_TASK_STATES:
-                        raise InvalidParamsError(
-                            message=f'Task {task.id} is in terminal state: {task.status.state}'
-                        )
+                    self._raise_if_task_terminal(task)
                 elif not create_task_if_missing:
                     raise TaskNotFoundError
 
@@ -527,6 +535,7 @@ class ActiveTask:
         """
         logger.debug('Producer[%s]: Started', self._task_id)
         request_context = None
+        task_missing_at_boundary = False
         try:
             while True:
                 (
@@ -534,13 +543,26 @@ class ActiveTask:
                     request_id,
                 ) = await self._request_queue.get()
                 await self._request_lock.acquire()
-                # TODO: Should we create task manager every time?
-                self._task_manager._call_context = request_context.call_context
+                # Order task loading after any idle refresh that began before
+                # this request acquired `_request_lock`. Later refreshes observe
+                # the held request lock and leave the streaming snapshot intact.
+                async with self._snapshot_lock:
+                    self._task_manager._call_context = (
+                        request_context.call_context
+                    )
+                    # This is the request boundary for queued requests that
+                    # were discovered while the previous request was active.
+                    self._task_manager._current_task = None
+                    request_context.current_task = (
+                        await self._task_manager.get_task()
+                    )
 
-                request_context.current_task = (
-                    await self._task_manager.get_task()
-                )
-
+                if (
+                    request_context.current_task is None
+                    and self._task_created.is_set()
+                ):
+                    task_missing_at_boundary = True
+                    raise TaskNotFoundError(f'Task {self._task_id} not found')
                 logger.debug(
                     'Producer[%s]: Executing agent task %s',
                     self._task_id,
@@ -579,7 +601,7 @@ class ActiveTask:
             )
             # Persist the failure directly instead of relying on the closing
             # event queue to carry a final status update.
-            if request_context:
+            if request_context and not task_missing_at_boundary:
                 task = await self._task_manager.ensure_task_id(
                     self._task_id,
                     request_context.context_id or '',
@@ -660,6 +682,7 @@ class ActiveTask:
                     self._task_id,
                 )
                 task = await self.get_task()
+                self._raise_if_task_terminal(task)
                 yield task
 
             while True:
@@ -732,9 +755,13 @@ class ActiveTask:
         logger.debug('Cancel[%s]: Cancelling task', self._task_id)
 
         # TODO: Conflicts with call_context on the pending request.
-        self._task_manager._call_context = call_context
-
-        task = await self._task_manager.get_task()
+        async with self._snapshot_lock:
+            self._task_manager._call_context = call_context
+            task = await self._task_manager.get_task()
+        if task is None and self._task_created.is_set():
+            raise TaskNotFoundError(f'Task {self._task_id} not found')
+        if task is not None and task.status.state in TERMINAL_TASK_STATES:
+            return task
         request_context = RequestContext(
             call_context=call_context,
             task_id=self._task_id,
@@ -860,7 +887,8 @@ class ActiveTask:
     async def get_task(self) -> Task:
         """Get task from db."""
         await self._task_created.wait()
-        task = await self._task_manager.get_task()
+        async with self._snapshot_lock:
+            task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
         return task

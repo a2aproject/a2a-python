@@ -46,30 +46,38 @@ class ActiveTaskRegistry:
         initial_message: Message | None = None,
     ) -> ActiveTask:
         """Retrieves an existing ActiveTask or creates a new one."""
-        async with self._lock:
-            if self._closed:
-                raise RuntimeError('ActiveTaskRegistry is closed')
-            active_task = self._active_tasks.get(task_id)
-            if active_task is not None:
-                await active_task.refresh_task_if_idle(call_context)
-                return active_task
+        while True:
+            async with self._lock:
+                if self._closed:
+                    raise RuntimeError('ActiveTaskRegistry is closed')
+                active_task = self._active_tasks.get(task_id)
+                if active_task is None:
+                    task_manager = TaskManager(
+                        task_id=task_id,
+                        context_id=context_id,
+                        task_store=self._task_store,
+                        initial_message=initial_message,
+                        context=call_context,
+                    )
 
-            task_manager = TaskManager(
-                task_id=task_id,
-                context_id=context_id,
-                task_store=self._task_store,
-                initial_message=initial_message,
-                context=call_context,
-            )
+                    active_task = ActiveTask(
+                        agent_executor=self._agent_executor,
+                        task_id=task_id,
+                        task_manager=task_manager,
+                        push_sender=self._push_sender,
+                        on_cleanup=self._on_active_task_cleanup,
+                    )
+                    self._active_tasks[task_id] = active_task
+                    break
 
-            active_task = ActiveTask(
-                agent_executor=self._agent_executor,
-                task_id=task_id,
-                task_manager=task_manager,
-                push_sender=self._push_sender,
-                on_cleanup=self._on_active_task_cleanup,
-            )
-            self._active_tasks[task_id] = active_task
+            # A refresh can wait behind task-store I/O, so do not hold the
+            # global registry lock while synchronizing this individual task.
+            await active_task.refresh_task_if_idle(call_context)
+            async with self._lock:
+                if self._closed:
+                    raise RuntimeError('ActiveTaskRegistry is closed')
+                if self._active_tasks.get(task_id) is active_task:
+                    return active_task
 
         await active_task.start(
             call_context=call_context,

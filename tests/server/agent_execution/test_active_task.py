@@ -27,6 +27,13 @@ from a2a.utils.errors import InvalidParamsError
 logger = logging.getLogger(__name__)
 
 
+def _working_task() -> Task:
+    return Task(
+        id='test-task-id',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+
+
 class TestActiveTask:
     """Tests for the ActiveTask class."""
 
@@ -105,10 +112,9 @@ class TestActiveTask:
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         agent_executor.cancel = AsyncMock()
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
+            _working_task(),
         ] + [
             Task(
                 id='test-task-id',
@@ -153,10 +159,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
@@ -200,10 +204,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
@@ -266,10 +268,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
@@ -380,10 +380,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
@@ -517,10 +515,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
@@ -662,10 +658,8 @@ class TestActiveTask:
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
         task_manager.get_task.side_effect = [
-            Task(
-                id='test-task-id',
-                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
-            )
+            _working_task(),
+            _working_task(),
         ] + [task_obj] * 10
 
         await active_task.start(
