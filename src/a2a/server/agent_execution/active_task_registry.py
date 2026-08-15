@@ -49,8 +49,10 @@ class ActiveTaskRegistry:
         async with self._lock:
             if self._closed:
                 raise RuntimeError('ActiveTaskRegistry is closed')
-            if task_id in self._active_tasks:
-                return self._active_tasks[task_id]
+            active_task = self._active_tasks.get(task_id)
+            if active_task is not None:
+                await active_task.refresh_task_if_idle(call_context)
+                return active_task
 
             task_manager = TaskManager(
                 task_id=task_id,

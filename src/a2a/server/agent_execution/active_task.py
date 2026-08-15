@@ -427,6 +427,22 @@ class ActiveTask:
         await self._request_queue.put((request_context, request_id))
         return request_id
 
+    async def refresh_task_if_idle(
+        self, call_context: ServerCallContext
+    ) -> None:
+        """Drops an idle task snapshot before a new request boundary.
+
+        An ``ActiveTask`` remains registered while a task waits for HITL input,
+        so another process may persist a newer task snapshot in the meantime.
+        Refreshing only while the producer/consumer reference is idle avoids
+        replacing the task object during an active streaming request, where
+        artifact chunks may still be appended to the in-memory snapshot.
+        """
+        async with self._lock:
+            if self._reference_count <= 1:
+                self._task_manager._call_context = call_context
+                self._task_manager._current_task = None
+
     async def start(
         self,
         call_context: ServerCallContext,
