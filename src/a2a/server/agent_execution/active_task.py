@@ -432,7 +432,8 @@ class ActiveTask:
     ) -> None:
         """Drops an idle task snapshot before a new request boundary.
 
-        An ``ActiveTask`` remains registered while a task waits for HITL input,
+        An ``ActiveTask`` remains registered while a task waits for
+        human-in-the-loop input,
         so another process may persist a newer task snapshot in the meantime.
         Refreshing only while the producer/consumer reference is idle avoids
         replacing the task object during an active streaming request, where
