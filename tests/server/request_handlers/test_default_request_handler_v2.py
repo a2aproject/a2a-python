@@ -1224,6 +1224,67 @@ async def test_on_message_send_limit_history():
 
 
 @pytest.mark.asyncio
+@pytest.mark.timeout(5)
+@pytest.mark.parametrize('consumer_persistence_fails', [False, True])
+async def test_on_message_send_propagates_request_boundary_store_failure(
+    consumer_persistence_fails: bool,
+) -> None:
+    task_id = 'request-boundary-store-failure'
+    context_id = 'request-boundary-context'
+    context = create_server_call_context()
+    stored_task = create_sample_task(
+        task_id=task_id,
+        context_id=context_id,
+        status_state=TaskState.TASK_STATE_INPUT_REQUIRED,
+    )
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = stored_task
+    agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+
+    try:
+        await request_handler._active_task_registry.get_or_create(
+            task_id,
+            context_id=context_id,
+            call_context=context,
+            create_task_if_missing=False,
+        )
+        task_store.get.reset_mock()
+        get_results: list[Task | OSError] = [
+            stored_task,
+            OSError('request-boundary read failed'),
+            OSError('failure-state read failed'),
+        ]
+        if consumer_persistence_fails:
+            get_results.append(OSError('consumer failure-state read failed'))
+        get_results.append(stored_task)
+        task_store.get.side_effect = get_results
+
+        with pytest.raises(OSError, match='request-boundary read failed'):
+            await request_handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        task_id=task_id,
+                        context_id=context_id,
+                        message_id='resume-after-store-failure',
+                        role=Role.ROLE_USER,
+                        parts=[Part(text='resume')],
+                    )
+                ),
+                context,
+            )
+
+        assert task_store.get.await_count == 4
+        agent_executor.execute.assert_not_awaited()
+    finally:
+        await request_handler.aclose()
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_early_producer_exception_marks_task_failed_and_preserves_originating_message():
     task_store = InMemoryTaskStore()
     request_handler = DefaultRequestHandlerV2(

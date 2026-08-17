@@ -140,16 +140,22 @@ class EventConsumer:
             logger.exception('Consumer[%s]: Failed', self.active_task._task_id)
 
             updated_task = None
-            task = await self.active_task._task_manager.get_task()
-            if task and task.status.state not in TERMINAL_TASK_STATES:
-                handled_event = TaskStatusUpdateEvent(
-                    task_id=task.id,
-                    context_id=task.context_id,
-                    status=TaskStatus(
-                        state=TaskState.TASK_STATE_FAILED,
-                    ),
+            try:
+                task = await self.active_task._task_manager.get_task()
+                if task and task.status.state not in TERMINAL_TASK_STATES:
+                    handled_event = TaskStatusUpdateEvent(
+                        task_id=task.id,
+                        context_id=task.context_id,
+                        status=TaskStatus(
+                            state=TaskState.TASK_STATE_FAILED,
+                        ),
+                    )
+                    updated_task = await self._handle_task_event(handled_event)
+            except Exception:
+                logger.exception(
+                    'Consumer[%s]: Failed to persist task failure',
+                    self.active_task._task_id,
                 )
-                updated_task = await self._handle_task_event(handled_event)
 
             await self._enqueue_to_subscribers(cast('Event', e), updated_task)
 
@@ -601,15 +607,21 @@ class ActiveTask:
             )
             # Persist the failure directly instead of relying on the closing
             # event queue to carry a final status update.
-            if request_context and not task_missing_at_boundary:
-                task = await self._task_manager.ensure_task_id(
+            try:
+                if request_context and not task_missing_at_boundary:
+                    task = await self._task_manager.ensure_task_id(
+                        self._task_id,
+                        request_context.context_id or '',
+                    )
+                    if task.status.state not in TERMINAL_TASK_STATES:
+                        task.status.state = TaskState.TASK_STATE_FAILED
+                        await self._task_manager.save_task_event(task)
+                    self._task_created.set()
+            except Exception:
+                logger.exception(
+                    'Producer[%s]: Failed to persist task failure',
                     self._task_id,
-                    request_context.context_id or '',
                 )
-                if task.status.state not in TERMINAL_TASK_STATES:
-                    task.status.state = TaskState.TASK_STATE_FAILED
-                    await self._task_manager.save_task_event(task)
-                self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
