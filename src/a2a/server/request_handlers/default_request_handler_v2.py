@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: TC003
 import logging
+import warnings
 
 from typing import TYPE_CHECKING, Any, cast
 
@@ -72,7 +73,13 @@ logger = logging.getLogger(__name__)
 
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandlerV2(RequestHandler):
-    """Default request handler for all incoming requests."""
+    """Default request handler for all incoming requests.
+
+    The ``queue_manager`` parameter is accepted for signature compatibility
+    with `DefaultRequestHandler` but is not used: v2 delegates event streaming
+    to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
+    `DeprecationWarning` and logs a warning.
+    """
 
     _background_tasks: set[asyncio.Task]
 
@@ -93,7 +100,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         | None = None,
     ) -> None:
         if queue_manager is not None:
-            logger.warning(
+            message = (
                 'A queue_manager was passed to DefaultRequestHandlerV2, but it '
                 'is not used: v2 delegates event streaming to an in-memory '
                 'ActiveTaskRegistry, so custom or distributed QueueManager '
@@ -101,6 +108,8 @@ class DefaultRequestHandlerV2(RequestHandler):
                 'streaming, either use LegacyRequestHandler or route '
                 'subscription requests to the replica holding the task.'
             )
+            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            logger.warning(message)
         self.agent_executor = agent_executor
         self.task_store = task_store
         self._agent_card = agent_card
