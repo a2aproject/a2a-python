@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
@@ -133,7 +134,7 @@ class LegacyRequestHandler(RequestHandler):
         )
         # TODO: Likely want an interface for managing this, like AgentExecutionManager.
         self._running_agents = {}
-        self._running_agents_lock = asyncio.Lock()
+        self._running_agents_lock = threading.RLock()
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
@@ -462,7 +463,7 @@ class LegacyRequestHandler(RequestHandler):
         self, task_id: str, producer_task: asyncio.Task
     ) -> None:
         """Registers the agent execution task with the handler."""
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents[task_id] = producer_task
 
     def _track_background_task(self, task: asyncio.Task) -> None:
@@ -501,7 +502,7 @@ class LegacyRequestHandler(RequestHandler):
                 'Producer task %s was cancelled during cleanup', task_id
             )
         await self._queue_manager.close(task_id)
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
     @validate_request_params

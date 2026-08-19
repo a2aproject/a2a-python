@@ -1,5 +1,5 @@
-import asyncio
 import logging
+import threading
 
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -29,7 +29,7 @@ class _InMemoryTaskStoreImpl(TaskStore):
         """Initializes the internal _InMemoryTaskStoreImpl."""
         logger.debug('Initializing _InMemoryTaskStoreImpl')
         self.tasks: dict[str, dict[str, Task]] = {}
-        self.lock = asyncio.Lock()
+        self.lock = threading.RLock()
         self.owner_resolver = owner_resolver
 
     def _get_owner_tasks(self, owner: str) -> dict[str, Task]:
@@ -41,7 +41,7 @@ class _InMemoryTaskStoreImpl(TaskStore):
         if owner not in self.tasks:
             self.tasks[owner] = {}
 
-        async with self.lock:
+        with self.lock:
             self.tasks[owner][task.id] = task
             logger.debug(
                 'Task %s for owner %s saved successfully.', task.id, owner
@@ -52,7 +52,7 @@ class _InMemoryTaskStoreImpl(TaskStore):
     ) -> Task | None:
         """Retrieves a task from the in-memory store by ID, for the given owner."""
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             logger.debug(
                 'Attempting to get task with id: %s for owner: %s',
                 task_id,
@@ -81,7 +81,7 @@ class _InMemoryTaskStoreImpl(TaskStore):
         owner = self.owner_resolver(context)
         logger.debug('Listing tasks for owner %s with params %s', owner, params)
 
-        async with self.lock:
+        with self.lock:
             owner_tasks = self._get_owner_tasks(owner)
             tasks = list(owner_tasks.values())
 
@@ -157,7 +157,7 @@ class _InMemoryTaskStoreImpl(TaskStore):
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the in-memory store by ID, for the given owner."""
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             logger.debug(
                 'Attempting to delete task with id: %s for owner %s',
                 task_id,
