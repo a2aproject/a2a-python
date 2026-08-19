@@ -5,9 +5,63 @@ import binascii
 from base64 import b64decode, b64encode
 from typing import Literal, Protocol, runtime_checkable
 
-from a2a.types.a2a_pb2 import Task
+from a2a.types.a2a_pb2 import Message, Part, Task
 from a2a.utils.constants import MAX_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
+
+
+MAX_TASK_ID_LENGTH = 1000
+"""Maximum allowed length of a task ID."""
+
+
+def validate_task_id(task_id: str) -> None:
+    """Validates that a task ID is non-empty and within the length limit.
+
+    Raises:
+        InvalidParamsError: If the task ID is empty or longer than
+            ``MAX_TASK_ID_LENGTH`` characters.
+    """
+    if not task_id:
+        raise InvalidParamsError(message='task ID must be non-empty')
+    if len(task_id) > MAX_TASK_ID_LENGTH:
+        raise InvalidParamsError(
+            message=f'task ID must be at most {MAX_TASK_ID_LENGTH} characters'
+        )
+
+
+def validate_message_content(message: Message) -> None:
+    """Validates that a message carries actual content.
+
+    A message must contain at least one part, and every part must have
+    content (text, raw bytes, a URL or data) rather than being empty.
+
+    Raises:
+        InvalidParamsError: If the message has no parts or contains an
+            empty part.
+    """
+    if not message.parts:
+        raise InvalidParamsError(
+            message='message must contain at least one part'
+        )
+    for part in message.parts:
+        if not _part_has_content(part):
+            raise InvalidParamsError(message='message parts must not be empty')
+
+
+def _part_has_content(part: Part) -> bool:
+    """Returns True if a part carries actual content.
+
+    A part has content if it has text, raw bytes or a URL, or a
+    non-null ``data`` payload (``google.protobuf.Value`` defaults to
+    null/empty).
+    """
+    if part.text or part.raw or part.url:
+        return True
+    return (
+        part.data.WhichOneof('kind') not in (None, 'null_value')
+        if part.HasField('data')
+        else False
+    )
 
 
 @runtime_checkable
