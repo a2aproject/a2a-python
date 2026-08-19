@@ -105,3 +105,42 @@ async def test_aclose_logs_and_swallows_task_errors(caplog):
         await registry.aclose()
 
     assert 'Error draining active task' in caplog.text
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_get_or_create_failed_start_removes_zombie_entry():
+    """A failed start() must not leave a zombie registry entry.
+
+    Regression test for zombie-entry cleanup: the entry was inserted before start(), and
+    the cleanup on failure was fire-and-forget, so a subsequent registry
+    lookup could still see the never-started task.
+    """
+    from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus
+    from a2a.utils.errors import InvalidParamsError
+
+    task_store = InMemoryTaskStore()
+    terminal_task = Task(
+        id='task-term',
+        context_id='c1',
+        status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+    )
+    await task_store.save(terminal_task, ServerCallContext())
+
+    registry = ActiveTaskRegistry(
+        agent_executor=_SlowExecutor(),
+        task_store=task_store,
+    )
+
+    with pytest.raises(InvalidParamsError):
+        await registry.get_or_create(
+            'task-term',
+            call_context=ServerCallContext(),
+            create_task_if_missing=True,
+        )
+
+    # Give any fire-and-forget cleanup tasks a chance to run; the entry must
+    # already be gone regardless.
+    await asyncio.sleep(0)
+    assert await registry.get('task-term') is None
+    assert 'task-term' not in registry._active_tasks
