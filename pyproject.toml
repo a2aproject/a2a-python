@@ -114,6 +114,10 @@ dev = [
   "pytest-mock>=3.14.0",
   "pytest-xdist>=3.6.1",
   "respx>=0.20.2",
+  # Test-only oracle. The RFC 8785 conformance tests check the canonicalizer
+  # against an independent implementation, so a mistake shared between the
+  # implementation and its tests still shows up. Not a runtime dependency.
+  "rfc8785>=0.1.4",
   "ruff>=0.12.8",
   "uv-dynamic-versioning>=0.8.2",
   "types-protobuf<7",

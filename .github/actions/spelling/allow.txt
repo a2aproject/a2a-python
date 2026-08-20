@@ -37,9 +37,12 @@ coc
 codegen
 coro
 culsans
+cyberphone
 datamodel
 datapart
 deepwiki
+denormal
+denormals
 drivername
 DSNs
 dunders
@@ -56,6 +59,7 @@ GBP
 genai
 getkwargs
 gle
+gowebpki
 GVsb
 hazmat
 HS256
@@ -91,6 +95,8 @@ middleware
 mikeas
 mockurl
 mysqladmin
+noncharacter
+noncharacters
 notif
 npx
 oauthoidc
@@ -128,6 +134,7 @@ resub
 rmi
 RS256
 RUF
+Rundgren
 SECP256R1
 SFIXED
 SLF
@@ -135,6 +142,7 @@ socio
 sse
 starlette
 Starlette
+stringified
 subgids
 subuids
 sut
