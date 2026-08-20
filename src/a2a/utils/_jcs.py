@@ -148,10 +148,11 @@ def _format_scalar(obj: Any) -> str:
 def _sorted_items(obj: dict[Any, Any]) -> list[tuple[str, Any]]:
     """Sorts a dict's items by UTF-16 code unit, per RFC 8785 section 3.2.3.
 
-    Comparing big-endian UTF-16 encodings bytewise is equivalent to comparing
-    the code unit sequences numerically, which is what the RFC requires and
-    what `sorted(..., key=str)` does not do: code point order and code unit
-    order disagree for every key containing a character above the BMP.
+    Comparing big-endian UTF-16 encodings byte by byte is equivalent to
+    comparing the code unit sequences numerically, which is what the RFC
+    requires and what `sorted(..., key=str)` does not do: code point order
+    and code unit order disagree for every key containing a character above
+    the BMP.
     """
     try:
         return sorted(obj.items(), key=lambda kv: kv[0].encode('utf-16-be'))
