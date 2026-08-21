@@ -28,6 +28,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
+    Message,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
@@ -80,10 +81,15 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: SendMessageResponse = json_format.ParseDict(
-            json_rpc_response.result, SendMessageResponse()
-        )
-        return response
+        # The server returns the Task or Message directly (not wrapped in
+        # the streaming SendMessageResponse oneof), so try each in turn and
+        # re-wrap for callers that expect a SendMessageResponse.
+        try:
+            task = json_format.ParseDict(json_rpc_response.result, Task())
+        except json_format.ParseError:
+            message = json_format.ParseDict(json_rpc_response.result, Message())
+            return SendMessageResponse(message=message)
+        return SendMessageResponse(task=task)
 
     async def send_message_streaming(
         self,

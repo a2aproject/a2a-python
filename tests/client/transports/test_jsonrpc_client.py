@@ -137,11 +137,9 @@ class TestSendMessage:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'task': {
-                    'id': task_id,
-                    'contextId': 'ctx-123',
-                    'status': {'state': 'TASK_STATE_COMPLETED'},
-                }
+                'id': task_id,
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
             },
         }
         mock_response.raise_for_status = MagicMock()
@@ -527,11 +525,9 @@ class TestExtensions:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'task': {
-                    'id': 'task-123',
-                    'contextId': 'ctx-123',
-                    'status': {'state': 'TASK_STATE_COMPLETED'},
-                }
+                'id': 'task-123',
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
             },
         }
         mock_response.raise_for_status = MagicMock()

@@ -36,9 +36,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsRequest,
     ListTasksRequest,
     SendMessageRequest,
-    SendMessageResponse,
     SubscribeToTaskRequest,
-    Task,
     TaskPushNotificationConfig,
 )
 from a2a.utils import constants, json_utils, proto_utils
@@ -405,9 +403,7 @@ class JsonRpcDispatcher:
         task_or_message = await self.request_handler.on_message_send(
             request_obj, context
         )
-        if isinstance(task_or_message, Task):
-            return MessageToDict(SendMessageResponse(task=task_or_message))
-        return MessageToDict(SendMessageResponse(message=task_or_message))
+        return MessageToDict(task_or_message, preserving_proto_field_name=False)
 
     async def _handle_cancel_task(
         self, request_obj: CancelTaskRequest, context: ServerCallContext
