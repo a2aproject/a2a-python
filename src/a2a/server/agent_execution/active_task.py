@@ -633,7 +633,13 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        tapped_queue = await self._event_queue_subscribers.tap()
+        # Subscriber sinks belong to remote consumers that can be abandoned
+        # (e.g. a non-blocking send whose HTTP response already returned).
+        # evict_on_full keeps one undrained subscriber from wedging dispatch
+        # for every other subscriber and, transitively, the producer.
+        tapped_queue = await self._event_queue_subscribers.tap(
+            evict_on_full=True
+        )
         request_id = await self.enqueue_request(request) if request else None
 
         try:
