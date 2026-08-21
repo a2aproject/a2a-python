@@ -85,18 +85,34 @@ class JsonRpcTransport(ClientTransport):
         # Servers that still nest the payload under the streaming
         # SendMessageResponse oneof (older SDKs, other language
         # implementations) send {"task": {...}} or {"message": {...}}.
-        # Unwrap explicitly for those before falling back to the direct
-        # Task/Message shape this SDK's own server now returns.
         if isinstance(result, dict) and 'task' in result:
             task = json_format.ParseDict(result['task'], Task())
             return SendMessageResponse(task=task)
         if isinstance(result, dict) and 'message' in result:
             message = json_format.ParseDict(result['message'], Message())
             return SendMessageResponse(message=message)
+        # Otherwise the payload is the Task/Message itself, per spec
+        # possibly carrying a "kind" discriminator field that our
+        # protobuf-generated Task/Message types don't declare. Strip it
+        # and use it (falling back to field-presence, same heuristic the
+        # v0.3 compat transport already uses) to pick which type to parse.
+        payload = dict(result) if isinstance(result, dict) else result
+        kind = payload.pop('kind', None) if isinstance(payload, dict) else None
+        if not kind and isinstance(payload, dict):
+            if 'messageId' in payload:
+                kind = 'message'
+            elif 'id' in payload:
+                kind = 'task'
+        if kind == 'message':
+            message = json_format.ParseDict(payload, Message())
+            return SendMessageResponse(message=message)
+        if kind == 'task':
+            task = json_format.ParseDict(payload, Task())
+            return SendMessageResponse(task=task)
         try:
-            task = json_format.ParseDict(result, Task())
+            task = json_format.ParseDict(payload, Task())
         except json_format.ParseError:
-            message = json_format.ParseDict(result, Message())
+            message = json_format.ParseDict(payload, Message())
             return SendMessageResponse(message=message)
         return SendMessageResponse(task=task)
 

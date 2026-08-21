@@ -212,6 +212,61 @@ class TestSendMessage:
         assert response.HasField('message')
         assert response.message.message_id == 'msg-1'
 
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_kind_task(
+        self, transport, mock_httpx_client
+    ):
+        """A spec-compliant peer (e.g. another language SDK) sends the
+        Task unwrapped but with a "kind" discriminator field, which our
+        protobuf-generated Task type doesn't declare. It must be
+        stripped rather than break parsing.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': task_id,
+                'kind': 'task',
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_kind_message(
+        self, transport, mock_httpx_client
+    ):
+        """Same as above, but for a peer's unwrapped Message with kind."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'messageId': 'msg-1',
+                'kind': 'message',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'hi'}],
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('message')
+        assert response.message.message_id == 'msg-1'
+
     @pytest.mark.parametrize(
         'error_cls, error_code', JSON_RPC_ERROR_CODE_MAP.items()
     )
