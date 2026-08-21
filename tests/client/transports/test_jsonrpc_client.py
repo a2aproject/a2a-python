@@ -155,6 +155,63 @@ class TestSendMessage:
         payload = call_args[1]['json']
         assert payload['method'] == 'SendMessage'
 
+    @pytest.mark.asyncio
+    async def test_send_message_legacy_wrapped_task(
+        self, transport, mock_httpx_client
+    ):
+        """A peer that still nests the payload under the streaming
+        SendMessageResponse oneof (older SDKs, other language
+        implementations) should still be parsed correctly.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'task': {
+                    'id': task_id,
+                    'contextId': 'ctx-123',
+                    'status': {'state': 'TASK_STATE_COMPLETED'},
+                }
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+        assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_send_message_legacy_wrapped_message(
+        self, transport, mock_httpx_client
+    ):
+        """Same as above, but for a peer returning a wrapped Message."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'message': {
+                    'messageId': 'msg-1',
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'hi'}],
+                }
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('message')
+        assert response.message.message_id == 'msg-1'
+
     @pytest.mark.parametrize(
         'error_cls, error_code', JSON_RPC_ERROR_CODE_MAP.items()
     )

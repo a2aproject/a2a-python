@@ -81,13 +81,22 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        # The server returns the Task or Message directly (not wrapped in
-        # the streaming SendMessageResponse oneof), so try each in turn and
-        # re-wrap for callers that expect a SendMessageResponse.
+        result = json_rpc_response.result
+        # Servers that still nest the payload under the streaming
+        # SendMessageResponse oneof (older SDKs, other language
+        # implementations) send {"task": {...}} or {"message": {...}}.
+        # Unwrap explicitly for those before falling back to the direct
+        # Task/Message shape this SDK's own server now returns.
+        if isinstance(result, dict) and 'task' in result:
+            task = json_format.ParseDict(result['task'], Task())
+            return SendMessageResponse(task=task)
+        if isinstance(result, dict) and 'message' in result:
+            message = json_format.ParseDict(result['message'], Message())
+            return SendMessageResponse(message=message)
         try:
-            task = json_format.ParseDict(json_rpc_response.result, Task())
+            task = json_format.ParseDict(result, Task())
         except json_format.ParseError:
-            message = json_format.ParseDict(json_rpc_response.result, Message())
+            message = json_format.ParseDict(result, Message())
             return SendMessageResponse(message=message)
         return SendMessageResponse(task=task)
 
