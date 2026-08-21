@@ -633,10 +633,12 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        # Subscriber sinks belong to remote consumers that can be abandoned
-        # (e.g. a non-blocking send whose HTTP response already returned).
-        # evict_on_full keeps one undrained subscriber from wedging dispatch
-        # for every other subscriber and, transitively, the producer.
+        # Subscriber sinks belong to remote consumers that can fall behind
+        # the dispatcher, either because the consumer went away (e.g. a
+        # non-blocking send whose HTTP response already returned) or because
+        # it is merely slow. evict_on_full keeps one sink whose queue has
+        # filled from wedging dispatch for every other subscriber and,
+        # transitively, the producer.
         tapped_queue = await self._event_queue_subscribers.tap(
             evict_on_full=True
         )
