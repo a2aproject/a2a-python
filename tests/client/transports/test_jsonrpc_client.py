@@ -267,6 +267,55 @@ class TestSendMessage:
         assert response.HasField('message')
         assert response.message.message_id == 'msg-1'
 
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_nested_kind(
+        self, transport, mock_httpx_client
+    ):
+        """A peer stamps "kind" on every Task/Message/Part it emits, not
+        just the top-level object, e.g. TaskStatus.message, Task.history
+        entries, and Message.parts entries. All of them must be stripped,
+        not just the one at the root.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': task_id,
+                'kind': 'task',
+                'contextId': 'ctx-123',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'message': {
+                        'messageId': 'msg-1',
+                        'kind': 'message',
+                        'role': 'ROLE_AGENT',
+                        'parts': [{'kind': 'text', 'text': 'hi'}],
+                    },
+                },
+                'history': [
+                    {
+                        'messageId': 'msg-0',
+                        'kind': 'message',
+                        'role': 'ROLE_USER',
+                        'parts': [{'kind': 'text', 'text': 'hello'}],
+                    }
+                ],
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+        assert response.task.status.message.message_id == 'msg-1'
+        assert response.task.status.message.parts[0].text == 'hi'
+        assert response.task.history[0].message_id == 'msg-0'
+
     @pytest.mark.parametrize(
         'error_cls, error_code', JSON_RPC_ERROR_CODE_MAP.items()
     )
