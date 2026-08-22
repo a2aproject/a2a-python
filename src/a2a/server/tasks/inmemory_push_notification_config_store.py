@@ -1,5 +1,5 @@
-import asyncio
 import logging
+import threading
 
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
@@ -24,7 +24,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         owner_resolver: OwnerResolver = resolve_user_scope,
     ) -> None:
         """Initializes the InMemoryPushNotificationConfigStore."""
-        self.lock = asyncio.Lock()
+        self.lock = threading.RLock()
         self._push_notification_infos: dict[
             str, dict[str, list[TaskPushNotificationConfig]]
         ] = {}
@@ -45,7 +45,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         owner = self.owner_resolver(context)
         if owner not in self._push_notification_infos:
             self._push_notification_infos[owner] = {}
-        async with self.lock:
+        with self.lock:
             owner_infos = self._push_notification_infos[owner]
             if task_id not in owner_infos:
                 owner_infos[task_id] = []
@@ -77,7 +77,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         Used by the user-callable read endpoints.
         """
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
             return list(owner_infos.get(task_id, []))
 
@@ -89,7 +89,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
 
         Used by the push-notification dispatch path.
         """
-        async with self.lock:
+        with self.lock:
             results: list[TaskPushNotificationConfig] = []
             for all_configs in self._push_notification_infos.values():
                 results.extend(all_configs.get(task_id, []))
@@ -107,7 +107,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         If config_id is None, all configurations for the task for the owner are deleted.
         """
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
             if task_id not in owner_infos:
                 logger.warning(
