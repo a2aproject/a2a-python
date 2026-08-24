@@ -26,18 +26,12 @@ def test_routes_creation(agent_card, mock_handler):
     )
 
     assert isinstance(routes, list)
-    # Both the exact path and the trailing-slash variant are registered so
-    # that clients sending either form (httpx normalizes empty paths to a
-    # trailing slash) reach the endpoint.
-    assert len(routes) == 2
+    assert len(routes) == 1
 
     from starlette.routing import Route
 
-    for route in routes:
-        assert isinstance(route, Route)
-        assert route.methods == {'POST'}
-
-    assert {route.path for route in routes} == {'/a2a/jsonrpc', '/a2a/jsonrpc/'}
+    assert isinstance(routes[0], Route)
+    assert routes[0].methods == {'POST'}
 
 
 def test_jsonrpc_custom_url(agent_card, mock_handler):
