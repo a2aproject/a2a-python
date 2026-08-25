@@ -130,6 +130,14 @@ dev = [
   "ty>=0.0.34",
 ]
 
+[tool.uv.workspace]
+# The ITK agent (itk/) is a workspace member so the repo has ONE uv.lock.
+# A separate itk/uv.lock silently went stale whenever a root dependency
+# changed (it embeds a2a-sdk's metadata), which broke every SDK's ITK run
+# that builds this repo as a peer. One lock, kept honest by the same
+# `uv sync --locked` CI the root already runs.
+members = ["itk"]
+
 [[tool.uv.index]]
 name = "testpypi"
 url = "https://test.pypi.org/simple/"
