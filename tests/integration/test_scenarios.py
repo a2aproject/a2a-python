@@ -53,6 +53,7 @@ from a2a.utils.errors import (
     InvalidParamsError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 
 
@@ -428,8 +429,7 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
         role=Role.ROLE_USER,
         parts=[Part(text='message to completed task')],
     )
-    # TODO: Is it correct error code ?
-    with pytest.raises(InvalidParamsError):
+    with pytest.raises(UnsupportedOperationError):
         async for _ in client.send_message(SendMessageRequest(message=msg2)):
             pass
 

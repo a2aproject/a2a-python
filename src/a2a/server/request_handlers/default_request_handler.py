@@ -53,7 +53,6 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
     InternalError,
-    InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -278,7 +277,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 
