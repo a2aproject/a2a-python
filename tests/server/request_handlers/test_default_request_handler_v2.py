@@ -969,6 +969,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1008,6 +1009,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1036,6 +1038,40 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.message
     )
+
+
+@pytest.mark.asyncio
+async def test_setup_active_task_inherits_stored_task_context_id():
+    """A task-only continuation must retain its existing conversation context."""
+    task_id = 'existing_task'
+    stored_task = create_sample_task(
+        task_id=task_id, context_id='stored_context'
+    )
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = stored_task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    request_handler._active_task_registry.get_or_create = AsyncMock()
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='continue_existing_task',
+            parts=[Part(text='continue')],
+            task_id=task_id,
+        )
+    )
+    call_context = create_server_call_context()
+
+    _, request_context = await request_handler._setup_active_task(
+        params, call_context
+    )
+
+    assert request_context.context_id == stored_task.context_id
+    assert params.message.context_id == stored_task.context_id
+    task_store.get.assert_awaited_once_with(task_id, call_context)
 
 
 @pytest.mark.asyncio

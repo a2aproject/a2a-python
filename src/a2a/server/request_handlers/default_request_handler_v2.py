@@ -221,6 +221,8 @@ class DefaultRequestHandlerV2(RequestHandler):
             task = await self.task_store.get(original_task_id, call_context)
             if not task:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
+            if not original_context_id:
+                original_context_id = task.context_id
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
