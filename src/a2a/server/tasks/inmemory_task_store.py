@@ -38,11 +38,9 @@ class _InMemoryTaskStoreImpl(TaskStore):
     async def save(self, task: Task, context: ServerCallContext) -> None:
         """Saves or updates a task in the in-memory store for the resolved owner."""
         owner = self.owner_resolver(context)
-        if owner not in self.tasks:
-            self.tasks[owner] = {}
-
         with self.lock:
-            self.tasks[owner][task.id] = task
+            owner_tasks = self.tasks.setdefault(owner, {})
+            owner_tasks[task.id] = task
             logger.debug(
                 'Task %s for owner %s saved successfully.', task.id, owner
             )

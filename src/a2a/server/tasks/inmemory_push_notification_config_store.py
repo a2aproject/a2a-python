@@ -43,10 +43,8 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     ) -> None:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
-        if owner not in self._push_notification_infos:
-            self._push_notification_infos[owner] = {}
         with self.lock:
-            owner_infos = self._push_notification_infos[owner]
+            owner_infos = self._push_notification_infos.setdefault(owner, {})
             if task_id not in owner_infos:
                 owner_infos[task_id] = []
 
