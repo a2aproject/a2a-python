@@ -54,9 +54,11 @@ uv run --with grpcio-tools python -m grpc_tools.protoc \
 # Fix imports in generated file
 sed -i 's/^import instruction_pb2 as instruction__pb2/from . import instruction_pb2 as instruction__pb2/' pyproto/instruction_pb2_grpc.py
 
-# 4. Build jit itk_service docker image from root of a2a-itk
-# We run docker build from the root directory of a2a-itk
-docker build -t itk_service a2a-itk
+# 4. Build jit itk_service docker image from root of a2a-itk (skipped in CI
+# where the workflow builds via docker/build-push-action for GHA caching).
+if [ "${ITK_SKIP_BUILD:-0}" != "1" ]; then
+  docker build -t itk_service a2a-itk
+fi
 
 # 5. Start docker service
 # Mounting a2a-python as repo and itk as current agent
@@ -76,11 +78,17 @@ if [ "${ITK_LOG_LEVEL^^}" = "DEBUG" ]; then
   DOCKER_MOUNT_LOGS="-v $ITK_DIR/logs:/app/logs"
 fi
 
+mkdir -p "$HOME/.cache/a2a-itk-launcher"
+
 docker run -d --name itk-service \
   -v "$A2A_PYTHON_ROOT:/app/agents/repo" \
   -v "$ITK_DIR:/app/agents/repo/itk" \
+  -v "$HOME/.cache/a2a-itk-launcher:/root/.cache/a2a-itk" \
   $DOCKER_MOUNT_LOGS \
   -e ITK_LOG_LEVEL="$ITK_LOG_LEVEL" \
+  -e ITK_ENTRYPOINT="${ITK_ENTRYPOINT:-itk_service_v2.py}" \
+  -e ITK_READINESS_TIMEOUT="${ITK_READINESS_TIMEOUT:-180}" \
+  -e ITK_MAX_WORKERS="${ITK_MAX_WORKERS:-2}" \
   -p 8000:8000 \
   itk_service
 
@@ -88,6 +96,9 @@ docker run -d --name itk-service \
 docker exec -u root itk-service git config --system --add safe.directory /app/agents/repo
 docker exec -u root itk-service git config --system --add safe.directory /app/agents/repo/itk
 docker exec -u root itk-service git config --system core.multiPackIndex false
+# Launcher's peer checkouts under /root/.cache/a2a-itk are host-owned; trust
+# only repos under the launcher cache dir so container-side git accepts them.
+docker exec -u root itk-service bash -lc 'while IFS= read -r -d "" d; do git config --system --add safe.directory "${d%/.git}"; done < <(find /root/.cache/a2a-itk -type d -name .git -print0)'
 
 # 6. Verify service is up and send post request
 MAX_RETRIES=30

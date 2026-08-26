@@ -67,6 +67,47 @@ class EventQueueSource(EventQueue):
             raise ValueError('No default sink available.')
         return self._default_sink.queue
 
+    async def _deliver_to_sink(
+        self, sink: 'EventQueueSink', event: Event
+    ) -> None:
+        """Puts one event into one sink, evicting an evict-on-full sink if full.
+
+        A sink whose consumer stopped draining (an abandoned subscriber) fills
+        up and, with a blocking put, would stall this dispatcher's ``gather``
+        forever: the incoming queue then fills, producers wedge in
+        ``enqueue_event``, and the task's event flow never recovers. Sinks
+        tapped with ``evict_on_full=True`` are therefore treated as broadcast
+        observers: when full, the sink is force-closed and detached so
+        dispatch to the remaining sinks continues and blocked producers
+        recover. Sinks with ``evict_on_full=False`` (including the default
+        sink) keep the blocking put, which is the documented flow-control
+        contract.
+
+        The ``full()`` pre-check is race-free: this dispatcher is the only
+        writer to a sink queue and consumers only read, so the queue cannot
+        grow between the check and the put.
+
+        A sink that closed after the dispatch snapshot was taken (e.g. a
+        graceful ``close(immediate=False)`` whose consumer is still
+        draining) is skipped: treating its full queue as an abandoned
+        consumer would upgrade the close to immediate and discard the
+        events the consumer is draining. The check is best-effort — a
+        close landing after it is harmless, because the put below
+        tolerates a shut-down queue.
+        """
+        if sink.is_closed():
+            return
+        if sink._evict_on_full and sink.queue.full():  # noqa: SLF001
+            logger.warning(
+                'Evicting event queue sink %r: its queue is full and the '
+                'consumer is not draining it. Closing the sink so dispatch '
+                'to the remaining sinks continues.',
+                sink,
+            )
+            await sink.close(immediate=True)
+            return
+        await sink._put_internal(event)  # noqa: SLF001
+
     async def _dispatch_loop(self) -> None:
         try:
             while True:
@@ -78,7 +119,7 @@ class EventQueueSource(EventQueue):
                 if active_sinks:
                     results = await asyncio.gather(
                         *(
-                            sink._put_internal(event)  # noqa: SLF001
+                            self._deliver_to_sink(sink, event)
                             for sink in active_sinks
                         ),
                         return_exceptions=True,
@@ -164,17 +205,33 @@ class EventQueueSource(EventQueue):
             )
 
     async def tap(
-        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
+        self,
+        max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+        evict_on_full: bool = False,
     ) -> 'EventQueueSink':
         """Taps the event queue to create a new child queue that receives future events.
 
         Note: The tapped queue may receive some old events if the incoming event
         queue is lagging behind and hasn't dispatched them yet.
+
+        Args:
+            max_queue_size: Bound for the new sink's queue.
+            evict_on_full: When True, the dispatcher treats this sink as a
+                broadcast observer: if its queue is full at delivery time, the
+                sink is force-closed and detached instead of blocking dispatch
+                (and, transitively, every producer) behind it. When False (the
+                default), a full sink back-pressures dispatch, preserving the
+                documented flow-control behavior. Use True for sinks whose
+                consumer may be abandoned, such as remote subscribers.
         """
         async with self._lock:
             if self._is_closed:
                 raise QueueShutDown('Cannot tap a closed EventQueueSource.')
-            sink = EventQueueSink(parent=self, max_queue_size=max_queue_size)
+            sink = EventQueueSink(
+                parent=self,
+                max_queue_size=max_queue_size,
+                evict_on_full=evict_on_full,
+            )
             self._sinks.add(sink)
             return sink
 
@@ -302,12 +359,21 @@ class EventQueueSink(EventQueue):
         self,
         parent: EventQueueSource,
         max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+        evict_on_full: bool = False,
     ) -> None:
-        """Initializes the EventQueueSink."""
+        """Initializes the EventQueueSink.
+
+        Args:
+            parent: The EventQueueSource this sink belongs to.
+            max_queue_size: Bound for this sink's queue.
+            evict_on_full: Dispatch policy for this sink; see
+                ``EventQueueSource.tap``.
+        """
         if max_queue_size <= 0:
             raise ValueError('max_queue_size must be greater than 0')
 
         self._parent = parent
+        self._evict_on_full = evict_on_full
         self._queue: AsyncQueue[Event] = create_async_queue(
             maxsize=max_queue_size
         )
@@ -342,7 +408,9 @@ class EventQueueSink(EventQueue):
         self._queue.task_done()
 
     async def tap(
-        self, max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE
+        self,
+        max_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+        evict_on_full: bool = False,
     ) -> 'EventQueueSink':
         """Creates a child queue that receives future events.
 
@@ -350,7 +418,9 @@ class EventQueueSink(EventQueue):
         queue is lagging behind and hasn't dispatched them yet.
         """
         # Delegate tap to the parent source so all sinks are flat under the source
-        return await self._parent.tap(max_queue_size=max_queue_size)
+        return await self._parent.tap(
+            max_queue_size=max_queue_size, evict_on_full=evict_on_full
+        )
 
     async def close(self, immediate: bool = False) -> None:
         """Closes the child sink queue.

@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.1.3](https://github.com/a2aproject/a2a-python/compare/v1.1.2...v1.1.3) (2026-08-18)
+
+
+### Bug Fixes
+
+* use threading.RLock for in-memory server singletons ([#1162](https://github.com/a2aproject/a2a-python/issues/1162)) ([5bae35b](https://github.com/a2aproject/a2a-python/commit/5bae35b79d672aac4160dbf25dd05ed108e12419))
+
 ## [1.1.2](https://github.com/a2aproject/a2a-python/compare/v1.1.1...v1.1.2) (2026-07-20)
 
 
