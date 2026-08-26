@@ -236,9 +236,9 @@ class EventQueueSource(EventQueue):
             return sink
 
     async def remove_sink(self, sink: 'EventQueueSink') -> None:
-        """Removes a sink from the source's internal list."""
+        """Removes a sink from the source's internal list if present."""
         async with self._lock:
-            self._sinks.remove(sink)
+            self._sinks.discard(sink)
 
     async def enqueue_event(self, event: Event) -> None:
         """Enqueues an event to this queue and all its children."""
@@ -434,9 +434,7 @@ class EventQueueSink(EventQueue):
             self._is_closed = True
             self._queue.shutdown(immediate=immediate)
 
-        # Ignore KeyError (close have to be idempotent).
-        with contextlib.suppress(KeyError):
-            await self._parent.remove_sink(self)
+        await self._parent.remove_sink(self)
 
         if not immediate:
             await self._queue.join()
