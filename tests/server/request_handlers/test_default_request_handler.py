@@ -3178,3 +3178,60 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(
         await request_handler.on_create_task_push_notification_config(
             set_config_params, context
         )
+
+
+@pytest.mark.asyncio
+async def test_on_create_task_push_notification_config_skips_when_validator_none(
+    agent_card,
+):
+    """Passing push_url_validator=None skips library screening."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
+    push_store = InMemoryPushNotificationConfigStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+        push_url_validator=None,
+    )
+    context = create_server_call_context()
+    set_config_params = TaskPushNotificationConfig(
+        task_id='task_1', id='config_id', url='http://127.0.0.1/hook'
+    )
+    result = await request_handler.on_create_task_push_notification_config(
+        set_config_params, context
+    )
+    assert result.url == 'http://127.0.0.1/hook'
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_invalid_push_url(agent_card):
+    """Inline push config on message send is screened before set_info."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = None
+    push_store = InMemoryPushNotificationConfigStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+    )
+    context = create_server_call_context()
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_push',
+            parts=[Part(text='Test')],
+        ),
+        configuration=SendMessageConfiguration(
+            task_push_notification_config=TaskPushNotificationConfig(
+                url='http://127.0.0.1/hook'
+            ),
+            accepted_output_modes=['text/plain'],
+        ),
+    )
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
+        await request_handler.on_message_send(params, context)

@@ -39,7 +39,7 @@ def _ip_is_blocked(ip_str: str) -> bool:
     )
 
 
-def push_url_validation_error(url: str) -> str | None:
+async def push_url_validation_error(url: str) -> str | None:
     """Return an error string if a push-notification URL is not safe.
 
     Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
@@ -47,6 +47,10 @@ def push_url_validation_error(url: str) -> str | None:
     (e.g. 169.254.169.254 cloud metadata, internal services). A host
     that cannot be resolved is rejected: the POST would fail anyway,
     and failing closed avoids treating resolution errors as a bypass.
+
+    Uses the running event-loop resolver so the default request
+    handlers stay non-blocking. Deployments can replace this with
+    their own policy via ``push_url_validator``.
     """
     try:
         parsed = urllib.parse.urlparse(url)
@@ -59,7 +63,8 @@ def push_url_validation_error(url: str) -> str | None:
         return 'no hostname'
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
+        loop = asyncio.get_running_loop()
+        infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError:
         return f"host '{host}' could not be resolved"
     for info in infos:

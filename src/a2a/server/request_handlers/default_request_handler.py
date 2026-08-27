@@ -105,7 +105,8 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
-        allow_private_push_urls: bool = False,
+        push_url_validator: Callable[[str], Awaitable[str | None]]
+        | None = push_url_validation_error,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -120,7 +121,11 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
-            allow_private_push_urls: Skip SSRF screening of push-notification URLs at config creation. For local development and tests only. Defaults to False.
+            push_url_validator: Async callable that returns an error string
+              for a rejected push URL, or None to accept it. Defaults to
+              ``push_url_validation_error``. Pass None to skip library
+              screening (the spec lists these checks as SHOULD, so the
+              policy is deployment-specific).
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -128,9 +133,7 @@ class LegacyRequestHandler(RequestHandler):
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
-        # Opt-in for local development/tests only: skips SSRF screening of
-        # push-notification URLs at config creation.
-        self._allow_private_push_urls = allow_private_push_urls
+        self._push_url_validator = push_url_validator
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -145,6 +148,16 @@ class LegacyRequestHandler(RequestHandler):
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        url_error = await self._push_url_validator(url)
+        if url_error:
+            raise InvalidParamsError(
+                message=f'Invalid push notification URL: {url_error}'
+            )
 
     @validate_request_params
     async def on_get_task(
@@ -312,6 +325,9 @@ class LegacyRequestHandler(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -535,12 +551,7 @@ class LegacyRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
-        if not self._allow_private_push_urls and (
-            url_error := push_url_validation_error(params.url)
-        ):
-            raise InvalidParamsError(
-                message=f'Invalid push notification URL: {url_error}'
-            )
+        await self._reject_unsafe_push_url(params.url)
 
         await self._push_config_store.set_info(
             task_id,
