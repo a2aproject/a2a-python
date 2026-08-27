@@ -48,16 +48,16 @@ def push_url_validation_error(url: str) -> str | None:
     that cannot be resolved is rejected: the POST would fail anyway,
     and failing closed avoids treating resolution errors as a bypass.
 
-    IPv4-mapped IPv6 forms (e.g. ``::ffff:127.0.0.1``) are covered:
-    ``ipaddress`` maps them to the underlying IPv4 address, so the
-    ``is_private``/``is_loopback`` checks apply to the mapped value.
+    IPv4-mapped IPv6 forms are covered: ``ipaddress`` maps them to the
+    underlying IPv4 address, so the ``is_private``/``is_loopback``
+    checks apply to the mapped value.
 
     Known limitations:
       * Validation covers the initial URL only. Redirect responses are
         not re-validated, so this check is only sound with
         ``follow_redirects=False`` (the httpx default, and the value
         ``BasePushNotificationSender`` now asserts on its client).
-      * DNS rebinding (TOCTOU): validation and the actual connection
+      * Resolve-then-connect race: validation and the actual connection
         resolve the hostname separately, so a hostile DNS server can
         answer the validation query with a public address and the
         connection query with a private one. Fully closing this would
@@ -77,10 +77,10 @@ def push_url_validation_error(url: str) -> str | None:
     port = parsed.port or (443 if parsed.scheme == 'https' else 80)
     try:
         infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except socket.gaierror:
+    except OSError:
         return f"host '{host}' could not be resolved"
     for info in infos:
-        if _ip_is_blocked(info[4][0]):
+        if _ip_is_blocked(str(info[4][0])):
             return f"host '{host}' resolves to a non-public address"
     return None
 
