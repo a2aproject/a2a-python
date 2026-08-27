@@ -104,6 +104,43 @@ async def test_consume_all_multiple_events(
 
 
 @pytest.mark.asyncio
+async def test_consume_all_does_not_stop_on_unspecified_state(
+    event_consumer: MagicMock,
+    mock_event_queue: MagicMock,
+):
+    events: list[Any] = [
+        Task(id='task_123', context_id='session-xyz'),
+        TaskStatusUpdateEvent(
+            task_id='task_123',
+            context_id='session-xyz',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+        TaskStatusUpdateEvent(
+            task_id='task_123',
+            context_id='session-xyz',
+            status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+        ),
+    ]
+    cursor = 0
+
+    async def mock_dequeue() -> Any:
+        nonlocal cursor
+        if cursor < len(events):
+            event = events[cursor]
+            cursor += 1
+            return event
+        mock_event_queue.is_closed.return_value = True
+        raise asyncio.QueueEmpty()
+
+    mock_event_queue.dequeue_event = mock_dequeue
+    consumed_events: list[Any] = []
+    async for event in event_consumer.consume_all():
+        consumed_events.append(event)
+    assert consumed_events == events
+    assert mock_event_queue.task_done.call_count == 3
+
+
+@pytest.mark.asyncio
 async def test_consume_until_message(
     event_consumer: MagicMock,
     mock_event_queue: MagicMock,

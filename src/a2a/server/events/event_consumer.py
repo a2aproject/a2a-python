@@ -75,7 +75,6 @@ class EventConsumer:
                         TaskState.TASK_STATE_CANCELED,
                         TaskState.TASK_STATE_FAILED,
                         TaskState.TASK_STATE_REJECTED,
-                        TaskState.TASK_STATE_UNSPECIFIED,
                         TaskState.TASK_STATE_INPUT_REQUIRED,
                     )
                 )
