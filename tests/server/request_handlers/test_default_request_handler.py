@@ -44,6 +44,9 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.base_push_notification_sender import (
+    push_url_validation_error,
+)
 from a2a.types import (
     InternalError,
     InvalidParamsError,
@@ -3156,6 +3159,7 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
+        push_url_validator=push_url_validation_error,
     )
     context = create_server_call_context()
 
@@ -3184,7 +3188,7 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(
 async def test_on_create_task_push_notification_config_skips_when_validator_none(
     agent_card,
 ):
-    """Passing push_url_validator=None skips library screening."""
+    """Default push_url_validator is None, so library screening is off."""
     mock_task_store = AsyncMock(spec=TaskStore)
     mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
     push_store = InMemoryPushNotificationConfigStore()
@@ -3193,7 +3197,6 @@ async def test_on_create_task_push_notification_config_skips_when_validator_none
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
-        push_url_validator=None,
     )
     context = create_server_call_context()
     set_config_params = TaskPushNotificationConfig(
@@ -3216,6 +3219,7 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
+        push_url_validator=push_url_validation_error,
     )
     context = create_server_call_context()
     params = SendMessageRequest(

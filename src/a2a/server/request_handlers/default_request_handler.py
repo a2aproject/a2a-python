@@ -31,9 +31,6 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
-from a2a.server.tasks.base_push_notification_sender import (
-    push_url_validation_error,
-)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -106,7 +103,7 @@ class LegacyRequestHandler(RequestHandler):
         ]
         | None = None,
         push_url_validator: Callable[[str], Awaitable[str | None]]
-        | None = push_url_validation_error,
+        | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -123,9 +120,9 @@ class LegacyRequestHandler(RequestHandler):
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
             push_url_validator: Async callable that returns an error string
               for a rejected push URL, or None to accept it. Defaults to
-              ``push_url_validation_error``. Pass None to skip library
-              screening (the spec lists these checks as SHOULD, so the
-              policy is deployment-specific).
+              None (no library screening). The spec lists these checks as
+              SHOULD, so deployments that want the built-in policy should
+              pass ``push_url_validation_error``.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store

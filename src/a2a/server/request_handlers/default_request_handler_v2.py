@@ -21,9 +21,6 @@ from a2a.server.request_handlers.request_handler import (
     validate,
     validate_request_params,
 )
-from a2a.server.tasks.base_push_notification_sender import (
-    push_url_validation_error,
-)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -95,7 +92,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         ]
         | None = None,
         push_url_validator: Callable[[str], Awaitable[str | None]]
-        | None = push_url_validation_error,
+        | None = None,
     ) -> None:
         self.agent_executor = agent_executor
         self.task_store = task_store
