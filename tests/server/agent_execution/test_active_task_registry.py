@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from a2a.auth.user import User
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
@@ -507,6 +508,12 @@ async def test_reused_task_does_not_cancel_unavailable_snapshot(
         )
         if stored_state is None:
             await task_store.delete(task_id, call_context)
+            with pytest.raises(TaskNotFoundError):
+                await registry.get_or_create(
+                    task_id,
+                    call_context=call_context,
+                    create_task_if_missing=False,
+                )
         else:
             await task_store.save(
                 Task(
@@ -516,11 +523,11 @@ async def test_reused_task_does_not_cancel_unavailable_snapshot(
                 ),
                 call_context,
             )
-        await registry.get_or_create(
-            task_id,
-            call_context=call_context,
-            create_task_if_missing=False,
-        )
+            await registry.get_or_create(
+                task_id,
+                call_context=call_context,
+                create_task_if_missing=False,
+            )
 
         if stored_state is None:
             with pytest.raises(TaskNotFoundError):
@@ -566,11 +573,12 @@ async def test_reused_task_does_not_recreate_missing_snapshot():
             create_task_if_missing=False,
         )
         await task_store.delete(task_id, call_context)
-        await registry.get_or_create(
-            task_id,
-            call_context=call_context,
-            create_task_if_missing=False,
-        )
+        with pytest.raises(TaskNotFoundError):
+            await registry.get_or_create(
+                task_id,
+                call_context=call_context,
+                create_task_if_missing=False,
+            )
 
         with pytest.raises(TaskNotFoundError):
             async for _ in active.subscribe(
@@ -701,7 +709,7 @@ async def test_idle_refresh_wins_over_inflight_passive_snapshot_read():
         get_count += 1
         task = Task()
         task.CopyFrom(latest_task)
-        if get_count == 2:
+        if get_count == 3:
             passive_get_started.set()
             await release_passive_get.wait()
         return task
@@ -802,7 +810,7 @@ async def test_aclose_not_blocked_by_pending_idle_refresh():
         assert requested_task_id == task_id
         assert context is call_context
         get_count += 1
-        if get_count > 1:
+        if get_count > 2:
             passive_get_started.set()
             await release_passive_get.wait()
         result = Task()
@@ -874,7 +882,7 @@ async def test_queued_request_refreshes_snapshot_when_previous_request_finishes(
         assert requested_task_id == task_id
         assert context is call_context
         get_count += 1
-        if get_count == 3:
+        if get_count == 4:
             second_get_started.set()
             await release_second_get.wait()
         task = Task()
@@ -967,3 +975,65 @@ async def test_queued_request_refreshes_snapshot_when_previous_request_finishes(
         executor.release_first.set()
         release_second_get.set()
         await registry.aclose()
+
+
+class _NamedUser(User):
+    """Minimal authenticated test user identified by ``user_name``."""
+
+    def __init__(self, user_name: str) -> None:
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
+
+
+def _ctx(user_name: str) -> ServerCallContext:
+    return ServerCallContext(user=_NamedUser(user_name))
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_get_or_create_cache_hit_is_owner_scoped():
+    """Issue #1159: resolving a LIVE (cached) task by id is owner-scoped at the
+    registry, so a non-owner cannot retrieve another user's active task on the
+    cache-hit path. The guarantee lives at the registry, not at each call site.
+    """
+    store = InMemoryTaskStore()
+    registry = ActiveTaskRegistry(
+        agent_executor=_SlowExecutor(), task_store=store
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    # Alice owns the task in the store and it is live in the registry, so the
+    # next lookups take the cache-hit early return rather than the miss path.
+    await store.save(
+        Task(
+            id='task-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+        alice,
+    )
+    active = await registry.get_or_create(
+        'task-1', call_context=alice, create_task_if_missing=True
+    )
+    assert await registry.get('task-1') is not None
+
+    # Bob (non-owner) is rejected on the cache-hit path, masked as not-found.
+    with pytest.raises(TaskNotFoundError):
+        await registry.get_or_create(
+            'task-1', call_context=bob, create_task_if_missing=False
+        )
+
+    # Alice (owner) still resolves the same live task.
+    again = await registry.get_or_create(
+        'task-1', call_context=alice, create_task_if_missing=False
+    )
+    assert again is active
+
+    await registry.aclose()
