@@ -26,6 +26,7 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    read_request_body_with_limit,
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -224,7 +225,7 @@ class JsonRpcDispatcher:
         body = None
 
         try:
-            body = await request.json()
+            body = json.loads(await read_request_body_with_limit(request))
             if isinstance(body, dict):
                 request_id = body.get('id')
                 # Ensure request_id is valid for JSON-RPC response (str/int/None only)
@@ -595,7 +596,11 @@ class JsonRpcDispatcher:
                         'data': json_utils.dumps(error_response),
                     }
 
-            return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]
+            return EventSourceResponse(
+                event_generator(handler_result),  # ty: ignore[invalid-argument-type]
+                ping=constants.SSE_PING_INTERVAL_SECONDS,
+                send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
+            )
 
         # handler_result is a dict (JSON-RPC response)
         return JSONResponse(handler_result)

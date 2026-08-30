@@ -96,6 +96,11 @@ def make_mock_request(
     mock_req.headers = Headers(default_headers)
     mock_req.body = AsyncMock(return_value=body)
 
+    async def _stream_body():
+        yield body
+
+    mock_req.stream = _stream_body
+
     # Needs to be able to build ServerCallContext, so provide .user and .auth etc. if needed
     mock_req.user = MagicMock(is_authenticated=False)
     mock_req.auth = None
@@ -323,3 +328,37 @@ class TestRestDispatcherStreaming:
                 payload = payload.decode('utf-8')
             assert non_ascii_text in payload
             assert '\\u4f60\\u597d' not in payload
+
+
+@pytest.mark.asyncio
+class TestRestDispatcherHardening:
+    async def test_oversized_request_body_rejected(
+        self, rest_dispatcher_instance, mock_handler
+    ):
+        """A body over the limit is rejected with 400 Payload too large."""
+        from a2a.utils.constants import MAX_REQUEST_BODY_SIZE
+
+        oversized = b'x' * (MAX_REQUEST_BODY_SIZE + 1)
+        req = make_mock_request(method='POST', body=oversized)
+        response = await rest_dispatcher_instance.on_message_send(req)
+
+        assert response.status_code == 400
+        import json
+
+        payload = json.loads(response.body)
+        assert 'Payload too large' in payload['error']['message']
+
+    async def test_sse_response_explicit_ping_and_send_timeout(
+        self, rest_dispatcher_instance
+    ):
+        """REST EventSourceResponse must carry explicit ping/send_timeout."""
+        from a2a.utils.constants import (
+            SSE_PING_INTERVAL_SECONDS,
+            SSE_SEND_TIMEOUT_SECONDS,
+        )
+
+        req = make_mock_request(method='POST')
+        response = await rest_dispatcher_instance.on_message_send_stream(req)
+
+        assert response.ping_interval == SSE_PING_INTERVAL_SECONDS
+        assert response.send_timeout == SSE_SEND_TIMEOUT_SECONDS

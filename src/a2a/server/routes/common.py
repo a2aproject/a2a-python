@@ -13,12 +13,61 @@ else:
         Request = Any
         BaseUser = Any
 
+    try:
+        from starlette.exceptions import HTTPException
+    except ImportError:
+        HTTPException = Any
+
 from a2a.auth.user import UnauthenticatedUser, User
 from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
+from a2a.utils.constants import MAX_REQUEST_BODY_SIZE
+
+
+try:
+    from starlette.status import HTTP_413_CONTENT_TOO_LARGE
+except ImportError:
+    HTTP_413_CONTENT_TOO_LARGE = 413
+
+
+async def read_request_body_with_limit(request: Request) -> bytes:
+    """Reads a request body, rejecting bodies over ``MAX_REQUEST_BODY_SIZE``.
+
+    The content-length header is checked first (fast reject), and the body
+    is then streamed in chunks with an incremental cap so oversized
+    chunked bodies are rejected while being read instead of buffered
+    unboundedly. The body is cached on the request (``request._body``) so
+    later ``request.body()`` calls return the same bytes.
+
+    Raises:
+        starlette.exceptions.HTTPException: With status 413 (content too
+            large) when the body exceeds the limit.
+    """
+    content_length = request.headers.get('content-length')
+    if content_length:
+        try:
+            if int(content_length) > MAX_REQUEST_BODY_SIZE:
+                raise HTTPException(status_code=HTTP_413_CONTENT_TOO_LARGE)
+        except ValueError:
+            pass
+
+    chunks: list[bytes] = []
+    size = 0
+    async for chunk in request.stream():
+        size += len(chunk)
+        if size > MAX_REQUEST_BODY_SIZE:
+            raise HTTPException(status_code=HTTP_413_CONTENT_TOO_LARGE)
+        chunks.append(chunk)
+
+    body = b''.join(chunks)
+    # Cache the body exactly like Request.body() does (Starlette stores it on
+    # `_body`), so subsequent request.body()/stream() calls return the same
+    # bytes instead of re-reading an already-consumed stream.
+    request._body = body  # noqa: SLF001
+    return body
 
 
 class StarletteUser(User):

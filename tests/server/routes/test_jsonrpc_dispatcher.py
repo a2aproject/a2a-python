@@ -653,3 +653,69 @@ class TestJsonRpcDispatcherMethodRouting:
 
 if __name__ == '__main__':
     pytest.main([__file__])
+
+
+# --- Transport hardening ---
+
+
+class TestTransportHardening:
+    def test_oversized_request_body_rejected(self, client, mock_handler):
+        """Bodies over the size limit must be rejected with 413 handling."""
+        from a2a.utils.constants import MAX_REQUEST_BODY_SIZE
+
+        oversized = 'x' * (MAX_REQUEST_BODY_SIZE + 1)
+        response = client.post(
+            '/',
+            content=oversized,
+            headers={
+                'A2A-Version': '1.0',
+                'Content-Type': 'application/json',
+            },
+        )
+        data = response.json()
+        assert data['error']['code'] == -32600  # InvalidRequestError
+        assert 'Payload too large' in data['error']['message']
+
+    def test_oversized_request_body_rejected_via_content_length(
+        self, client, mock_handler
+    ):
+        """A content-length header over the limit is rejected fast."""
+        from a2a.utils.constants import MAX_REQUEST_BODY_SIZE
+
+        response = client.post(
+            '/',
+            content=b'{}',
+            headers={
+                'A2A-Version': '1.0',
+                'Content-Type': 'application/json',
+                'Content-Length': str(MAX_REQUEST_BODY_SIZE + 1),
+            },
+        )
+        data = response.json()
+        assert data['error']['code'] == -32600
+        assert 'Payload too large' in data['error']['message']
+
+    @pytest.mark.asyncio
+    async def test_sse_response_explicit_ping_and_send_timeout(self):
+        """EventSourceResponse must carry explicit ping/send_timeout."""
+        from a2a.server.context import ServerCallContext
+        from a2a.server.request_handlers.request_handler import RequestHandler
+        from a2a.server.routes.jsonrpc_dispatcher import JsonRpcDispatcher
+        from a2a.utils.constants import (
+            SSE_PING_INTERVAL_SECONDS,
+            SSE_SEND_TIMEOUT_SECONDS,
+        )
+
+        dispatcher = JsonRpcDispatcher(
+            request_handler=AsyncMock(spec=RequestHandler)
+        )
+
+        async def stream():
+            yield {'result': 'ok'}
+
+        response = dispatcher._create_response(
+            ServerCallContext(state={'request_id': '1'}),
+            stream(),
+        )
+        assert response.ping_interval == SSE_PING_INTERVAL_SECONDS
+        assert response.send_timeout == SSE_SEND_TIMEOUT_SECONDS
