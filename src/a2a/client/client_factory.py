@@ -78,13 +78,7 @@ class ClientFactory:
         config: ClientConfig | None = None,
     ):
         config = config or ClientConfig()
-        # Follow redirects by default: a server may 307 a trailing-slash
-        # variant of the JSON-RPC/REST endpoint (Starlette's default
-        # redirect_slashes). 307 preserves method and body, so this is safe
-        # for POST payloads and keeps the client robust to either spelling.
-        httpx_client = config.httpx_client or httpx.AsyncClient(
-            follow_redirects=True
-        )
+        httpx_client = config.httpx_client or httpx.AsyncClient()
         httpx_client.headers.setdefault(
             VERSION_HEADER, PROTOCOL_VERSION_CURRENT
         )

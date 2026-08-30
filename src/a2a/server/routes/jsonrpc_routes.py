@@ -64,5 +64,5 @@ def create_jsonrpc_routes(
             path=rpc_url,
             endpoint=dispatcher.handle_requests,
             methods=['POST'],
-        ),
+        )
     ]

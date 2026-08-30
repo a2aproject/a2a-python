@@ -136,24 +136,6 @@ def test_client_factory_create_with_default_config(
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
-def test_client_factory_default_client_follows_redirects(
-    base_agent_card: AgentCard,
-):
-    """Default factory client follows redirects (307 trailing-slash handling)."""
-    factory = ClientFactory()
-    assert factory._httpx_client.follow_redirects is True
-
-
-def test_client_factory_respects_custom_client_redirect_setting(
-    base_agent_card: AgentCard,
-):
-    """A user-supplied httpx client keeps its own redirect policy."""
-    custom = httpx.AsyncClient(follow_redirects=False)
-    factory = ClientFactory(ClientConfig(httpx_client=custom))
-    assert factory._httpx_client is custom
-    assert factory._httpx_client.follow_redirects is False
-
-
 @pytest.mark.asyncio
 async def test_client_factory_create_from_url(base_agent_card: AgentCard):
     """Verify that create_from_url resolves the card and creates a client."""
