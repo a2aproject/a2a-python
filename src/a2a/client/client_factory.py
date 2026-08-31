@@ -157,12 +157,14 @@ class ClientFactory:
                         self._httpx_client,
                         card,
                         url,
+                        extra_params=config.extra_params,
                     )
 
                 return RestTransport(
                     self._httpx_client,
                     card,
                     url,
+                    extra_params=config.extra_params,
                 )
 
             self.register(
