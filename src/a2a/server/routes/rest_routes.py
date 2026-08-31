@@ -32,6 +32,7 @@ def create_rest_routes(
     context_builder: ServerCallContextBuilder | None = None,
     enable_v0_3_compat: bool = False,
     path_prefix: str = '',
+    shutdown_grace_period: float = 0,
 ) -> list['BaseRoute']:
     """Creates the Starlette Routes for the A2A protocol REST endpoint.
 
@@ -44,6 +45,10 @@ def create_rest_routes(
         enable_v0_3_compat: If True, mounts backward-compatible v0.3 protocol
           endpoints using REST03Adapter.
         path_prefix: The URL prefix for the REST endpoints.
+        shutdown_grace_period: Seconds to allow active SSE streams to finish
+          before force-cancellation during shutdown. This value should be less
+          than the ASGI server's graceful shutdown timeout. Defaults to 0,
+          matching the ``sse-starlette`` default behavior.
     """
     if not _package_starlette_installed:
         raise ImportError(
@@ -55,6 +60,7 @@ def create_rest_routes(
     dispatcher = RestDispatcher(
         request_handler=request_handler,
         context_builder=context_builder,
+        shutdown_grace_period=shutdown_grace_period,
     )
 
     routes: list[BaseRoute] = []

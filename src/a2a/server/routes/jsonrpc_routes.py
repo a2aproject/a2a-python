@@ -30,6 +30,7 @@ def create_jsonrpc_routes(
     rpc_url: str,
     context_builder: ServerCallContextBuilder | None = None,
     enable_v0_3_compat: bool = False,
+    shutdown_grace_period: float = 0,
 ) -> list['Route']:
     """Creates the Starlette Route for the A2A protocol JSON-RPC endpoint.
 
@@ -45,6 +46,10 @@ def create_jsonrpc_routes(
           ServerCallContext passed to the request_handler. If None the
           DefaultServerCallContextBuilder is used.
         enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
+        shutdown_grace_period: Seconds to allow active SSE streams to finish
+          before force-cancellation during shutdown. This value should be less
+          than the ASGI server's graceful shutdown timeout. Defaults to 0,
+          matching the ``sse-starlette`` default behavior.
     """
     if not _package_starlette_installed:
         raise ImportError(
@@ -57,6 +62,7 @@ def create_jsonrpc_routes(
         request_handler=request_handler,
         context_builder=context_builder,
         enable_v0_3_compat=enable_v0_3_compat,
+        shutdown_grace_period=shutdown_grace_period,
     )
 
     return [

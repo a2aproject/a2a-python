@@ -1,5 +1,6 @@
 import asyncio
 
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -124,6 +125,25 @@ class TestJsonRpcDispatcherOptionalDependencies:
             ),
         ):
             JsonRpcDispatcher(**mock_app_params)
+
+
+class TestJsonRpcDispatcherStreamingResponse:
+    def test_shutdown_grace_period_is_passed_to_event_source_response(
+        self, mock_handler
+    ) -> None:
+        async def stream_generator() -> AsyncGenerator[dict[str, Any]]:
+            yield {'result': {}}
+
+        dispatcher = JsonRpcDispatcher(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+
+        response = dispatcher._create_response(
+            ServerCallContext(), stream_generator()
+        )
+
+        assert getattr(response, '_shutdown_grace_period') == 30.0
 
 
 class TestJsonRpcDispatcherExtensions:

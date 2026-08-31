@@ -248,6 +248,32 @@ class TestRestDispatcherEndpoints:
 
 @pytest.mark.asyncio
 class TestRestDispatcherStreaming:
+    async def test_shutdown_grace_period_is_passed_to_streaming_responses(
+        self, mock_handler
+    ) -> None:
+        async def stream(
+            context: ServerCallContext,
+        ) -> AsyncIterator[dict[str, str]]:
+            yield {'result': 'value'}
+
+        async def empty_stream(
+            context: ServerCallContext,
+        ) -> AsyncIterator[dict[str, str]]:
+            for item in []:
+                yield item
+
+        dispatcher = RestDispatcher(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+        req = make_mock_request(method='POST')
+
+        response = await dispatcher._handle_streaming(req, stream)
+        empty_response = await dispatcher._handle_streaming(req, empty_stream)
+
+        assert getattr(response, '_shutdown_grace_period') == 30.0
+        assert getattr(empty_response, '_shutdown_grace_period') == 30.0
+
     async def test_on_message_send_stream_success(
         self, rest_dispatcher_instance
     ):
