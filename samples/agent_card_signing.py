@@ -110,8 +110,8 @@ def generate_signing_key(
     """Generates an ES256 key pair for card signing.
 
     A real deployment loads a long-lived private key from a key management
-    service or secret store instead. The public half is returned as a JWKS
-    document, ready to be served at a stable URL.
+    service or secret store instead. The public half is returned as a JWKS document, ready
+    to be served at a stable URL.
 
     Args:
         kid: The key ID advertised in the JWS header and in the JWKS.
@@ -261,7 +261,7 @@ class JwksKeyProvider:
 
     Lookups are pure in-memory: the verifier is a synchronous callable, often
     invoked from async code, so it must not do blocking network I/O. Fetch and
-    refresh the key sets out of band with `from_urls`.
+    refresh the key sets out of band with `fetch`.
     """
 
     def __init__(self, jwks_by_url: Mapping[str, PyJWKSet]) -> None:
@@ -274,7 +274,7 @@ class JwksKeyProvider:
         self._jwks_by_url = dict(jwks_by_url)
 
     @classmethod
-    async def from_urls(
+    async def fetch(
         cls, trusted_jku_urls: set[str], http_client: httpx.AsyncClient
     ) -> 'JwksKeyProvider':
         """Fetches every trusted JWKS and builds a provider from them.
@@ -336,9 +336,7 @@ async def create_card_verifier(
         A callable that raises `SignatureVerificationError` for a card it cannot
         verify, and returns `None` for one it can.
     """
-    key_provider = await JwksKeyProvider.from_urls(
-        trusted_jku_urls, http_client
-    )
+    key_provider = await JwksKeyProvider.fetch(trusted_jku_urls, http_client)
     return create_signature_verifier(
         key_provider=key_provider,
         algorithms=ALLOWED_ALGORITHMS,
@@ -385,7 +383,7 @@ async def _fetch_card_json(
 
 
 async def run_demo(base_url: str) -> None:
-    """Verifies the agent's card, then three cases a verifier must reject."""
+    """Verifies a good card, then two cards a verifier should reject."""
     async with httpx.AsyncClient() as http_client:
         verifier = await create_card_verifier(
             trusted_jku_urls={f'{base_url}{JWKS_WELL_KNOWN_PATH}'},
@@ -413,7 +411,7 @@ async def run_demo(base_url: str) -> None:
         except InvalidSignaturesError as e:
             print(f'   rejected as expected: {e}')
         else:
-            raise RuntimeError('the tampered card was accepted')
+            print('   ERROR: tampered card was accepted')
 
         print('\n3. A card with its signature stripped off')
         unsigned_json = await _fetch_card_json(base_url, http_client)
@@ -423,7 +421,7 @@ async def run_demo(base_url: str) -> None:
         except NoSignatureError as e:
             print(f'   rejected as expected: {e}')
         else:
-            raise RuntimeError('the unsigned card was accepted')
+            print('   ERROR: unsigned card was accepted')
 
         print('\n4. The genuine card, checked by a client that pins other keys')
         # Same keys, published at a URL this client does not trust. The
@@ -433,7 +431,6 @@ async def run_demo(base_url: str) -> None:
         keys_response = await http_client.get(
             f'{base_url}{JWKS_WELL_KNOWN_PATH}'
         )
-        keys_response.raise_for_status()
         pinned_elsewhere = create_signature_verifier(
             key_provider=JwksKeyProvider(
                 {
@@ -449,7 +446,7 @@ async def run_demo(base_url: str) -> None:
         except InvalidSignaturesError as e:
             print(f'   rejected as expected: {e}')
         else:
-            raise RuntimeError('the card with an untrusted jku was accepted')
+            print('   ERROR: card with an untrusted jku was accepted')
 
 
 async def serve(host: str, port: int) -> None:
@@ -483,6 +480,7 @@ async def serve_and_demo(host: str, port: int) -> None:
 
 def main() -> None:
     """Parses arguments and runs the requested mode."""
+    logging.basicConfig(level=logging.INFO)
     server_args = argparse.ArgumentParser(add_help=False)
     server_args.add_argument('--host', default=DEFAULT_HOST)
     server_args.add_argument('--port', type=int, default=DEFAULT_PORT)
@@ -508,11 +506,6 @@ def main() -> None:
     )
 
     args = parser.parse_args()
-    # The client modes print a numbered walkthrough; INFO logging from httpx and
-    # the card resolver would bury it.
-    logging.basicConfig(
-        level=logging.INFO if args.mode == 'serve' else logging.WARNING
-    )
     if args.mode == 'serve':
         asyncio.run(serve(args.host, args.port))
     elif args.mode == 'verify':

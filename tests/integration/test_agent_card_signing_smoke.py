@@ -63,6 +63,5 @@ async def test_agent_card_signing_demo() -> None:
 
     assert 'verified card for agent: Signed Card Agent' in output, output
     # One rejection each for the tampered, unsigned and untrusted-key cards.
-    # The sample raises if any of them is accepted, so a zero exit status
-    # already means no forgery slipped through.
     assert output.count('rejected as expected') == 3, output
+    assert 'ERROR:' not in output, output
