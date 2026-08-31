@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -16,6 +17,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.push_url_validator import push_url_validation_error
 from google.protobuf.json_format import MessageToDict
 
 
@@ -41,16 +43,7 @@ def _create_sample_push_config(
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
-        # The sender rejects clients with follow_redirects enabled.
-        self.mock_httpx_client.follow_redirects = False
         self.mock_config_store = AsyncMock()
-        # Keep DNS hermetic: pretend every test URL resolves to a public IP.
-        getaddrinfo_patch = patch(
-            'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo',
-            return_value=[(2, 1, 6, '', ('93.184.216.34', 80))],
-        )
-        self.addCleanup(getaddrinfo_patch.stop)
-        getaddrinfo_patch.start()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
@@ -59,18 +52,6 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def test_constructor_stores_client_and_config_store(self) -> None:
         self.assertEqual(self.sender._client, self.mock_httpx_client)
         self.assertEqual(self.sender._config_store, self.mock_config_store)
-
-    def test_constructor_rejects_redirect_following_client(self) -> None:
-        # Redirect targets are dispatched without re-validation, so a
-        # redirect-following client reopens the SSRF hole the URL
-        # validation closes.
-        redirecting_client = AsyncMock(spec=httpx.AsyncClient)
-        redirecting_client.follow_redirects = True
-        with self.assertRaises(ValueError):
-            BasePushNotificationSender(
-                httpx_client=redirecting_client,
-                config_store=self.mock_config_store,
-            )
 
     async def test_send_notification_success(self) -> None:
         task_id = 'task_send_success'
@@ -251,25 +232,21 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
 
 
-_GAI = 'a2a.server.tasks.base_push_notification_sender.socket.getaddrinfo'
-
-
 def _gai_result(ip: str, port: int = 80):
     return [(2, 1, 6, '', (ip, port))]
 
 
 class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
-    """SSRF hardening: client-supplied push URLs must not reach non-public
-    destinations unless the operator explicitly opts out."""
+    """SSRF hardening: when push_url_validation_error is installed, client
+    push URLs must not reach non-public destinations."""
 
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
-        # The sender rejects clients with follow_redirects enabled.
-        self.mock_httpx_client.follow_redirects = False
         self.mock_config_store = AsyncMock()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
+            push_url_validator=push_url_validation_error,
         )
 
     async def _dispatch(self, url: str) -> None:
@@ -281,18 +258,23 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.return_value = mock_response
         await self.sender.send_notification(task.id, task)
 
+    def _patch_gai(self, *, return_value=None, side_effect=None):
+        loop = asyncio.get_running_loop()
+        mock_gai = AsyncMock(return_value=return_value, side_effect=side_effect)
+        return patch.object(loop, 'getaddrinfo', mock_gai)
+
     async def test_metadata_endpoint_blocked(self) -> None:
-        with patch(_GAI, return_value=_gai_result('169.254.169.254')):
+        with self._patch_gai(return_value=_gai_result('169.254.169.254')):
             await self._dispatch('http://metadata.google.internal/latest')
         self.mock_httpx_client.post.assert_not_called()
 
     async def test_loopback_blocked(self) -> None:
-        with patch(_GAI, return_value=_gai_result('127.0.0.1')):
+        with self._patch_gai(return_value=_gai_result('127.0.0.1')):
             await self._dispatch('http://localhost:8080/admin')
         self.mock_httpx_client.post.assert_not_called()
 
     async def test_private_range_blocked(self) -> None:
-        with patch(_GAI, return_value=_gai_result('10.0.0.5')):
+        with self._patch_gai(return_value=_gai_result('10.0.0.5')):
             await self._dispatch('http://internal-service/endpoint')
         self.mock_httpx_client.post.assert_not_called()
 
@@ -301,22 +283,19 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_not_called()
 
     async def test_unresolvable_host_blocked_fail_closed(self) -> None:
-        import socket as _socket
-
-        with patch(_GAI, side_effect=_socket.gaierror('no DNS')):
+        with self._patch_gai(side_effect=OSError('no DNS')):
             await self._dispatch('http://does-not-resolve.invalid/')
         self.mock_httpx_client.post.assert_not_called()
 
     async def test_public_host_allowed(self) -> None:
-        with patch(_GAI, return_value=_gai_result('93.184.216.34')):
+        with self._patch_gai(return_value=_gai_result('93.184.216.34')):
             await self._dispatch('http://notify.me/here')
         self.mock_httpx_client.post.assert_awaited_once()
 
-    async def test_allow_private_opt_out(self) -> None:
+    async def test_default_hook_none_skips_validation(self) -> None:
         sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
-            allow_private_push_urls=True,
         )
         task = _create_sample_task()
         config = _create_sample_push_config(url='http://localhost:9000/hook')

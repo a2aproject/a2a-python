@@ -364,6 +364,32 @@ class TestJsonRpcDispatcherMethodRouting:
         call_context = handler.on_list_tasks.call_args[0][1]
         assert call_context.state['method'] == 'ListTasks'
 
+    @pytest.mark.parametrize(
+        ('params', 'artifacts_expected'),
+        [
+            pytest.param({}, False, id='default'),
+            pytest.param({'includeArtifacts': True}, True, id='included'),
+        ],
+    )
+    def test_list_tasks_artifact_presence(
+        self,
+        client: TestClient,
+        handler: AsyncMock,
+        params: dict[str, Any],
+        artifacts_expected: bool,
+    ) -> None:
+        handler.on_list_tasks.return_value = ListTasksResponse(
+            tasks=[Task(id='task1')]
+        )
+
+        response = client.post(
+            '/', json=_make_jsonrpc_request('ListTasks', params)
+        )
+        response.raise_for_status()
+
+        task = response.json()['result']['tasks'][0]
+        assert ('artifacts' in task) is artifacts_expected
+
     def test_create_push_notification_config_routes_correctly(
         self, client, handler
     ):

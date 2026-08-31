@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio  # noqa: TC003
 import logging
+import warnings
 
 from typing import TYPE_CHECKING, Any, cast
 
@@ -72,7 +73,13 @@ logger = logging.getLogger(__name__)
 
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandlerV2(RequestHandler):
-    """Default request handler for all incoming requests."""
+    """Default request handler for all incoming requests.
+
+    The ``queue_manager`` parameter is accepted for signature compatibility
+    with `DefaultRequestHandler` but is not used: v2 delegates event streaming
+    to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
+    `DeprecationWarning` and logs a warning.
+    """
 
     _background_tasks: set[asyncio.Task]
 
@@ -82,7 +89,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         task_store: TaskStore,
         agent_card: AgentCard,
         queue_manager: Any
-        | None = None,  # Kept for backward compat in signature
+        | None = None,  # Accepted for signature compat; ignored in v2 (warns)
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
@@ -91,12 +98,26 @@ class DefaultRequestHandlerV2(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[str | None]]
+        | None = None,
     ) -> None:
+        if queue_manager is not None:
+            message = (
+                'A queue_manager was passed to DefaultRequestHandlerV2, but it '
+                'is not used: v2 delegates event streaming to an in-memory '
+                'ActiveTaskRegistry, so custom or distributed QueueManager '
+                'implementations are ignored. For multi-replica event '
+                'streaming, either use LegacyRequestHandler or route '
+                'subscription requests to the replica holding the task.'
+            )
+            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            logger.warning(message)
         self.agent_executor = agent_executor
         self.task_store = task_store
         self._agent_card = agent_card
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -111,6 +132,16 @@ class DefaultRequestHandlerV2(RequestHandler):
             push_sender=self._push_sender,
         )
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        url_error = await self._push_url_validator(url)
+        if url_error:
+            raise InvalidParamsError(
+                message=f'Invalid push notification URL: {url_error}'
+            )
 
     async def aclose(self) -> None:
         """Shuts down the handler, draining all active tasks.
@@ -220,6 +251,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -344,6 +378,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        await self._reject_unsafe_push_url(params.url)
 
         await self._push_config_store.set_info(
             task_id,

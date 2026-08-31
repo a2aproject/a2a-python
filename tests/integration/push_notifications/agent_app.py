@@ -154,9 +154,9 @@ def create_agent_app(
         push_sender=BasePushNotificationSender(
             httpx_client=notification_client,
             config_store=push_config_store,
-            # e2e webhooks are real local test servers (loopback).
-            allow_private_push_urls=True,
         ),
+        # e2e webhooks are real local test servers (loopback).
+        push_url_validator=None,
     )
     rest_routes = create_rest_routes(request_handler=handler)
     agent_card_routes = create_agent_card_routes(
@@ -227,9 +227,9 @@ def create_multi_user_agent_app(
         push_sender=BasePushNotificationSender(
             httpx_client=notification_client,
             config_store=push_config_store,
-            # e2e webhooks are real local test servers (loopback).
-            allow_private_push_urls=True,
         ),
+        # e2e webhooks are real local test servers (loopback).
+        push_url_validator=None,
     )
 
     rest_routes = create_rest_routes(

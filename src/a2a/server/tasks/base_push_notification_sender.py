@@ -1,8 +1,7 @@
 import asyncio
-import ipaddress
 import logging
-import socket
-import urllib.parse
+
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -18,71 +17,15 @@ from a2a.server.tasks.push_notification_sender import (
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
+from a2a.utils.push_url_validator import push_url_validation_error
 
 
 logger = logging.getLogger(__name__)
 
-
-def _ip_is_blocked(ip_str: str) -> bool:
-    """Whether an address is not a public unicast destination."""
-    try:
-        addr = ipaddress.ip_address(ip_str.split('%', maxsplit=1)[0])
-    except ValueError:
-        return True
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_multicast
-        or addr.is_reserved
-        or addr.is_unspecified
-    )
-
-
-def push_url_validation_error(url: str) -> str | None:
-    """Return an error string if a push-notification URL is not safe.
-
-    Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
-    link-local, private, reserved, multicast, or unspecified addresses
-    (e.g. 169.254.169.254 cloud metadata, internal services). A host
-    that cannot be resolved is rejected: the POST would fail anyway,
-    and failing closed avoids treating resolution errors as a bypass.
-
-    IPv4-mapped IPv6 forms are covered: ``ipaddress`` maps them to the
-    underlying IPv4 address, so the ``is_private``/``is_loopback``
-    checks apply to the mapped value.
-
-    Known limitations:
-      * Validation covers the initial URL only. Redirect responses are
-        not re-validated, so this check is only sound with
-        ``follow_redirects=False`` (the httpx default, and the value
-        ``BasePushNotificationSender`` now asserts on its client).
-      * Resolve-then-connect race: validation and the actual connection
-        resolve the hostname separately, so a hostile DNS server can
-        answer the validation query with a public address and the
-        connection query with a private one. Fully closing this would
-        require pinning the validated address in the HTTP transport;
-        until then, operators should treat this as defense-in-depth
-        and keep network-level egress controls in place.
-    """
-    try:
-        parsed = urllib.parse.urlparse(url)
-    except ValueError:
-        return 'unparseable URL'
-    if parsed.scheme not in ('http', 'https'):
-        return f"scheme '{parsed.scheme}' is not http/https"
-    host = parsed.hostname
-    if not host:
-        return 'no hostname'
-    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
-    try:
-        infos = socket.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except OSError:
-        return f"host '{host}' could not be resolved"
-    for info in infos:
-        if _ip_is_blocked(str(info[4][0])):
-            return f"host '{host}' resolves to a non-public address"
-    return None
+__all__ = [
+    'BasePushNotificationSender',
+    'push_url_validation_error',
+]
 
 
 class BasePushNotificationSender(PushNotificationSender):
@@ -94,7 +37,8 @@ class BasePushNotificationSender(PushNotificationSender):
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
         *,
-        allow_private_push_urls: bool = False,
+        push_url_validator: Callable[[str], Awaitable[str | None]]
+        | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -108,21 +52,11 @@ class BasePushNotificationSender(PushNotificationSender):
               Pass None (the default) in new code. A non-None
               value logs a deprecation warning and is otherwise
               ignored.
-            allow_private_push_urls: Push-notification URLs are
-              client-supplied and the server POSTs to them, which makes
-              them an SSRF vector (cloud metadata endpoints, internal
-              services). By default each URL is validated at dispatch
-              time and non-public targets are dropped. Set this to True
-              only in deployments whose legitimate webhooks live on
-              private networks (validation is then skipped entirely).
-
-        Note:
-            URL validation covers the initial request URL only. If the
-            client follows redirects, a validated public URL can
-            redirect to an internal address unchecked, so
-            ``follow_redirects`` must stay disabled (the httpx
-            default). This constructor rejects clients configured
-            otherwise.
+            push_url_validator: Async callable that returns an error
+              string for a rejected push URL, or None to accept it.
+              Defaults to None (no library screening). The spec lists
+              these checks as SHOULD, so deployments that want the
+              built-in policy should pass ``push_url_validation_error``.
         """
         if context is not None:
             logger.warning(
@@ -134,17 +68,9 @@ class BasePushNotificationSender(PushNotificationSender):
                 'caller identity is not carried into dispatch. Drop the '
                 'context argument from the constructor call.'
             )
-        if httpx_client.follow_redirects:
-            raise ValueError(
-                'BasePushNotificationSender validates the initial push URL '
-                'only; a client with follow_redirects=True would dispatch '
-                'redirect targets without re-validation (redirect-based '
-                'SSRF). Construct the client with follow_redirects=False '
-                '(the default).'
-            )
         self._client = httpx_client
         self._config_store = config_store
-        self._allow_private_push_urls = allow_private_push_urls
+        self._push_url_validator = push_url_validator
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
@@ -172,8 +98,8 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
-        if not self._allow_private_push_urls:
-            validation_error = push_url_validation_error(url)
+        if self._push_url_validator is not None:
+            validation_error = await self._push_url_validator(url)
             if validation_error:
                 logger.warning(
                     'Push-notification URL for task_id=%s rejected: %s',
