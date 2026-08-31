@@ -8,6 +8,7 @@ from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
+    AuthenticationInfo,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -34,8 +35,11 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    authentication: AuthenticationInfo | None = None,
 ) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
+    return TaskPushNotificationConfig(
+        id=config_id, url=url, token=token, authentication=authentication
+    )
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
@@ -100,6 +104,61 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
+
+    async def test_send_notification_with_auth_header(self) -> None:
+        task_id = 'task_send_auth'
+        task_data = _create_sample_task(task_id=task_id)
+        config = _create_sample_push_config(
+            url='http://notify.me/here',
+            token='unique_token',
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='token_or_jwt'
+            ),
+        )
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_data.id
+        )
+        self.mock_httpx_client.post.assert_awaited_once_with(
+            config.url,
+            json=MessageToDict(StreamResponse(task=task_data)),
+            headers={
+                'X-A2A-Notification-Token': 'unique_token',
+                'Authorization': 'Bearer token_or_jwt',
+            },
+        )
+        mock_response.raise_for_status.assert_called_once()
+
+    def test_authorization_header_requires_scheme_and_credentials(self) -> None:
+        config = _create_sample_push_config()
+        self.assertIsNone(self.sender._authorization_header(config))
+
+        config = _create_sample_push_config(
+            authentication=AuthenticationInfo(credentials='token_or_jwt')
+        )
+        self.assertIsNone(self.sender._authorization_header(config))
+
+        config = _create_sample_push_config(
+            authentication=AuthenticationInfo(scheme='Bearer')
+        )
+        self.assertIsNone(self.sender._authorization_header(config))
+
+        config = _create_sample_push_config(
+            authentication=AuthenticationInfo(
+                scheme='Basic', credentials='token_or_jwt'
+            )
+        )
+        self.assertEqual(
+            self.sender._authorization_header(config),
+            'Basic token_or_jwt',
+        )
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
