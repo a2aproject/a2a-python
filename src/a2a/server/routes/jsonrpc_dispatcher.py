@@ -162,6 +162,7 @@ class JsonRpcDispatcher:
             self._v03_adapter = JSONRPC03Adapter(
                 http_handler=request_handler,
                 context_builder=self._context_builder,
+                shutdown_grace_period=shutdown_grace_period,
             )
 
     def _generate_error_response(

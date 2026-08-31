@@ -117,3 +117,22 @@ def test_shutdown_grace_period_is_forwarded_to_dispatcher(mock_handler) -> None:
             context_builder=None,
             shutdown_grace_period=30.0,
         )
+
+
+def test_shutdown_grace_period_is_forwarded_to_v03_adapter(
+    mock_handler,
+) -> None:
+    """Tests that v0.3 compatibility routes share the shutdown grace period."""
+    with patch('a2a.server.routes.rest_routes.REST03Adapter') as adapter_class:
+        adapter_class.return_value.routes.return_value = {}
+        create_rest_routes(
+            request_handler=mock_handler,
+            enable_v0_3_compat=True,
+            shutdown_grace_period=30.0,
+        )
+
+    adapter_class.assert_called_once_with(
+        http_handler=mock_handler,
+        context_builder=None,
+        shutdown_grace_period=30.0,
+    )

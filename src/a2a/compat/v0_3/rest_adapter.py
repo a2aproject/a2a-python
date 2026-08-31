@@ -59,11 +59,13 @@ class REST03Adapter:
         self,
         http_handler: 'RequestHandler',
         context_builder: 'ServerCallContextBuilder | None' = None,
-    ):
+        shutdown_grace_period: float = 0,
+    ) -> None:
         self.handler = REST03Handler(request_handler=http_handler)
         self._context_builder = V03ServerCallContextBuilder(
             context_builder or DefaultServerCallContextBuilder()
         )
+        self._shutdown_grace_period = shutdown_grace_period
 
     @rest_error_handler
     async def _handle_request(
@@ -97,7 +99,8 @@ class REST03Adapter:
                 yield json_utils.dumps(item)
 
         return EventSourceResponse(
-            event_generator(method(request, call_context))
+            event_generator(method(request, call_context)),
+            shutdown_grace_period=self._shutdown_grace_period,
         )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:

@@ -216,6 +216,22 @@ class TestJsonRpcDispatcherTenant:
 
 
 class TestJsonRpcDispatcherV03Compat:
+    def test_shutdown_grace_period_is_forwarded_to_adapter(
+        self, mock_handler
+    ) -> None:
+        with patch.object(
+            jsonrpc_dispatcher, 'JSONRPC03Adapter'
+        ) as adapter_class:
+            JsonRpcDispatcher(
+                request_handler=mock_handler,
+                enable_v0_3_compat=True,
+                shutdown_grace_period=30.0,
+            )
+
+        adapter_class.assert_called_once()
+        assert adapter_class.call_args.kwargs['http_handler'] is mock_handler
+        assert adapter_class.call_args.kwargs['shutdown_grace_period'] == 30.0
+
     def test_v0_3_compat_flag_routes_to_adapter(self, mock_handler):
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://mockurl.com'

@@ -68,6 +68,7 @@ def create_rest_routes(
         v03_adapter = REST03Adapter(
             http_handler=request_handler,
             context_builder=context_builder,
+            shutdown_grace_period=shutdown_grace_period,
         )
         v03_routes = v03_adapter.routes()
         for (path, method), endpoint in v03_routes.items():
