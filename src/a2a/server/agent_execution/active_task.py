@@ -633,7 +633,13 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        tapped_queue = await self._event_queue_subscribers.tap()
+        # Subscriber sinks belong to remote consumers that can be abandoned
+        # (e.g. a non-blocking send whose HTTP response already returned).
+        # evict_on_full keeps one undrained subscriber from wedging dispatch
+        # for every other subscriber and, transitively, the producer.
+        tapped_queue = await self._event_queue_subscribers.tap(
+            evict_on_full=True
+        )
         request_id = await self.enqueue_request(request) if request else None
 
         try:
@@ -707,6 +713,12 @@ class ActiveTask:
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
 
+        The returned task carries a terminal state, which is written to the
+        task store. That write is not guaranteed to reach an active subscriber
+        stream: by the time cancel writes it the event queues may already be
+        closed, so a client that was streaming may have to re-read the task to
+        observe the terminal state.
+
         Concurrency Guarantee:
         Uses `_lock` to ensure we don't attempt to cancel a producer that is
         already winding down or hasn't started. It fires the cancellation signal
@@ -730,7 +742,26 @@ class ActiveTask:
                 logger.debug(
                     'Cancel[%s]: Cancelling producer task', self._task_id
                 )
-                self._producer_task.cancel()
+                # Await the executor's cancel before cancelling the producer,
+                # so the component that owns the task's terminal state can
+                # still write to the still-open event queue. Cancelling the
+                # producer first can tear the queue down first and drop that
+                # write. Mirrors the V1 handler ordering. The producer cancel
+                # is in a finally so it still runs when executor.cancel() raises
+                # a BaseException such as asyncio.CancelledError, which
+                # `except Exception` does not catch; otherwise the producer
+                # would leak as a pending task. Cancelling after
+                # _mark_task_as_failed also keeps the FAILED write ahead of the
+                # queue teardown, so it is not dropped as QueueShutDown.
+                #
+                # Residual: if executor.cancel() raises a BaseException (e.g.
+                # asyncio.CancelledError), it propagates out of cancel() from
+                # the finally before the _is_finished.wait() and the CANCELED
+                # write below, leaving the task non-terminal with no producer
+                # behind it. This is not the #1170 silent-success shape (the
+                # caller receives the exception), and it is recoverable: a
+                # later cancel() takes the else branch and reaches the
+                # terminal write.
                 try:
                     await self._agent_executor.cancel(
                         request_context, self._event_queue_agent
@@ -741,6 +772,8 @@ class ActiveTask:
                     )
                     await self._mark_task_as_failed(e)
                     raise
+                finally:
+                    self._producer_task.cancel()
             else:
                 logger.debug(
                     'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',
@@ -753,6 +786,26 @@ class ActiveTask:
         task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
+        # A cleanup-only executor.cancel() may not write a terminal state, and
+        # a task parked in a non-terminal state (e.g. input-required) has no
+        # running producer to write one either. Close it out as CANCELED so a
+        # caller that cancelled is never left polling a live task. Mirrors the
+        # V1 handler, which made a non-cancelled outcome visible instead of
+        # reporting success and changing nothing.
+        if task.status.state not in TERMINAL_TASK_STATES:
+            # Write a copy rather than mutating the task in place: get_task()
+            # returns the shared _task_manager._current_task, which may already
+            # have been yielded to a subscriber. Copying keeps THIS terminal
+            # write off the yielded reference. It is not a file-wide guarantee:
+            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom,
+            # and the producer-failure write above) still update the shared
+            # object in place. Making every write copy-on-yield is the general
+            # property tracked in #1175 and #1191.
+            updated = Task()
+            updated.CopyFrom(task)
+            updated.status.state = TaskState.TASK_STATE_CANCELED
+            await self._task_manager.save_task_event(updated)
+            task = updated
         return task
 
     async def aclose(self) -> None:
