@@ -82,10 +82,9 @@ class EventQueueSource(EventQueue):
         ``evict_on_full=False`` (including the default sink) keep the blocking
         put, which is the documented flow-control contract.
 
-        The eviction test is queue fullness at delivery time and nothing else.
-        It makes no claim about the consumer: a consumer that has gone away and
-        a consumer that is reading steadily but has fallen ``max_queue_size``
-        events behind the dispatcher both satisfy it and are both evicted.
+        The eviction condition is queue fullness at delivery time, which says
+        nothing about why the consumer is behind. A departed consumer and a
+        slow one are evicted alike.
 
         The ``full()`` pre-check is race-free: this dispatcher is the only
         writer to a sink queue and consumers only read, so the queue cannot
@@ -103,12 +102,9 @@ class EventQueueSource(EventQueue):
             return
         if sink._evict_on_full and sink.queue.full():  # noqa: SLF001
             logger.warning(
-                'Evicting event queue sink %r: its queue was full at delivery '
-                'time, so this sink is at least max_queue_size events behind '
-                'the dispatcher. Closing the sink so dispatch to the remaining '
-                'sinks continues. This does not mean the consumer stopped '
-                'reading: a consumer that is still reading but lagging by more '
-                'than the bound is evicted the same way.',
+                'Evicting event queue sink %r: queue full at delivery time '
+                '(>= max_queue_size events behind); closing it so dispatch '
+                'continues.',
                 sink,
             )
             await sink.close(immediate=True)
