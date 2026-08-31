@@ -567,7 +567,7 @@ async def test_get_task_push_notification_config_info_with_config():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', id='config_id', url='http://1.example.com'
+        task_id='task_1', id='config_id', url='http://example.com'
     )
     context = create_server_call_context()
     await request_handler.on_create_task_push_notification_config(
@@ -600,7 +600,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
@@ -783,13 +783,13 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params1 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
     )
     set_config_params2 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://2.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
