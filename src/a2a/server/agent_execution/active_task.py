@@ -633,8 +633,8 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        # evict_on_full=True: a subscriber that falls behind is dropped rather
-        # than wedging dispatch for the others. See _deliver_to_sink().
+        # evict_on_full=True: a subscriber that falls behind is dropped, so it
+        # cannot wedge dispatch for the others. See _deliver_to_sink().
         tapped_queue = await self._event_queue_subscribers.tap(
             evict_on_full=True
         )
