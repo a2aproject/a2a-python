@@ -1,11 +1,10 @@
 import logging
 
 from collections.abc import Callable
-from datetime import datetime, timezone
 
 
 try:
-    from sqlalchemy import Table, and_, delete, func, or_, select
+    from sqlalchemy import Table, and_, case, delete, func, or_, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -245,13 +244,11 @@ class DatabaseTaskStore(TaskStore):
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            # Use coalesce to treat NULL timestamps as datetime.min,
-            # which sort last in descending order
+            # Sort NULL timestamps last without binding a sentinel value, which
+            # may fall outside a database's supported datetime range.
             stmt = base_stmt.order_by(
-                func.coalesce(
-                    timestamp_col,
-                    datetime.min.replace(tzinfo=timezone.utc),
-                ).desc(),
+                case((timestamp_col.is_(None), 1), else_=0).asc(),
+                timestamp_col.desc(),
                 self.task_model.id.desc(),
             )
 

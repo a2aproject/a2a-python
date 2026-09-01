@@ -2,6 +2,7 @@ import os
 
 from collections.abc import AsyncGenerator
 from datetime import datetime, timezone
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -10,7 +11,8 @@ import pytest_asyncio
 from _pytest.mark.structures import ParameterSet
 from a2a.compat.v0_3 import types as types_v03
 from a2a.types.a2a_pb2 import ListTasksRequest
-from sqlalchemy import insert
+from sqlalchemy import event, insert
+from sqlalchemy.engine import Connection, ExecutionContext
 
 
 # Skip entire test module if SQLAlchemy is not installed
@@ -342,6 +344,50 @@ async def test_list_tasks(
     # Cleanup
     for task in tasks_to_create:
         await db_store_parameterized.delete(task.id, TEST_CONTEXT)
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_does_not_bind_out_of_range_datetimes(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    """Test list ordering without out-of-range datetime sentinels."""
+    bound_datetimes: list[datetime] = []
+    compiled_execution_count = 0
+
+    def capture_bound_datetimes(
+        _conn: Connection,
+        _cursor: Any,
+        _statement: str,
+        _parameters: Any,
+        context: ExecutionContext,
+        _executemany: bool,
+    ) -> None:
+        nonlocal compiled_execution_count
+        if context.compiled is None:
+            return
+        compiled_execution_count += 1
+        bound_datetimes.extend(
+            value
+            for value in context.compiled.params.values()
+            if isinstance(value, datetime)
+        )
+
+    event.listen(
+        db_store_parameterized.engine.sync_engine,
+        'before_cursor_execute',
+        capture_bound_datetimes,
+    )
+    try:
+        await db_store_parameterized.list(ListTasksRequest(), TEST_CONTEXT)
+    finally:
+        event.remove(
+            db_store_parameterized.engine.sync_engine,
+            'before_cursor_execute',
+            capture_bound_datetimes,
+        )
+
+    assert compiled_execution_count > 0
+    assert all(value.year >= 1000 for value in bound_datetimes)
 
 
 @pytest.mark.asyncio
