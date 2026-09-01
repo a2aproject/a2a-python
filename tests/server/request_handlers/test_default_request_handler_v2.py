@@ -1119,6 +1119,25 @@ async def test_on_get_task_negative_history_length_error():
 
 
 @pytest.mark.asyncio
+async def test_on_get_task_history_length_too_large_error():
+    """Test on_get_task raises error for history length above the limit."""
+    from a2a.utils.task import MAX_HISTORY_LENGTH
+
+    mock_task_store = AsyncMock(spec=TaskStore)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = GetTaskRequest(id='task1', history_length=MAX_HISTORY_LENGTH + 1)
+    context = create_server_call_context()
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_get_task(params, context)
+    assert str(MAX_HISTORY_LENGTH) in exc_info.value.message
+    mock_task_store.get.assert_not_awaited()
+
+
+@pytest.mark.asyncio
 async def test_on_list_tasks_page_size_too_small():
     """Test on_list_tasks raises error for page_size < 1."""
     mock_task_store = AsyncMock(spec=TaskStore)
