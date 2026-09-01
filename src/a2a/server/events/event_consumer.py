@@ -18,7 +18,10 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-@trace_class(kind=SpanKind.SERVER)
+@trace_class(
+    kind=SpanKind.SERVER,
+    exclude_list=['consume_all'],
+)
 class EventConsumer:
     """Consumer to read events from the agent event queue."""
 
