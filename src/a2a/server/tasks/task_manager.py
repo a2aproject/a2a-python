@@ -19,6 +19,37 @@ from a2a.utils.telemetry import trace_function
 logger = logging.getLogger(__name__)
 
 
+TERMINAL_TASK_STATES = {
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
+}
+
+
+def validate_state_transition(
+    current_state: TaskState, new_state: TaskState
+) -> None:
+    """Validates a task state transition before it is persisted.
+
+    Terminal states are final: a task in COMPLETED/CANCELED/FAILED/REJECTED
+    must never move to a different state (including back to SUBMITTED).
+    Re-persisting the same terminal state is tolerated for idempotency.
+
+    Raises:
+        InvalidAgentResponseError: If the transition moves a task away from
+            a terminal state.
+    """
+    if current_state in TERMINAL_TASK_STATES and new_state != current_state:
+        raise InvalidAgentResponseError(
+            message=(
+                f'Illegal state transition from terminal state '
+                f'{TaskState.Name(current_state)} to '
+                f'{TaskState.Name(new_state)}'
+            )
+        )
+
+
 @trace_function()
 def append_artifact_to_task(task: Task, event: TaskArtifactUpdateEvent) -> None:
     """Helper method for updating a Task object with new artifact data from an event.
@@ -204,6 +235,7 @@ class TaskManager:
             logger.debug(
                 'Updating task %s status to: %s', task.id, event.status.state
             )
+            validate_state_transition(task.status.state, event.status.state)
             if task.status.HasField('message'):
                 task.history.append(task.status.message)
             if event.metadata:
