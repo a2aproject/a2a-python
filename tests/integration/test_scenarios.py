@@ -11,7 +11,6 @@ import pytest_asyncio
 from a2a.auth.user import User
 from a2a.client.client import ClientConfig
 from a2a.client.client_factory import ClientFactory
-from a2a.client.errors import A2AClientError
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.context import ServerCallContext
@@ -49,6 +48,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import TransportProtocol
 from a2a.utils.errors import (
+    A2AError,
     InvalidAgentResponseError,
     InvalidParamsError,
     TaskNotCancelableError,
@@ -469,7 +469,9 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
     )
 
     # TODO: Is it correct error code ?
-    with pytest.raises(A2AClientError, match='TEST_ERROR_IN_EXECUTE'):
+    # Agent exceptions are sanitized server-side (internal details are
+    # logged, not exposed to clients); clients receive the generic error.
+    with pytest.raises(A2AError, match='Internal error'):
         async for _ in client.send_message(
             SendMessageRequest(
                 message=msg,
@@ -548,7 +550,9 @@ async def test_scenario_12_13_error_after_initial_event(use_legacy, streaming):
 
         tasks.append(asyncio.create_task(release_agent()))
 
-    with pytest.raises(A2AClientError, match='TEST_ERROR_IN_EXECUTE'):
+    # Agent exceptions are sanitized server-side (internal details are
+    # logged, not exposed to clients); clients receive the generic error.
+    with pytest.raises(A2AError, match='Internal error'):
         async for _ in it:
             pass
 
@@ -610,7 +614,9 @@ async def test_scenario_14_error_in_cancel(use_legacy, streaming):
 
     await asyncio.wait_for(started_event.wait(), timeout=1.0)
 
-    with pytest.raises(A2AClientError, match='TEST_ERROR_IN_CANCEL'):
+    # Agent exceptions are sanitized server-side; clients receive the
+    # generic error.
+    with pytest.raises(A2AError, match='Internal error'):
         await client.cancel_task(CancelTaskRequest(id=task_id))
 
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
@@ -678,7 +684,9 @@ async def test_scenario_15_subscribe_error(use_legacy):
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(consume_task, timeout=0.1)
     else:
-        with pytest.raises(A2AClientError, match='TEST_ERROR_IN_EXECUTE'):
+        # Agent exceptions are sanitized server-side (internal details are
+        # logged, not exposed to clients); clients receive the generic error.
+        with pytest.raises(A2AError, match='Internal error'):
             await consume_task
 
     (task,) = (await client.list_tasks(ListTasksRequest())).tasks
@@ -1019,8 +1027,9 @@ async def test_scenario_19_no_parallel_executions(use_legacy, streaming):
 
     # Verify that both calls for clients finished.
     if use_legacy and not streaming:
-        # Legacy handler fails on first execution.
-        with pytest.raises(A2AClientError, match='NoTaskQueue'):
+        # Legacy handler fails on first execution; the failure is
+        # sanitized server-side (internal details are logged, not exposed).
+        with pytest.raises(A2AError, match='Internal error'):
             await task1
     else:
         await task1

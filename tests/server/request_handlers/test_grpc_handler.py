@@ -746,3 +746,49 @@ class TestTenantExtraction:
         server_context = call_args[0][1]
         assert isinstance(server_context, ServerCallContext)
         assert server_context.tenant == ''
+
+
+@pytest.mark.asyncio
+async def test_unhandled_exception_is_sanitized(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+) -> None:
+    """A non-A2A exception must not leak its message to the client."""
+    mock_request_handler.on_get_task.side_effect = RuntimeError(
+        'internal detail: /secret/path'
+    )
+    request_proto = a2a_pb2.GetTaskRequest(id='any')
+
+    await grpc_handler.GetTask(request_proto, mock_grpc_context)
+
+    mock_grpc_context.abort.assert_awaited_once()
+    call_args, _ = mock_grpc_context.abort.call_args
+    assert call_args[0] == grpc.StatusCode.INTERNAL
+    assert 'internal detail' not in call_args[1]
+    assert 'INTERNAL' in call_args[1] or 'Internal error' in call_args[1]
+
+
+@pytest.mark.asyncio
+async def test_unknown_a2a_error_type_is_sanitized(
+    grpc_handler: GrpcHandler,
+    mock_request_handler: AsyncMock,
+    mock_grpc_context: AsyncMock,
+) -> None:
+    """An A2AError outside the mapping must not leak details."""
+    from a2a.utils.errors import A2AError
+
+    class CustomError(A2AError):
+        message = 'custom'
+
+    mock_request_handler.on_get_task.side_effect = CustomError(
+        'sensitive internals here'
+    )
+    request_proto = a2a_pb2.GetTaskRequest(id='any')
+
+    await grpc_handler.GetTask(request_proto, mock_grpc_context)
+
+    mock_grpc_context.abort.assert_awaited_once()
+    call_args, _ = mock_grpc_context.abort.call_args
+    assert call_args[0] == grpc.StatusCode.UNKNOWN
+    assert 'sensitive internals' not in call_args[1]
