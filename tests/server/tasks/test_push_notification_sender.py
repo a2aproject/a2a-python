@@ -282,6 +282,10 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         await self._dispatch('ftp://example.com/file')
         self.mock_httpx_client.post.assert_not_called()
 
+    async def test_invalid_port_blocked(self) -> None:
+        await self._dispatch('http://example.com:99999/hook')
+        self.mock_httpx_client.post.assert_not_called()
+
     async def test_unresolvable_host_blocked_fail_closed(self) -> None:
         with self._patch_gai(side_effect=OSError('no DNS')):
             await self._dispatch('http://does-not-resolve.invalid/')

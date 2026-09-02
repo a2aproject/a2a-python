@@ -44,6 +44,7 @@ async def push_url_validation_error(url: str) -> str | None:
     """
     try:
         parsed = urllib.parse.urlparse(url)
+        explicit_port = parsed.port
     except ValueError:
         return 'unparseable URL'
     if parsed.scheme not in ('http', 'https'):
@@ -51,7 +52,7 @@ async def push_url_validation_error(url: str) -> str | None:
     host = parsed.hostname
     if not host:
         return 'no hostname'
-    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
+    port = explicit_port or (443 if parsed.scheme == 'https' else 80)
     try:
         loop = asyncio.get_running_loop()
         infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)

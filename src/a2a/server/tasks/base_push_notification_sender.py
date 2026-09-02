@@ -17,14 +17,12 @@ from a2a.server.tasks.push_notification_sender import (
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 from a2a.utils.proto_utils import to_stream_response
-from a2a.utils.push_url_validator import push_url_validation_error
 
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     'BasePushNotificationSender',
-    'push_url_validation_error',
 ]
 
 
