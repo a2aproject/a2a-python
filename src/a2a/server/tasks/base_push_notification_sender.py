@@ -91,9 +91,11 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
-        if self._push_url_validator is not None:
-            if not await self._push_url_validator(url):
-                return False
+        if (
+            self._push_url_validator is not None
+            and not await self._push_url_validator(url)
+        ):
+            return False
         try:
             headers = None
             if push_info.token:
