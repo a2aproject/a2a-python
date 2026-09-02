@@ -98,8 +98,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
-        push_url_validator: Callable[[str], Awaitable[str | None]]
-        | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         if queue_manager is not None:
             message = (
@@ -137,11 +136,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         """Apply the configured push-URL policy, if any."""
         if self._push_url_validator is None:
             return
-        url_error = await self._push_url_validator(url)
-        if url_error:
-            raise InvalidParamsError(
-                message=f'Invalid push notification URL: {url_error}'
-            )
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     async def aclose(self) -> None:
         """Shuts down the handler, draining all active tasks.

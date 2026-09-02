@@ -17,7 +17,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
-from a2a.utils.push_url_validator import push_url_validation_error
+from a2a.utils.push_url_validator import validate_push_notification_url
 from google.protobuf.json_format import MessageToDict
 
 
@@ -237,7 +237,7 @@ def _gai_result(ip: str, port: int = 80):
 
 
 class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
-    """SSRF hardening: when push_url_validation_error is installed, client
+    """SSRF hardening: when validate_push_notification_url is installed, client
     push URLs must not reach non-public destinations."""
 
     def setUp(self) -> None:
@@ -246,7 +246,7 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.mock_config_store,
-            push_url_validator=push_url_validation_error,
+            push_url_validator=validate_push_notification_url,
         )
 
     async def _dispatch(self, url: str) -> None:

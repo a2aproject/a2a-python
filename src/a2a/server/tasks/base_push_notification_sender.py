@@ -21,10 +21,6 @@ from a2a.utils.proto_utils import to_stream_response
 
 logger = logging.getLogger(__name__)
 
-__all__ = [
-    'BasePushNotificationSender',
-]
-
 
 class BasePushNotificationSender(PushNotificationSender):
     """Base implementation of PushNotificationSender interface."""
@@ -35,8 +31,7 @@ class BasePushNotificationSender(PushNotificationSender):
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
         *,
-        push_url_validator: Callable[[str], Awaitable[str | None]]
-        | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -50,11 +45,11 @@ class BasePushNotificationSender(PushNotificationSender):
               Pass None (the default) in new code. A non-None
               value logs a deprecation warning and is otherwise
               ignored.
-            push_url_validator: Async callable that returns an error
-              string for a rejected push URL, or None to accept it.
-              Defaults to None (no library screening). The spec lists
-              these checks as SHOULD, so deployments that want the
-              built-in policy should pass ``push_url_validation_error``.
+            push_url_validator: Async callable that returns True to
+              accept a push URL, or False to reject it. Defaults to
+              None (no library screening). The spec lists these checks
+              as SHOULD, so deployments that want the built-in policy
+              should pass ``validate_push_notification_url``.
         """
         if context is not None:
             logger.warning(
@@ -97,13 +92,7 @@ class BasePushNotificationSender(PushNotificationSender):
     ) -> bool:
         url = push_info.url
         if self._push_url_validator is not None:
-            validation_error = await self._push_url_validator(url)
-            if validation_error:
-                logger.warning(
-                    'Push-notification URL for task_id=%s rejected: %s',
-                    task_id,
-                    validation_error,
-                )
+            if not await self._push_url_validator(url):
                 return False
         try:
             headers = None

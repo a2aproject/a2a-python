@@ -531,6 +531,7 @@ class TestPushNotificationDispatchAcrossOwners(
         self.mock_httpx_client.post.return_value = mock_response
 
         self.config_store = InMemoryPushNotificationConfigStore()
+
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
             config_store=self.config_store,

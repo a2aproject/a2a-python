@@ -2,8 +2,12 @@
 
 import asyncio
 import ipaddress
+import logging
 import socket
 import urllib.parse
+
+
+logger = logging.getLogger(__name__)
 
 
 def _ip_is_blocked(ip_str: str) -> bool:
@@ -22,8 +26,8 @@ def _ip_is_blocked(ip_str: str) -> bool:
     )
 
 
-async def push_url_validation_error(url: str) -> str | None:
-    """Return an error string if a push-notification URL is not safe.
+async def validate_push_notification_url(url: str) -> bool:
+    """Return True if a push-notification URL is safe to fetch.
 
     Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
     link-local, private, reserved, multicast, or unspecified addresses
@@ -46,19 +50,34 @@ async def push_url_validation_error(url: str) -> str | None:
         parsed = urllib.parse.urlparse(url)
         explicit_port = parsed.port
     except ValueError:
-        return 'unparseable URL'
+        logger.warning('Push-notification URL is unparseable: %s', url)
+        return False
     if parsed.scheme not in ('http', 'https'):
-        return f"scheme '{parsed.scheme}' is not http/https"
+        logger.warning(
+            'Push-notification URL scheme %r is not http/https: %s',
+            parsed.scheme,
+            url,
+        )
+        return False
     host = parsed.hostname
     if not host:
-        return 'no hostname'
+        logger.warning('Push-notification URL has no hostname: %s', url)
+        return False
     port = explicit_port or (443 if parsed.scheme == 'https' else 80)
     try:
         loop = asyncio.get_running_loop()
         infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
     except OSError:
-        return f"host '{host}' could not be resolved"
+        logger.warning(
+            'Push-notification host %r could not be resolved: %s', host, url
+        )
+        return False
     for info in infos:
         if _ip_is_blocked(str(info[4][0])):
-            return f"host '{host}' resolves to a non-public address"
-    return None
+            logger.warning(
+                'Push-notification host %r resolves to a non-public address: %s',
+                host,
+                url,
+            )
+            return False
+    return True
