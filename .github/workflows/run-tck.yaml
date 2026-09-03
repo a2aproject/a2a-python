@@ -17,7 +17,8 @@ permissions:
   contents: read
 
 env:
-  TCK_VERSION: 0.3.0.beta3
+  TCK_VERSION_0_3: 0.3.0.beta5
+  TCK_VERSION_1_0: 1.0.0.alpha2
   SUT_BASE_URL: http://localhost:41241
   SUT_JSONRPC_URL: http://localhost:41241/a2a/jsonrpc
   UV_SYSTEM_PYTHON: 1
@@ -28,8 +29,8 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  tck-test:
-    name: Run TCK with Python ${{ matrix.python-version }}
+  tck-test-0-3:
+    name: Run TCK 0.3 with Python ${{ matrix.python-version }}
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -50,12 +51,12 @@ jobs:
       - name: Install Dependencies
         run: uv sync --locked --all-extras
 
-      - name: Checkout a2a-tck
+      - name: Checkout a2a-tck (0.3)
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
           repository: a2aproject/a2a-tck
           path: tck/a2a-tck
-          ref: ${{ env.TCK_VERSION }}
+          ref: ${{ env.TCK_VERSION_0_3 }}
 
       - name: Start SUT
         run: |
@@ -90,14 +91,14 @@ jobs:
             sleep "$RETRY_INTERVAL"
           done
 
-      - name: Run TCK (mandatory)
-        id: run-tck-mandatory
+      - name: Run TCK 0.3 (mandatory)
+        id: run-tck-0-3-mandatory
         run: |
           uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category mandatory --transports jsonrpc
         working-directory: tck/a2a-tck
 
-      - name: Run TCK (capabilities)
-        id: run-tck-capabilities
+      - name: Run TCK 0.3 (capabilities)
+        id: run-tck-0-3-capabilities
         run: |
           uv run run_tck.py --sut-url ${{ env.SUT_JSONRPC_URL }} --category capabilities --transports jsonrpc
         working-directory: tck/a2a-tck
@@ -107,3 +108,112 @@ jobs:
         run: |
           pkill -f sut_agent.py || true
           sleep 2
+
+  tck-test-1-0:
+    name: Run TCK 1.0 with Python ${{ matrix.python-version }}
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.13']
+    steps:
+      - name: Checkout a2a-python
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78 # v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Set up Python ${{ matrix.python-version }}
+        run: uv python install ${{ matrix.python-version }}
+
+      - name: Install Dependencies
+        run: uv sync --locked --all-extras
+
+      - name: Checkout a2a-tck (1.0)
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          repository: a2aproject/a2a-tck
+          path: tck/a2a-tck
+          ref: ${{ env.TCK_VERSION_1_0 }}
+
+      - name: Set up Python for TCK
+        uses: actions/setup-python@e7915738e0b27e6ee8e8962efb8a8e7f5993a5fb # v6
+        with:
+          python-version-file: "tck/a2a-tck/pyproject.toml"
+
+      - name: Install TCK dependencies
+        run: |
+          pip install uv
+          uv pip install -e .
+        working-directory: tck/a2a-tck
+
+      - name: Start SUT
+        run: |
+          uv run tck/sut_agent.py &
+
+      - name: Wait for SUT to start
+        run: |
+          URL="${{ env.SUT_BASE_URL }}/.well-known/agent-card.json"
+          EXPECTED_STATUS=200
+          TIMEOUT=120
+          RETRY_INTERVAL=2
+          START_TIME=$(date +%s)
+
+          while true; do
+            CURRENT_TIME=$(date +%s)
+            ELAPSED_TIME=$((CURRENT_TIME - START_TIME))
+
+            if [ "$ELAPSED_TIME" -ge "$TIMEOUT" ]; then
+                echo "❌ Timeout: Server did not respond with status $EXPECTED_STATUS within $TIMEOUT seconds."
+                exit 1
+            fi
+
+            HTTP_STATUS=$(curl --output /dev/null --silent --write-out "%{http_code}" "$URL") || true
+            echo "STATUS: ${HTTP_STATUS}"
+
+            if [ "$HTTP_STATUS" -eq "$EXPECTED_STATUS" ]; then
+                echo "✅ Server is up! Received status $HTTP_STATUS after $ELAPSED_TIME seconds."
+                break;
+            fi
+
+            echo "⏳ Server not ready (status: $HTTP_STATUS). Retrying in $RETRY_INTERVAL seconds..."
+            sleep "$RETRY_INTERVAL"
+          done
+
+      - name: Run TCK 1.0
+        id: run-tck-1-0
+        timeout-minutes: 5
+        run: |
+          set -o pipefail
+          uv run ./run_tck.py --sut-host ${{ env.SUT_BASE_URL }} -v 2>&1 | tee tck-output.log
+        working-directory: tck/a2a-tck
+
+      - name: TCK 1.0 Summary
+        if: always() && steps.run-tck-1-0.outcome != 'skipped'
+        run: |
+          if [ -f tck/a2a-tck/tck-output.log ]; then
+            SUMMARY=$(sed -n '/^═══/,$p' tck/a2a-tck/tck-output.log)
+            if [ -n "$SUMMARY" ]; then
+              echo '### TCK 1.0 Results (Python ${{ matrix.python-version }})' >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+              echo "$SUMMARY" >> $GITHUB_STEP_SUMMARY
+              echo '```' >> $GITHUB_STEP_SUMMARY
+            fi
+          fi
+
+      - name: Stop SUT
+        if: always()
+        run: |
+          pkill -f sut_agent.py || true
+          sleep 2
+
+      - name: Upload TCK Reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8ec6f72902dc1558f1e5dac0f6a5e9f9c2 # v4
+        with:
+          name: tck-1.0-reports-py${{ matrix.python-version }}
+          path: tck/a2a-tck/reports/
+          retention-days: 14
+          if-no-files-found: warn
