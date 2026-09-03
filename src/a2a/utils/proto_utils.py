@@ -174,10 +174,7 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         field = fields[k]
         v_list = params.getlist(k)
 
-        # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-        # deprecated `field.label` with `field.is_repeated` once the minimum
-        # protobuf version requirement is bumped.
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if field.is_repeated:
             accumulated: list[Any] = []
             for v in v_list:
                 if not v:
@@ -211,10 +208,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label == FieldDescriptor.LABEL_REPEATED:
+    if field.is_repeated:
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -255,10 +249,7 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label != FieldDescriptor.LABEL_REPEATED:
+    if not field.is_repeated:
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
