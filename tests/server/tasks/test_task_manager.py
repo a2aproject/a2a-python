@@ -112,6 +112,28 @@ async def test_get_task_nonexistent(
 
 
 @pytest.mark.asyncio
+async def test_invalidate_cached_task_forces_store_reread(
+    task_manager: TaskManager, mock_task_store: AsyncMock
+) -> None:
+    """After invalidation, get_task re-reads the store instead of returning the
+    cached snapshot (issue #1188)."""
+    stale = create_minimal_task()
+    fresh = create_minimal_task()
+    fresh.status.state = TaskState.TASK_STATE_INPUT_REQUIRED
+    mock_task_store.get.return_value = fresh
+
+    # Prime the cache; a second get_task without invalidation stays cached.
+    task_manager._current_task = stale
+    assert await task_manager.get_task() is stale
+    mock_task_store.get.assert_not_called()
+
+    task_manager.invalidate_cached_task()
+
+    assert await task_manager.get_task() is fresh
+    mock_task_store.get.assert_called_once_with(MINIMAL_TASK_ID, TEST_CONTEXT)
+
+
+@pytest.mark.asyncio
 async def test_save_task_event_new_task(
     task_manager: TaskManager, mock_task_store: AsyncMock
 ) -> None:
