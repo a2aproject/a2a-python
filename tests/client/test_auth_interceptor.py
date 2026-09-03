@@ -33,7 +33,6 @@ from a2a.types.a2a_pb2 import (
     SecurityRequirement,
     SecurityScheme,
     SendMessageRequest,
-    SendMessageResponse,
     StringList,
 )
 from a2a.utils.constants import TransportProtocol
@@ -49,11 +48,10 @@ def build_success_response(request: httpx.Request) -> httpx.Response:
         role=Role.ROLE_AGENT,
         parts=[],
     )
-    response = SendMessageResponse(message=message)
     response_payload = {
         'id': request_payload['id'],
         'jsonrpc': '2.0',
-        'result': json_format.MessageToDict(response),
+        'result': json_format.MessageToDict(message),
     }
     return httpx.Response(200, json=response_payload)
 
