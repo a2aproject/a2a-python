@@ -35,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
+from a2a.utils.sanitizers import sanitize_path_id
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -149,7 +150,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.id}',
+            f'/tasks/{sanitize_path_id(request.id)}',
             request.tenant,
             context=context,
             params=params,
@@ -189,7 +190,7 @@ class RestTransport(ClientTransport):
         """Requests the agent to cancel a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.id}:cancel',
+            f'/tasks/{sanitize_path_id(request.id)}:cancel',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -206,7 +207,7 @@ class RestTransport(ClientTransport):
         """Sets or updates the push notification configuration for a specific task."""
         response_data = await self._execute_request(
             'POST',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{sanitize_path_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             json=MessageToDict(request),
@@ -233,7 +234,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{sanitize_path_id(request.task_id)}/pushNotificationConfigs/{sanitize_path_id(request.id, "push_id")}',
             request.tenant,
             context=context,
             params=params,
@@ -258,7 +259,7 @@ class RestTransport(ClientTransport):
 
         response_data = await self._execute_request(
             'GET',
-            f'/tasks/{request.task_id}/pushNotificationConfigs',
+            f'/tasks/{sanitize_path_id(request.task_id)}/pushNotificationConfigs',
             request.tenant,
             context=context,
             params=params,
@@ -285,7 +286,7 @@ class RestTransport(ClientTransport):
 
         await self._execute_request(
             'DELETE',
-            f'/tasks/{request.task_id}/pushNotificationConfigs/{request.id}',
+            f'/tasks/{sanitize_path_id(request.task_id)}/pushNotificationConfigs/{sanitize_path_id(request.id, "push_id")}',
             request.tenant,
             context=context,
             params=params,
@@ -300,7 +301,7 @@ class RestTransport(ClientTransport):
         """Reconnects to get task updates."""
         async for event in self._send_stream_request(
             'POST',
-            f'/tasks/{request.id}:subscribe',
+            f'/tasks/{sanitize_path_id(request.id)}:subscribe',
             request.tenant,
             context=context,
         ):

@@ -7,6 +7,7 @@ from a2a.utils.constants import (
     TransportProtocol,
 )
 from a2a.utils.proto_utils import to_stream_response
+from a2a.utils.sanitizers import sanitize_path_id
 
 
 __all__ = [
@@ -14,5 +15,6 @@ __all__ = [
     'DEFAULT_RPC_URL',
     'TransportProtocol',
     'proto_utils',
+    'sanitize_path_id',
     'to_stream_response',
 ]
