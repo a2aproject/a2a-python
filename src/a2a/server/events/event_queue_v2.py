@@ -72,16 +72,19 @@ class EventQueueSource(EventQueue):
     ) -> None:
         """Puts one event into one sink, evicting an evict-on-full sink if full.
 
-        A sink whose consumer stopped draining (an abandoned subscriber) fills
-        up and, with a blocking put, would stall this dispatcher's ``gather``
-        forever: the incoming queue then fills, producers wedge in
-        ``enqueue_event``, and the task's event flow never recovers. Sinks
-        tapped with ``evict_on_full=True`` are therefore treated as broadcast
-        observers: when full, the sink is force-closed and detached so
-        dispatch to the remaining sinks continues and blocked producers
-        recover. Sinks with ``evict_on_full=False`` (including the default
-        sink) keep the blocking put, which is the documented flow-control
-        contract.
+        A sink whose queue has filled up would, with a blocking put, stall
+        this dispatcher's ``gather`` until the sink drains: if it never does,
+        the incoming queue then fills, producers wedge in ``enqueue_event``,
+        and the task's event flow never recovers. Sinks tapped with
+        ``evict_on_full=True`` are therefore treated as broadcast observers:
+        when full, the sink is force-closed and detached so dispatch to the
+        remaining sinks continues and blocked producers recover. Sinks with
+        ``evict_on_full=False`` (including the default sink) keep the blocking
+        put, which is the documented flow-control contract.
+
+        The eviction condition is queue fullness at delivery time, which says
+        nothing about why the consumer is behind. A departed consumer and a
+        slow one are evicted alike.
 
         The ``full()`` pre-check is race-free: this dispatcher is the only
         writer to a sink queue and consumers only read, so the queue cannot
@@ -89,8 +92,8 @@ class EventQueueSource(EventQueue):
 
         A sink that closed after the dispatch snapshot was taken (e.g. a
         graceful ``close(immediate=False)`` whose consumer is still
-        draining) is skipped: treating its full queue as an abandoned
-        consumer would upgrade the close to immediate and discard the
+        draining) is skipped: treating its full queue as an eviction
+        candidate would upgrade the close to immediate and discard the
         events the consumer is draining. The check is best-effort — a
         close landing after it is harmless, because the put below
         tolerates a shut-down queue.
@@ -99,9 +102,9 @@ class EventQueueSource(EventQueue):
             return
         if sink._evict_on_full and sink.queue.full():  # noqa: SLF001
             logger.warning(
-                'Evicting event queue sink %r: its queue is full and the '
-                'consumer is not draining it. Closing the sink so dispatch '
-                'to the remaining sinks continues.',
+                'Evicting event queue sink %r: queue full at delivery time '
+                '(>= max_queue_size events behind); closing it so dispatch '
+                'continues.',
                 sink,
             )
             await sink.close(immediate=True)
@@ -221,8 +224,10 @@ class EventQueueSource(EventQueue):
                 sink is force-closed and detached instead of blocking dispatch
                 (and, transitively, every producer) behind it. When False (the
                 default), a full sink back-pressures dispatch, preserving the
-                documented flow-control behavior. Use True for sinks whose
-                consumer may be abandoned, such as remote subscribers.
+                documented flow-control behavior. Use True for sinks that may
+                fall more than ``max_queue_size`` events behind the dispatcher,
+                such as remote subscribers, whether because their consumer went
+                away or because it is merely slow.
         """
         async with self._lock:
             if self._is_closed:
