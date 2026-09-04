@@ -381,6 +381,33 @@ class LateFailingTerminalAgentExecutor(AgentExecutor):
         pass
 
 
+class FailedStatusAgentExecutor(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(TaskState.TASK_STATE_FAILED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+class FailedStatusThenRaisesAgentExecutor(FailedStatusAgentExecutor):
+    def __init__(self) -> None:
+        self.exception = RuntimeError('late producer failure')
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await super().execute(context, event_queue)
+        raise self.exception
+
+
 async def send_message_with_early_failure(
     request_handler: DefaultRequestHandlerV2,
     params: SendMessageRequest,
@@ -1295,6 +1322,54 @@ async def test_on_message_send_late_producer_exception_preserves_persisted_termi
     stored_task = await task_store.get(params.message.task_id, context)
     assert stored_task is not None
     assert stored_task.status.state == terminal_state
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failed_task_does_not_hide_producer_exception() -> (
+    None
+):
+    agent_executor = FailedStatusThenRaisesAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failed_then_raised',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='late producer failure') as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+    assert exc_info.value is agent_executor.exception
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_returns_agent_declared_failed_task() -> None:
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=FailedStatusAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_declared_failure',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_FAILED
 
 
 @pytest.mark.asyncio
