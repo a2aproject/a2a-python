@@ -191,6 +191,13 @@ class DefaultRequestHandlerV2(RequestHandler):
         context: ServerCallContext,
     ) -> Task | None:
         task_id = params.id
+        task = await self.task_store.get(task_id, context)
+        if not task:
+            raise TaskNotFoundError(f'Task {task_id} not found')
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise TaskNotCancelableError(
+                message=f'Task cannot be canceled - current state: {task.status.state}'
+            )
 
         try:
             active_task = await self._active_task_registry.get_or_create(
@@ -230,6 +237,10 @@ class DefaultRequestHandlerV2(RequestHandler):
             task = await self.task_store.get(original_task_id, call_context)
             if not task:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
+            if task.status.state in TERMINAL_TASK_STATES:
+                raise InvalidParamsError(
+                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                )
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(

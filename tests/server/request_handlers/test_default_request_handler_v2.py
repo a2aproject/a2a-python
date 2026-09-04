@@ -38,6 +38,7 @@ from a2a.types import (
     InvalidAgentResponseError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
+    TaskNotCancelableError,
     TaskNotFoundError,
 )
 from a2a.types.a2a_pb2 import (
@@ -969,6 +970,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -982,13 +984,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
@@ -1008,6 +1004,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1021,13 +1018,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(InvalidParamsError) as exc_info:
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
@@ -1036,6 +1027,68 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.message
     )
+
+
+@pytest.mark.asyncio
+async def test_reused_task_admission_rejects_external_terminal_state():
+    """Send and cancel read the store even when the registry has the task."""
+    task_id = 'externally-completed-task'
+    context_id = 'externally-completed-context'
+    context = create_server_call_context()
+    task_store = InMemoryTaskStore()
+    await task_store.save(
+        Task(
+            id=task_id,
+            context_id=context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+        ),
+        context,
+    )
+    executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+
+    try:
+        await request_handler._active_task_registry.get_or_create(
+            task_id,
+            call_context=context,
+            create_task_if_missing=False,
+        )
+        await task_store.save(
+            Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.TASK_STATE_COMPLETED),
+            ),
+            context,
+        )
+
+        with pytest.raises(InvalidParamsError, match='terminal state'):
+            await request_handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        task_id=task_id,
+                        context_id=context_id,
+                        message_id='late-resume',
+                        role=Role.ROLE_USER,
+                        parts=[Part(text='must not resume')],
+                    )
+                ),
+                context,
+            )
+
+        with pytest.raises(TaskNotCancelableError):
+            await request_handler.on_cancel_task(
+                CancelTaskRequest(id=task_id), context
+            )
+
+        executor.execute.assert_not_awaited()
+        executor.cancel.assert_not_awaited()
+    finally:
+        await request_handler.aclose()
 
 
 @pytest.mark.asyncio
@@ -1211,6 +1264,67 @@ async def test_on_message_send_limit_history():
     task = await task_store.get(result.id, context)
     assert task is not None
     assert task.history is not None and len(task.history) > 1
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(5)
+@pytest.mark.parametrize('consumer_persistence_fails', [False, True])
+async def test_on_message_send_propagates_request_boundary_store_failure(
+    consumer_persistence_fails: bool,
+) -> None:
+    task_id = 'request-boundary-store-failure'
+    context_id = 'request-boundary-context'
+    context = create_server_call_context()
+    stored_task = create_sample_task(
+        task_id=task_id,
+        context_id=context_id,
+        status_state=TaskState.TASK_STATE_INPUT_REQUIRED,
+    )
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = stored_task
+    agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+
+    try:
+        await request_handler._active_task_registry.get_or_create(
+            task_id,
+            context_id=context_id,
+            call_context=context,
+            create_task_if_missing=False,
+        )
+        task_store.get.reset_mock()
+        get_results: list[Task | OSError] = [
+            stored_task,
+            OSError('request-boundary read failed'),
+            OSError('failure-state read failed'),
+        ]
+        if consumer_persistence_fails:
+            get_results.append(OSError('consumer failure-state read failed'))
+        get_results.append(stored_task)
+        task_store.get.side_effect = get_results
+
+        with pytest.raises(OSError, match='request-boundary read failed'):
+            await request_handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        task_id=task_id,
+                        context_id=context_id,
+                        message_id='resume-after-store-failure',
+                        role=Role.ROLE_USER,
+                        parts=[Part(text='resume')],
+                    )
+                ),
+                context,
+            )
+
+        assert task_store.get.await_count == 4
+        agent_executor.execute.assert_not_awaited()
+    finally:
+        await request_handler.aclose()
 
 
 @pytest.mark.asyncio
