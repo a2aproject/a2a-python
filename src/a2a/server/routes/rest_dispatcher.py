@@ -10,6 +10,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    serialize_list_tasks_response,
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -327,19 +328,19 @@ class RestDispatcher:
     @rest_error_handler
     async def list_tasks(self, request: Request) -> Response:
         """Handles the 'tasks/list' REST method."""
+        params = a2a_pb2.ListTasksRequest()
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.ListTasksResponse:
-            params = a2a_pb2.ListTasksRequest()
             proto_utils.parse_params(request.query_params, params)
             return await self.request_handler.on_list_tasks(params, context)
 
         response = await self._handle_non_streaming(request, _handler)
         return JSONResponse(
-            content=MessageToDict(
-                response, always_print_fields_with_no_presence=True
+            content=serialize_list_tasks_response(
+                response, params.include_artifacts
             )
         )
 

@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from collections.abc import Awaitable, Callable
+
 import httpx
 
 from google.protobuf.json_format import MessageToDict
@@ -28,6 +30,8 @@ class BasePushNotificationSender(PushNotificationSender):
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
+        *,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -41,6 +45,11 @@ class BasePushNotificationSender(PushNotificationSender):
               Pass None (the default) in new code. A non-None
               value logs a deprecation warning and is otherwise
               ignored.
+            push_url_validator: Async callable that returns True to
+              accept a push URL, or False to reject it. Defaults to
+              None (no library screening). The spec lists these checks
+              as SHOULD, so deployments that want the built-in policy
+              should pass ``validate_push_notification_url``.
         """
         if context is not None:
             logger.warning(
@@ -54,6 +63,7 @@ class BasePushNotificationSender(PushNotificationSender):
             )
         self._client = httpx_client
         self._config_store = config_store
+        self._push_url_validator = push_url_validator
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
@@ -81,6 +91,11 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
+        if (
+            self._push_url_validator is not None
+            and not await self._push_url_validator(url)
+        ):
+            return False
         try:
             headers = None
             if push_info.token:

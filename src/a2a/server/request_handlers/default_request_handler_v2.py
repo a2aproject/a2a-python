@@ -98,6 +98,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         if queue_manager is not None:
             message = (
@@ -115,6 +116,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         self._agent_card = agent_card
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -129,6 +131,13 @@ class DefaultRequestHandlerV2(RequestHandler):
             push_sender=self._push_sender,
         )
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     async def aclose(self) -> None:
         """Shuts down the handler, draining all active tasks.
@@ -238,6 +247,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -362,6 +374,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        await self._reject_unsafe_push_url(params.url)
 
         await self._push_config_store.set_info(
             task_id,
