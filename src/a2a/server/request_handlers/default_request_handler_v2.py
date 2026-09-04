@@ -46,6 +46,7 @@ from a2a.utils.errors import (
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.utils.task import (
     apply_history_length,
@@ -230,6 +231,10 @@ class DefaultRequestHandlerV2(RequestHandler):
             task = await self.task_store.get(original_task_id, call_context)
             if not task:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
+            if task.status.state in TERMINAL_TASK_STATES:
+                raise UnsupportedOperationError(
+                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                )
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
