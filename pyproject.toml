@@ -33,7 +33,7 @@ classifiers = [
 ]
 
 [project.optional-dependencies]
-http-server = ["sse-starlette", "starlette"]
+http-server = ["sse-starlette>=3.3.0", "starlette"]
 fastapi = ["a2a-sdk[http-server]", "fastapi>=0.115.2"]
 encryption = ["cryptography>=43.0.0"]
 grpc = ["grpcio>=1.60", "grpcio-tools>=1.60", "grpcio_reflection>=1.7.0"]

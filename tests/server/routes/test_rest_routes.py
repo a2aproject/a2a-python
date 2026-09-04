@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -92,3 +92,47 @@ def test_rest_list_tasks(agent_card, mock_handler):
     response = client.get('/tasks', headers={'A2A-Version': '1.0'})
     assert response.status_code == 200
     assert mock_handler.on_list_tasks.called
+
+
+def test_shutdown_grace_period_is_forwarded_to_dispatcher(mock_handler) -> None:
+    """Tests that the route factory configures SSE cooperative shutdown."""
+    with patch(
+        'a2a.server.routes.rest_routes.RestDispatcher'
+    ) as dispatcher_class:
+        create_rest_routes(request_handler=mock_handler)
+        dispatcher_class.assert_called_once_with(
+            request_handler=mock_handler,
+            context_builder=None,
+            shutdown_grace_period=0,
+        )
+
+        dispatcher_class.reset_mock()
+        create_rest_routes(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+
+        dispatcher_class.assert_called_once_with(
+            request_handler=mock_handler,
+            context_builder=None,
+            shutdown_grace_period=30.0,
+        )
+
+
+def test_shutdown_grace_period_is_forwarded_to_v03_adapter(
+    mock_handler,
+) -> None:
+    """Tests that v0.3 compatibility routes share the shutdown grace period."""
+    with patch('a2a.server.routes.rest_routes.REST03Adapter') as adapter_class:
+        adapter_class.return_value.routes.return_value = {}
+        create_rest_routes(
+            request_handler=mock_handler,
+            enable_v0_3_compat=True,
+            shutdown_grace_period=30.0,
+        )
+
+    adapter_class.assert_called_once_with(
+        http_handler=mock_handler,
+        context_builder=None,
+        shutdown_grace_period=30.0,
+    )
