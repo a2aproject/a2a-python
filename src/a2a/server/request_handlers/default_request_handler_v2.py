@@ -38,6 +38,7 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
 )
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
@@ -298,9 +299,16 @@ class DefaultRequestHandlerV2(RequestHandler):
             ):
                 self._validate_task_id_match(task_id, event.id)
                 result = event
-                # DO break here as it's "return_immediately".
-                # AgentExecutor will continue to run in the background.
-                break
+                # A FAILED task may be followed by a producer exception. Keep
+                # the task as the fallback result, but let the subscription
+                # surface that exception or finish the current request.
+                if (
+                    params.configuration.return_immediately
+                    or event.status.state != TaskState.TASK_STATE_FAILED
+                ):
+                    # AgentExecutor will continue to run in the background
+                    # when return_immediately is set.
+                    break
 
             if isinstance(event, Message):
                 result = event
