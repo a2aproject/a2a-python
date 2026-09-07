@@ -15,6 +15,8 @@ from typing import Any
 
 from pyproto import instruction_pb2
 
+import acts_behaviors
+
 from a2a.client import Client, ClientConfig, create_client
 from a2a.client.errors import A2AClientError
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
@@ -40,6 +42,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    AgentSkill,
     CancelTaskRequest,
     Message,
     Part,
@@ -352,6 +355,17 @@ class V10AgentExecutor(AgentExecutor):
     ) -> None:
         """Executes a task instruction."""
         logger.info('Executing task %s', context.task_id)
+
+        # Dual mode. An ACTS conformance test names a `tck-*` behaviour in its
+        # first user message (ACTS §11); anything else is an ITK traversal
+        # carrying a protobuf Instruction. The branch is taken before any task
+        # is created, because one ACTS behaviour must answer with a bare
+        # Message and so must not open a task at all.
+        behavior = acts_behaviors.behavior_for(context)
+        if behavior is not None:
+            await acts_behaviors.run(behavior, context, event_queue)
+            return
+
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
@@ -495,10 +509,25 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         name='ITK v10 Agent',
         description='Python agent using SDK 1.0.',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
+        # ACTS evaluates a test's `preconditions` against this card and skips
+        # when they are unmet (ACTS §12.5), so anything the agent really does
+        # has to be advertised or the matching tests silently never run.
+        capabilities=AgentCapabilities(
+            streaming=True,
+            push_notifications=True,
+            extended_agent_card=True,
+        ),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
+        skills=[
+            AgentSkill(
+                id='acts-behaviors',
+                name='ACTS behaviours',
+                description='Implements the ACTS §11 tck-* behaviour contract.',
+                tags=['acts', 'conformance'],
+            )
+        ],
     )
 
     task_store = InMemoryTaskStore()
