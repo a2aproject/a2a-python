@@ -538,16 +538,13 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         config_store=push_config_store,
     )
 
+    # One handler for every binding. It carries `extended_agent_card` because
+    # the card advertises `extendedAgentCard: true`, and a capability is
+    # advertised per agent, not per binding — configuring it on JSON-RPC alone
+    # made `Get Extended Agent Card` answer with the card over JSON-RPC and
+    # `ExtendedAgentCardNotConfiguredError` over gRPC and REST, from an agent
+    # claiming the capability once for all three.
     handler = DefaultRequestHandler(
-        agent_executor=V10AgentExecutor(),
-        agent_card=agent_card,
-        task_store=task_store,
-        queue_manager=InMemoryQueueManager(),
-        push_config_store=push_config_store,
-        push_sender=push_sender,
-    )
-
-    handler_extended = DefaultRequestHandler(
         agent_executor=V10AgentExecutor(),
         agent_card=agent_card,
         task_store=task_store,
@@ -561,7 +558,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        request_handler=handler_extended,
+        request_handler=handler,
         rpc_url='/',
         enable_v0_3_compat=True,
     )
