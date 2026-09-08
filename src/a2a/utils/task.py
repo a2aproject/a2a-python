@@ -10,6 +10,17 @@ from a2a.utils.constants import MAX_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
 
 
+MAX_HISTORY_LENGTH = 1000
+"""Maximum allowed value for a ``history_length`` request.
+
+Keeps a single request from asking the server to materialize an
+unbounded history (e.g. ``historyLength=999999999``). The value is a
+pragmatic cap aligned with the other A2A SDKs' semantics, where very
+large values effectively mean "return everything available"; clients
+requesting more than this cap get ``InvalidParamsError``.
+"""
+
+
 @runtime_checkable
 class HistoryLengthConfig(Protocol):
     """Protocol for configuration arguments containing history_length field."""
@@ -25,9 +36,13 @@ class HistoryLengthConfig(Protocol):
 
 
 def validate_history_length(config: HistoryLengthConfig | None) -> None:
-    """Validates that history_length is non-negative."""
+    """Validates that history_length is non-negative and within limits."""
     if config and config.history_length < 0:
         raise InvalidParamsError(message='history length must be non-negative')
+    if config and config.history_length > MAX_HISTORY_LENGTH:
+        raise InvalidParamsError(
+            message=f'history length must be at most {MAX_HISTORY_LENGTH}'
+        )
 
 
 def apply_history_length(
