@@ -26,9 +26,9 @@ thing the split exists to prevent.
 
 That regex is greedy to the word boundary, which gives longest-match for
 free: `tck-artifact-file-url` beats `tck-artifact-file` without an ordered
-table, and a typo like `tck-complet-task` is reported as an unimplemented
-behaviour instead of falling through to the ITK path and failing there with
-"no valid instruction".
+table, and a misspelled prefix is reported as an unimplemented behaviour
+instead of falling through to the ITK path and failing there with "no valid
+instruction".
 """
 
 from __future__ import annotations
@@ -37,12 +37,13 @@ import asyncio
 import logging
 import re
 import uuid
+
 from typing import TYPE_CHECKING, Any
+
+import acts_client_parse
 
 from google.protobuf import json_format
 from google.protobuf.struct_pb2 import Struct, Value
-
-import acts_client_parse
 
 from a2a.server.tasks import TaskUpdater
 from a2a.types.a2a_pb2 import Message, Part, Task, TaskState, TaskStatus
@@ -188,47 +189,55 @@ async def _dispatch(
     """
     if behavior == acts_client_parse.BEHAVIOR:
         await _client_parse(context, updater)
-        return
-
-    if behavior == 'tck-multi-turn':
+    elif behavior == 'tck-multi-turn':
         await _multi_turn(context, updater)
-        return
-
-    if behavior == 'tck-cancel':
-        # Hold in WORKING. The framework cancels the executor task when a
-        # CancelTask arrives, which surfaces here as CancelledError.
-        try:
-            while True:
-                await asyncio.sleep(0.2)
-        except asyncio.CancelledError:
-            logger.info('tck-cancel: task %s canceled', context.task_id)
-            raise
-        return
-
-    if behavior == 'tck-long-running':
-        await asyncio.sleep(LONG_RUNNING_DELAY_S)
-        # `CORE-EXEC-001` polls to completion and then asserts the finished
-        # task carries at least one artifact, so the work has to leave one
-        # behind even though §11.2 describes this behaviour only as "delayed
-        # completion".
-        await updater.add_artifact(
-            [Part(text='long running result')],
-            name='long-running',
-            last_chunk=True,
-        )
-        await updater.complete(
-            updater.new_agent_message([Part(text='long running work finished')])
-        )
-        return
-
-    if behavior in ('tck-stream-basic', 'tck-stream-chunked'):
+    elif behavior == 'tck-cancel':
+        await _cancel(context)
+    elif behavior == 'tck-long-running':
+        await _long_running(updater)
+    elif behavior in ('tck-stream-basic', 'tck-stream-chunked'):
         await _stream(behavior, updater)
-        return
-
-    if behavior.startswith('tck-artifact-'):
+    elif behavior.startswith('tck-artifact-'):
         await _artifact(behavior, updater)
-        return
+    else:
+        await _terminal(behavior, updater)
 
+
+async def _cancel(context: RequestContext) -> None:
+    """Hold in WORKING until the framework cancels this executor task.
+
+    A CancelTask surfaces here as `CancelledError`. Waiting on an event
+    nobody sets is how you block indefinitely without polling.
+    """
+    try:
+        await asyncio.Event().wait()
+    except asyncio.CancelledError:
+        logger.info('tck-cancel: task %s canceled', context.task_id)
+        raise
+
+
+async def _long_running(updater: TaskUpdater) -> None:
+    """Stay in WORKING briefly, then complete with an artifact."""
+    await asyncio.sleep(LONG_RUNNING_DELAY_S)
+    # `CORE-EXEC-001` polls to completion and then asserts the finished task
+    # carries at least one artifact, so the work has to leave one behind even
+    # though §11.2 describes this behaviour only as "delayed completion".
+    await updater.add_artifact(
+        [Part(text='long running result')],
+        name='long-running',
+        last_chunk=True,
+    )
+    await updater.complete(
+        updater.new_agent_message([Part(text='long running work finished')])
+    )
+
+
+async def _terminal(behavior: str, updater: TaskUpdater) -> None:
+    """End the task in the state the behaviour names.
+
+    An unknown behaviour fails the task rather than completing it — a silent
+    success would report conformance the agent never demonstrated.
+    """
     terminal = {
         'tck-complete-task': updater.complete,
         'tck-task-failure': updater.failed,
@@ -257,7 +266,7 @@ async def _client_parse(context: RequestContext, updater: TaskUpdater) -> None:
     `expect.body`.
     """
     request = None
-    for part in (context.message.parts if context.message else ()):
+    for part in context.message.parts if context.message else ():
         if part.HasField('data'):
             request = acts_client_parse.request_from(
                 json_format.MessageToDict(part.data)
@@ -326,7 +335,7 @@ async def _artifact(behavior: str, updater: TaskUpdater) -> None:
 
 
 async def _stream(behavior: str, updater: TaskUpdater) -> None:
-    """working -> artifact(s) -> completed, as separate events.
+    """Working -> artifact(s) -> completed, as separate events.
 
     Emitted through the updater so each step is its own queue event, which is
     what makes them separate SSE frames — a single combined update would

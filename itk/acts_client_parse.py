@@ -30,9 +30,12 @@ from __future__ import annotations
 
 import json
 import logging
+
 from typing import Any
 
 import httpx
+
+from google.protobuf.json_format import MessageToDict
 
 from a2a.client import ClientConfig, create_client
 from a2a.client.card_resolver import A2ACardResolver
@@ -46,7 +49,6 @@ from a2a.types.a2a_pb2 import (
     SendMessageRequest,
 )
 from a2a.utils import TransportProtocol
-from google.protobuf.json_format import MessageToDict
 
 
 logger = logging.getLogger(__name__)
@@ -108,7 +110,9 @@ def _scaffold_card() -> AgentCard:
     return AgentCard(
         name='acts-client-parse',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=False, extended_agent_card=True),
+        capabilities=AgentCapabilities(
+            streaming=False, extended_agent_card=True
+        ),
         supported_interfaces=[
             AgentInterface(
                 url=_BASE_URL,
@@ -171,38 +175,50 @@ async def parse(operation: str, payload: Any) -> dict[str, Any]:
     propagating, because for `CLIENT-PARSE-004` that *is* the expected parse.
     """
     try:
-        if operation == 'get_agent_card':
-            return await _parse_card(payload, _CARD_PATH)
-        if operation == 'get_extended_agent_card':
-            # The corpus writes this one as a bare card, matching the wire:
-            # `supportedInterfaces` on its own payload names REST, where the
-            # extended card is a plain GET. Accept an envelope too, since a
-            # JSON-RPC binding does wrap it.
-            if _is_enveloped(payload):
-                return await _parse_extended_card_envelope(payload)
-            return await _parse_card(payload, _EXTENDED_CARD_PATH)
-
-        client = await _client(payload)
-        try:
-            if operation == 'send_message':
-                async for event in client.send_message(
-                    SendMessageRequest(
-                        message=Message(role='ROLE_USER', message_id='acts')
-                    )
-                ):
-                    # StreamResponse keeps the oneof, which is exactly the
-                    # discriminator `expect_parsed: {task: ...}` addresses.
-                    return MessageToDict(event)
-                return {}
-            if operation == 'get_task':
-                task = await client.get_task(GetTaskRequest(id='acts'))
-                return MessageToDict(task)
-        finally:
-            await client.close()
-
-        return {'error': {'message': f'unsupported client operation {operation!r}'}}
+        parsed = await _parse_operation(operation, payload)
     except Exception as exc:  # noqa: BLE001 - the error IS the parse result
         return _as_error(exc, payload)
+    return parsed
+
+
+async def _parse_operation(operation: str, payload: Any) -> dict[str, Any]:
+    """Route ``operation`` to whichever half of the client handles it."""
+    if operation == 'get_agent_card':
+        return await _parse_card(payload, _CARD_PATH)
+
+    if operation == 'get_extended_agent_card':
+        # The corpus writes this one as a bare card, matching the wire:
+        # `supportedInterfaces` on its own payload names REST, where the
+        # extended card is a plain GET. Accept an envelope too, since a
+        # JSON-RPC binding does wrap it.
+        if _is_enveloped(payload):
+            return await _parse_extended_card_envelope(payload)
+        return await _parse_card(payload, _EXTENDED_CARD_PATH)
+
+    return await _parse_via_rpc(operation, payload)
+
+
+async def _parse_via_rpc(operation: str, payload: Any) -> dict[str, Any]:
+    """The operations that go through the RPC client rather than the card."""
+    client = await _client(payload)
+    try:
+        if operation == 'send_message':
+            async for event in client.send_message(
+                SendMessageRequest(
+                    message=Message(role='ROLE_USER', message_id='acts')
+                )
+            ):
+                # StreamResponse keeps the oneof, which is exactly the
+                # discriminator `expect_parsed: {task: ...}` addresses.
+                return MessageToDict(event)
+            return {}
+        if operation == 'get_task':
+            task = await client.get_task(GetTaskRequest(id='acts'))
+            return MessageToDict(task)
+    finally:
+        await client.close()
+
+    return {'error': {'message': f'unsupported client operation {operation!r}'}}
 
 
 def _as_error(exc: Exception, payload: Any) -> dict[str, Any]:
