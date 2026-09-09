@@ -461,6 +461,30 @@ class V10AgentExecutor(AgentExecutor):
         await task_updater.update_status(TaskState.TASK_STATE_CANCELED)
 
 
+def _capabilities() -> AgentCapabilities:
+    """What this agent advertises — everything, unless asked for less.
+
+    Four ACTS tests assert that an agent *without* a capability answers
+    `UnsupportedOperationError`, so their preconditions require the card not
+    to advertise it and they can never run against a fully capable agent. The
+    ACTS runner starts a second SUT with `ITK_ACTS_REDUCED_CAPABILITIES` set
+    to reach them, and the SDK already gates those operations on this card, so
+    publishing less is all it takes to refuse them.
+    """
+    if os.environ.get('ITK_ACTS_REDUCED_CAPABILITIES'):
+        logger.info('Advertising no optional capabilities (ACTS reduced pass)')
+        return AgentCapabilities(
+            streaming=False,
+            push_notifications=False,
+            extended_agent_card=False,
+        )
+    return AgentCapabilities(
+        streaming=True,
+        push_notifications=True,
+        extended_agent_card=True,
+    )
+
+
 async def main_async(http_port: int, grpc_port: int) -> None:
     """Starts the Agent with HTTP and gRPC interfaces."""
     interfaces = [
@@ -512,11 +536,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         # ACTS evaluates a test's `preconditions` against this card and skips
         # when they are unmet (ACTS §12.5), so anything the agent really does
         # has to be advertised or the matching tests silently never run.
-        capabilities=AgentCapabilities(
-            streaming=True,
-            push_notifications=True,
-            extended_agent_card=True,
-        ),
+        capabilities=_capabilities(),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
