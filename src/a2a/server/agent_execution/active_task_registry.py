@@ -48,47 +48,52 @@ class ActiveTaskRegistry:
         initial_message: Message | None = None,
     ) -> ActiveTask:
         """Retrieves an existing ActiveTask or creates a new one."""
-        with self._lock:
-            if self._closed:
-                raise RuntimeError('ActiveTaskRegistry is closed')
-            existing = self._active_tasks.get(task_id)
-            if existing is None:
-                task_manager = TaskManager(
-                    task_id=task_id,
-                    context_id=context_id,
-                    task_store=self._task_store,
-                    initial_message=initial_message,
-                    context=call_context,
-                )
+        while True:
+            with self._lock:
+                if self._closed:
+                    raise RuntimeError('ActiveTaskRegistry is closed')
+                active_task = self._active_tasks.get(task_id)
+                if active_task is None:
+                    task_manager = TaskManager(
+                        task_id=task_id,
+                        context_id=context_id,
+                        task_store=self._task_store,
+                        initial_message=initial_message,
+                        context=call_context,
+                    )
 
-                active_task = ActiveTask(
-                    agent_executor=self._agent_executor,
-                    task_id=task_id,
-                    task_manager=task_manager,
-                    push_sender=self._push_sender,
-                    on_cleanup=self._on_active_task_cleanup,
-                )
-                self._active_tasks[task_id] = active_task
+                    active_task = ActiveTask(
+                        agent_executor=self._agent_executor,
+                        task_id=task_id,
+                        task_manager=task_manager,
+                        push_sender=self._push_sender,
+                        on_cleanup=self._on_active_task_cleanup,
+                    )
+                    self._active_tasks[task_id] = active_task
+                    break
 
-        if existing is not None:
-            # Owner-aware guard on the cache-hit path. The miss path below is
+            # A refresh can wait behind task-store I/O, so do not hold the
+            # global registry lock while synchronizing this individual task.
+            # ActiveTask itself skips the refresh while its request lock is
+            # held, preserving an in-flight streaming/artifact snapshot.
+            await active_task.refresh_task_if_idle(call_context)
+
+            # A cache hit must still be owner-scoped. The miss path below is
             # owner-scoped by ActiveTask.start(), which reads through the task
             # store with call_context and raises TaskNotFoundError when the
-            # task is not owned and create_task_if_missing is false. A cache
-            # hit returned before that check, so resolving a live task by id
-            # was an unauthenticated lookup (issue #1159, CWE-639): every
-            # call site had to guard first. Enforce it here instead, so the
-            # hit path is symmetric with the miss path and no future caller
-            # can reintroduce the gap. Skipped when create_task_if_missing is
-            # set, which is the on_message_send create path establishing
-            # ownership. Masked as not-found so existence is not leaked. Done
-            # outside _lock because the store read is I/O and the miss-path
-            # check runs outside the lock too.
+            # task is not owned and create_task_if_missing is false. Refresh
+            # comes first so a missing or deleted snapshot cannot remain
+            # cached after this request boundary, even when this check fails.
             if not create_task_if_missing and not await self._task_store.get(
                 task_id, call_context
             ):
                 raise TaskNotFoundError
-            return existing
+
+            with self._lock:
+                if self._closed:
+                    raise RuntimeError('ActiveTaskRegistry is closed')
+                if self._active_tasks.get(task_id) is active_task:
+                    return active_task
 
         await active_task.start(
             call_context=call_context,
