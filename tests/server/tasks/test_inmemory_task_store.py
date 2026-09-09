@@ -258,6 +258,91 @@ async def test_list_tasks_fails(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'task_time, threshold, included',
+    [
+        ('00Z', '00.001Z', False),
+        ('00.001Z', '00Z', True),
+        ('00.123Z', '00.123001Z', False),
+        ('00.123001Z', '00.123Z', True),
+        ('00.123Z', '00.123000001Z', False),
+        ('00.123000001Z', '00.123Z', True),
+        ('00.123001Z', '00.123001001Z', False),
+        ('00.123001001Z', '00.123001Z', True),
+        ('00.123Z', '00.123Z', True),
+        ('00.123000001Z', '00.123000001Z', True),
+        ('00.999999999Z', '01Z', False),
+        ('01Z', '00.999999999Z', True),
+    ],
+)
+async def test_list_tasks_timestamp_filter_precision(
+    task_time: str, threshold: str, included: bool
+) -> None:
+    """Compare timestamp values across JSON fractional-second precisions."""
+    store = InMemoryTaskStore()
+    task = create_minimal_task()
+    task.status.timestamp.FromJsonString(f'2025-01-01T00:00:{task_time}')
+    await store.save(task, TEST_CONTEXT)
+    await store.save(create_minimal_task('no-timestamp'), TEST_CONTEXT)
+    await store.save(Task(id='no-status'), TEST_CONTEXT)
+    params = ListTasksRequest()
+    params.status_timestamp_after.FromJsonString(
+        f'2025-01-01T00:00:{threshold}'
+    )
+
+    page = await store.list(params, TEST_CONTEXT)
+
+    assert [result.id for result in page.tasks] == (
+        [task.id] if included else []
+    )
+    assert page.total_size == int(included)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('page_size', [1, 3, 20])
+async def test_list_tasks_timestamp_ordering_and_pagination(
+    page_size: int,
+) -> None:
+    """Keep chronological order and ID tie-breaking across page boundaries."""
+    store = InMemoryTaskStore()
+    # Chronological order, including timestamps before and at the Unix epoch.
+    timestamps = [
+        '1969-12-31T23:59:59.999999999Z',
+        '1970-01-01T00:00:00Z',
+        '2025-01-01T00:00:00Z',
+        '2025-01-01T00:00:00.123Z',
+        '2025-01-01T00:00:00.123000001Z',
+        '2025-01-01T00:00:00.123001Z',
+        '2025-01-01T00:00:00.123001001Z',
+        '2025-01-01T00:00:01Z',
+        '2025-01-01T00:00:01Z',
+    ]
+    for index, timestamp in enumerate(timestamps):
+        task = create_minimal_task(f'task-{index}')
+        task.status.timestamp.FromJsonString(timestamp)
+        await store.save(task, TEST_CONTEXT)
+    await store.save(create_minimal_task('no-timestamp'), TEST_CONTEXT)
+    await store.save(Task(id='no-status'), TEST_CONTEXT)
+    expected_ids = [
+        *(f'task-{index}' for index in reversed(range(len(timestamps)))),
+        'no-timestamp',
+        'no-status',
+    ]
+    params = ListTasksRequest(page_size=page_size)
+
+    for start in range(0, len(expected_ids), page_size):
+        page = await store.list(params, TEST_CONTEXT)
+        assert [task.id for task in page.tasks] == expected_ids[
+            start : start + page_size
+        ]
+        assert page.total_size == len(expected_ids)
+        assert bool(page.next_page_token) == (
+            start + page_size < len(expected_ids)
+        )
+        params.page_token = page.next_page_token
+
+
+@pytest.mark.asyncio
 async def test_in_memory_task_store_delete() -> None:
     """Test deleting a task from the store."""
     store = InMemoryTaskStore()

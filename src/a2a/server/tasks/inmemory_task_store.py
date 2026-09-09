@@ -93,8 +93,8 @@ class _InMemoryTaskStoreImpl(TaskStore):
                 task for task in tasks if task.status.state == params.status
             ]
         if params.HasField('status_timestamp_after'):
-            last_updated_after_iso = (
-                params.status_timestamp_after.ToJsonString()
+            last_updated_after_ns = (
+                params.status_timestamp_after.ToNanoseconds()
             )
             tasks = [
                 task
@@ -102,8 +102,8 @@ class _InMemoryTaskStoreImpl(TaskStore):
                 if (
                     task.HasField('status')
                     and task.status.HasField('timestamp')
-                    and task.status.timestamp.ToJsonString()
-                    >= last_updated_after_iso
+                    and task.status.timestamp.ToNanoseconds()
+                    >= last_updated_after_ns
                 )
             ]
 
@@ -113,9 +113,9 @@ class _InMemoryTaskStoreImpl(TaskStore):
                 task.status.HasField('timestamp')
                 if task.HasField('status')
                 else False,
-                task.status.timestamp.ToJsonString()
+                task.status.timestamp.ToNanoseconds()
                 if task.HasField('status') and task.status.HasField('timestamp')
-                else '',
+                else 0,
                 task.id,
             ),
             reverse=True,
