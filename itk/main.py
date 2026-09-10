@@ -15,6 +15,8 @@ from typing import Any
 
 from pyproto import instruction_pb2
 
+import acts_behaviors
+
 from a2a.client import Client, ClientConfig, create_client
 from a2a.client.errors import A2AClientError
 from a2a.compat.v0_3 import a2a_v0_3_pb2_grpc
@@ -40,6 +42,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    AgentSkill,
     CancelTaskRequest,
     Message,
     Part,
@@ -352,6 +355,17 @@ class V10AgentExecutor(AgentExecutor):
     ) -> None:
         """Executes a task instruction."""
         logger.info('Executing task %s', context.task_id)
+
+        # Dual mode. An ACTS conformance test names a `tck-*` behaviour in its
+        # first user message (ACTS §11); anything else is an ITK traversal
+        # carrying a protobuf Instruction. The branch is taken before any task
+        # is created, because one ACTS behaviour must answer with a bare
+        # Message and so must not open a task at all.
+        behavior = acts_behaviors.behavior_for(context)
+        if behavior is not None:
+            await acts_behaviors.run(behavior, context, event_queue)
+            return
+
         task_updater = TaskUpdater(
             event_queue,
             context.task_id,
@@ -447,6 +461,30 @@ class V10AgentExecutor(AgentExecutor):
         await task_updater.update_status(TaskState.TASK_STATE_CANCELED)
 
 
+def _capabilities() -> AgentCapabilities:
+    """What this agent advertises — everything, unless asked for less.
+
+    Four ACTS tests assert that an agent *without* a capability answers
+    `UnsupportedOperationError`, so their preconditions require the card not
+    to advertise it and they can never run against a fully capable agent. The
+    ACTS runner starts a second SUT with `ITK_ACTS_REDUCED_CAPABILITIES` set
+    to reach them, and the SDK already gates those operations on this card, so
+    publishing less is all it takes to refuse them.
+    """
+    if os.environ.get('ITK_ACTS_REDUCED_CAPABILITIES'):
+        logger.info('Advertising no optional capabilities (ACTS reduced pass)')
+        return AgentCapabilities(
+            streaming=False,
+            push_notifications=False,
+            extended_agent_card=False,
+        )
+    return AgentCapabilities(
+        streaming=True,
+        push_notifications=True,
+        extended_agent_card=True,
+    )
+
+
 async def main_async(http_port: int, grpc_port: int) -> None:
     """Starts the Agent with HTTP and gRPC interfaces."""
     interfaces = [
@@ -495,10 +533,21 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         name='ITK v10 Agent',
         description='Python agent using SDK 1.0.',
         version='1.0.0',
-        capabilities=AgentCapabilities(streaming=True),
+        # ACTS evaluates a test's `preconditions` against this card and skips
+        # when they are unmet (ACTS §12.5), so anything the agent really does
+        # has to be advertised or the matching tests silently never run.
+        capabilities=_capabilities(),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
+        skills=[
+            AgentSkill(
+                id='acts-behaviors',
+                name='ACTS behaviours',
+                description='Implements the ACTS §11 tck-* behaviour contract.',
+                tags=['acts', 'conformance'],
+            )
+        ],
     )
 
     task_store = InMemoryTaskStore()
@@ -509,16 +558,13 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         config_store=push_config_store,
     )
 
+    # One handler for every binding. It carries `extended_agent_card` because
+    # the card advertises `extendedAgentCard: true`, and a capability is
+    # advertised per agent, not per binding — configuring it on JSON-RPC alone
+    # made `Get Extended Agent Card` answer with the card over JSON-RPC and
+    # `ExtendedAgentCardNotConfiguredError` over gRPC and REST, from an agent
+    # claiming the capability once for all three.
     handler = DefaultRequestHandler(
-        agent_executor=V10AgentExecutor(),
-        agent_card=agent_card,
-        task_store=task_store,
-        queue_manager=InMemoryQueueManager(),
-        push_config_store=push_config_store,
-        push_sender=push_sender,
-    )
-
-    handler_extended = DefaultRequestHandler(
         agent_executor=V10AgentExecutor(),
         agent_card=agent_card,
         task_store=task_store,
@@ -532,7 +578,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         agent_card=agent_card, card_url='/.well-known/agent-card.json'
     )
     jsonrpc_routes = create_jsonrpc_routes(
-        request_handler=handler_extended,
+        request_handler=handler,
         rpc_url='/',
         enable_v0_3_compat=True,
     )
