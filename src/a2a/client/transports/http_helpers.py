@@ -102,6 +102,9 @@ async def parse_sse_stream(
         elif key == 'data':
             payload_chunks.append(val)
 
+    if payload_chunks:
+        yield event_name, '\n'.join(payload_chunks)
+
 
 async def send_http_stream_request(
     httpx_client: httpx.AsyncClient,
