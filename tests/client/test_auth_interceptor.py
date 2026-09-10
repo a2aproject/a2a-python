@@ -121,7 +121,7 @@ async def test_in_memory_context_credential_store(
     session_id = 'session-id'
     scheme_name = 'test-scheme'
     credential = 'test-token'
-    await store.set_credentials(session_id, scheme_name, credential)
+    store.set_credentials(session_id, scheme_name, credential)
 
     # Assert: Successful retrieval
     context = ClientCallContext(state={'sessionId': session_id})
@@ -144,7 +144,7 @@ async def test_in_memory_context_credential_store(
     assert retrieved_credential_empty is None
     # Assert: Overwrite the credential when session_id already exists
     new_credential = 'new-token'
-    await store.set_credentials(session_id, scheme_name, new_credential)
+    store.set_credentials(session_id, scheme_name, new_credential)
     assert await store.get_credentials(scheme_name, context) == new_credential
 
 
@@ -249,7 +249,7 @@ async def test_auth_interceptor_variants(
     test_case: AuthTestCase, store: InMemoryContextCredentialStore
 ) -> None:
     """Parametrized test verifying that AuthInterceptor correctly attaches credentials based on the defined security scheme in the AgentCard."""
-    await store.set_credentials(
+    store.set_credentials(
         test_case.session_id, test_case.scheme_name, test_case.credential
     )
     auth_interceptor = AuthInterceptor(credential_service=store)
@@ -300,7 +300,7 @@ async def test_auth_interceptor_skips_when_scheme_not_in_security_schemes(
     scheme_name = 'missing'
     session_id = 'session-id'
     credential = 'test-token'
-    await store.set_credentials(session_id, scheme_name, credential)
+    store.set_credentials(session_id, scheme_name, credential)
     auth_interceptor = AuthInterceptor(credential_service=store)
     agent_card = AgentCard(
         supported_interfaces=[
