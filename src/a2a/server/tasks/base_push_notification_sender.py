@@ -1,8 +1,7 @@
 import asyncio
-import ipaddress
 import logging
-import socket
-import urllib.parse
+
+from collections.abc import Awaitable, Callable
 
 import httpx
 
@@ -23,56 +22,6 @@ from a2a.utils.proto_utils import to_stream_response
 logger = logging.getLogger(__name__)
 
 
-def _ip_is_blocked(ip_str: str) -> bool:
-    """Whether an address is not a public unicast destination."""
-    try:
-        addr = ipaddress.ip_address(ip_str.split('%', maxsplit=1)[0])
-    except ValueError:
-        return True
-    return (
-        addr.is_private
-        or addr.is_loopback
-        or addr.is_link_local
-        or addr.is_multicast
-        or addr.is_reserved
-        or addr.is_unspecified
-    )
-
-
-async def push_url_validation_error(url: str) -> str | None:
-    """Return an error string if a push-notification URL is not safe.
-
-    Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
-    link-local, private, reserved, multicast, or unspecified addresses
-    (e.g. 169.254.169.254 cloud metadata, internal services). A host
-    that cannot be resolved is rejected: the POST would fail anyway,
-    and failing closed avoids treating resolution errors as a bypass.
-
-    Uses the running event-loop resolver so the default request
-    handlers stay non-blocking. Deployments can replace this with
-    their own policy via ``push_url_validator``.
-    """
-    try:
-        parsed = urllib.parse.urlparse(url)
-    except ValueError:
-        return 'unparseable URL'
-    if parsed.scheme not in ('http', 'https'):
-        return f"scheme '{parsed.scheme}' is not http/https"
-    host = parsed.hostname
-    if not host:
-        return 'no hostname'
-    port = parsed.port or (443 if parsed.scheme == 'https' else 80)
-    try:
-        loop = asyncio.get_running_loop()
-        infos = await loop.getaddrinfo(host, port, type=socket.SOCK_STREAM)
-    except OSError:
-        return f"host '{host}' could not be resolved"
-    for info in infos:
-        if _ip_is_blocked(str(info[4][0])):
-            return f"host '{host}' resolves to a non-public address"
-    return None
-
-
 class BasePushNotificationSender(PushNotificationSender):
     """Base implementation of PushNotificationSender interface."""
 
@@ -81,6 +30,8 @@ class BasePushNotificationSender(PushNotificationSender):
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
+        *,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -94,6 +45,11 @@ class BasePushNotificationSender(PushNotificationSender):
               Pass None (the default) in new code. A non-None
               value logs a deprecation warning and is otherwise
               ignored.
+            push_url_validator: Async callable that returns True to
+              accept a push URL, or False to reject it. Defaults to
+              None (no library screening). The spec lists these checks
+              as SHOULD, so deployments that want the built-in policy
+              should pass ``validate_push_notification_url``.
         """
         if context is not None:
             logger.warning(
@@ -107,6 +63,7 @@ class BasePushNotificationSender(PushNotificationSender):
             )
         self._client = httpx_client
         self._config_store = config_store
+        self._push_url_validator = push_url_validator
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
@@ -134,6 +91,11 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
+        if (
+            self._push_url_validator is not None
+            and not await self._push_url_validator(url)
+        ):
+            return False
         try:
             headers = None
             if push_info.token:

@@ -103,8 +103,7 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
-        push_url_validator: Callable[[str], Awaitable[str | None]]
-        | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -119,11 +118,11 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
-            push_url_validator: Async callable that returns an error string
-              for a rejected push URL, or None to accept it. Defaults to
-              None (no library screening). The spec lists these checks as
-              SHOULD, so deployments that want the built-in policy should
-              pass ``push_url_validation_error``.
+            push_url_validator: Async callable that returns True to accept
+              a push URL, or False to reject it. Defaults to None (no
+              library screening). The spec lists these checks as SHOULD,
+              so deployments that want the built-in policy should pass
+              ``validate_push_notification_url``.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -151,11 +150,8 @@ class LegacyRequestHandler(RequestHandler):
         """Apply the configured push-URL policy, if any."""
         if self._push_url_validator is None:
             return
-        url_error = await self._push_url_validator(url)
-        if url_error:
-            raise InvalidParamsError(
-                message=f'Invalid push notification URL: {url_error}'
-            )
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     @validate_request_params
     async def on_get_task(
