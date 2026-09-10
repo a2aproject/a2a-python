@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.1.5](https://github.com/a2aproject/a2a-python/compare/v1.1.4...v1.1.5) (2026-09-10)
+
+
+### Features
+
+* implement ACTS SUT behaviors for the ITK agent with YAML config ([#1230](https://github.com/a2aproject/a2a-python/issues/1230)) ([41485c8](https://github.com/a2aproject/a2a-python/commit/41485c8a711eee356ee05cf8b5148749e8bc2bd4))
+
+
+### Bug Fixes
+
+* **server:** avoid out-of-range datetime task ordering ([#1220](https://github.com/a2aproject/a2a-python/issues/1220)) ([d55a3d3](https://github.com/a2aproject/a2a-python/commit/d55a3d323733ddf416d98d7d702d0bd73e22a3e4))
+* **tck:** enqueue Task before TaskStatusUpdateEvent in SUT agent ([#1165](https://github.com/a2aproject/a2a-python/issues/1165)) ([3971c70](https://github.com/a2aproject/a2a-python/commit/3971c7007d1e4abf43eda76f3d49c9fab3bf6c6c))
+
 ## [1.1.4](https://github.com/a2aproject/a2a-python/compare/v1.1.3...v1.1.4) (2026-09-07)
 
 
