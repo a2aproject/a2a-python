@@ -21,6 +21,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import InvalidParamsError
+from google.protobuf.descriptor import FieldDescriptor
 from google.protobuf.json_format import MessageToDict, Parse
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
@@ -180,6 +181,38 @@ class TestDictSerialization:
         assert result['int'] == 42
         assert result['list'] == ['hello', 9999999999999999999, '123']
         assert result['nested']['inner_large_string'] == 9999999999999999999
+
+
+class TestFieldIsRepeatedFallback:
+    """Test _field_is_repeated handles both old and new protobuf descriptor APIs."""
+
+    def test_uses_is_repeated_when_available(self):
+        """protobuf>=6.31 exposes is_repeated; the helper should use it directly."""
+
+        class FakeField:
+            is_repeated = True
+            label = 3
+
+        assert proto_utils._field_is_repeated(FakeField())
+
+        class FakeFieldNotRepeated:
+            is_repeated = False
+            label = 1
+
+        assert not proto_utils._field_is_repeated(FakeFieldNotRepeated())
+
+    def test_falls_back_to_label_when_is_repeated_missing(self):
+        """protobuf<6.31 (floor >=5.29.5) lacks is_repeated; fall back to label."""
+
+        class FakeOldFieldRepeated:
+            label = FieldDescriptor.LABEL_REPEATED
+
+        assert proto_utils._field_is_repeated(FakeOldFieldRepeated())
+
+        class FakeOldFieldOptional:
+            label = FieldDescriptor.LABEL_OPTIONAL
+
+        assert not proto_utils._field_is_repeated(FakeOldFieldOptional())
 
 
 class TestRestParams:
