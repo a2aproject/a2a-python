@@ -52,6 +52,11 @@ class ActiveTaskRegistry:
             if self._closed:
                 raise RuntimeError('ActiveTaskRegistry is closed')
             existing = self._active_tasks.get(task_id)
+            if existing is not None:
+                # Drop the reused task's stale snapshot so the next request
+                # re-reads the store instead of overwriting another replica's
+                # writes. No-op while a subscriber stream is in flight.
+                existing.refresh_on_reuse()
             if existing is None:
                 task_manager = TaskManager(
                     task_id=task_id,

@@ -155,6 +155,10 @@ class TaskManager:
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
+    def invalidate_cached_task(self) -> None:
+        """Drops the cached snapshot so the next `get_task` re-reads the store."""
+        self._current_task = None
+
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ) -> Task | None:
