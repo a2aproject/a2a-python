@@ -90,7 +90,7 @@ class TestTenantDecorator:
         mock_httpx.send.return_value = MagicMock(
             status_code=200,
             json=lambda: {
-                'result': {'message': {}},
+                'result': {},
                 'id': '1',
                 'jsonrpc': '2.0',
             },

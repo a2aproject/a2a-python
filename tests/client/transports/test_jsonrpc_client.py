@@ -137,11 +137,9 @@ class TestSendMessage:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'task': {
-                    'id': task_id,
-                    'contextId': 'ctx-123',
-                    'status': {'state': 'TASK_STATE_COMPLETED'},
-                }
+                'id': task_id,
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
             },
         }
         mock_response.raise_for_status = MagicMock()
@@ -156,6 +154,167 @@ class TestSendMessage:
         assert call_args[0][1] == 'http://test-agent.example.com'
         payload = call_args[1]['json']
         assert payload['method'] == 'SendMessage'
+
+    @pytest.mark.asyncio
+    async def test_send_message_legacy_wrapped_task(
+        self, transport, mock_httpx_client
+    ):
+        """A peer that still nests the payload under the streaming
+        SendMessageResponse oneof (older SDKs, other language
+        implementations) should still be parsed correctly.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'task': {
+                    'id': task_id,
+                    'contextId': 'ctx-123',
+                    'status': {'state': 'TASK_STATE_COMPLETED'},
+                }
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+        assert response.task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    @pytest.mark.asyncio
+    async def test_send_message_legacy_wrapped_message(
+        self, transport, mock_httpx_client
+    ):
+        """Same as above, but for a peer returning a wrapped Message."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'message': {
+                    'messageId': 'msg-1',
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'hi'}],
+                }
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('message')
+        assert response.message.message_id == 'msg-1'
+
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_kind_task(
+        self, transport, mock_httpx_client
+    ):
+        """A spec-compliant peer (e.g. another language SDK) sends the
+        Task unwrapped but with a "kind" discriminator field, which our
+        protobuf-generated Task type doesn't declare. It must be
+        stripped rather than break parsing.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': task_id,
+                'kind': 'task',
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_kind_message(
+        self, transport, mock_httpx_client
+    ):
+        """Same as above, but for a peer's unwrapped Message with kind."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'messageId': 'msg-1',
+                'kind': 'message',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'hi'}],
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('message')
+        assert response.message.message_id == 'msg-1'
+
+    @pytest.mark.asyncio
+    async def test_send_message_unwrapped_with_nested_kind(
+        self, transport, mock_httpx_client
+    ):
+        """A peer stamps "kind" on every Task/Message/Part it emits, not
+        just the top-level object, e.g. TaskStatus.message, Task.history
+        entries, and Message.parts entries. All of them must be stripped,
+        not just the one at the root.
+        """
+        task_id = str(uuid4())
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': task_id,
+                'kind': 'task',
+                'contextId': 'ctx-123',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'message': {
+                        'messageId': 'msg-1',
+                        'kind': 'message',
+                        'role': 'ROLE_AGENT',
+                        'parts': [{'kind': 'text', 'text': 'hi'}],
+                    },
+                },
+                'history': [
+                    {
+                        'messageId': 'msg-0',
+                        'kind': 'message',
+                        'role': 'ROLE_USER',
+                        'parts': [{'kind': 'text', 'text': 'hello'}],
+                    }
+                ],
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        request = create_send_message_request()
+        response = await transport.send_message(request)
+
+        assert response.HasField('task')
+        assert response.task.id == task_id
+        assert response.task.status.message.message_id == 'msg-1'
+        assert response.task.status.message.parts[0].text == 'hi'
+        assert response.task.history[0].message_id == 'msg-0'
 
     @pytest.mark.parametrize(
         'error_cls, error_code', JSON_RPC_ERROR_CODE_MAP.items()
@@ -527,11 +686,9 @@ class TestExtensions:
             'jsonrpc': '2.0',
             'id': '1',
             'result': {
-                'task': {
-                    'id': 'task-123',
-                    'contextId': 'ctx-123',
-                    'status': {'state': 'TASK_STATE_COMPLETED'},
-                }
+                'id': 'task-123',
+                'contextId': 'ctx-123',
+                'status': {'state': 'TASK_STATE_COMPLETED'},
             },
         }
         mock_response.raise_for_status = MagicMock()

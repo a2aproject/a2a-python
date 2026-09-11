@@ -28,6 +28,7 @@ from a2a.types.a2a_pb2 import (
     ListTaskPushNotificationConfigsResponse,
     ListTasksRequest,
     ListTasksResponse,
+    Message,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
@@ -45,6 +46,23 @@ _JSON_RPC_ERROR_CODE_TO_A2A_ERROR = {
     code: error_type for error_type, code in JSON_RPC_ERROR_CODE_MAP.items()
 }
 _ERROR_INFO_TYPE = 'type.googleapis.com/google.rpc.ErrorInfo'
+
+
+def _strip_kind(value: Any) -> Any:
+    """Recursively drops "kind" discriminator keys from a decoded JSON value.
+
+    Spec-compliant peers stamp "kind" on Task, Message, and Part
+    objects wherever they appear (top level, TaskStatus.message,
+    Task.history[], Message.parts[]), but this SDK's protobuf-generated
+    types don't declare that field, so json_format.ParseDict rejects it.
+    """
+    if isinstance(value, dict):
+        return {
+            key: _strip_kind(val) for key, val in value.items() if key != 'kind'
+        }
+    if isinstance(value, list):
+        return [_strip_kind(item) for item in value]
+    return value
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -80,10 +98,44 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: SendMessageResponse = json_format.ParseDict(
-            json_rpc_response.result, SendMessageResponse()
-        )
-        return response
+        result = json_rpc_response.result
+        # Servers that still nest the payload under the streaming
+        # SendMessageResponse oneof (older SDKs, other language
+        # implementations) send {"task": {...}} or {"message": {...}}.
+        if isinstance(result, dict) and 'task' in result:
+            task = json_format.ParseDict(_strip_kind(result['task']), Task())
+            return SendMessageResponse(task=task)
+        if isinstance(result, dict) and 'message' in result:
+            message = json_format.ParseDict(
+                _strip_kind(result['message']), Message()
+            )
+            return SendMessageResponse(message=message)
+        # Otherwise the payload is the Task/Message itself, per spec
+        # possibly carrying a "kind" discriminator field on itself and on
+        # every nested Message/Part (status.message, history[], parts[]),
+        # none of which this SDK's protobuf-generated types declare.
+        # Read the top-level kind (or fall back to the same field-presence
+        # heuristic the v0.3 compat transport already uses) before
+        # stripping it throughout the tree.
+        kind = result.get('kind') if isinstance(result, dict) else None
+        if not kind and isinstance(result, dict):
+            if 'messageId' in result:
+                kind = 'message'
+            elif 'id' in result:
+                kind = 'task'
+        payload = _strip_kind(result)
+        if kind == 'message':
+            message = json_format.ParseDict(payload, Message())
+            return SendMessageResponse(message=message)
+        if kind == 'task':
+            task = json_format.ParseDict(payload, Task())
+            return SendMessageResponse(task=task)
+        try:
+            task = json_format.ParseDict(payload, Task())
+        except json_format.ParseError:
+            message = json_format.ParseDict(payload, Message())
+            return SendMessageResponse(message=message)
+        return SendMessageResponse(task=task)
 
     async def send_message_streaming(
         self,
