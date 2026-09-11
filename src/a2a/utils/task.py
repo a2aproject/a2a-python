@@ -5,9 +5,20 @@ import binascii
 from base64 import b64decode, b64encode
 from typing import Literal, Protocol, runtime_checkable
 
-from a2a.types.a2a_pb2 import Task
+from a2a.types.a2a_pb2 import Task, TaskState
 from a2a.utils.constants import MAX_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
+
+# States from which a task cannot transition to any other state.
+# Single source of truth shared by the server modules (task_manager,
+# active_task, request handlers) so terminal-state semantics cannot drift
+# between them.
+TERMINAL_TASK_STATES = {
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
+}
 
 
 @runtime_checkable
