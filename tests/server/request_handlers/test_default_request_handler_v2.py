@@ -512,6 +512,49 @@ async def test_set_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('store_kind', ['inmemory', 'database'])
+async def test_create_task_push_notification_config_returns_stored_id(
+    store_kind,
+):
+    """Test on_create_task_push_notification_config returns the id that was stored."""
+    if store_kind == 'database':
+        from a2a.server.tasks.database_push_notification_config_store import (
+            DatabasePushNotificationConfigStore,
+        )
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///file:pushidv2?mode=memory&cache=shared&uri=true'
+        )
+        push_config_store = DatabasePushNotificationConfigStore(engine=engine)
+    else:
+        push_config_store = InMemoryPushNotificationConfigStore()
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    stored = await push_config_store.get_info(task.id, context)
+    assert response.id == task.id
+    assert [config.id for config in stored] == [response.id]
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store():
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandlerV2(
