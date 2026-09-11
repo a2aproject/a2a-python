@@ -13,18 +13,11 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
+from a2a.utils.task import TERMINAL_TASK_STATES
 from a2a.utils.telemetry import trace_function
 
 
 logger = logging.getLogger(__name__)
-
-
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 
 
 def validate_state_transition(

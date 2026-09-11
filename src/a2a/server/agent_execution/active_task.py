@@ -75,17 +75,12 @@ from a2a.utils.errors import (
     InvalidParamsError,
     TaskNotFoundError,
 )
+from a2a.utils.task import TERMINAL_TASK_STATES
 
 
 logger = logging.getLogger(__name__)
 
 
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 INTERRUPTED_TASK_STATES = {
     TaskState.TASK_STATE_AUTH_REQUIRED,
     TaskState.TASK_STATE_INPUT_REQUIRED,
