@@ -1,3 +1,7 @@
+import asyncio
+import concurrent.futures
+import threading
+
 from datetime import datetime, timezone
 
 import pytest
@@ -368,3 +372,61 @@ async def test_inmemory_task_store_copying_behavior(use_copying: bool):
     else:
         assert retrieved_task_2.status.state == TaskState.TASK_STATE_COMPLETED
         assert retrieved_task_2 is retrieved_task
+
+
+def _lock_is_owned(lock: threading.RLock) -> bool:
+    is_owned = getattr(lock, '_is_owned', None)
+    return bool(is_owned()) if callable(is_owned) else False
+
+
+def _save_task_in_thread(
+    store: InMemoryTaskStore,
+    task_id: str,
+    context: ServerCallContext,
+) -> None:
+    asyncio.run(store.save(create_minimal_task(task_id=task_id), context))
+
+
+def test_save_creates_owner_bucket_under_lock() -> None:
+    """Creating the first owner bucket must happen while the RLock is held."""
+    store = InMemoryTaskStore(use_copying=False)
+    impl = store._impl
+    lock_held: list[bool] = []
+
+    class _LockHeldOwnerMap(dict[str, dict[str, Task]]):
+        def setdefault(
+            self,
+            key: str,
+            default: dict[str, Task] | None = None,
+        ) -> dict[str, Task]:
+            lock_held.append(_lock_is_owned(impl.lock))
+            if default is None:
+                default = {}
+            return super().setdefault(key, default)
+
+        def __setitem__(self, key: str, value: dict[str, Task]) -> None:
+            lock_held.append(_lock_is_owned(impl.lock))
+            super().__setitem__(key, value)
+
+    impl.tasks = _LockHeldOwnerMap()
+    asyncio.run(store.save(create_minimal_task(), TEST_CONTEXT))
+    assert lock_held
+    assert all(lock_held)
+
+
+def test_concurrent_first_owner_saves_keep_both_tasks() -> None:
+    """Concurrent first saves for a new owner must keep both tasks."""
+    store = InMemoryTaskStore(use_copying=False)
+    context = ServerCallContext(user=SampleUser('race-owner'))
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        futures = [
+            pool.submit(_save_task_in_thread, store, 'task-a', context),
+            pool.submit(_save_task_in_thread, store, 'task-b', context),
+        ]
+        for future in futures:
+            future.result(timeout=10)
+
+    page = asyncio.run(store.list(ListTasksRequest(), context))
+    assert {task.id for task in page.tasks} == {'task-a', 'task-b'}
+    assert asyncio.run(store.get('task-a', context)) is not None
+    assert asyncio.run(store.get('task-b', context)) is not None
