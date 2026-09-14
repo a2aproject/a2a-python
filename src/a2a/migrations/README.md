@@ -38,6 +38,8 @@ Or you can use the `--database-url` flag to specify the database URL for a singl
 ### 3. Apply Migrations
 Always run this command after installing or upgrading the SDK to ensure your database matches the required schema. This will upgrade the tables `tasks` and `push_notification_configs` in your database by adding columns `owner` and `last_updated` and an index `(owner, last_updated)` to the `tasks` table and a column `owner` to the `push_notification_configs` table.
 
+Revision `b5e3d1c8a2f7` additionally adds a `version` column to `tasks` and creates the `task_events` table (both used by the clustered multi-server stores). This is required for **every** database-backed deployment after upgrading, not just multi-server ones: `DatabaseTaskStore` reads and writes the `version` column for every task, so a database missing it will error at runtime. The migration also backfills existing rows' `version` so in-flight tasks keep working across the upgrade.
+
 ```bash
 uv run a2a-db
 ```
