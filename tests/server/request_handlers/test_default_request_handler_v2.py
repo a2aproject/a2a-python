@@ -138,7 +138,7 @@ def test_init_default_dependencies():
         handler._request_context_builder._should_populate_referred_tasks
         is False
     )
-    assert handler._request_context_builder._task_store == task_store
+    assert handler._request_context_builder._task_store is None
 
 
 def test_init_warns_when_queue_manager_passed(caplog):
