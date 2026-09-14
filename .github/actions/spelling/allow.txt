@@ -33,6 +33,7 @@ buf
 bufbuild
 cla
 cls
+clustermode
 coc
 codegen
 coro
@@ -158,5 +159,7 @@ TResponse
 typ
 typeerror
 UIDs
+versioned
+Versioned
 vulnz
 whl
