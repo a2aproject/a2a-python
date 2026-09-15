@@ -26,6 +26,7 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    serialize_list_tasks_response,
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -431,10 +432,8 @@ class JsonRpcDispatcher:
         tasks_response = await self.request_handler.on_list_tasks(
             request_obj, context
         )
-        return MessageToDict(
-            tasks_response,
-            preserving_proto_field_name=False,
-            always_print_fields_with_no_presence=True,
+        return serialize_list_tasks_response(
+            tasks_response, request_obj.include_artifacts
         )
 
     async def _handle_create_task_push_notification_config(

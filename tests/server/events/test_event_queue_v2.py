@@ -2,12 +2,14 @@ import asyncio
 import logging
 
 from typing import Any
+from unittest import mock
 
 import pytest
 import pytest_asyncio
 
 from a2a.server.events.event_queue import (
     DEFAULT_MAX_QUEUE_SIZE,
+    Event,
     EventQueue,
     QueueShutDown,
 )
@@ -264,6 +266,27 @@ async def test_close_idempotent(event_queue: EventQueueSource) -> None:
     assert event_queue.is_closed() is True
     await event_queue.close()
     assert event_queue.is_closed() is True
+
+
+@pytest.mark.asyncio
+async def test_sink_close_idempotent_does_not_record_exception() -> None:
+    span = mock.MagicMock()
+    tracer = mock.MagicMock()
+    tracer.start_as_current_span.return_value.__enter__.return_value = span
+    tracer.start_as_current_span.return_value.__exit__.return_value = False
+
+    with mock.patch('opentelemetry.trace.get_tracer', return_value=tracer):
+        event_queue = EventQueueSource(create_default_sink=False)
+        sink = await event_queue.tap()
+
+        await sink.close(immediate=True)
+        await sink.close(immediate=True)
+        await event_queue.close(immediate=True)
+
+    tracer.start_as_current_span.assert_called()
+    span.record_exception.assert_not_called()
+    for call in span.set_status.call_args_list:
+        assert 'description' not in call.kwargs
 
 
 @pytest.mark.asyncio
@@ -864,3 +887,126 @@ async def test_event_queue_blocking_behavior() -> None:
     # Validate that: after unblocking second consumer everything ends smoothly.
     assert len(consumed_first) == 50
     assert len(consumed_second) == 50
+
+
+@pytest.mark.asyncio
+async def test_evict_on_full_sink_is_evicted_and_dispatch_continues() -> None:
+    """A full evict_on_full sink is evicted; other sinks keep receiving.
+
+    Regression test for the runtime wedge reported on #1101: one abandoned
+    subscriber sink fills up, the dispatcher's gather blocks on it forever,
+    and no other sink receives anything again.
+    """
+    queue = EventQueueSource()
+    stuck_sink = await queue.tap(max_queue_size=1, evict_on_full=True)
+
+    consumed: list[Event] = []
+
+    async def consume_default() -> None:
+        while True:
+            try:
+                event = await queue.dequeue_event()
+                consumed.append(event)
+                queue.task_done()
+            except QueueShutDown:
+                break
+
+    consumer_task = asyncio.create_task(consume_default())
+
+    # The first event fills the stuck sink (capacity 1, never drained). The
+    # second and third reach the default sink only if the dispatcher
+    # survives the stuck sink.
+    for i in range(3):
+        await queue.enqueue_event(create_sample_message(str(i)))
+
+    async def default_sink_received_all() -> None:
+        while len(consumed) < 3:
+            await asyncio.sleep(0.01)
+
+    await asyncio.wait_for(default_sink_received_all(), timeout=2.0)
+
+    # The stuck sink was evicted: closed and detached from the source.
+    assert stuck_sink.is_closed()
+    assert stuck_sink not in queue._sinks  # noqa: SLF001
+
+    await queue.close(immediate=True)
+    await consumer_task
+
+
+@pytest.mark.asyncio
+async def test_producer_unblocked_after_evict_on_full() -> None:
+    """Producers blocked on a full incoming queue recover after eviction.
+
+    Without eviction, the dispatcher never finishes its gather, the incoming
+    queue stays full, and every producer wedges in enqueue_event permanently.
+    """
+    queue = EventQueueSource(max_queue_size=1, create_default_sink=False)
+    await queue.tap(max_queue_size=1, evict_on_full=True)
+
+    # Sink capacity 1 + incoming capacity 1 both fill, so without eviction
+    # the later enqueues block forever. With eviction the pipeline drains
+    # and every enqueue completes.
+    async def produce() -> None:
+        for i in range(4):
+            await queue.enqueue_event(create_sample_message(str(i)))
+
+    await asyncio.wait_for(produce(), timeout=2.0)
+    await queue.close(immediate=True)
+
+
+@pytest.mark.asyncio
+async def test_default_tap_keeps_backpressure() -> None:
+    """A default tap (evict_on_full=False) preserves blocking dispatch."""
+    queue = EventQueueSource()
+    stuck_sink = await queue.tap(max_queue_size=1)
+
+    for i in range(3):
+        await queue.enqueue_event(create_sample_message(str(i)))
+
+    # Give the dispatcher time to block on the full sink; the sink must
+    # survive and stay attached (flow control, not eviction).
+    await asyncio.sleep(0.3)
+    assert not stuck_sink.is_closed()
+    assert stuck_sink in queue._sinks  # noqa: SLF001
+
+    await queue.close(immediate=True)
+
+
+@pytest.mark.asyncio
+async def test_graceful_close_not_upgraded_to_immediate_by_eviction() -> None:
+    """A sink mid-graceful-close is skipped, never force-closed by eviction.
+
+    ``close(immediate=False)`` marks the sink closed and waits for the
+    consumer to drain the remaining events, but the dispatcher may still
+    hold the sink in an ``active_sinks`` snapshot taken before the close
+    removed it. Delivering to that sink while its queue is full must not
+    trip the evict-on-full path (``close(immediate=True)``), which would
+    discard the events the consumer is still draining.
+    """
+    queue = EventQueueSource()
+    sink = await queue.tap(max_queue_size=1, evict_on_full=True)
+
+    # Fill the sink so the evict-on-full branch would be reachable.
+    await sink._put_internal(create_sample_message('0'))  # noqa: SLF001
+
+    # Start a graceful close: it marks the sink closed, then blocks in
+    # queue.join() until the pending event is consumed.
+    close_task = asyncio.create_task(sink.close(immediate=False))
+    while not sink.is_closed():
+        await asyncio.sleep(0)
+
+    # Simulate the dispatcher delivering from a stale snapshot: the sink
+    # is full and marked closed. It must be skipped, not evicted.
+    await queue._deliver_to_sink(  # noqa: SLF001
+        sink, create_sample_message('1')
+    )
+
+    # The pending event survived the delivery attempt and the consumer
+    # finishes draining, which lets the graceful close complete.
+    event = await sink.dequeue_event()
+    assert isinstance(event, Message)
+    assert event.message_id == '0'
+    sink.task_done()
+    await asyncio.wait_for(close_task, timeout=2.0)
+
+    await queue.close(immediate=True)

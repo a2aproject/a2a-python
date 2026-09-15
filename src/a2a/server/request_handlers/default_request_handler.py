@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
@@ -102,6 +103,7 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -116,6 +118,11 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
+            push_url_validator: Async callable that returns True to accept
+              a push URL, or False to reject it. Defaults to None (no
+              library screening). The spec lists these checks as SHOULD,
+              so deployments that want the built-in policy should pass
+              ``validate_push_notification_url``.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -123,6 +130,7 @@ class LegacyRequestHandler(RequestHandler):
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -133,10 +141,17 @@ class LegacyRequestHandler(RequestHandler):
         )
         # TODO: Likely want an interface for managing this, like AgentExecutionManager.
         self._running_agents = {}
-        self._running_agents_lock = asyncio.Lock()
+        self._running_agents_lock = threading.RLock()
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     @validate_request_params
     async def on_get_task(
@@ -304,6 +319,9 @@ class LegacyRequestHandler(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -462,7 +480,7 @@ class LegacyRequestHandler(RequestHandler):
         self, task_id: str, producer_task: asyncio.Task
     ) -> None:
         """Registers the agent execution task with the handler."""
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents[task_id] = producer_task
 
     def _track_background_task(self, task: asyncio.Task) -> None:
@@ -501,7 +519,7 @@ class LegacyRequestHandler(RequestHandler):
                 'Producer task %s was cancelled during cleanup', task_id
             )
         await self._queue_manager.close(task_id)
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
     @validate_request_params
@@ -526,6 +544,8 @@ class LegacyRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        await self._reject_unsafe_push_url(params.url)
 
         await self._push_config_store.set_info(
             task_id,

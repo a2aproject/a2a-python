@@ -1,4 +1,5 @@
 import asyncio
+import threading
 
 from unittest.mock import MagicMock
 
@@ -31,7 +32,8 @@ class TestInMemoryQueueManager:
     async def test_init(self, queue_manager: InMemoryQueueManager) -> None:
         """Test that the InMemoryQueueManager initializes with empty task queue and a lock."""
         assert queue_manager._task_queue == {}
-        assert isinstance(queue_manager._lock, asyncio.Lock)
+        assert not isinstance(queue_manager._lock, asyncio.Lock)
+        assert isinstance(queue_manager._lock, type(threading.RLock()))
 
     @pytest.mark.asyncio
     async def test_add_new_queue(
