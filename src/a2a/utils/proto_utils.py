@@ -150,6 +150,14 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
     return value
 
 
+def _field_is_repeated(field: FieldDescriptor) -> bool:
+    """protobuf>=6.31.0 exposes `is_repeated`; older (floor >=5.29.5) does not."""
+    is_repeated = getattr(field, 'is_repeated', None)
+    if is_repeated is not None:
+        return is_repeated
+    return field.label == FieldDescriptor.LABEL_REPEATED
+
+
 def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
     """Converts REST query parameters back into a Protobuf message.
 
@@ -174,10 +182,7 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         field = fields[k]
         v_list = params.getlist(k)
 
-        # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-        # deprecated `field.label` with `field.is_repeated` once the minimum
-        # protobuf version requirement is bumped.
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if _field_is_repeated(field):
             accumulated: list[Any] = []
             for v in v_list:
                 if not v:
@@ -211,10 +216,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label == FieldDescriptor.LABEL_REPEATED:
+    if _field_is_repeated(field):
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -255,10 +257,7 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label != FieldDescriptor.LABEL_REPEATED:
+    if not _field_is_repeated(field):
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
