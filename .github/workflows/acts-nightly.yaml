@@ -1,4 +1,8 @@
-name: Nightly ITK
+name: Nightly ACTS
+
+# Conformance counterpart of `nightly.yaml`, on the same schedule. Separate
+# workflows so neither shows up red for the other's failure and each can be
+# re-run on its own.
 
 on:
   schedule:
@@ -6,11 +10,11 @@ on:
   workflow_dispatch:     # Allow manual execution
 
 permissions:
-  contents: write 
+  contents: write
 
 jobs:
-  nightly:
-    name: Nightly ITK Run
+  acts:
+    name: Nightly ACTS Run
     runs-on: ubuntu-latest
 
     steps:
@@ -47,20 +51,41 @@ jobs:
           restore-keys: |
             itk-launcher-${{ runner.os }}-
 
-      - name: Run Nightly ITK Tests
+      - name: Run Nightly ACTS Conformance
         run: bash run_itk.sh
         working-directory: itk
         env:
           A2A_ITK_REVISION: main
+          ITK_ACTS_RUN: "1"
+          ITK_ACTS_TRANSPORTS: jsonrpc,grpc,rest
+          # Unlike the PR tier this does NOT gate on conformance: a `must`
+          # failure is the metric being recorded, not a broken run. The step
+          # fails only if the service errored or the report came back
+          # malformed, which is exactly when publishing should be skipped.
           ITK_NIGHTLY_RUN: "True"
           ITK_SKIP_BUILD: "1"
 
-      - name: Upload Results to Rolling Release
+      - name: Upload ACTS reports
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: acts-reports-python-nightly
+          path: itk/acts-report-*.json
+          if-no-files-found: warn
+          # Outlives the rolling asset's 7-run window, so every entry it
+          # carries still has its full report to link to.
+          retention-days: 30
+
+      - name: Upload ACTS Results to Rolling Release
         uses: softprops/action-gh-release@v3
         with:
+          # The conformance counterpart of `itk_python.json`, on the same
+          # permanent tag: `process_acts_results.py` fetches
+          # `.../download/nightly-metrics/acts_python.json`, appends one entry
+          # covering all three bindings, and the upload puts it back.
           tag_name: "nightly-metrics"
           prerelease: true
           files: |
-            itk/itk_python.json
+            itk/acts_python.json
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
