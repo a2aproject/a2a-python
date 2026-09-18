@@ -44,9 +44,6 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
-from a2a.server.tasks.base_push_notification_sender import (
-    push_url_validation_error,
-)
 from a2a.types import (
     InternalError,
     InvalidParamsError,
@@ -78,6 +75,9 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+)
+from a2a.utils.push_url_validator import (
+    validate_push_notification_url,
 )
 
 
@@ -3159,7 +3159,7 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
-        push_url_validator=push_url_validation_error,
+        push_url_validator=validate_push_notification_url,
     )
     context = create_server_call_context()
 
@@ -3219,7 +3219,7 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
-        push_url_validator=push_url_validation_error,
+        push_url_validator=validate_push_notification_url,
     )
     context = create_server_call_context()
     params = SendMessageRequest(
