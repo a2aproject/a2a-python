@@ -46,7 +46,7 @@ class InMemoryContextCredentialStore(CredentialService):
         session_id = context.state['sessionId']
         return self._store.get(session_id, {}).get(security_scheme_name)
 
-    async def set_credentials(
+    def set_credentials(
         self, session_id: str, security_scheme_name: str, credential: str
     ) -> None:
         """Method to populate the store."""
