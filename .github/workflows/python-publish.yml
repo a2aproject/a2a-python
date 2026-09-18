@@ -49,3 +49,37 @@ jobs:
         uses: pypa/gh-action-pypi-publish@dc37677b2e1c63e2034f94d8a5b11f265b73ba33 # v1.14.2
         with:
           packages-dir: dist/
+
+  notify-failure:
+    if: failure()
+    runs-on: ubuntu-latest
+    needs:
+      - release-build
+      - pypi-publish
+    permissions:
+      issues: write
+
+    steps:
+      - name: Open and pin an issue for the failed publish
+        env:
+          ASSIGNEES: "ishymko,mykytanetipa"
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          printf '%s\n\n%s\n' \
+            "$TAG is not on PyPI. The publish workflow failed." \
+            "Failed run: $RUN_URL" > body.md
+
+          url="$(gh issue create --repo "$REPO" \
+            --title "Publish failed for $TAG" \
+            --label 'component: tooling' \
+            --body-file body.md)"
+          echo "Opened $url"
+
+          # Assigning and pinning must never discard the alert itself.
+          gh issue edit "$url" --add-assignee "$ASSIGNEES" \
+            || echo "::warning::Could not assign $url"
+          gh issue pin "$url" \
+            || echo "::warning::Could not pin $url. A repository allows at most 3 pinned issues."
