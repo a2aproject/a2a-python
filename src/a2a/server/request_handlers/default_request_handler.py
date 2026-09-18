@@ -547,6 +547,12 @@ class LegacyRequestHandler(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
+        # Stores default an empty id to the task id, but only the in-memory
+        # store does so on the caller's object. Normalize here so the returned
+        # config carries the id that was persisted, on every store.
+        if not params.id:
+            params.id = task_id
+
         await self._push_config_store.set_info(
             task_id,
             params,
