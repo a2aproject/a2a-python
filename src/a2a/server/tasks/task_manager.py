@@ -13,10 +13,34 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
+from a2a.utils.task import TERMINAL_TASK_STATES
 from a2a.utils.telemetry import trace_function
 
 
 logger = logging.getLogger(__name__)
+
+
+def validate_state_transition(
+    current_state: TaskState, new_state: TaskState
+) -> None:
+    """Validates a task state transition before it is persisted.
+
+    Terminal states are final: a task in COMPLETED/CANCELED/FAILED/REJECTED
+    must never move to a different state (including back to SUBMITTED).
+    Re-persisting the same terminal state is tolerated for idempotency.
+
+    Raises:
+        InvalidAgentResponseError: If the transition moves a task away from
+            a terminal state.
+    """
+    if current_state in TERMINAL_TASK_STATES and new_state != current_state:
+        raise InvalidAgentResponseError(
+            message=(
+                f'Illegal state transition from terminal state '
+                f'{TaskState.Name(current_state)} to '
+                f'{TaskState.Name(new_state)}'
+            )
+        )
 
 
 @trace_function()
@@ -204,6 +228,7 @@ class TaskManager:
             logger.debug(
                 'Updating task %s status to: %s', task.id, event.status.state
             )
+            validate_state_transition(task.status.state, event.status.state)
             if task.status.HasField('message'):
                 task.history.append(task.status.message)
             if event.metadata:
