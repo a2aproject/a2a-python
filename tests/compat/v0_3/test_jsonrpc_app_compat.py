@@ -1,9 +1,13 @@
 import logging
 
-from unittest.mock import AsyncMock
+from collections.abc import AsyncIterator
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
+from a2a.compat.v0_3 import jsonrpc_adapter
+from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_jsonrpc_routes
 from a2a.types.a2a_pb2 import (
@@ -21,6 +25,33 @@ from starlette.testclient import TestClient
 
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.asyncio
+async def test_shutdown_grace_period_is_passed_to_event_source_response(
+    mock_handler: AsyncMock,
+) -> None:
+    async def stream_generator() -> AsyncIterator[MagicMock]:
+        yield MagicMock()
+
+    adapter = JSONRPC03Adapter(
+        http_handler=mock_handler,
+        shutdown_grace_period=30.0,
+    )
+    adapter.handler.on_message_send_stream = MagicMock(
+        return_value=stream_generator()
+    )
+    request_obj = MagicMock(method='message/stream')
+
+    with patch.object(jsonrpc_adapter, 'EventSourceResponse') as response_class:
+        await adapter._process_streaming_request(
+            request_id='1',
+            request_obj=request_obj,
+            context=ServerCallContext(),
+        )
+
+    response_class.assert_called_once()
+    assert response_class.call_args.kwargs['shutdown_grace_period'] == 30.0
 
 
 @pytest.fixture
