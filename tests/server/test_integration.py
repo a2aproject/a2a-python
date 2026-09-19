@@ -350,9 +350,8 @@ def test_send_message(client: TestClient, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert 'result' in data
-    # Result is wrapped in SendMessageResponse with task field
-    assert data['result']['task']['id'] == 'task1'
-    assert data['result']['task']['status']['state'] == 'TASK_STATE_SUBMITTED'
+    assert data['result']['id'] == 'task1'
+    assert data['result']['status']['state'] == 'TASK_STATE_SUBMITTED'
 
     # Verify handler was called
     handler.on_message_send.assert_awaited_once()
@@ -536,8 +535,7 @@ def test_server_auth(app, handler: mock.AsyncMock):
     assert response.status_code == 200
     data = response.json()
     assert 'result' in data
-    # Result is wrapped in SendMessageResponse with message field
-    assert data['result']['message']['parts'][0]['text'] == 'test_user'
+    assert data['result']['parts'][0]['text'] == 'test_user'
 
     # Verify handler was called
     handler.on_message_send.assert_awaited_once()
