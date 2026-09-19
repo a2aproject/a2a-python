@@ -7,9 +7,18 @@ from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
+from a2a.utils.errors import InvalidParamsError
 
 
 logger = logging.getLogger(__name__)
+
+
+MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK = 50
+"""Maximum number of push notification configs a single task may have.
+
+Prevents a client from registering an unbounded number of webhooks for
+one task (DoS / resource exhaustion).
+"""
 
 
 class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
@@ -51,13 +60,33 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
             if not notification_config.id:
                 notification_config.id = task_id
 
+            # Enforce the per-task cap. Updating an existing config does not
+            # count as a new entry, so deduplicate before the check.
+            existing_configs = owner_infos[task_id]
+            is_update = any(
+                config.id == notification_config.id
+                for config in existing_configs
+            )
+            if (
+                not is_update
+                and len(existing_configs)
+                >= MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK
+            ):
+                raise InvalidParamsError(
+                    message=(
+                        f'maximum of '
+                        f'{MAX_PUSH_NOTIFICATION_CONFIGS_PER_TASK} push '
+                        'notification configs per task exceeded'
+                    )
+                )
+
             # Remove existing config with the same ID
-            for config in owner_infos[task_id]:
+            for config in existing_configs:
                 if config.id == notification_config.id:
-                    owner_infos[task_id].remove(config)
+                    existing_configs.remove(config)
                     break
 
-            owner_infos[task_id].append(notification_config)
+            existing_configs.append(notification_config)
             logger.debug(
                 'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
