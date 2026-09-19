@@ -39,6 +39,7 @@ from a2a.types import (
     InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -988,7 +989,9 @@ TERMINAL_TASK_STATES = {
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_task_in_terminal_state(terminal_state):
+async def test_on_message_send_task_in_terminal_state(
+    terminal_state: TaskState,
+) -> None:
     """Test on_message_send when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_task_{state_name}'
@@ -996,6 +999,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1009,13 +1013,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
@@ -1027,7 +1025,9 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
-async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
+async def test_on_message_send_stream_task_in_terminal_state(
+    terminal_state: TaskState,
+) -> None:
     """Test on_message_send_stream when task is already in a terminal state."""
     state_name = TaskState.Name(terminal_state)
     task_id = f'terminal_stream_task_{state_name}'
@@ -1035,6 +1035,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         task_id=task_id, status_state=terminal_state
     )
     mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
     request_handler = DefaultRequestHandlerV2(
         agent_executor=MockAgentExecutor(),
         task_store=mock_task_store,
@@ -1048,13 +1049,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
             task_id=task_id,
         )
     )
-    with (
-        patch(
-            'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
-            return_value=terminal_task,
-        ),
-        pytest.raises(InvalidParamsError) as exc_info,
-    ):
+    with pytest.raises(UnsupportedOperationError) as exc_info:
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
