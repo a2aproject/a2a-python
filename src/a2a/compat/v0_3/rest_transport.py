@@ -58,7 +58,17 @@ _A2A_ERROR_NAME_TO_CLS = {
 
 @trace_class(kind=SpanKind.CLIENT)
 class CompatRestTransport(ClientTransport):
-    """A backward compatible REST transport for A2A v0.3."""
+    """A backward compatible REST transport for A2A v0.3.
+
+    Args:
+        httpx_client: The async HTTP client to use for requests.
+        agent_card: The AgentCard describing the remote agent.
+        url: The base URL of the agent.
+        subscribe_method_override: Override for the subscribe method.
+        extra_params: Optional query parameters to append to every
+            request URL. Useful for provider-specific requirements, such
+            as ``{'alt': 'sse'}`` for Google A2A API streaming endpoints.
+    """
 
     def __init__(
         self,
@@ -66,6 +76,7 @@ class CompatRestTransport(ClientTransport):
         agent_card: AgentCard | None,
         url: str,
         subscribe_method_override: str | None = None,
+        extra_params: dict[str, str] | None = None,
     ):
         """Initializes the CompatRestTransport."""
         self.url = url.removesuffix('/')
@@ -73,6 +84,7 @@ class CompatRestTransport(ClientTransport):
         self.agent_card = agent_card
         self._subscribe_method_override = subscribe_method_override
         self._subscribe_auto_method_override = subscribe_method_override is None
+        self._extra_params = dict(extra_params) if extra_params else {}
 
     async def send_message(
         self,
@@ -389,6 +401,7 @@ class CompatRestTransport(ClientTransport):
             f'{self.url}{path}',
             self._handle_http_error,
             json=json,
+            params=self._extra_params or None,
             **http_kwargs,
         ):
             event_proto = a2a_v0_3_pb2.StreamResponse()
@@ -418,11 +431,21 @@ class CompatRestTransport(ClientTransport):
         http_kwargs['headers'][VERSION_HEADER.lower()] = PROTOCOL_VERSION_0_3
         add_legacy_extension_header(http_kwargs['headers'])
 
+        # Merge global extra_params with per-request params.
+        # Per-request params take precedence over extra_params.
+        merged_params: dict[str, Any] | None = None
+        if self._extra_params:
+            merged_params = dict(self._extra_params)
+            if params:
+                merged_params.update(params)
+        elif params:
+            merged_params = params
+
         request = self.httpx_client.build_request(
             method,
             f'{self.url}{path}',
             json=json,
-            params=params,
+            params=merged_params,
             **http_kwargs,
         )
         return await self._send_request(request)

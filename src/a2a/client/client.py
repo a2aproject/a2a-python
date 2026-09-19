@@ -74,6 +74,15 @@ class ClientConfig:
     push_notification_config: TaskPushNotificationConfig | None = None
     """Push notification configuration to use for every request."""
 
+    extra_params: dict[str, str] | None = None
+    """Optional query parameters to append to every request URL.
+
+    Useful for provider-specific requirements, such as
+    ``{'alt': 'sse'}`` for Google A2A API streaming endpoints where
+    the transcoding layer wraps SSE streams inside JSON arrays by
+    default without this parameter.
+    """
+
 
 class ClientCallContext(BaseModel):
     """A context passed with each client call, allowing for call-specific.
