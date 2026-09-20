@@ -70,7 +70,7 @@ def field_schema(
         # array-wrapping block below.
         if not field.is_repeated and not _is_required(field) and '$ref' in item:
             return {'oneOf': [item, {'type': 'null'}], 'example': None}
-    elif field.type == FieldDescriptor.TYPE_ENUM:
+    elif field.type == FieldDescriptor.TYPE_ENUM and field.enum_type:
         values = [v.name for v in field.enum_type.values]
         example = next(
             (
