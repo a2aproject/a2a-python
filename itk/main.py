@@ -11,6 +11,13 @@ import httpx
 import uvicorn
 
 from fastapi import FastAPI
+from starlette.middleware.base import (
+    BaseHTTPMiddleware,
+    RequestResponseEndpoint,
+)
+from starlette.requests import Request
+from starlette.responses import JSONResponse, Response
+from starlette.types import ASGIApp
 from typing import Any
 
 from pyproto import instruction_pb2
@@ -44,9 +51,13 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     AgentSkill,
     CancelTaskRequest,
+    HTTPAuthSecurityScheme,
     Message,
     Part,
+    SecurityRequirement,
+    SecurityScheme,
     SendMessageRequest,
+    StringList,
     SubscribeToTaskRequest,
     Task,
     TaskState,
@@ -461,6 +472,170 @@ class V10AgentExecutor(AgentExecutor):
         await task_updater.update_status(TaskState.TASK_STATE_CANCELED)
 
 
+#: Credentials the ACTS runner presents. Not secrets: the runner attaches the
+#: valid one to every abstract operation and offers the insufficient one from
+#: `SEC-AUTH-002` and `SEC-EXTCARD-002`, so a fixture has to recognise both to
+#: answer 200 / 403 / 401 as those tests require.
+ACTS_VALID_TOKEN = 'itk-valid-token'  # noqa: S105
+ACTS_INSUFFICIENT_TOKEN = 'itk-insufficient-token'  # noqa: S105
+ACTS_SECURITY_SCHEME = 'bearerAuth'
+
+#: Where the REST binding serves the extended card, relative to its mount.
+#: Matched as a suffix because `create_rest_routes` also mounts every route
+#: under `/{tenant}`, so the same operation answers on two paths.
+EXTENDED_CARD_PATH = '/extendedAgentCard'
+
+
+def _auth_enforced() -> bool:
+    """Whether to require a credential on the ordinary operation endpoints.
+
+    Off unless `ITK_ACTS_AUTH` is set. Two reasons, and the second decides it:
+
+    - ITK traversal peers dial this agent with no credential at all, so
+      enforcing during a traversal run would fail every scenario that calls
+      us. An environment switch alone would handle that, since the two suites
+      run as separate processes.
+    - The ACTS runner attaches its credential to *abstract operations only*;
+      raw steps are sent exactly as written (ACTS §4.4), which is what keeps
+      the unauthenticated `SEC-AUTH-001` probe meaningful. But then every
+      other raw step is unauthenticated too, and fifteen of them expect to
+      succeed. An absent `Authorization` header means "reject me" in
+      `SEC-AUTH-001` and "serve me" in `JSONRPC-ENV-001`, and no server can
+      tell those two requests apart.
+
+    So the ACTS runner sets this for a *separate* pass over just the
+    `SEC-AUTH-*` tests, the same way `ITK_ACTS_REDUCED_CAPABILITIES` gets its
+    own pass, and leaves the main pass unauthenticated. With the switch off
+    the card declares no schemes — which is honest, and makes those tests skip
+    on their `authentication` precondition rather than fail.
+
+    The extended-card endpoint is *not* covered by this switch; see
+    `_ActsCredentialMiddleware`.
+    """
+    return bool(os.environ.get('ITK_ACTS_AUTH'))
+
+
+def _security_schemes() -> dict[str, SecurityScheme]:
+    """The schemes the card advertises.
+
+    Declared only when the agent actually enforces them: a card claiming a
+    scheme it does not check would be a lie, and this is what the ACTS
+    `authentication` precondition reads to decide whether the `SEC-AUTH-*`
+    tests are applicable at all.
+    """
+    if not _auth_enforced():
+        return {}
+    return {
+        ACTS_SECURITY_SCHEME: SecurityScheme(
+            http_auth_security_scheme=HTTPAuthSecurityScheme(
+                description='Bearer token presented by the ACTS runner.',
+                scheme='Bearer',
+                bearer_format='opaque',
+            )
+        )
+    }
+
+
+def _security_requirements() -> list[SecurityRequirement]:
+    """What the card says a client must satisfy.
+
+    Separate from the schemes because they mean different things: schemes are
+    what a client *may* use, requirements are what it *must*. An agent
+    publishing the first and not the second requires nothing.
+    """
+    if not _auth_enforced():
+        return []
+    return [SecurityRequirement(schemes={ACTS_SECURITY_SCHEME: StringList()})]
+
+
+def _status_body(code: int, status: str, message: str) -> dict[str, Any]:
+    """A `google.rpc.Status` body, the shape A2A §11.6 requires of an error."""
+    return {
+        'error': {
+            'code': code,
+            'status': status,
+            'message': message,
+            'details': [
+                {
+                    '@type': 'type.googleapis.com/google.rpc.ErrorInfo',
+                    'reason': status,
+                    'domain': 'a2a-protocol.org',
+                }
+            ],
+        }
+    }
+
+
+def _credential_rejection(request: Request) -> JSONResponse | None:
+    """The response refusing this request, or None to let it through.
+
+    Three outcomes, because the tests distinguish them: the valid token
+    passes, the insufficient one authenticates but does not authorize (403),
+    and anything else — including nothing at all — fails authentication (401).
+    The `WWW-Authenticate` challenge is what A2A §3.3.2 asks for on the 401.
+    """
+    header = request.headers.get('authorization', '')
+    presented = ''
+    scheme, _, value = header.partition(' ')
+    if scheme.lower() == 'bearer':
+        presented = value.strip()
+
+    if presented == ACTS_VALID_TOKEN:
+        return None
+    if presented == ACTS_INSUFFICIENT_TOKEN:
+        return JSONResponse(
+            _status_body(
+                403, 'PERMISSION_DENIED', 'Token lacks the required scope.'
+            ),
+            status_code=403,
+        )
+    return JSONResponse(
+        _status_body(401, 'UNAUTHENTICATED', 'A bearer token is required.'),
+        status_code=401,
+        headers={
+            'WWW-Authenticate': (
+                f'Bearer realm="a2a", scheme="{ACTS_SECURITY_SCHEME}"'
+            )
+        },
+    )
+
+
+class _ActsCredentialMiddleware(BaseHTTPMiddleware):
+    """Guards a binding's operations, and always guards the extended card.
+
+    The extended card is guarded whatever `ITK_ACTS_AUTH` says, for two
+    reasons. It costs traversal nothing — no traversal scenario fetches one —
+    and A2A §13.3 makes it unconditional: the operation MUST require
+    authentication, whether or not the agent requires it anywhere else. That
+    is why `SEC-EXTCARD-001/002/004` are the only auth tests that can produce
+    a verdict against a default SUT.
+
+    The public agent card is not reachable through this middleware: it is
+    served from the parent app, not from either binding's mount. It has to
+    stay open — A2A §8.2 makes the well-known URL the discovery mechanism and
+    §7.3 has the client learn which schemes it needs *from that card*, so
+    requiring one to read it would be circular, and the ITK readiness probe
+    fetches it unauthenticated.
+    """
+
+    def __init__(self, app: ASGIApp, *, guard_all: bool) -> None:
+        super().__init__(app)
+        self._guard_all = guard_all
+
+    async def dispatch(
+        self, request: Request, call_next: RequestResponseEndpoint
+    ) -> Response:
+        guarded = self._guard_all or request.url.path.endswith(
+            EXTENDED_CARD_PATH
+        )
+        if not guarded:
+            return await call_next(request)
+        rejection = _credential_rejection(request)
+        if rejection is not None:
+            return rejection
+        return await call_next(request)
+
+
 def _capabilities() -> AgentCapabilities:
     """What this agent advertises — everything, unless asked for less.
 
@@ -537,6 +712,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         # when they are unmet (ACTS §12.5), so anything the agent really does
         # has to be advertised or the matching tests silently never run.
         capabilities=_capabilities(),
+        # Authentication is *not* a capability — `AgentCapabilities` has no
+        # member for it — so it is declared here, at the top level, and the
+        # ACTS `authentication` precondition reads both of these.
+        security_schemes=_security_schemes(),
+        security_requirements=_security_requirements(),
         default_input_modes=['text/plain'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
@@ -587,12 +767,23 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         enable_v0_3_compat=True,
     )
 
-    app = FastAPI()
-    app.mount(
-        '/jsonrpc',
-        FastAPI(routes=jsonrpc_routes),
+    # Each binding is its own sub-app, so the credential guard goes on the
+    # sub-app rather than on a path prefix of the parent: the public card is
+    # served from the parent alone and must stay reachable without one.
+    jsonrpc_app = FastAPI(routes=jsonrpc_routes)
+    rest_app = FastAPI(routes=rest_routes)
+    if _auth_enforced():
+        logger.info('Requiring a bearer credential on /jsonrpc and /rest')
+        jsonrpc_app.add_middleware(_ActsCredentialMiddleware, guard_all=True)
+    # Always on for REST, whatever the mode: `/extendedAgentCard` lives here
+    # and A2A §13.3 makes its authentication unconditional.
+    rest_app.add_middleware(
+        _ActsCredentialMiddleware, guard_all=_auth_enforced()
     )
-    app.mount('/rest', FastAPI(routes=rest_routes))
+
+    app = FastAPI()
+    app.mount('/jsonrpc', jsonrpc_app)
+    app.mount('/rest', rest_app)
     app.routes.extend(agent_card_routes)
 
     server = grpc.aio.server()

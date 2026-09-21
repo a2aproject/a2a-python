@@ -1,6 +1,7 @@
 import logging
 
 from collections.abc import Callable
+from typing import Any, cast
 
 
 try:
@@ -151,16 +152,20 @@ class DatabaseTaskStore(TaskStore):
                 id=task_model.id,
                 context_id=task_model.context_id,
             )
+            # These JSON columns are annotated with proto types but hold plain
+            # dicts at rest; ParseDict wants the dict view.
             if task_model.status:
-                ParseDict(task_model.status, task.status)
+                ParseDict(
+                    cast('dict[str, Any]', task_model.status), task.status
+                )
             if task_model.artifacts:
                 for art_dict in task_model.artifacts:
                     art = task.artifacts.add()
-                    ParseDict(art_dict, art)
+                    ParseDict(cast('dict[str, Any]', art_dict), art)
             if task_model.history:
                 for msg_dict in task_model.history:
                     msg = task.history.add()
-                    ParseDict(msg_dict, msg)
+                    ParseDict(cast('dict[str, Any]', msg_dict), msg)
             if task_model.task_metadata:
                 task.metadata.update(task_model.task_metadata)
             return task

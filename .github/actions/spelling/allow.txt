@@ -51,6 +51,7 @@ euo
 EUR
 evt
 excinfo
+EXTCARD
 FastAPI
 fernet
 fetchrow
