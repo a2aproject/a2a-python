@@ -1,0 +1,26 @@
+name: Auto-assign new issues
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  auto-assign-new-issue:
+    name: Auto-assign new issues
+    runs-on: ubuntu-latest
+    if: github.repository == 'a2aproject/a2a-python'
+    permissions:
+      issues: write
+
+    steps:
+      - name: Assign the triage owner to the new issue
+        env:
+          ASSIGNEES: "mykytanetipa,rohityan"
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.html_url }}
+        run: |
+          gh issue edit "$ISSUE" --repo "$REPO" --add-assignee "$ASSIGNEES" \
+            || echo "::warning::Could not assign $ISSUE"
