@@ -1,0 +1,26 @@
+---
+name: Notify on new issue
+on:
+  issues:
+    types: [opened]
+
+permissions:
+  contents: read
+
+jobs:
+  notify-new-issue:
+    name: Notify on new issue
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+
+    steps:
+      - name: Assign the triage owners to the new issue
+        env:
+          ASSIGNEES: "mykytanetipa"
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+          ISSUE: ${{ github.event.issue.html_url }}
+        run: |
+          gh issue edit "$ISSUE" --repo "$REPO" --add-assignee "$ASSIGNEES" \
+            || echo "::warning::Could not assign $ISSUE"
