@@ -7,6 +7,7 @@ from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.message import Message
 
 from a2a.types.a2a_pb2 import SendMessageRequest, TaskPushNotificationConfig
+from a2a.utils.proto_utils import _field_is_repeated
 
 
 REST_BODY_TYPES: dict[tuple[str, str], type[Message]] = {
@@ -68,7 +69,11 @@ def field_schema(
         # nullable — they're already inlined as their JSON-Schema equivalent.
         # Repeated fields must not return early here — they fall through to the
         # array-wrapping block below.
-        if not field.is_repeated and not _is_required(field) and '$ref' in item:
+        if (
+            not _field_is_repeated(field)
+            and not _is_required(field)
+            and '$ref' in item
+        ):
             return {'oneOf': [item, {'type': 'null'}], 'example': None}
     elif field.type == FieldDescriptor.TYPE_ENUM and field.enum_type:
         values = [v.name for v in field.enum_type.values]
@@ -92,7 +97,7 @@ def field_schema(
         elif field.type == FieldDescriptor.TYPE_BOOL:
             item['example'] = False
 
-    if field.is_repeated:
+    if _field_is_repeated(field):
         array_schema: dict[str, Any] = {'type': 'array', 'items': item}
         # Propagate the item example to the array so Swagger pre-fills one entry
         # instead of generating one entry per oneOf branch.
