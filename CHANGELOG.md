@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.1.5](https://github.com/a2aproject/a2a-python/compare/v1.1.4...v1.1.5) (2026-09-21)
+
+
+### Bug Fixes
+
+* **deps:** support protobuf 7 ([#1260](https://github.com/a2aproject/a2a-python/issues/1260)) ([67ba0a4](https://github.com/a2aproject/a2a-python/commit/67ba0a41d4f5bc4cfef3db4073c3b981888f7efd))
+* replace deprecated FieldDescriptor.label with is_repeated in proto_utils ([#1158](https://github.com/a2aproject/a2a-python/issues/1158)) ([4554e2d](https://github.com/a2aproject/a2a-python/commit/4554e2d6279b560bfcf61050799c6ea66da17583))
+* **server:** avoid out-of-range datetime task ordering ([#1220](https://github.com/a2aproject/a2a-python/issues/1220)) ([d55a3d3](https://github.com/a2aproject/a2a-python/commit/d55a3d323733ddf416d98d7d702d0bd73e22a3e4))
+
 ## [1.1.4](https://github.com/a2aproject/a2a-python/compare/v1.1.3...v1.1.4) (2026-09-07)
 
 
