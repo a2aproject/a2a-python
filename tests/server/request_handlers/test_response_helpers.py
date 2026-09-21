@@ -39,6 +39,24 @@ class TestResponseHelpers(unittest.TestCase):
         self.assertNotIn('supportsAuthenticatedExtendedCard', result)
         self.assertEqual(result['name'], 'Test Agent')
 
+    def test_agent_card_to_dict_includes_required_empty_skills(self) -> None:
+        card = AgentCard(
+            name='Skill-less Agent',
+            description='An agent with no advertised skills',
+            version='1.0',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://jsonrpc.v10.com',
+                    protocol_binding='JSONRPC',
+                    protocol_version='1.0.0',
+                ),
+            ],
+        )
+
+        result = agent_card_to_dict(card)
+
+        self.assertEqual(result['skills'], [])
+
     def test_agent_card_to_dict_with_extended_card(self) -> None:
         card = AgentCard(
             name='Test Agent',
@@ -178,6 +196,7 @@ class TestResponseHelpers(unittest.TestCase):
                     'protocolVersion': '1.0.0',
                 },
             ],
+            'skills': [],
         }
 
         self.assertEqual(result, expected)

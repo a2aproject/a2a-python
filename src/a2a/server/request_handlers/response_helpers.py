@@ -88,6 +88,12 @@ def agent_card_to_dict(card: AgentCard) -> dict[str, Any]:
     """Convert AgentCard to dict and inject backward compatibility fields."""
     result = MessageToDict(card)
 
+    # ``skills`` is required by the A2A specification even when an agent has
+    # no advertised skills. Protobuf's JSON conversion omits empty repeated
+    # fields, so restore the required empty list before merging compatibility
+    # fields for older protocol versions.
+    result.setdefault('skills', [])
+
     try:
         compat_card = to_compat_agent_card(card)
         compat_dict = compat_card.model_dump(exclude_none=True)

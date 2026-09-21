@@ -23,7 +23,7 @@ def test_get_agent_card_success(agent_card):
     response = client.get('/.well-known/agent-card.json')
     assert response.status_code == 200
     assert response.headers['content-type'] == 'application/json'
-    assert response.json() == {}  # Empty card serializes to empty dict/json
+    assert response.json() == {'skills': []}
 
 
 def test_get_agent_card_with_modifier(agent_card):
