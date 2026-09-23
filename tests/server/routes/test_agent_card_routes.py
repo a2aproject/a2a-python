@@ -69,3 +69,83 @@ def test_agent_card_custom_url(agent_card):
     assert client.get('/.well-known/agent-card.json').status_code == 404
     # Check that custom returns 200
     assert client.get(custom_url).status_code == 200
+
+
+def card_client(**kwargs) -> TestClient:
+    return TestClient(
+        Starlette(routes=create_agent_card_routes(**kwargs)),
+        # Otherwise httpx resends the ETag it already saw and turns a
+        # deliberate unconditional GET into a 304.
+        headers={'cache-control': 'no-cache'},
+    )
+
+
+def test_response_carries_an_etag():
+    """Spec 8.6.1: the card endpoint SHOULD include an ETag."""
+    response = card_client(agent_card=AgentCard(name='a', version='1')).get(
+        '/.well-known/agent-card.json'
+    )
+
+    assert response.status_code == 200
+    assert response.headers['etag'].startswith('"')
+
+
+def test_cache_control_is_sent_only_when_configured():
+    url = '/.well-known/agent-card.json'
+    card = AgentCard(name='a', version='1')
+
+    assert 'cache-control' not in card_client(agent_card=card).get(url).headers
+    configured = card_client(
+        agent_card=card, cache_control='public, max-age=3600'
+    ).get(url)
+    assert configured.headers['cache-control'] == 'public, max-age=3600'
+
+
+def test_etag_changes_with_the_card():
+    url = '/.well-known/agent-card.json'
+
+    first = card_client(agent_card=AgentCard(name='a', version='1')).get(url)
+    second = card_client(agent_card=AgentCard(name='b', version='1')).get(url)
+
+    assert first.headers['etag'] != second.headers['etag']
+
+
+def test_etag_tracks_the_modified_card_not_the_original():
+    """card_modifier can vary the body per request, so the hash must follow it."""
+    url = '/.well-known/agent-card.json'
+
+    async def rename(card: AgentCard) -> AgentCard:
+        return AgentCard(name='modified', version=card.version)
+
+    plain = card_client(agent_card=AgentCard(name='a', version='1')).get(url)
+    modified = card_client(
+        agent_card=AgentCard(name='a', version='1'), card_modifier=rename
+    ).get(url)
+
+    assert plain.headers['etag'] != modified.headers['etag']
+
+
+@pytest.mark.parametrize(
+    'if_none_match', ['{etag}', 'W/{etag}', '*', '"other", {etag}']
+)
+def test_matching_if_none_match_gets_304(if_none_match):
+    url = '/.well-known/agent-card.json'
+    client = card_client(agent_card=AgentCard(name='a', version='1'))
+    etag = client.get(url).headers['etag']
+
+    response = client.get(
+        url, headers={'If-None-Match': if_none_match.format(etag=etag)}
+    )
+
+    assert response.status_code == 304
+    assert response.content == b''
+
+
+def test_stale_if_none_match_gets_the_card():
+    url = '/.well-known/agent-card.json'
+    client = card_client(agent_card=AgentCard(name='a', version='1'))
+
+    response = client.get(url, headers={'If-None-Match': '"stale"'})
+
+    assert response.status_code == 200
+    assert response.json()['name'] == 'a'
