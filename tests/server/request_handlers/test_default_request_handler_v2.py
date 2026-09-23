@@ -1131,6 +1131,102 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_rejects_context_id_not_matching_task():
+    """Spec 5.6: a contextId disagreeing with the named task's is rejected.
+
+    Asserted on the executor never running, not merely on the error type.
+    TaskManager already rejects this mismatch once the agent emits an event
+    (`Context in event doesn't match TaskManager`), so an assertion on
+    InvalidParamsError alone passes with or without the handler's guard.
+    What the guard changes is that the request is refused before any agent
+    work starts.
+    """
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    executor = HelloAgentExecutor()
+    executor.execute = AsyncMock(wraps=executor.execute)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=executor,
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-mismatch',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='wrong-context',
+        )
+    )
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+
+    assert (
+        'Context wrong-context does not match context real-context'
+        in exc_info.value.message
+    )
+    executor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_matching_task():
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-match',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='real-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_without_task_id():
+    """A contextId alone starts a new task in that context, so it is not checked."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-context-only',
+            parts=[Part(text='hello')],
+            context_id='client-chosen-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
     """Subscribing to a terminal task is rejected with UnsupportedOperationError."""
