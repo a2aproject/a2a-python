@@ -30,7 +30,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.constants import PROTOCOL_VERSION_CURRENT, VERSION_HEADER
-from a2a.utils.errors import A2A_ERROR_REASONS
+from a2a.utils.errors import A2A_ERROR_REASONS, TaskNotFoundError
 from google.protobuf import any_pb2
 from google.rpc import error_details_pb2, status_pb2
 
@@ -681,3 +681,77 @@ def test_get_grpc_metadata(
     # Filter out a2a-version as it's not being tested here directly and simplifies the assertion
     filtered_metadata = [m for m in metadata if m[0] != VERSION_HEADER.lower()]
     assert filtered_metadata == expected_metadata
+
+
+@pytest.mark.asyncio
+async def test_grpc_mapped_error_restores_error_info_metadata_as_data(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+) -> None:
+    """``ErrorInfo.metadata`` must be restored into ``A2AError.data``.
+
+    The server projects ``error.data`` onto ``ErrorInfo.metadata``, so a
+    client that reads back only ``reason``/``domain`` would drop data the
+    JSON-RPC and REST transports both preserve.
+    """
+    error_info = error_details_pb2.ErrorInfo(
+        reason='TASK_NOT_FOUND',
+        domain='a2a-protocol.org',
+        metadata={'taskId': 'abc-123'},
+    )
+
+    status = status_pb2.Status(
+        code=grpc.StatusCode.NOT_FOUND.value[0], message='Task not found'
+    )
+    detail = any_pb2.Any()
+    detail.Pack(error_info)
+    status.details.append(detail)
+
+    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.NOT_FOUND,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details='Task not found',
+    )
+
+    with pytest.raises(TaskNotFoundError) as excinfo:
+        await grpc_transport.send_message(sample_message_send_params)
+
+    assert excinfo.value.data == {'taskId': 'abc-123'}
+
+
+@pytest.mark.asyncio
+async def test_grpc_mapped_error_without_metadata_has_no_data(
+    grpc_transport: GrpcTransport,
+    mock_grpc_stub: AsyncMock,
+    sample_message_send_params: SendMessageRequest,
+) -> None:
+    """An empty ``ErrorInfo.metadata`` must leave ``data`` unset."""
+    error_info = error_details_pb2.ErrorInfo(
+        reason='TASK_NOT_FOUND',
+        domain='a2a-protocol.org',
+    )
+
+    status = status_pb2.Status(
+        code=grpc.StatusCode.NOT_FOUND.value[0], message='Task not found'
+    )
+    detail = any_pb2.Any()
+    detail.Pack(error_info)
+    status.details.append(detail)
+
+    mock_grpc_stub.SendMessage.side_effect = grpc.aio.AioRpcError(
+        code=grpc.StatusCode.NOT_FOUND,
+        initial_metadata=grpc.aio.Metadata(),
+        trailing_metadata=grpc.aio.Metadata(
+            ('grpc-status-details-bin', status.SerializeToString()),
+        ),
+        details='Task not found',
+    )
+
+    with pytest.raises(TaskNotFoundError) as excinfo:
+        await grpc_transport.send_message(sample_message_send_params)
+
+    assert excinfo.value.data is None

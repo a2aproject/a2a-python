@@ -63,18 +63,23 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
 
     if status is not None:
         exception_cls: type[A2AError] | None = None
+        metadata: dict[str, str] | None = None
         for detail in status.details:
             if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)
                 if error_info.domain == 'a2a-protocol.org':
                     exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
+                    if error_info.metadata:
+                        metadata = dict(error_info.metadata)
             elif detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):
                 bad_request = error_details_pb2.BadRequest()
                 detail.Unpack(bad_request)
                 data = {'errors': bad_request_to_validation_errors(bad_request)}
 
         if exception_cls:
+            if data is None and metadata:
+                data = metadata
             raise exception_cls(status.message, data=data) from e
 
     raise A2AClientError(f'gRPC Error {e.code().name}: {e.details()}') from e

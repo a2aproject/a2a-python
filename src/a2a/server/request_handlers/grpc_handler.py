@@ -39,6 +39,27 @@ from a2a.utils.proto_utils import validation_errors_to_bad_request
 logger = logging.getLogger(__name__)
 
 
+def _error_metadata(error: A2AError) -> dict[str, str]:
+    """Project ``A2AError.data`` onto ``ErrorInfo.metadata``.
+
+    ``google.rpc.ErrorInfo.metadata`` is a ``map<string, string>``, so
+    only string-valued entries can cross the wire. The JSON-RPC and REST
+    paths carry ``error.data`` the same way, which keeps the gRPC path
+    from silently dropping it for non-validation errors.
+
+    Returns:
+        The metadata entries to attach, or an empty mapping.
+    """
+    data = getattr(error, 'data', None)
+    if not isinstance(data, dict):
+        return {}
+    return {
+        str(key): str(value)
+        for key, value in data.items()
+        if isinstance(value, str)
+    }
+
+
 class GrpcServerCallContextBuilder(ABC):
     """Interface for building ServerCallContext from gRPC context."""
 
@@ -380,6 +401,7 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             error_info = error_details_pb2.ErrorInfo(
                 reason=reason,
                 domain='a2a-protocol.org',
+                metadata=_error_metadata(error),
             )
 
             status_code = code.value[0]
