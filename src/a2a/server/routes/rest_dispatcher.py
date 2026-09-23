@@ -172,7 +172,10 @@ class RestDispatcher:
             return a2a_pb2.SendMessageResponse(message=task_or_message)
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_stream_error_handler
     async def on_message_send_stream(
@@ -210,7 +213,10 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_stream_error_handler
     async def on_subscribe_to_task(
@@ -246,7 +252,10 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_error_handler
     async def get_push_notification(self, request: Request) -> Response:
@@ -268,7 +277,10 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_error_handler
     async def delete_push_notification(self, request: Request) -> Response:
@@ -286,7 +298,9 @@ class RestDispatcher:
             )
 
         await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content={})
+        return JSONResponse(
+            content={}, media_type=constants.A2A_JSON_MEDIA_TYPE
+        )
 
     @rest_error_handler
     async def set_push_notification(self, request: Request) -> Response:
@@ -305,7 +319,10 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_error_handler
     async def list_push_notifications(self, request: Request) -> Response:
@@ -323,7 +340,10 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
 
     @rest_error_handler
     async def list_tasks(self, request: Request) -> Response:
@@ -341,7 +361,8 @@ class RestDispatcher:
         return JSONResponse(
             content=serialize_list_tasks_response(
                 response, params.include_artifacts
-            )
+            ),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
         )
 
     @rest_error_handler
@@ -360,4 +381,7 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return JSONResponse(
+            content=MessageToDict(response),
+            media_type=constants.A2A_JSON_MEDIA_TYPE,
+        )
