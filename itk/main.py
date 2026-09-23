@@ -752,6 +752,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         push_config_store=push_config_store,
         push_sender=push_sender,
         extended_agent_card=agent_card,
+        # CORE-SEND-004 sends a part whose mediaType the card does not
+        # declare and expects ContentTypeNotSupportedError. Off by default in
+        # the SDK; this card states its input modes accurately, so the
+        # fixture can hold the SDK to them.
+        validate_input_modes=True,
     )
 
     agent_card_routes = create_agent_card_routes(

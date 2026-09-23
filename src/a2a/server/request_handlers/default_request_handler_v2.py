@@ -49,6 +49,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -101,6 +102,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         ]
         | None = None,
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
     ) -> None:
         if queue_manager is not None:
             message = (
@@ -119,6 +121,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -228,6 +231,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         call_context: ServerCallContext,
     ) -> tuple[ActiveTask, RequestContext]:
         validate_history_length(params.configuration)
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
 
         original_task_id = params.message.task_id or None
         original_context_id = params.message.context_id or None
