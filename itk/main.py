@@ -717,7 +717,13 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         # ACTS `authentication` precondition reads both of these.
         security_schemes=_security_schemes(),
         security_requirements=_security_requirements(),
-        default_input_modes=['text/plain'],
+        # application/x-protobuf because the ITK instruction envelope is a
+        # binary Part: wrap_instruction_to_request() builds one and
+        # extract_instruction() reads it. The agent has always accepted
+        # those; declaring text/plain alone was a card that understated
+        # what it takes, which went unnoticed until validate_input_modes
+        # below started holding the agent to it.
+        default_input_modes=['text/plain', 'application/x-protobuf'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
         skills=[
