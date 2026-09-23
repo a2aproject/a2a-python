@@ -136,6 +136,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             result = await handler_func(server_context)
         except A2AError as e:
             await self.abort_context(e, context)
+        except Exception:
+            logger.exception('Unhandled exception in gRPC handler')
+            await self.abort_context(types.InternalError(), context)
         else:
             return result
         return default_response
@@ -153,6 +156,9 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
                 yield item
         except A2AError as e:
             await self.abort_context(e, context)
+        except Exception:
+            logger.exception('Unhandled exception in gRPC handler')
+            await self.abort_context(types.InternalError(), context)
 
     async def SendMessage(
         self,
@@ -413,9 +419,13 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
             context.set_trailing_metadata(tuple(new_metadata))
             await context.abort(rich_status.code, rich_status.details)
         else:
+            logger.error(
+                'Unknown error type during request handling',
+                exc_info=error,
+            )
             await context.abort(
                 grpc.StatusCode.UNKNOWN,
-                f'Unknown error type: {error}',
+                'Unknown error',
             )
 
     def _build_call_context(

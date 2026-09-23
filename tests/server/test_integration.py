@@ -898,7 +898,7 @@ def test_validation_error(client: TestClient):
 
 
 def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
-    """Test handling unhandled exception."""
+    """Test handling unhandled exception without leaking internal details."""
     handler.on_get_task.side_effect = Exception('Unexpected error')
 
     response = client.post(
@@ -914,7 +914,9 @@ def test_unhandled_exception(client: TestClient, handler: mock.AsyncMock):
     data = response.json()
     assert 'error' in data
     assert data['error']['code'] == InternalError().code
-    assert 'Unexpected error' in data['error']['message']
+    # The internal exception message must not leak to the client.
+    assert data['error']['message'] == 'Internal error'
+    assert 'Unexpected error' not in data['error']['message']
 
 
 def test_get_method_to_rpc_endpoint(client: TestClient):

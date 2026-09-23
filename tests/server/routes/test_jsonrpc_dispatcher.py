@@ -679,3 +679,57 @@ class TestJsonRpcDispatcherMethodRouting:
 
 if __name__ == '__main__':
     pytest.main([__file__])
+
+
+# --- Error sanitization ---
+
+
+class TestErrorSanitization:
+    def test_unhandled_exception_does_not_leak(self, client, mock_handler):
+        """Non-A2A exceptions must not leak their message to the client."""
+        mock_handler.on_get_task.side_effect = RuntimeError(
+            'internal detail: /secret/path'
+        )
+        response = client.post(
+            '/',
+            json={
+                'jsonrpc': '2.0',
+                'id': '1',
+                'method': 'GetTask',
+                'params': {'id': 'task1'},
+            },
+        )
+        data = response.json()
+        assert data['error']['code'] == -32603  # InternalError
+        assert data['error']['message'] == 'Internal error'
+        assert 'internal detail' not in response.text
+
+    def test_malformed_params_does_not_leak(self, client):
+        """Parse failures must not leak the raw parse error to the client."""
+        response = client.post(
+            '/',
+            json={
+                'jsonrpc': '2.0',
+                'id': '1',
+                'method': 'GetTask',
+                # id must be a string; a dict fails proto parsing.
+                'params': {'id': {'nested': 'invalid'}},
+            },
+        )
+        data = response.json()
+        assert data['error']['code'] == -32602  # InvalidParamsError
+        assert 'nested' not in response.text
+
+    def test_invalid_base_request_does_not_leak(self, client):
+        """Base JSON-RPC validation failures must not leak details."""
+        response = client.post(
+            '/',
+            json={
+                'jsonrpc': '2.0',
+                'id': '1',
+                'method': 'GetTask',
+                'params': 'not-a-dict',
+            },
+        )
+        data = response.json()
+        assert data['error']['code'] == -32600  # InvalidRequestError
