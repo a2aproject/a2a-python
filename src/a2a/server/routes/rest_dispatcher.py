@@ -163,7 +163,7 @@ class RestDispatcher:
         ) -> a2a_pb2.SendMessageResponse:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             task_or_message = await self.request_handler.on_message_send(
                 params, context
             )
@@ -186,7 +186,7 @@ class RestDispatcher:
         ) -> AsyncIterator[dict[str, Any]]:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             async for event in self.request_handler.on_message_send_stream(
                 params, context
             ):
@@ -298,7 +298,7 @@ class RestDispatcher:
         ) -> a2a_pb2.TaskPushNotificationConfig:
             body = await request.body()
             params = a2a_pb2.TaskPushNotificationConfig()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             params.task_id = request.path_params['id']
             return await self.request_handler.on_create_task_push_notification_config(
                 params, context

@@ -876,19 +876,17 @@ def test_unknown_method(client: TestClient):
 
 def test_validation_error(client: TestClient):
     """Test handling validation error."""
-    # Missing required fields in the message
+    # A params the dispatcher cannot parse at all. Merely omitting required
+    # fields no longer stops here: spec 5.7 leniency drops the unknown names
+    # and leaves an empty Message, which the handler's required-field
+    # validation rejects instead -- a layer this mock handler never reaches.
     response = client.post(
         '/',
         json={
             'jsonrpc': '2.0',
             'id': '123',
             'method': 'SendMessage',
-            'params': {
-                'message': {
-                    # Missing required fields
-                    'text': 'Hello'
-                }
-            },
+            'params': {'message': {'parts': 'should be a list'}},
         },
     )
     assert response.status_code == 200

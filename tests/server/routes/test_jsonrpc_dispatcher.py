@@ -93,6 +93,70 @@ def _make_send_message_request(
     }
 
 
+class TestUnrecognizedFields:
+    """Spec 5.7: implementations SHOULD ignore unrecognized fields."""
+
+    def test_unknown_field_in_params_is_ignored(self, client):
+        request = _make_send_message_request()
+        request['params']['x_custom_field'] = 'test'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+        assert 'result' in body
+
+    def test_unknown_field_inside_message_is_ignored(self, client):
+        request = _make_send_message_request()
+        request['params']['message']['x_custom_field'] = 'test'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+        assert 'result' in body
+
+    def test_a_structurally_wrong_value_is_still_rejected(self, client):
+        """Leniency covers unknown names, not values of the wrong shape."""
+        request = _make_send_message_request()
+        request['params']['message']['parts'] = 'not-a-list'
+
+        body = client.post('/', json=request).json()
+
+        assert body['error']['code'] == -32602
+
+    def test_unknown_enum_value_is_accepted_as_unspecified(self, client):
+        """A documented side effect of ignore_unknown_fields, pinned here.
+
+        protobuf applies the same forward-compatibility rule to enum values
+        as to field names, and the flag cannot be taken for one and not the
+        other. A future ROLE_* therefore arrives as ROLE_UNSPECIFIED (0)
+        rather than failing the request.
+        """
+        request = _make_send_message_request()
+        request['params']['message']['role'] = 'ROLE_FROM_THE_FUTURE'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+
+
+class TestParseErrorDataShape:
+    """Spec 9.5: error.data is an array of objects, each carrying @type."""
+
+    @pytest.fixture
+    def parse_error(self, client) -> dict:
+        request = _make_send_message_request()
+        request['params']['message']['parts'] = 'not-a-list'
+        return client.post('/', json=request).json()['error']
+
+    def test_data_is_a_typed_array(self, parse_error):
+        assert isinstance(parse_error['data'], list)
+        assert parse_error['data'][0]['@type'].endswith('google.rpc.ErrorInfo')
+        assert parse_error['data'][0]['reason'] == 'INVALID_PARAMS'
+
+    def test_parse_diagnostic_survives_in_metadata(self, parse_error):
+        assert 'parts' in parse_error['data'][0]['metadata']['parseError']
+
+
 class TestJsonRpcDispatcherOptionalDependencies:
     @pytest.fixture(scope='class')
     def mock_app_params(self) -> dict:
