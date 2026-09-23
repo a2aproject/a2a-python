@@ -34,6 +34,7 @@ from a2a.server.tasks import (
 )
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
@@ -985,6 +986,69 @@ TERMINAL_TASK_STATES = {
     TaskState.TASK_STATE_FAILED,
     TaskState.TASK_STATE_REJECTED,
 }
+
+
+def create_input_mode_handler(*, validate_input_modes: bool):
+    """A handler whose card declares text/plain as its only input mode."""
+    return DefaultRequestHandlerV2(
+        # HelloAgentExecutor reaches a terminal state; MockAgentExecutor
+        # streams forever, so a blocking send against it never returns.
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+
+
+def create_undeclared_media_type_request():
+    return SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_undeclared_media_type_when_enabled():
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        await handler.on_message_send(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_allows_undeclared_media_type_by_default():
+    """The check is opt-in, so an unflagged handler keeps accepting the part."""
+    handler = create_input_mode_handler(validate_input_modes=False)
+
+    result = await handler.on_message_send(
+        create_undeclared_media_type_request(), create_server_call_context()
+    )
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_rejects_undeclared_media_type():
+    """Streaming shares _setup_active_task, so it is gated by the same flag."""
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        async for _ in handler.on_message_send_stream(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        ):
+            pass
 
 
 @pytest.mark.asyncio

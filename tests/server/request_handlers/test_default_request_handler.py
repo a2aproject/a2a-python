@@ -45,6 +45,7 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -984,6 +985,47 @@ class HelloAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('validate_input_modes', 'expect_rejection'), [(True, True), (False, False)]
+)
+async def test_on_message_send_input_mode_validation_is_opt_in(
+    validate_input_modes, expect_rejection
+):
+    """The legacy handler gates the same check behind the same flag."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+    if expect_rejection:
+        with pytest.raises(ContentTypeNotSupportedError):
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+    else:
+        assert (
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+            is not None
+        )
 
 
 @pytest.mark.asyncio
