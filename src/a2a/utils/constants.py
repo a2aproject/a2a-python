@@ -11,6 +11,9 @@ DEFAULT_LIST_TASKS_PAGE_SIZE = 50
 MAX_LIST_TASKS_PAGE_SIZE = 100
 """Maximum page size for the `tasks/list` method."""
 
+A2A_JSON_MEDIA_TYPE = 'application/a2a+json'
+"""Media type for HTTP+JSON binding payloads (spec 11.1)."""
+
 
 class TransportProtocol(str, Enum):
     """Transport protocol string constants."""
