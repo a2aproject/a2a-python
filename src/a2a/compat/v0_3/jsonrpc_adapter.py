@@ -277,4 +277,8 @@ class JSONRPC03Adapter:
                     )
                 }
 
-        return EventSourceResponse(event_generator(stream_gen))
+        return EventSourceResponse(
+            event_generator(stream_gen),
+            ping=constants.SSE_PING_INTERVAL_SECONDS,
+            send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
+        )

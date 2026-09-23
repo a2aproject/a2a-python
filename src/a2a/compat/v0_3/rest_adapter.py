@@ -36,7 +36,7 @@ from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
 )
-from a2a.utils import json_utils
+from a2a.utils import constants, json_utils
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -97,7 +97,9 @@ class REST03Adapter:
                 yield json_utils.dumps(item)
 
         return EventSourceResponse(
-            event_generator(method(request, call_context))
+            event_generator(method(request, call_context)),
+            ping=constants.SSE_PING_INTERVAL_SECONDS,
+            send_timeout=constants.SSE_SEND_TIMEOUT_SECONDS,
         )
 
     def routes(self) -> dict[tuple[str, str], Callable[[Request], Any]]:

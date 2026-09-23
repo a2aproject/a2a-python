@@ -19,6 +19,7 @@ from a2a.types.a2a_pb2 import (
     TaskState as TaskState10,
     TaskStatus as TaskStatus10,
 )
+from a2a.utils import constants
 from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
@@ -242,3 +243,31 @@ async def test_v03_streaming_does_not_ascii_escape_non_ascii(
         payload = payload.decode('utf-8')
     assert non_ascii_text in payload
     assert '\\u4f60\\u597d' not in payload
+
+
+@pytest.mark.anyio
+async def test_v03_streaming_response_carries_ping_and_send_timeout(
+    request_handler: RequestHandler,
+) -> None:
+    """v0.3 REST streaming must configure SSE keep-alive like the v1 route.
+
+    Without explicit ``ping``/``send_timeout`` the v0.3 streams keep
+    ``sse_starlette`` defaults, so a compat-enabled deployment loses the
+    heartbeat behaviour the transport hardening adds elsewhere.
+    """
+    adapter = REST03Adapter(http_handler=request_handler)
+
+    async def stream(request: Request, context: object) -> AsyncIterator[dict]:
+        yield {'msg': {'text': 'hello'}}
+
+    mock_req = MagicMock(spec=Request)
+    mock_req.body = AsyncMock(return_value=b'{}')
+    mock_req.headers = Headers({'a2a-version': '0.3'})
+    mock_req.user = MagicMock(is_authenticated=False)
+    mock_req.auth = None
+    mock_req.scope = {}
+
+    response = await adapter._handle_streaming_request(stream, mock_req)
+
+    assert response.ping_interval == constants.SSE_PING_INTERVAL_SECONDS
+    assert response.send_timeout == constants.SSE_SEND_TIMEOUT_SECONDS

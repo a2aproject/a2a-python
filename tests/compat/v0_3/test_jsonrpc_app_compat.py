@@ -143,3 +143,41 @@ def test_get_extended_agent_card_v03_compat(
     assert 'result' in data
     # The result should be a v0.3 AgentCard
     assert 'supportsAuthenticatedExtendedCard' in data['result']
+
+
+@pytest.mark.anyio
+async def test_v03_jsonrpc_streaming_response_carries_ping_and_send_timeout():
+    """v0.3 JSON-RPC streaming must configure SSE keep-alive like the v1 route.
+
+    ``ping=None`` (the ``sse_starlette`` default) leaves compat-enabled
+    deployments without heartbeats, so those streams keep the previous
+    dead-connection behaviour the transport hardening removes elsewhere.
+    """
+    from a2a.compat.v0_3 import types as types_v03
+    from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
+    from a2a.server.context import ServerCallContext
+    from a2a.utils import constants
+
+    handler = AsyncMock(spec=RequestHandler)
+
+    async def stream(request_obj, context):
+        yield Message10(message_id='1', role=Role10.ROLE_AGENT, parts=[])
+
+    handler.on_message_send_stream.side_effect = stream
+
+    payload = types_v03.SendStreamingMessageRequest(
+        id='1',
+        params=types_v03.MessageSendParams(
+            message=types_v03.Message(
+                message_id='1', role=types_v03.Role.user, parts=[]
+            )
+        ),
+    )
+
+    adapter = JSONRPC03Adapter(handler)
+    response = await adapter._process_streaming_request(
+        '1', payload, ServerCallContext()
+    )
+
+    assert response.ping_interval == constants.SSE_PING_INTERVAL_SECONDS
+    assert response.send_timeout == constants.SSE_SEND_TIMEOUT_SECONDS
