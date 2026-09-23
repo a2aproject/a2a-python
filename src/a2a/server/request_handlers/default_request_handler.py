@@ -292,7 +292,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 

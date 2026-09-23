@@ -47,6 +47,7 @@ from a2a.utils.errors import (
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.utils.task import (
     apply_history_length,
@@ -198,7 +199,11 @@ class DefaultRequestHandlerV2(RequestHandler):
                 task_id, call_context=context, create_task_if_missing=False
             )
             result = await active_task.cancel(context)
-        except InvalidParamsError as e:
+        except UnsupportedOperationError as e:
+            # get_or_create -> ActiveTask.start() rejects a terminal task with
+            # UnsupportedOperationError (spec 3.1.1). Cancel is the one caller
+            # for which that is the wrong answer: 3.3.2 gives terminal-task
+            # cancellation its own error.
             raise TaskNotCancelableError from e
 
         if isinstance(result, Message):
