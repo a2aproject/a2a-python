@@ -36,6 +36,7 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import inspect
 import logging
 import uuid
 
@@ -560,17 +561,26 @@ class ActiveTask:
                 'Producer[%s]: Execution failed',
                 self._task_id,
             )
-            # Persist the failure directly instead of relying on the closing
-            # event queue to carry a final status update.
+            # Persist FAILED (store + push) before finally closes the
+            # queues (issue #1175). Do not emit a FAILED status event:
+            # blocking on_message_send would treat that Task as success.
+            # The producer exception is the stream signal.
             if request_context:
-                task = await self._task_manager.ensure_task_id(
-                    self._task_id,
-                    request_context.context_id or '',
-                )
-                if task.status.state not in TERMINAL_TASK_STATES:
-                    task.status.state = TaskState.TASK_STATE_FAILED
-                    await self._task_manager.save_task_event(task)
-                self._task_created.set()
+                try:
+                    await self._task_manager.ensure_task_id(
+                        self._task_id,
+                        request_context.context_id or '',
+                    )
+                    await self._persist_and_publish_terminal(
+                        TaskState.TASK_STATE_FAILED,
+                        publish_to_stream=False,
+                    )
+                    self._task_created.set()
+                except Exception:
+                    logger.exception(
+                        'Producer[%s]: Failed to persist FAILED state',
+                        self._task_id,
+                    )
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
@@ -711,11 +721,11 @@ class ActiveTask:
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
 
-        The returned task carries a terminal state, which is written to the
-        task store. That write is not guaranteed to reach an active subscriber
-        stream: by the time cancel writes it the event queues may already be
-        closed, so a client that was streaming may have to re-read the task to
-        observe the terminal state.
+        The returned task carries a terminal state written to the store.
+        When a producer is still running, that state is also published to
+        the live subscriber stream and push *before* the producer is
+        cancelled (issue #1175). If the producer has already finished, the
+        subscriber queue is already closed, so the write is store plus push.
 
         Concurrency Guarantee:
         Uses `_lock` to ensure we don't attempt to cancel a producer that is
@@ -755,7 +765,7 @@ class ActiveTask:
                 # Residual: if executor.cancel() raises a BaseException (e.g.
                 # asyncio.CancelledError), it propagates out of cancel() from
                 # the finally before the _is_finished.wait() and the CANCELED
-                # write below, leaving the task non-terminal with no producer
+                # fallback below, leaving the task non-terminal with no producer
                 # behind it. This is not the #1170 silent-success shape (the
                 # caller receives the exception), and it is recoverable: a
                 # later cancel() takes the else branch and reaches the
@@ -771,6 +781,21 @@ class ActiveTask:
                     await self._mark_task_as_failed(e)
                     raise
                 finally:
+                    try:
+                        # Cleanup-only executor.cancel() or a parked
+                        # input-required task leaves no terminal event.
+                        # Publish CANCELED while the subscriber queue is
+                        # still open — producer teardown lives in
+                        # _run_producer.finally and cannot run until
+                        # _producer_task.cancel() below.
+                        await self._persist_and_publish_terminal(
+                            TaskState.TASK_STATE_CANCELED
+                        )
+                    except Exception:
+                        logger.exception(
+                            'Cancel[%s]: Failed to persist CANCELED state',
+                            self._task_id,
+                        )
                     self._producer_task.cancel()
             else:
                 logger.debug(
@@ -784,26 +809,15 @@ class ActiveTask:
         task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
-        # A cleanup-only executor.cancel() may not write a terminal state, and
-        # a task parked in a non-terminal state (e.g. input-required) has no
-        # running producer to write one either. Close it out as CANCELED so a
-        # caller that cancelled is never left polling a live task. Mirrors the
-        # V1 handler, which made a non-cancelled outcome visible instead of
-        # reporting success and changing nothing.
+        # Fallback when the running-producer path did not write (producer
+        # already finished or never started). The subscriber queue is
+        # typically already closed here: store + push only.
         if task.status.state not in TERMINAL_TASK_STATES:
-            # Write a copy rather than mutating the task in place: get_task()
-            # returns the shared _task_manager._current_task, which may already
-            # have been yielded to a subscriber. Copying keeps THIS terminal
-            # write off the yielded reference. It is not a file-wide guarantee:
-            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom,
-            # and the producer-failure write above) still update the shared
-            # object in place. Making every write copy-on-yield is the general
-            # property tracked in #1175 and #1191.
-            updated = Task()
-            updated.CopyFrom(task)
-            updated.status.state = TaskState.TASK_STATE_CANCELED
-            await self._task_manager.save_task_event(updated)
-            task = updated
+            persisted = await self._persist_and_publish_terminal(
+                TaskState.TASK_STATE_CANCELED
+            )
+            if persisted is not None:
+                task = persisted
         return task
 
     async def aclose(self) -> None:
@@ -870,6 +884,61 @@ class ActiveTask:
             ):
                 logger.debug('Cleanup[%s]: Triggering cleanup', self._task_id)
                 self._on_cleanup(self)
+
+    async def _persist_and_publish_terminal(
+        self, state: TaskState, *, publish_to_stream: bool = True
+    ) -> Task | None:
+        """Write a terminal state to the store and notify live observers.
+
+        Direct ``save_task_event`` after the subscriber queue is closed is
+        invisible to ``SubscribeToTask`` / ``message/stream`` and to push
+        (issue #1175). This helper persists a *copy* of the current task
+        (the shared ``get_task()`` object must not mutate under a reader)
+        and, when ``publish_to_stream`` is true, emits a
+        ``TaskStatusUpdateEvent`` to subscribers *before* teardown.
+
+        Returns the current task unchanged (no store write, no stream
+        publish, no push) when it is already terminal, so a later
+        cancel/failure cannot emit a duplicate notification carrying the
+        earlier state.
+
+        Producer-failure keeps ``publish_to_stream=False``: blocking
+        ``on_message_send`` treats a FAILED ``Task`` as a successful
+        terminal result, so the crash must still surface as the
+        producer exception on the stream. Store and push still get
+        FAILED before the queues close.
+        """
+        task = await self._task_manager.get_task()
+        if task is None or task.status.state in TERMINAL_TASK_STATES:
+            return task
+
+        updated = Task()
+        updated.CopyFrom(task)
+        updated.status.state = state
+        await self._task_manager.save_task_event(updated)
+        task = updated
+
+        event = TaskStatusUpdateEvent(
+            task_id=task.id,
+            context_id=task.context_id,
+            status=TaskStatus(state=task.status.state),
+        )
+        if publish_to_stream:
+            # Subscriber taps dequeue (event, updated_task), matching
+            # EventConsumer._enqueue_to_subscribers. Event is the
+            # agent-queue type; widening it would lie about that queue.
+            updated_task_copy = Task()
+            updated_task_copy.CopyFrom(task)
+            await self._event_queue_subscribers.enqueue_event(
+                cast('Any', (event, updated_task_copy))
+            )
+        if self._push_sender and self._task_id:
+            notification = self._push_sender.send_notification(
+                self._task_id, event
+            )
+            if inspect.isawaitable(notification):
+                await notification
+        return task
 
     async def _mark_task_as_failed(self, exception: Exception) -> Task | None:
         logger.debug('Marking task %s as failed: %s', self._task_id, exception)

@@ -129,6 +129,171 @@ class TestActiveTask:
         agent_executor.cancel.assert_called_once()
         stop_event.set()
 
+    @staticmethod
+    def _wire_current_task(task_manager: Mock, task: Task) -> None:
+        """Make get_task / save_task_event share one current Task."""
+
+        async def get_task() -> Task:
+            return task_manager._current_task
+
+        async def ensure_task_id(task_id: str, context_id: str) -> Task:
+            return task_manager._current_task
+
+        async def save_task_event(event: Task) -> None:
+            if isinstance(event, Task):
+                task_manager._current_task = event
+
+        task_manager._current_task = task
+        task_manager.get_task = AsyncMock(side_effect=get_task)
+        task_manager.save_task_event = AsyncMock(side_effect=save_task_event)
+        task_manager.ensure_task_id = AsyncMock(side_effect=ensure_task_id)
+
+    @pytest.mark.asyncio
+    async def test_cancel_publishes_canceled_to_subscriber_stream(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+        push_sender: Mock,
+    ) -> None:
+        """Issue #1175: cancel() must emit CANCELED on a live subscriber stream.
+
+        A cleanup-only executor.cancel() writes nothing. The helper persists a
+        copy and enqueues TaskStatusUpdateEvent before the producer tears the
+        subscriber queue down.
+        """
+        stop_event = asyncio.Event()
+
+        async def execute_mock(req, q):
+            await stop_event.wait()
+
+        shared = Task(
+            id='test-task-id',
+            context_id='test-context-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+        self._wire_current_task(task_manager, shared)
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock()
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.05)
+
+        events: list[object] = []
+
+        async def collect() -> None:
+            try:
+                async for event in active_task.subscribe():
+                    events.append(event)
+            except Exception:  # noqa: BLE001
+                pass
+
+        collector = asyncio.create_task(collect())
+        await asyncio.sleep(0.05)
+
+        result = await active_task.cancel(request_context)
+        stop_event.set()
+        await asyncio.wait_for(collector, timeout=2)
+
+        assert result.status.state == TaskState.TASK_STATE_CANCELED
+        assert result is not shared
+        assert shared.status.state == TaskState.TASK_STATE_WORKING
+        status_events = [
+            e
+            for e in events
+            if isinstance(e, TaskStatusUpdateEvent)
+            and e.status.state == TaskState.TASK_STATE_CANCELED
+        ]
+        assert status_events, f'subscriber saw {events!r}, expected CANCELED'
+        push_sender.send_notification.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_producer_failure_persists_failed_and_notifies_push(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+        push_sender: Mock,
+    ) -> None:
+        """Issue #1175: producer-failure persists FAILED and notifies push.
+
+        The crash still surfaces as ValueError on the stream: blocking
+        on_message_send would treat a FAILED Task as a successful result.
+        """
+        shared = Task(
+            id='test-task-id',
+            context_id='test-context-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+        self._wire_current_task(task_manager, shared)
+        request_context.context_id = 'test-context-id'
+        crash = asyncio.Event()
+
+        async def execute_mock(req, q):
+            await crash.wait()
+            raise ValueError('Producer crashed')
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        # Let the consumer flush _RequestStarted so this tap sees only the
+        # terminal publish (same timing as the cancel-stream test).
+        await asyncio.sleep(0.05)
+
+        collector_error: list[BaseException] = []
+
+        async def collect() -> None:
+            try:
+                async for _event in active_task.subscribe():
+                    pass
+            except ValueError as exc:
+                collector_error.append(exc)
+                return
+
+        collector = asyncio.create_task(collect())
+        await asyncio.sleep(0.05)
+        crash.set()
+        await asyncio.wait_for(collector, timeout=2)
+
+        assert collector_error, 'subscriber hung up instead of seeing the crash'
+        assert (
+            task_manager._current_task.status.state
+            == TaskState.TASK_STATE_FAILED
+        )
+        assert shared.status.state == TaskState.TASK_STATE_WORKING
+        push_sender.send_notification.assert_awaited()
+
+    @pytest.mark.asyncio
+    async def test_persist_terminal_skips_when_already_terminal(
+        self,
+        active_task: ActiveTask,
+        task_manager: Mock,
+        push_sender: Mock,
+    ) -> None:
+        """Already-terminal tasks must not get a duplicate store/push write."""
+        shared = Task(
+            id='test-task-id',
+            context_id='test-context-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_CANCELED),
+        )
+        self._wire_current_task(task_manager, shared)
+
+        result = await active_task._persist_and_publish_terminal(
+            TaskState.TASK_STATE_FAILED
+        )
+
+        assert result is shared
+        task_manager.save_task_event.assert_not_called()
+        push_sender.send_notification.assert_not_called()
+
     @pytest.mark.asyncio
     async def test_active_task_cancel_producer_cancelled_on_cancellederror(
         self,
