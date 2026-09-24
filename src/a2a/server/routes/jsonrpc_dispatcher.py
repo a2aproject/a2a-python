@@ -15,7 +15,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
-    InvalidParamsError,
     InvalidRequestError,
     JSONParseError,
     JSONRPCError,
@@ -47,6 +46,12 @@ from a2a.utils.errors import (
     A2AError,
     TaskNotFoundError,
     UnsupportedOperationError,
+)
+from a2a.utils.errors import (
+    InvalidParamsError as A2AInvalidParamsError,
+)
+from a2a.utils.errors import (
+    InvalidRequestError as A2AInvalidRequestError,
 )
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
@@ -256,7 +261,10 @@ class JsonRpcDispatcher:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    InvalidRequestError(data=str(e)),
+                    A2AInvalidRequestError(
+                        message='Invalid request',
+                        data={'parseError': str(e)},
+                    ),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
@@ -287,14 +295,34 @@ class JsonRpcDispatcher:
                     request_id, MethodNotFoundError()
                 )
             try:
-                # Parse the params field into the proto message type
+                # Parse the params field into the proto message type.
+                # Spec 5.7: unrecognized fields SHOULD be ignored, so a
+                # client speaking a later minor version is not rejected over
+                # a field this build has never heard of.
+                #
+                # The flag also accepts unknown *enum values*, defaulting
+                # them to 0, which is the same forward-compatibility bargain
+                # one field deeper: a future ROLE_* arrives as
+                # ROLE_UNSPECIFIED rather than failing the request. Handlers
+                # that care must check for the unspecified value; protobuf
+                # offers no way to take the field leniency without this.
                 params = body.get('params', {})
-                specific_request = ParseDict(params, model_class())
+                specific_request = ParseDict(
+                    params, model_class(), ignore_unknown_fields=True
+                )
             except Exception as e:
                 logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    InvalidParamsError(data=str(e)),
+                    # The A2AError rather than the JSON-RPC model: spec 9.5
+                    # makes error.data an array of @type-bearing objects, and
+                    # only the A2AError path runs build_error_details. The
+                    # JSON-RPC model would put the bare diagnostic string
+                    # there instead.
+                    A2AInvalidParamsError(
+                        message='Invalid params',
+                        data={'parseError': str(e)},
+                    ),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
