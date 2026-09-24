@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.1.6](https://github.com/a2aproject/a2a-python/compare/v1.1.5...v1.1.6) (2026-09-24)
+
+
+### Bug Fixes
+
+* compare in-memory task timestamps numerically ([#1233](https://github.com/a2aproject/a2a-python/issues/1233)) ([0d5473c](https://github.com/a2aproject/a2a-python/commit/0d5473ca4fa6d40034a6a7c8d65bce5cd85d8167))
+
+
+### Documentation
+
+* **samples:** add Agent Card signing sample ([#1198](https://github.com/a2aproject/a2a-python/issues/1198)) ([f3ac824](https://github.com/a2aproject/a2a-python/commit/f3ac82489dd84ce9dcd3802357cb4e987ffdbb74))
+
 ## [1.1.5](https://github.com/a2aproject/a2a-python/compare/v1.1.4...v1.1.5) (2026-09-21)
 
 
