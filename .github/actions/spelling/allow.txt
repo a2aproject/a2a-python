@@ -45,6 +45,7 @@ deepwiki
 denormal
 denormals
 drivername
+dsn
 DSNs
 dunders
 ES256
@@ -119,6 +120,7 @@ poolclass
 postgres
 POSTGRES
 postgresql
+procs
 proot
 proto
 protobuf
