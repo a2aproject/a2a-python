@@ -72,8 +72,8 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import (
     InvalidAgentResponseError,
-    InvalidParamsError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 
 
@@ -441,7 +441,7 @@ class ActiveTask:
         logger.debug('ActiveTask[%s]: Starting', self._task_id)
         async with self._lock:
             if self._is_finished.is_set():
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     f'Task {self._task_id} is already completed. Cannot start it again.'
                 )
 
@@ -469,7 +469,7 @@ class ActiveTask:
                 if task:
                     self._task_created.set()
                     if task.status.state in TERMINAL_TASK_STATES:
-                        raise InvalidParamsError(
+                        raise UnsupportedOperationError(
                             message=f'Task {task.id} is in terminal state: {task.status.state}'
                         )
                 elif not create_task_if_missing:
@@ -623,7 +623,7 @@ class ActiveTask:
 
         async with self._lock:
             if self._is_finished.is_set():
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     f'Task {self._task_id} is already completed.'
                 )
             self._reference_count += 1

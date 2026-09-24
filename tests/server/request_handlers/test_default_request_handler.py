@@ -2553,7 +2553,7 @@ async def test_on_message_send_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
@@ -2597,7 +2597,7 @@ async def test_on_message_send_stream_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
