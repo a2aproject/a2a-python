@@ -39,6 +39,18 @@ async def test_parse_sse_stream_edge_cases():
 
 
 @pytest.mark.asyncio
+async def test_parse_sse_stream_flushes_last_event_without_blank_line():
+    async def mock_aiter_lines():
+        yield 'data: {"task":{"id":"t1"}}\n'
+
+    response = httpx.Response(200)
+    response.aiter_lines = mock_aiter_lines  # type: ignore
+
+    events = [e async for e in parse_sse_stream(response)]
+    assert events == [('message', '{"task":{"id":"t1"}}')]
+
+
+@pytest.mark.asyncio
 async def test_send_http_stream_request_non_sse(mocker):
     client = httpx.AsyncClient()
     request = httpx.Request('GET', 'http://test')
