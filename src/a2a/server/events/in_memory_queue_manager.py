@@ -9,7 +9,10 @@ from a2a.server.events.queue_manager import (
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
-@trace_class(kind=SpanKind.SERVER)
+@trace_class(
+    kind=SpanKind.SERVER,
+    exclude_list=['add', 'get', 'create_or_tap'],
+)
 class InMemoryQueueManager(QueueManager):
     """InMemoryQueueManager is used for a single binary management.
 
