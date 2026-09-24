@@ -717,7 +717,13 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         # ACTS `authentication` precondition reads both of these.
         security_schemes=_security_schemes(),
         security_requirements=_security_requirements(),
-        default_input_modes=['text/plain'],
+        # application/x-protobuf because the ITK instruction envelope is a
+        # binary Part: wrap_instruction_to_request() builds one and
+        # extract_instruction() reads it. The agent has always accepted
+        # those; declaring text/plain alone was a card that understated
+        # what it takes, which went unnoticed until validate_input_modes
+        # below started holding the agent to it.
+        default_input_modes=['text/plain', 'application/x-protobuf'],
         default_output_modes=['text/plain'],
         supported_interfaces=interfaces,
         skills=[
@@ -752,6 +758,11 @@ async def main_async(http_port: int, grpc_port: int) -> None:
         push_config_store=push_config_store,
         push_sender=push_sender,
         extended_agent_card=agent_card,
+        # CORE-SEND-004 sends a part whose mediaType the card does not
+        # declare and expects ContentTypeNotSupportedError. Off by default in
+        # the SDK; this card states its input modes accurately, so the
+        # fixture can hold the SDK to them.
+        validate_input_modes=True,
     )
 
     agent_card_routes = create_agent_card_routes(
