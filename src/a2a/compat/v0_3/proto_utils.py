@@ -211,10 +211,15 @@ class ToProto:
 
     @classmethod
     def task_status(cls, status: types.TaskStatus) -> a2a_pb2.TaskStatus:
-        return a2a_pb2.TaskStatus(
+        proto_status = a2a_pb2.TaskStatus(
             state=cls.task_state(status.state),
             update=cls.message(status.message),
         )
+        if status.timestamp:
+            proto_status.timestamp.FromJsonString(
+                str(status.timestamp).replace('+00:00', 'Z')
+            )
+        return proto_status
 
     @classmethod
     def task_state(cls, state: types.TaskState) -> a2a_pb2.TaskState:
@@ -405,6 +410,7 @@ class ToProto:
             signatures=[cls.agent_card_signature(x) for x in card.signatures]
             if card.signatures
             else None,
+            icon_url=card.icon_url,
         )
 
     @classmethod
@@ -515,6 +521,7 @@ class ToProto:
                 oauth2_security_scheme=a2a_pb2.OAuth2SecurityScheme(
                     description=scheme.root.description,
                     flows=cls.oauth2_flows(scheme.root.flows),
+                    oauth2_metadata_url=scheme.root.oauth2_metadata_url,
                 )
             )
         if isinstance(scheme.root, types.MutualTLSSecurityScheme):
@@ -577,6 +584,7 @@ class ToProto:
             examples=skill.examples,
             input_modes=skill.input_modes,
             output_modes=skill.output_modes,
+            security=cls.security(skill.security),
         )
 
     @classmethod
@@ -689,6 +697,9 @@ class FromProto:
         return types.TaskStatus(
             state=cls.task_state(status.state),
             message=cls.message(status.update),
+            timestamp=status.timestamp.ToJsonString()
+            if status.HasField('timestamp')
+            else None,
         )
 
     @classmethod
@@ -876,6 +887,7 @@ class FromProto:
             signatures=[cls.agent_card_signature(x) for x in card.signatures]
             if card.signatures
             else None,
+            icon_url=card.icon_url or None,
         )
 
     @classmethod
@@ -992,6 +1004,8 @@ class FromProto:
                 root=types.OAuth2SecurityScheme(
                     description=scheme.oauth2_security_scheme.description,
                     flows=cls.oauth2_flows(scheme.oauth2_security_scheme.flows),
+                    oauth2_metadata_url=scheme.oauth2_security_scheme.oauth2_metadata_url
+                    or None,
                 )
             )
         if scheme.HasField('mtls_security_scheme'):
@@ -1086,6 +1100,7 @@ class FromProto:
             examples=list(skill.examples),
             input_modes=list(skill.input_modes),
             output_modes=list(skill.output_modes),
+            security=cls.security(list(skill.security)),
         )
 
     @classmethod
