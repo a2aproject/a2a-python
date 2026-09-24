@@ -1,11 +1,11 @@
 import logging
 
 from collections.abc import Callable
-from datetime import datetime, timezone
+from typing import Any, cast
 
 
 try:
-    from sqlalchemy import Table, and_, delete, func, or_, select
+    from sqlalchemy import Table, and_, case, delete, func, or_, select
     from sqlalchemy.ext.asyncio import (
         AsyncEngine,
         AsyncSession,
@@ -152,16 +152,20 @@ class DatabaseTaskStore(TaskStore):
                 id=task_model.id,
                 context_id=task_model.context_id,
             )
+            # These JSON columns are annotated with proto types but hold plain
+            # dicts at rest; ParseDict wants the dict view.
             if task_model.status:
-                ParseDict(task_model.status, task.status)
+                ParseDict(
+                    cast('dict[str, Any]', task_model.status), task.status
+                )
             if task_model.artifacts:
                 for art_dict in task_model.artifacts:
                     art = task.artifacts.add()
-                    ParseDict(art_dict, art)
+                    ParseDict(cast('dict[str, Any]', art_dict), art)
             if task_model.history:
                 for msg_dict in task_model.history:
                     msg = task.history.add()
-                    ParseDict(msg_dict, msg)
+                    ParseDict(cast('dict[str, Any]', msg_dict), msg)
             if task_model.task_metadata:
                 task.metadata.update(task_model.task_metadata)
             return task
@@ -245,13 +249,11 @@ class DatabaseTaskStore(TaskStore):
             count_stmt = select(func.count()).select_from(base_stmt.alias())
             total_count = (await session.execute(count_stmt)).scalar_one()
 
-            # Use coalesce to treat NULL timestamps as datetime.min,
-            # which sort last in descending order
+            # Sort NULL timestamps last without binding a sentinel value, which
+            # may fall outside a database's supported datetime range.
             stmt = base_stmt.order_by(
-                func.coalesce(
-                    timestamp_col,
-                    datetime.min.replace(tzinfo=timezone.utc),
-                ).desc(),
+                case((timestamp_col.is_(None), 1), else_=0).asc(),
+                timestamp_col.desc(),
                 self.task_model.id.desc(),
             )
 

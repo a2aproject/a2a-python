@@ -51,6 +51,7 @@ euo
 EUR
 evt
 excinfo
+EXTCARD
 FastAPI
 fernet
 fetchrow
@@ -135,6 +136,7 @@ rmi
 RS256
 RUF
 Rundgren
+SECP
 SECP256R1
 SFIXED
 SLF

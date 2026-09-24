@@ -1,0 +1,106 @@
+# Which ACTS `tck-*` behaviours this SDK's ITK agent implements (ACTS §11.1).
+#
+# **This file is the list.** `itk/acts_behaviors.py` implements the behaviours
+# but does not restate their names, so there is nothing here to drift out of
+# step with — the two are a claim and its implementation, and the runner checks
+# one against the other by running the tests.
+#
+# A prefix listed here but not implemented makes the test FAIL, not skip:
+# deliberately, so lagging support stays visible in the conformance report
+# instead of quietly shrinking it. Adding a behaviour means adding a branch in
+# `_dispatch` and an entry here.
+
+acts_version: "1.0"
+
+behaviors:
+  - prefix: "tck-complete-task"
+    description: "Complete the task with a text response message"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+
+  - prefix: "tck-input-required"
+    description: "Return the task in INPUT_REQUIRED"
+    response_type: task
+    terminal_state: TASK_STATE_INPUT_REQUIRED
+
+  - prefix: "tck-auth-required"
+    description: "Return the task in AUTH_REQUIRED"
+    response_type: task
+    terminal_state: TASK_STATE_AUTH_REQUIRED
+
+  - prefix: "tck-reject-task"
+    description: "Reject the task"
+    response_type: task
+    terminal_state: TASK_STATE_REJECTED
+
+  - prefix: "tck-task-failure"
+    description: "Complete with FAILED and an error message"
+    response_type: task
+    terminal_state: TASK_STATE_FAILED
+
+  - prefix: "tck-message-response"
+    description: "Return a direct Message, not a Task"
+    response_type: message
+
+  - prefix: "tck-multi-turn"
+    description: "Stay in INPUT_REQUIRED until the user sends 'done'"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+
+  - prefix: "tck-cancel"
+    description: "Remain in WORKING until canceled"
+    response_type: task
+    terminal_state: TASK_STATE_CANCELED
+
+  - prefix: "tck-long-running"
+    description: "Stay in WORKING briefly, then complete"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    delay_ms: 1000
+
+  - prefix: "tck-artifact-text"
+    description: "Complete with a text artifact"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    artifacts:
+      - text: "generated text content"
+
+  - prefix: "tck-artifact-data"
+    description: "Complete with a structured data artifact"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    artifacts:
+      - data: {key: "value", count: 1}
+
+  - prefix: "tck-artifact-file"
+    description: "Complete with a file artifact carrying inline bytes"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    artifacts:
+      - file: {name: "document.txt", mediaType: "text/plain"}
+
+  - prefix: "tck-artifact-file-url"
+    description: "Complete with a file artifact carrying a URL"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    artifacts:
+      - fileUrl:
+          url: "https://example.com/document.txt"
+          name: "document.txt"
+          mediaType: "text/plain"
+
+  - prefix: "tck-stream-basic"
+    description: "Stream working -> artifact -> completed"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    streaming: true
+    artifacts:
+      - text: "streamed content"
+
+  - prefix: "tck-stream-chunked"
+    description: "Stream one artifact across several appended chunks"
+    response_type: task
+    terminal_state: TASK_STATE_COMPLETED
+    streaming: true
+    artifacts:
+      - text: "chunk one chunk two chunk three"
