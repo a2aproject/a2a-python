@@ -3,6 +3,10 @@
 This module tests the proto utilities including to_stream_response and dictionary normalization.
 """
 
+import logging
+
+from typing import Any, cast
+
 import httpx
 import pytest
 
@@ -328,3 +332,57 @@ class TestValidateProtoRequiredFields:
 
         fields = [e['field'] for e in errors]
         assert 'status.state' in fields
+
+
+class TestWarnOnMissingRequiredFields:
+    """Tests for warn_on_missing_required_fields function."""
+
+    def test_complete_message_returns_true_without_logging(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        msg = Message(
+            message_id='msg-1',
+            role=Role.ROLE_USER,
+            parts=[Part(text='hello')],
+        )
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert proto_utils.warn_on_missing_required_fields(msg, 'test:')
+        assert caplog.records == []
+
+    def test_missing_fields_are_logged_instead_of_raised(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(
+                Message(), 'message passed to test:'
+            )
+        [record] = caplog.records
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == (
+            'message passed to test: Message is missing fields marked '
+            'REQUIRED by the A2A spec: message_id, role, parts'
+        )
+
+    def test_non_message_objects_are_not_checked(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert proto_utils.warn_on_missing_required_fields(
+                cast('Any', object()), 'test:'
+            )
+        assert caplog.records == []
+
+    def test_nested_missing_fields_are_reported_with_their_path(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        task = Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            history=[Message()],
+        )
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(
+                task, 'test:'
+            )
+        assert 'history[0].message_id' in caplog.text

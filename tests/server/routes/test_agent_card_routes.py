@@ -1,11 +1,17 @@
 import copy
+import logging
 
 from unittest.mock import AsyncMock
 
 import pytest
 
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
-from a2a.types.a2a_pb2 import AgentCard
+from a2a.types.a2a_pb2 import (
+    AgentCapabilities,
+    AgentCard,
+    AgentInterface,
+    AgentSkill,
+)
 from a2a.utils.signing import create_agent_card_signer
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -231,3 +237,53 @@ def test_etag_still_changes_when_a_signed_card_changes():
     second = signed_client('b').get(url)
 
     assert first.headers['etag'] != second.headers['etag']
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_route_creation_warns_about_missing_required_fields(
+    agent_card: AgentCard, caplog: pytest.LogCaptureFixture
+) -> None:
+    """An incomplete card is still served, but a warning is logged once."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        routes = create_agent_card_routes(agent_card=agent_card)
+    [record] = caplog.records
+    message = record.getMessage()
+    assert 'agent_card passed to create_agent_card_routes:' in message
+    assert 'name, description, supported_interfaces' in message
+
+    client = TestClient(Starlette(routes=routes))
+    assert client.get('/.well-known/agent-card.json').status_code == 200
+
+
+def test_route_creation_does_not_warn_for_complete_card(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        create_agent_card_routes(agent_card=_complete_agent_card())
+    assert caplog.records == []
