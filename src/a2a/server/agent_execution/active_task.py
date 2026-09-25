@@ -419,6 +419,17 @@ class ActiveTask:
         """The ID of the task."""
         return self._task_id
 
+    def refresh_on_reuse(self) -> None:
+        """Drops the cached task snapshot when the task is idle.
+
+        Forces the next request to re-read the store instead of resuming from a
+        stale pre-interrupt snapshot. Skipped while a subscriber stream is in
+        flight (`_reference_count > 1`), since re-reading mid-stream would lose
+        the open artifact.
+        """
+        if self._reference_count <= 1:
+            self._task_manager.invalidate_cached_task()
+
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:

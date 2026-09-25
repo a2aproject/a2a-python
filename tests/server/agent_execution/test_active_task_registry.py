@@ -170,3 +170,91 @@ async def test_get_or_create_cache_hit_is_owner_scoped():
     assert again is active
 
     await registry.aclose()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_reused_idle_task_drops_stale_snapshot():
+    """Issue #1188: reusing an idle ActiveTask after a non-terminal interrupt
+    must drop its cached TaskManager snapshot, so the per-request get_task()
+    in _run_producer re-reads the store instead of resuming from a
+    pre-interrupt snapshot that would overwrite state another replica wrote.
+    """
+    store = InMemoryTaskStore()
+    registry = ActiveTaskRegistry(
+        agent_executor=_SlowExecutor(), task_store=store
+    )
+    ctx = _ctx('alice')
+
+    await store.save(
+        Task(
+            id='task-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+        ),
+        ctx,
+    )
+    active = await registry.get_or_create(
+        'task-1', call_context=ctx, create_task_if_missing=True
+    )
+
+    # Simulate the producer having cached a pre-interrupt snapshot, then the
+    # task going idle (its previous request's subscriber has detached).
+    stale = Task(
+        id='task-1',
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
+    active._task_manager._current_task = stale
+    assert active._reference_count == 1  # idle: no in-flight subscriber
+
+    reused = await registry.get_or_create(
+        'task-1', call_context=ctx, create_task_if_missing=False
+    )
+
+    assert reused is active
+    assert active._task_manager._current_task is None
+
+    await registry.aclose()
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_reused_streaming_task_keeps_snapshot():
+    """Issue #1188 guard: a reused ActiveTask with a subscriber stream still in
+    flight (reference_count > 1) must KEEP its snapshot. Re-reading the store
+    mid-stream would drop the open artifact and the next append=True chunk
+    would fail with InvalidAgentResponseError.
+    """
+    store = InMemoryTaskStore()
+    registry = ActiveTaskRegistry(
+        agent_executor=_SlowExecutor(), task_store=store
+    )
+    ctx = _ctx('alice')
+
+    await store.save(
+        Task(
+            id='task-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+        ctx,
+    )
+    active = await registry.get_or_create(
+        'task-1', call_context=ctx, create_task_if_missing=True
+    )
+
+    snapshot = Task(
+        id='task-1',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    active._task_manager._current_task = snapshot
+    # Simulate an in-flight subscriber tailing the current stream.
+    active._reference_count = 2
+
+    reused = await registry.get_or_create(
+        'task-1', call_context=ctx, create_task_if_missing=False
+    )
+
+    assert reused is active
+    assert active._task_manager._current_task is snapshot
+
+    active._reference_count = 1
+    await registry.aclose()

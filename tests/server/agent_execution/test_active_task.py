@@ -73,6 +73,28 @@ class TestActiveTask:
         )
 
     @pytest.mark.asyncio
+    async def test_refresh_on_reuse_drops_snapshot_when_idle(
+        self, active_task: ActiveTask, task_manager: Mock
+    ) -> None:
+        """An idle reused task (reference_count <= 1) invalidates its snapshot."""
+        active_task._reference_count = 1
+
+        active_task.refresh_on_reuse()
+
+        task_manager.invalidate_cached_task.assert_called_once_with()
+
+    @pytest.mark.asyncio
+    async def test_refresh_on_reuse_keeps_snapshot_when_streaming(
+        self, active_task: ActiveTask, task_manager: Mock
+    ) -> None:
+        """A task with an in-flight subscriber keeps its snapshot."""
+        active_task._reference_count = 2
+
+        active_task.refresh_on_reuse()
+
+        task_manager.invalidate_cached_task.assert_not_called()
+
+    @pytest.mark.asyncio
     async def test_active_task_already_started(
         self, active_task: ActiveTask, request_context: Mock
     ) -> None:
