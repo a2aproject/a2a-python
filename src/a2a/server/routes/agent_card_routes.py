@@ -26,6 +26,7 @@ else:
 from a2a.server.request_handlers.response_helpers import agent_card_to_dict
 from a2a.types.a2a_pb2 import AgentCard
 from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 
 
 def create_agent_card_routes(
@@ -39,6 +40,10 @@ def create_agent_card_routes(
             'The `starlette` package is required to use `create_agent_card_routes`. '
             'It can be installed as part of `a2a-sdk` optional dependencies, `a2a-sdk[http-server]`.'
         )
+
+    warn_on_missing_required_fields(
+        agent_card, 'agent_card passed to create_agent_card_routes:'
+    )
 
     async def _get_agent_card(request: Request) -> Response:
         """Returns the public AgentCard describing this agent's capabilities, supported transports, and skills."""
