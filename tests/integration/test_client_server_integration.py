@@ -650,11 +650,11 @@ async def test_json_transport_base_client_send_message_with_extensions(
     with patch.object(
         transport, '_send_request', new_callable=AsyncMock
     ) as mock_send_request:
-        # Mock returns a JSON-RPC response with SendMessageResponse structure
+        # Mock returns a JSON-RPC response with the Task returned directly.
         mock_send_request.return_value = {
             'id': '123',
             'jsonrpc': '2.0',
-            'result': {'task': MessageToDict(TASK_FROM_BLOCKING)},
+            'result': MessageToDict(TASK_FROM_BLOCKING),
         }
 
         service_params = ServiceParametersFactory.create(
