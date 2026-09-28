@@ -77,7 +77,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.assert_called_once()
 
@@ -122,7 +122,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         return self.mock_httpx_client.post.await_args.kwargs['headers']
 
     async def test_authentication_becomes_an_authorization_header(self) -> None:
-        """Spec 4.3.3: Authorization: {scheme} {credentials}."""
+        """Authentication becomes `Authorization: {scheme} {credentials}`."""
         headers = await self._post_headers_for(
             authentication=AuthenticationInfo(
                 scheme='Bearer', credentials='test-token'
@@ -152,14 +152,38 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             authentication=AuthenticationInfo(scheme='Bearer')
         )
 
-        assert headers is None
+        assert headers == {}
+
+    async def test_authentication_without_credentials_warns(self) -> None:
+        """A scheme with no credentials is valid to send, so say why it was dropped."""
+        with self.assertLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ) as logs:
+            await self._post_headers_for(
+                config_id='cfg-half-auth',
+                authentication=AuthenticationInfo(scheme='Bearer'),
+            )
+
+        assert any(
+            'cfg-half-auth' in line and 'no ' in line for line in logs.output
+        )
+
+    async def test_complete_authentication_does_not_warn(self) -> None:
+        with self.assertNoLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ):
+            await self._post_headers_for(
+                authentication=AuthenticationInfo(
+                    scheme='Bearer', credentials='test-token'
+                )
+            )
 
     async def test_no_authentication_sends_no_authorization_header(
         self,
     ) -> None:
         headers = await self._post_headers_for()
 
-        assert headers is None
+        assert headers == {}
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
@@ -198,7 +222,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_logger.exception.assert_called_once()
 
@@ -231,13 +255,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.call_count = 2
 
@@ -262,7 +286,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(status_update=event)),
-            headers=None,
+            headers={},
         )
 
     async def test_send_notification_artifact_update_event(self) -> None:
@@ -286,7 +310,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),
-            headers=None,
+            headers={},
         )
 
 

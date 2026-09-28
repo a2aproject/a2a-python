@@ -100,19 +100,25 @@ class BasePushNotificationSender(PushNotificationSender):
             headers: dict[str, str] = {}
             if push_info.token:
                 headers['X-A2A-Notification-Token'] = push_info.token
-            # Spec 4.3.3 gives the webhook request an
-            # `Authorization: {scheme} {credentials}` header built from
-            # PushNotificationConfig.authentication.
             auth = push_info.authentication
-            if push_info.HasField('authentication') and (
-                auth.scheme and auth.credentials
-            ):
-                headers['Authorization'] = f'{auth.scheme} {auth.credentials}'
+            if push_info.HasField('authentication'):
+                if auth.scheme and auth.credentials:
+                    headers['Authorization'] = (
+                        f'{auth.scheme} {auth.credentials}'
+                    )
+                elif auth.scheme:
+                    logger.warning(
+                        'Push config %s sets an authentication scheme with no '
+                        'credentials; sending no Authorization header for '
+                        'task_id=%s',
+                        push_info.id,
+                        task_id,
+                    )
 
             response = await self._client.post(
                 url,
                 json=MessageToDict(to_stream_response(event)),
-                headers=headers or None,
+                headers=headers,
             )
             response.raise_for_status()
             logger.info(
