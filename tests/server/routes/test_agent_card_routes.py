@@ -1,9 +1,14 @@
+import copy
+
 from unittest.mock import AsyncMock
 
 import pytest
 
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.types.a2a_pb2 import AgentCard
+from a2a.utils.signing import create_agent_card_signer
+from cryptography.hazmat.primitives import serialization
+from cryptography.hazmat.primitives.asymmetric import ec
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
 
@@ -80,14 +85,13 @@ def card_client(**kwargs) -> TestClient:
     )
 
 
-def test_response_carries_an_etag():
-    """Spec 8.6.1: the card endpoint SHOULD include an ETag."""
+def test_response_carries_a_weak_etag():
     response = card_client(agent_card=AgentCard(name='a', version='1')).get(
         '/.well-known/agent-card.json'
     )
 
     assert response.status_code == 200
-    assert response.headers['etag'].startswith('"')
+    assert response.headers['etag'].startswith('W/"')
 
 
 def test_cache_control_is_sent_only_when_configured():
@@ -126,16 +130,22 @@ def test_etag_tracks_the_modified_card_not_the_original():
 
 
 @pytest.mark.parametrize(
-    'if_none_match', ['{etag}', 'W/{etag}', '*', '"other", {etag}']
+    'make_header',
+    [
+        lambda etag: etag,
+        # Weak comparison, so the strong spelling of the same tag matches.
+        lambda etag: etag.removeprefix('W/'),
+        lambda etag: '*',
+        lambda etag: f'"other", {etag}',
+    ],
+    ids=['exact', 'strong-spelling', 'star', 'list'],
 )
-def test_matching_if_none_match_gets_304(if_none_match):
+def test_matching_if_none_match_gets_304(make_header):
     url = '/.well-known/agent-card.json'
     client = card_client(agent_card=AgentCard(name='a', version='1'))
     etag = client.get(url).headers['etag']
 
-    response = client.get(
-        url, headers={'If-None-Match': if_none_match.format(etag=etag)}
-    )
+    response = client.get(url, headers={'If-None-Match': make_header(etag)})
 
     assert response.status_code == 304
     assert response.content == b''
@@ -149,3 +159,75 @@ def test_stale_if_none_match_gets_the_card():
 
     assert response.status_code == 200
     assert response.json()['name'] == 'a'
+
+
+def test_a_card_re_signed_per_request_still_revalidates():
+    """The card_modifier that re-signs on every request must still get a 304.
+
+    ES256 signatures are randomized, so an unchanged card signs differently
+    every time. Hashing the signature in would produce a tag that changes on
+    every request and never once matches.
+    """
+    url = '/.well-known/agent-card.json'
+    private_key = ec.generate_private_key(ec.SECP256R1()).private_bytes(
+        serialization.Encoding.PEM,
+        serialization.PrivateFormat.PKCS8,
+        serialization.NoEncryption(),
+    )
+    sign = create_agent_card_signer(
+        signing_key=private_key,
+        protected_header={
+            'alg': 'ES256',
+            'kid': 'k',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    async def sign_per_request(card: AgentCard) -> AgentCard:
+        return sign(copy.deepcopy(card))
+
+    client = card_client(
+        agent_card=AgentCard(name='a', version='1'),
+        card_modifier=sign_per_request,
+    )
+    first = client.get(url)
+    second = client.get(url)
+
+    # Same card, different signature, so the bodies differ byte for byte.
+    assert first.json()['signatures'] != second.json()['signatures']
+    assert first.headers['etag'] == second.headers['etag']
+    assert (
+        client.get(
+            url, headers={'If-None-Match': first.headers['etag']}
+        ).status_code
+        == 304
+    )
+
+
+def test_etag_still_changes_when_a_signed_card_changes():
+    """Excluding signatures must not blind the tag to real content changes."""
+    url = '/.well-known/agent-card.json'
+    sign = create_agent_card_signer(
+        signing_key='a-secret-long-enough-for-hs256-hmac',
+        protected_header={
+            'alg': 'HS256',
+            'kid': 'k',
+            'jku': None,
+            'typ': 'JOSE',
+        },
+    )
+
+    def signed_client(name: str) -> TestClient:
+        async def modifier(card: AgentCard) -> AgentCard:
+            return sign(copy.deepcopy(card))
+
+        return card_client(
+            agent_card=AgentCard(name=name, version='1'),
+            card_modifier=modifier,
+        )
+
+    first = signed_client('a').get(url)
+    second = signed_client('b').get(url)
+
+    assert first.headers['etag'] != second.headers['etag']

@@ -32,19 +32,31 @@ from a2a.utils.constants import AGENT_CARD_WELL_KNOWN_PATH
 
 
 def _etag_for(card_dict: dict[str, Any]) -> str:
-    """An ETag derived from the card being served.
+    """A weak ETag derived from the card being served.
 
-    Spec 8.6.1 allows either the card's `version` or a hash of its content.
-    Hashing is what stays correct under `card_modifier`, which can return a
-    different card per request without touching `version`.
+    Hashed rather than taken from `version`, because `card_modifier` can
+    return a different card per request without touching `version`.
+
+    `signatures` is excluded and the tag is weak, which is what makes
+    revalidation work for a card signed per request. The signature covers
+    the card with `signatures` stripped, so it carries no information the
+    rest of the card does not -- but with a randomized algorithm such as
+    ES256 it differs on every signing, and a strong tag over it would change
+    on every request and never once match. A weak tag claims only semantic
+    equivalence, which two signings of identical content have.
+
+    The cost is that a 304 leaves the client on the signature it already
+    holds. That signature stays valid, since it covers content that has not
+    changed.
 
     `sort_keys` rather than RFC 8785 canonicalization: an ETag is opaque and
     is only ever compared against one this server produced, so determinism
     is the whole requirement, and JCS would add a depth limit and a failure
     mode for no gain.
     """
-    body = json.dumps(card_dict, sort_keys=True, separators=(',', ':'))
-    return f'"{hashlib.sha256(body.encode("utf-8")).hexdigest()}"'
+    unsigned = {k: v for k, v in card_dict.items() if k != 'signatures'}
+    body = json.dumps(unsigned, sort_keys=True, separators=(',', ':'))
+    return f'W/"{hashlib.sha256(body.encode("utf-8")).hexdigest()}"'
 
 
 def _if_none_match_hits(header: str, etag: str) -> bool:
@@ -53,8 +65,11 @@ def _if_none_match_hits(header: str, etag: str) -> bool:
     if '*' in candidates:
         return True
     # If-None-Match uses the weak comparison function, so W/"x" and "x" are
-    # a match.
-    return any(candidate.removeprefix('W/') == etag for candidate in candidates)
+    # the same entity on both sides of the comparison.
+    return any(
+        candidate.removeprefix('W/') == etag.removeprefix('W/')
+        for candidate in candidates
+    )
 
 
 def create_agent_card_routes(
@@ -70,10 +85,10 @@ def create_agent_card_routes(
         card_modifier: Optional callback to adjust the card per request.
         card_url: Path the card is served from.
         cache_control: Value for the `Cache-Control` response header, e.g.
-          ``'public, max-age=3600'``. Spec 8.6.1 asks for a `max-age` suited
-          to the agent's expected update frequency, which only the
-          deployment knows, so there is no default. The `ETag` is sent
-          either way, and revalidating against it costs one 304.
+          ``'public, max-age=3600'``. A `max-age` has to suit the agent's
+          expected update frequency, which only the deployment knows, so
+          there is no default. The `ETag` is sent either way, and
+          revalidating against it costs one 304.
     """
     if not _package_starlette_installed:
         raise ImportError(
