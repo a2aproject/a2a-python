@@ -1104,10 +1104,9 @@ async def test_server_rejects_stream_on_validation_error(
                 'json': {
                     'jsonrpc': '2.0',
                     'method': 'SendMessage',
-                    # A field of the wrong shape, not merely an unknown one.
-                    # Since spec 5.7 leniency landed, `{'message': 'a
-                    # string'}` parses to an empty Message and is rejected a
-                    # layer later, by the handler's required-field
+                    # A field of the wrong shape, not merely an unknown
+                    # one: `{'message': 'a string'}` now parses to an empty
+                    # Message and is rejected by the handler's required-field
                     # validation, which a mock handler does not run.
                     'params': {'message': {'parts': 'should be a list'}},
                     'id': 1,

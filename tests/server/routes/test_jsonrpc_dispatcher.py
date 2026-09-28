@@ -94,7 +94,7 @@ def _make_send_message_request(
 
 
 class TestUnrecognizedFields:
-    """Spec 5.7: implementations SHOULD ignore unrecognized fields."""
+    """Unrecognized fields are ignored, for forward compatibility."""
 
     def test_unknown_field_in_params_is_ignored(self, client):
         request = _make_send_message_request()
@@ -140,7 +140,7 @@ class TestUnrecognizedFields:
 
 
 class TestParseErrorDataShape:
-    """Spec 9.5: error.data is an array of objects, each carrying @type."""
+    """error.data is an array of objects, each carrying @type."""
 
     @pytest.fixture
     def parse_error(self, client) -> dict:

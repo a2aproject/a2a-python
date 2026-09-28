@@ -877,9 +877,9 @@ def test_unknown_method(client: TestClient):
 def test_validation_error(client: TestClient):
     """Test handling validation error."""
     # A params the dispatcher cannot parse at all. Merely omitting required
-    # fields no longer stops here: spec 5.7 leniency drops the unknown names
-    # and leaves an empty Message, which the handler's required-field
-    # validation rejects instead -- a layer this mock handler never reaches.
+    # fields no longer stops here: the unknown names are dropped, leaving an
+    # empty Message that the handler's required-field validation rejects
+    # instead -- a layer this mock handler never reaches.
     response = client.post(
         '/',
         json={
