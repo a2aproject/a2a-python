@@ -126,10 +126,11 @@ class LegacyRequestHandler(RequestHandler):
               so deployments that want the built-in policy should pass
               ``validate_push_notification_url``.
             validate_input_modes: Reject message parts whose ``media_type``
-              is absent from the card's ``default_input_modes`` with
-              ``ContentTypeNotSupportedError``. Defaults to False, because
-              an agent whose declared modes do not spell the media types
-              its clients really send would start refusing traffic it
+              the card declares nowhere -- neither in
+              ``default_input_modes`` nor in any skill's ``input_modes`` --
+              with ``ContentTypeNotSupportedError``. Defaults to False,
+              because an agent whose declared modes do not spell the media
+              types its clients really send would start refusing traffic it
               previously accepted.
         """
         self.agent_executor = agent_executor

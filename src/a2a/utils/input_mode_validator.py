@@ -7,16 +7,23 @@ from a2a.utils.errors import ContentTypeNotSupportedError
 def validate_input_modes(message: Message, agent_card: AgentCard) -> None:
     """Rejects parts whose media type the agent card does not declare.
 
-    Spec 3.3.2 defines ContentTypeNotSupportedError for a media type in the
-    request's message parts that the agent does not support.
+    The allowed set is the union of `default_input_modes` and every skill's
+    `input_modes`, which may widen it: a skill's `input_modes` overrides the
+    card default for that skill. A request does not name the skill that will
+    serve it, so the union is the most that can be decided here -- anything
+    outside it is supported by no skill and cannot be served, while a media
+    type inside it may still reach a skill that does not take it, which only
+    that skill can answer.
 
-    A card declaring no input modes accepts everything: an empty
-    `default_input_modes` is an absent declaration, not an empty allowlist.
-    `media_type` is a proto3 string, so a part that omits it arrives as `''`
-    and is likewise not checked -- only a media type the client actually
-    stated can contradict the card.
+    A card declaring no input modes anywhere accepts everything: an empty
+    union is an absent declaration, not an empty allowlist. `media_type` is
+    a proto3 string, so a part that omits it arrives as `''` and is likewise
+    not checked -- only a media type the client actually stated can
+    contradict the card.
     """
     declared = set(agent_card.default_input_modes)
+    for skill in agent_card.skills:
+        declared.update(skill.input_modes)
     if not declared:
         return
 
