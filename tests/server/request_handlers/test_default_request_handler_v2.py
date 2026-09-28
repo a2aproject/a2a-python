@@ -1132,7 +1132,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
 
 @pytest.mark.asyncio
 async def test_on_message_send_rejects_context_id_not_matching_task():
-    """Spec 5.6: a contextId disagreeing with the named task's is rejected.
+    """A contextId disagreeing with the named task's is rejected.
 
     Asserted on the executor never running, not merely on the error type.
     TaskManager already rejects this mismatch once the agent emits an event
