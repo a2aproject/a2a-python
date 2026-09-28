@@ -15,6 +15,7 @@ AGrpc
 aio
 aiomysql
 AIP
+AJSON
 alg
 amannn
 aproject
