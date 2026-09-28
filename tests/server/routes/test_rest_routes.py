@@ -97,7 +97,7 @@ def test_rest_list_tasks(agent_card, mock_handler):
 def test_send_message_response_uses_the_a2a_media_type(
     agent_card, mock_handler
 ):
-    """Spec 11.1: HTTP+JSON responses SHOULD be application/a2a+json."""
+    """HTTP+JSON responses are labelled application/a2a+json."""
     mock_handler.on_message_send.return_value = Task(id='123')
     client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
 

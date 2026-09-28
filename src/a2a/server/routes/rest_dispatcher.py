@@ -36,7 +36,8 @@ if TYPE_CHECKING:
     from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
-    from starlette.responses import JSONResponse, Response
+    from starlette.responses import JSONResponse as A2AJSONResponse
+    from starlette.responses import Response
 
     _package_starlette_installed = True
 else:
@@ -46,12 +47,17 @@ else:
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
 
+        class A2AJSONResponse(JSONResponse):
+            """JSONResponse labelled with the A2A media type."""
+
+            media_type = constants.A2A_JSON_MEDIA_TYPE
+
         _package_starlette_installed = True
     except ImportError:
         EventSourceResponse = Any
         ServerSentEvent = Any
         Request = Any
-        JSONResponse = Any
+        A2AJSONResponse = Any
         Response = Any
 
         _package_starlette_installed = False
@@ -172,10 +178,7 @@ class RestDispatcher:
             return a2a_pb2.SendMessageResponse(message=task_or_message)
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_message_send_stream(
@@ -213,10 +216,7 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_subscribe_to_task(
@@ -252,10 +252,7 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def get_push_notification(self, request: Request) -> Response:
@@ -277,10 +274,7 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def delete_push_notification(self, request: Request) -> Response:
@@ -298,9 +292,7 @@ class RestDispatcher:
             )
 
         await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content={}, media_type=constants.A2A_JSON_MEDIA_TYPE
-        )
+        return A2AJSONResponse(content={})
 
     @rest_error_handler
     async def set_push_notification(self, request: Request) -> Response:
@@ -319,10 +311,7 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_push_notifications(self, request: Request) -> Response:
@@ -340,10 +329,7 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_tasks(self, request: Request) -> Response:
@@ -358,11 +344,10 @@ class RestDispatcher:
             return await self.request_handler.on_list_tasks(params, context)
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
+        return A2AJSONResponse(
             content=serialize_list_tasks_response(
                 response, params.include_artifacts
-            ),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
+            )
         )
 
     @rest_error_handler
@@ -381,7 +366,4 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(response),
-            media_type=constants.A2A_JSON_MEDIA_TYPE,
-        )
+        return A2AJSONResponse(content=MessageToDict(response))
