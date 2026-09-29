@@ -233,22 +233,31 @@ class DefaultRequestHandlerV2(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError
 
-        # Fast path: this replica is running the agent -> stop it directly.
-        local = await self._active_task_registry.get(task_id)
-        if local is not None and local.has_running_execution:
-            try:
-                result = await local.cancel(context)
-            except UnsupportedOperationError as e:
-                raise TaskNotCancelableError from e
-            if isinstance(result, Message):
-                raise InternalError(
-                    message='Cancellation returned a message instead of a task.'
-                )
-            return result
+        # This replica holds the task, running or waiting for input.
+        if await self._active_task_registry.get(task_id) is not None:
+            return await self._cancel_local(task_id, context)
 
         # Running on another replica (or nowhere): record CANCELED in shared
         # state; the owner sees the version bump on its next save and aborts.
         return await self._cancel_remote(task_id, task, version, context)
+
+    async def _cancel_local(
+        self, task_id: str, context: ServerCallContext
+    ) -> Task:
+        try:
+            active_task = await self._active_task_registry.get_or_create(
+                task_id, call_context=context, create_task_if_missing=False
+            )
+            result = await active_task.cancel(context)
+        except UnsupportedOperationError as e:
+            raise TaskNotCancelableError from e
+
+        if isinstance(result, Message):
+            raise InternalError(
+                message='Cancellation returned a message instead of a task.'
+            )
+
+        return result
 
     async def _cancel_remote(
         self,

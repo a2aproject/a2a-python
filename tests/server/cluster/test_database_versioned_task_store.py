@@ -1,8 +1,10 @@
 """Tests for `VersionedDatabaseTaskStore` (CAS over SQLAlchemy)."""
 
+import asyncio
 import os
 
 from collections.abc import AsyncGenerator
+from unittest.mock import patch
 
 import pytest
 import pytest_asyncio
@@ -28,7 +30,11 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
 )
 from sqlalchemy import event
-from sqlalchemy.ext.asyncio import AsyncEngine, create_async_engine
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    create_async_engine,
+)
 
 
 def _enforce_sqlite_foreign_keys(engine: AsyncEngine) -> None:
@@ -342,6 +348,60 @@ async def test_save_retries_transient_operational_error(
     assert not version.is_missing
 
 
+class _DriverError(Exception):
+    """A driver error carrying a SQLSTATE, as asyncpg errors do."""
+
+    def __init__(self, sqlstate: str) -> None:
+        super().__init__(sqlstate)
+        self.sqlstate = sqlstate
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('sqlstate', 'expected_calls'),
+    [('40P01', 2), ('40001', 2), ('42P01', 1)],
+    ids=['deadlock', 'serialization', 'other'],
+)
+async def test_save_retries_only_transient_postgres_errors(
+    versioned_store: VersionedDatabaseTaskStore,
+    sqlstate: str,
+    expected_calls: int,
+) -> None:
+    """Postgres deadlocks and serialization failures arrive as a plain
+    DBAPIError; they are retried, other DBAPIErrors are not."""
+    from unittest import mock
+
+    from sqlalchemy.exc import DBAPIError
+
+    calls = {'n': 0}
+    real_save_once = versioned_store._save_once  # noqa: SLF001
+
+    async def flaky_save_once(*args, **kwargs):  # noqa: ANN002, ANN003
+        calls['n'] += 1
+        if calls['n'] == 1:
+            raise DBAPIError('stmt', {}, _DriverError(sqlstate))
+        return await real_save_once(*args, **kwargs)
+
+    def save():  # noqa: ANN202
+        return versioned_store.save(
+            create_task(),
+            event=None,
+            prev=None,
+            prev_version=TaskVersion.MISSING,
+            context=TEST_CONTEXT,
+        )
+
+    with mock.patch.object(
+        versioned_store, '_save_once', side_effect=flaky_save_once
+    ):
+        if expected_calls == 1:
+            with pytest.raises(DBAPIError):
+                await save()
+        else:
+            await save()
+    assert calls['n'] == expected_calls
+
+
 @pytest.mark.asyncio
 async def test_save_raises_after_exhausting_retries(
     versioned_store: VersionedDatabaseTaskStore,
@@ -592,3 +652,138 @@ async def test_delete_removes_version_row(
     )
     stored = await versioned_store.get('task-abc', TEST_CONTEXT)
     assert stored is not None
+
+
+@pytest.mark.asyncio
+async def test_versions_count_writes(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    v1 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_SUBMITTED),
+        event=None,
+        prev=None,
+        prev_version=TaskVersion.MISSING,
+        context=TEST_CONTEXT,
+    )
+    v2 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_WORKING),
+        event=None,
+        prev=None,
+        prev_version=v1,
+        context=TEST_CONTEXT,
+    )
+    # Cancel skips the version check but still counts as a write.
+    v3 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_CANCELED),
+        event=None,
+        prev=None,
+        prev_version=v1,
+        context=TEST_CONTEXT,
+    )
+    assert (v1, v2, v3) == (TaskVersion(1), TaskVersion(2), TaskVersion(3))
+    stored = await versioned_store.get('task-abc', TEST_CONTEXT)
+    assert stored is not None
+    assert stored.version == v3
+
+
+@pytest.mark.asyncio
+async def test_cancel_of_adopted_task_starts_at_version_one(
+    versioned_store: VersionedDatabaseTaskStore,
+) -> None:
+    await versioned_store.as_task_store.save(
+        create_task(state=TaskState.TASK_STATE_WORKING), TEST_CONTEXT
+    )
+    version = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_CANCELED),
+        event=None,
+        prev=None,
+        prev_version=TaskVersion.MISSING,
+        context=TEST_CONTEXT,
+    )
+    assert version == TaskVersion(1)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(20)
+@pytest.mark.parametrize('db_config', DB_CONFIGS)
+async def test_cancel_racing_save_does_not_deadlock(
+    db_config: tuple[str | None, str],
+) -> None:
+    """A cancel that starts while another replica's save holds the version
+    row waits for it instead of deadlocking on the tasks row."""
+    db_url, dialect_name = db_config
+    if db_url is None:
+        pytest.skip(f'DSN for {dialect_name} not set in environment variables.')
+    if dialect_name == 'sqlite':
+        pytest.skip('SQLite has no row locks.')
+
+    engine_a = create_async_engine(db_url)
+    engine_b = create_async_engine(db_url)
+    try:
+        async with engine_a.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        store_a = VersionedDatabaseTaskStore(
+            engine=engine_a, create_table=False
+        )
+        store_b = VersionedDatabaseTaskStore(
+            engine=engine_b, create_table=False
+        )
+        v1 = await store_a.save(
+            create_task(state=TaskState.TASK_STATE_WORKING),
+            event=None,
+            prev=None,
+            prev_version=TaskVersion.MISSING,
+            context=TEST_CONTEXT,
+        )
+
+        # Pause A's save after it has locked the version row and before it
+        # writes the tasks row; B's cancel starts in that window.
+        a_holds_version = asyncio.Event()
+        resume_a = asyncio.Event()
+        real_merge = AsyncSession.merge
+
+        async def paused_merge(self, *args, **kwargs):  # noqa: ANN001, ANN002, ANN003, ANN202
+            if self.bind is engine_a and not a_holds_version.is_set():
+                a_holds_version.set()
+                await resume_a.wait()
+            return await real_merge(self, *args, **kwargs)
+
+        async def complete_on_a() -> TaskVersion:
+            return await store_a.save(
+                create_task(state=TaskState.TASK_STATE_COMPLETED),
+                event=None,
+                prev=None,
+                prev_version=v1,
+                context=TEST_CONTEXT,
+            )
+
+        async def cancel_on_b() -> TaskVersion:
+            await a_holds_version.wait()
+            return await store_b.save(
+                create_task(state=TaskState.TASK_STATE_CANCELED),
+                event=None,
+                prev=None,
+                prev_version=v1,
+                context=TEST_CONTEXT,
+            )
+
+        with patch.object(AsyncSession, 'merge', paused_merge):
+            both = asyncio.gather(
+                complete_on_a(), cancel_on_b(), return_exceptions=True
+            )
+            await a_holds_version.wait()
+            await asyncio.sleep(0.3)  # let B reach its first lock
+            resume_a.set()
+            save_result, cancel_result = await both
+
+        assert save_result == TaskVersion(2)
+        # B waited for A, then found the task already terminal.
+        assert isinstance(cancel_result, ConcurrentTaskModificationError)
+        final = await store_a.get('task-abc', TEST_CONTEXT)
+        assert final is not None
+        assert final.task.status.state == TaskState.TASK_STATE_COMPLETED
+    finally:
+        async with engine_a.begin() as conn:
+            await conn.run_sync(Base.metadata.drop_all)
+        await engine_a.dispose()
+        await engine_b.dispose()

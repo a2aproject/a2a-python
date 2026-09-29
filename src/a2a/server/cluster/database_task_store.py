@@ -1,13 +1,12 @@
 import asyncio
 import logging
-import time
 
 from collections.abc import Callable
 
 
 try:
     from sqlalchemy import Table, and_, delete, insert, select, update
-    from sqlalchemy.exc import IntegrityError, OperationalError
+    from sqlalchemy.exc import DBAPIError, IntegrityError, OperationalError
     from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
     from sqlalchemy.orm import class_mapper
 except ImportError as e:
@@ -62,6 +61,17 @@ _TERMINAL_STATES = frozenset(
 # DB contention retry
 _MAX_ATTEMPTS = 5
 _RETRY_DELAY_S = 0.02
+# Postgres deadlock and serialization failure. asyncpg reports these as a
+# generic DBAPIError rather than OperationalError.
+_TRANSIENT_ERROR_CODES = frozenset({'40P01', '40001'})
+
+
+def _is_transient(error: DBAPIError) -> bool:
+    """Whether `error` is DB contention that is safe to retry."""
+    return (
+        isinstance(error, OperationalError)
+        or getattr(error.orig, 'sqlstate', None) in _TRANSIENT_ERROR_CODES
+    )
 
 
 class VersionedDatabaseTaskStore(VersionedTaskStore):
@@ -143,8 +153,9 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
     ) -> TaskVersion:
         """Persists `task` with a compare-and-swap on the version side table.
 
-        The version lives in ``task_versions``, not on the tasks row. First
-        write inserts it, updates CAS on it, cancel overwrites a non-terminal
+        The version lives in ``task_versions``, not on the tasks row, and
+        counts writes to the task: the first write sets 1 and every later
+        write adds 1. Updates CAS on it; cancel overwrites a non-terminal
         task. When `event` is provided it is appended to ``task_events`` in the
         same transaction for cross-replica replay.
         """
@@ -163,8 +174,8 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
                 return await self._save_once(
                     task, event=event, prev_version=prev_version, owner=owner
                 )
-            except OperationalError:
-                if attempts >= self._max_attempts:
+            except DBAPIError as e:
+                if not _is_transient(e) or attempts >= self._max_attempts:
                     raise
                 await asyncio.sleep(self._retry_delay_s * attempts)
 
@@ -176,27 +187,37 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         prev_version: TaskVersion,
         owner: str,
     ) -> TaskVersion:
-        new_version = time.time_ns()
         model = self._db._to_orm(task, owner)  # noqa: SLF001
 
+        # Every branch locks the task_versions row before the tasks row, so
+        # concurrent writers cannot deadlock.
         async with self._db.async_session_maker.begin() as session:
             if task.status.state == TaskState.TASK_STATE_CANCELED:
+                stored = await self._lock_version(session, task.id, owner)
                 current = await self._current_task(session, task.id, owner)
                 if current is None or current.status.state in _TERMINAL_STATES:
                     raise ConcurrentTaskModificationError(task.id)
-                await self._upsert_version(session, task.id, owner, new_version)
-            elif prev_version.is_missing:
-                try:
-                    await session.execute(
-                        insert(self._version_model).values(
-                            task_id=task.id,
-                            owner=owner,
-                            version=new_version,
-                        )
+                new_version = (stored or 0) + 1
+                if stored is None:
+                    await self._insert_version(
+                        session, task.id, owner, new_version
                     )
-                except IntegrityError as e:
-                    raise ConcurrentTaskModificationError(task.id) from e
+                else:
+                    await session.execute(
+                        update(self._version_model)
+                        .where(
+                            and_(
+                                self._version_model.task_id == task.id,
+                                self._version_model.owner == owner,
+                            )
+                        )
+                        .values(version=new_version)
+                    )
+            elif prev_version.is_missing:
+                new_version = 1
+                await self._insert_version(session, task.id, owner, new_version)
             else:
+                new_version = _as_int(prev_version) + 1
                 result = await session.execute(
                     update(self._version_model)
                     .where(
@@ -243,8 +264,8 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
             attempts += 1
             try:
                 return await self._get_once(task_id, owner)
-            except OperationalError:
-                if attempts >= self._max_attempts:
+            except DBAPIError as e:
+                if not _is_transient(e) or attempts >= self._max_attempts:
                     raise
                 await asyncio.sleep(self._retry_delay_s * attempts)
 
@@ -295,25 +316,34 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         ).scalar_one_or_none()
         return self._db._from_orm(row) if row is not None else None  # noqa: SLF001
 
-    async def _upsert_version(
+    async def _lock_version(
+        self, session: AsyncSession, task_id: str, owner: str
+    ) -> int | None:
+        return (
+            await session.execute(
+                select(self._version_model.version)
+                .where(
+                    and_(
+                        self._version_model.task_id == task_id,
+                        self._version_model.owner == owner,
+                    )
+                )
+                .with_for_update()
+            )
+        ).scalar_one_or_none()
+
+    async def _insert_version(
         self, session: AsyncSession, task_id: str, owner: str, version: int
     ) -> None:
-        result = await session.execute(
-            update(self._version_model)
-            .where(
-                and_(
-                    self._version_model.task_id == task_id,
-                    self._version_model.owner == owner,
-                )
-            )
-            .values(version=version)
-        )
-        if result.rowcount == 0:  # ty:ignore[unresolved-attribute]
+        # The insert is what makes one of two concurrent first writers lose.
+        try:
             await session.execute(
                 insert(self._version_model).values(
                     task_id=task_id, owner=owner, version=version
                 )
             )
+        except IntegrityError as e:
+            raise ConcurrentTaskModificationError(task_id) from e
 
     async def list(
         self,

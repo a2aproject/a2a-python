@@ -74,6 +74,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
+    InternalError,
     InvalidAgentResponseError,
     TaskNotFoundError,
     UnsupportedOperationError,
@@ -142,19 +143,36 @@ class EventConsumer:
         except Exception as e:
             logger.exception('Consumer[%s]: Failed', self.active_task._task_id)
 
-            updated_task = None
-            task = await self.active_task._task_manager.get_task()
-            if task and task.status.state not in TERMINAL_TASK_STATES:
-                handled_event = TaskStatusUpdateEvent(
-                    task_id=task.id,
-                    context_id=task.context_id,
-                    status=TaskStatus(
-                        state=TaskState.TASK_STATE_FAILED,
-                    ),
-                )
-                updated_task = await self._handle_task_event(handled_event)
+            error: Exception = e
+            if isinstance(e, ConcurrentTaskModificationError):
+                # Other writers kept advancing the task; report a protocol error.
+                error = InternalError(message=str(e))
 
-            await self._enqueue_to_subscribers(cast('Event', e), updated_task)
+            updated_task = None
+            try:
+                updated_task = await self._write_failed_status()
+            finally:
+                # Subscribers must always hear about the failure, or the
+                # request waiting on them never returns.
+                await self._enqueue_to_subscribers(
+                    cast('Event', error), updated_task
+                )
+
+    async def _write_failed_status(self) -> Task | None:
+        task = await self.active_task._task_manager.get_task()
+        if not task or task.status.state in TERMINAL_TASK_STATES:
+            return None
+        handled_event = TaskStatusUpdateEvent(
+            task_id=task.id,
+            context_id=task.context_id,
+            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+        )
+        try:
+            return await self._handle_task_event(handled_event)
+        except ConcurrentTaskModificationError:
+            # Another writer advanced the task; keep its state.
+            self.active_task._task_manager.invalidate()
+            return None
 
     async def _process_event(self, event: Event) -> None:
         try:
@@ -459,15 +477,6 @@ class ActiveTask:
         """The ID of the task."""
         return self._task_id
 
-    @property
-    def has_running_execution(self) -> bool:
-        """Whether this replica is actively executing the agent for this task."""
-        return (
-            self._producer_task is not None
-            and not self._producer_task.done()
-            and self._request_lock.locked()
-        )
-
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:
@@ -572,9 +581,18 @@ class ActiveTask:
                 # Drop the cached snapshot and re-read to pick
                 # up state another replica may have advanced.
                 self._task_manager.invalidate()
-                request_context.current_task = (
-                    await self._task_manager.get_task()
-                )
+                task = await self._task_manager.get_task()
+                # In cluster mode another replica may have finished the task
+                # while this one waited for input.
+                if (
+                    self._event_stream is not None
+                    and task is not None
+                    and task.status.state in TERMINAL_TASK_STATES
+                ):
+                    raise UnsupportedOperationError(
+                        message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    )
+                request_context.current_task = task
 
                 logger.debug(
                     'Producer[%s]: Executing agent task %s',

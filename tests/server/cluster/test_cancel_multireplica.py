@@ -4,10 +4,15 @@ import contextlib
 import pytest
 
 from a2a.types.a2a_pb2 import CancelTaskRequest, TaskState
-from a2a.utils.errors import TaskNotCancelableError, TaskNotFoundError
+from a2a.utils.errors import (
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
+)
 
 from .conftest import (
     CompletingAgent,
+    InputRequiredThenCompleteAgent,
     LongRunningAgent,
     build_send_request,
     drain,
@@ -145,3 +150,50 @@ async def test_cancel_non_owner_rejected(shared_store, shared_stream) -> None:
             )
     finally:
         await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_follow_up_after_remote_cancel_of_waiting_task_is_rejected(
+    shared_store, shared_stream, context
+) -> None:
+    """A task waits for input on A and is cancelled from B. A follow-up routed
+    to A is rejected rather than reviving the task, and A drops the task."""
+    agent = InputRequiredThenCompleteAgent()
+    replica_a = make_replica(shared_store, shared_stream, agent)
+    replica_b = make_replica(shared_store, shared_stream, agent)
+    try:
+        r1 = await replica_a.on_message_send(
+            build_send_request('q1', message_id='m1'), context
+        )
+        assert r1.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+        registry_a = replica_a._active_task_registry  # noqa: SLF001
+        assert await registry_a.get(r1.id) is not None
+
+        cancelled = await replica_b.on_cancel_task(
+            CancelTaskRequest(id=r1.id), context
+        )
+        assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+
+        with pytest.raises(UnsupportedOperationError, match='terminal state'):
+            await replica_a.on_message_send(
+                build_send_request(
+                    'a',
+                    task_id=r1.id,
+                    context_id=r1.context_id,
+                    message_id='m2',
+                ),
+                context,
+            )
+
+        final = await shared_store.get(r1.id, context)
+        assert final is not None
+        assert final.task.status.state == TaskState.TASK_STATE_CANCELED
+        for _ in range(100):
+            if await registry_a.get(r1.id) is None:
+                break
+            await asyncio.sleep(0.01)
+        assert await registry_a.get(r1.id) is None
+    finally:
+        await replica_a.aclose()
+        await replica_b.aclose()

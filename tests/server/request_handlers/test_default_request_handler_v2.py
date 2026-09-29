@@ -2250,3 +2250,84 @@ async def test_on_cancel_of_parked_task_is_owner_scoped():
 
     agent.release.set()
     await handler.aclose()
+
+
+class _AsksForInputAgent(AgentExecutor):
+    """Always asks for more input; counts execute() and cancel() calls."""
+
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.cancel_calls = 0
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        self.execute_calls += 1
+        if context.current_task is None:
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+        updater = TaskUpdater(
+            event_queue, context.task_id or '', context.context_id or ''
+        )
+        await updater.requires_input(
+            message=updater.new_agent_message([Part(text='need input')])
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        self.cancel_calls += 1
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_cancel_of_input_required_task_cannot_be_undone():
+    """Cancelling a task that waits for input cancels the agent, drops the
+    ActiveTask, and a follow-up message cannot revive the task."""
+    agent = _AsksForInputAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = _ctx('alice')
+    task = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER, message_id='m1', parts=[Part(text='hi')]
+            )
+        ),
+        ctx,
+    )
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    # Wait until the turn has fully ended and the task is parked for input.
+    active = await handler._active_task_registry.get(task.id)
+    assert active is not None
+    for _ in range(100):
+        if not active._request_lock.locked():
+            break
+        await asyncio.sleep(0.01)
+    assert not active._request_lock.locked()
+
+    cancelled = await handler.on_cancel_task(CancelTaskRequest(id=task.id), ctx)
+    assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_calls == 1
+    for _ in range(100):
+        if await handler._active_task_registry.get(task.id) is None:
+            break
+        await asyncio.sleep(0.01)
+    assert await handler._active_task_registry.get(task.id) is None
+
+    follow_up = Message(
+        role=Role.ROLE_USER,
+        message_id='m2',
+        parts=[Part(text='more')],
+        task_id=task.id,
+        context_id=task.context_id,
+    )
+    with pytest.raises(UnsupportedOperationError, match='terminal state'):
+        await handler.on_message_send(
+            SendMessageRequest(message=follow_up), ctx
+        )
+
+    stored = await handler.on_get_task(GetTaskRequest(id=task.id), ctx)
+    assert stored.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.execute_calls == 1
+    await handler.aclose()
