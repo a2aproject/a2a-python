@@ -48,12 +48,15 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
+    from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
     )
     from a2a.server.tasks.task_manager import TaskManager
 
+from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
     Event,
@@ -154,6 +157,29 @@ class EventConsumer:
             await self._enqueue_to_subscribers(cast('Event', e), updated_task)
 
     async def _process_event(self, event: Event) -> None:
+        try:
+            await self._process_event_inner(event)
+        except ConcurrentTaskModificationError:
+            # Another writer advanced this task
+            logger.info(
+                'Consumer[%s]: concurrent modification, reloading',
+                self.active_task._task_id,
+            )
+            self.active_task._task_manager.invalidate()
+            task = await self.active_task._task_manager.get_task()
+            if task is not None and task.status.state in TERMINAL_TASK_STATES:
+                await self._enqueue_to_subscribers(task, task)
+                producer = self.active_task._producer_task
+                if producer is not None and not producer.done():
+                    producer.cancel()
+                await self._handle_terminal_state(task)
+                await self.active_task._event_queue_subscribers.close(
+                    immediate=False
+                )
+                return
+            await self._process_event_inner(event)
+
+    async def _process_event_inner(self, event: Event) -> None:
         updated_task = None
         handled_event: (
             Task
@@ -333,6 +359,16 @@ class EventConsumer:
         await self.active_task._event_queue_subscribers.enqueue_event(
             cast('Any', (event, updated_task))
         )
+
+        # Fan out to other replicas
+        stream = self.active_task._event_stream
+        if stream is not None and isinstance(event, Event):
+            version = self.active_task._task_manager.current_version
+            await stream.publish(
+                self.active_task._task_id,
+                VersionedEvent(event=event, version=version),
+            )
+
         self.active_task._event_queue_agent.task_done()
 
 
@@ -354,13 +390,14 @@ class ActiveTask:
       permanently ceased execution and closed its queues.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
         task_id: str,
         task_manager: TaskManager,
         push_sender: PushNotificationSender | None = None,
         on_cleanup: Callable[[ActiveTask], None] | None = None,
+        event_stream: TaskEventStream | None = None,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -372,6 +409,8 @@ class ActiveTask:
             on_cleanup: Optional callback triggered when the task is fully finished
                         and the last subscriber has disconnected. Used to prune
                         the task from the ActiveTaskRegistry.
+            event_stream: Optional cross-replica stream; applied events are
+                        published to it so other replicas can observe them.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
@@ -383,6 +422,7 @@ class ActiveTask:
         self._task_manager = task_manager
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
+        self._event_stream = event_stream
 
         # --- Synchronization Primitives ---
         # `_lock` protects structural lifecycle changes: start(), subscribe() counting,
@@ -418,6 +458,15 @@ class ActiveTask:
     def task_id(self) -> str:
         """The ID of the task."""
         return self._task_id
+
+    @property
+    def has_running_execution(self) -> bool:
+        """Whether this replica is actively executing the agent for this task."""
+        return (
+            self._producer_task is not None
+            and not self._producer_task.done()
+            and self._request_lock.locked()
+        )
 
     async def enqueue_request(
         self, request_context: RequestContext
@@ -520,6 +569,9 @@ class ActiveTask:
                 # TODO: Should we create task manager every time?
                 self._task_manager._call_context = request_context.call_context
 
+                # Drop the cached snapshot and re-read to pick
+                # up state another replica may have advanced.
+                self._task_manager.invalidate()
                 request_context.current_task = (
                     await self._task_manager.get_task()
                 )
@@ -781,6 +833,7 @@ class ActiveTask:
                 )
 
         await self._is_finished.wait()
+        self._task_manager.invalidate()
         task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
