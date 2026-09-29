@@ -1,5 +1,29 @@
 # Changelog
 
+## [1.2.0](https://github.com/a2aproject/a2a-python/compare/v1.1.5...v1.2.0) (2026-09-29)
+
+
+### Features
+
+* **rest:** serve HTTP+JSON responses as application/a2a+json ([#1274](https://github.com/a2aproject/a2a-python/issues/1274)) ([dc5a5da](https://github.com/a2aproject/a2a-python/commit/dc5a5da79e2063c9a309dcc44dcc021f656d4c77))
+* **server:** add caching headers to the agent card endpoint ([#1272](https://github.com/a2aproject/a2a-python/issues/1272)) ([83d7f5d](https://github.com/a2aproject/a2a-python/commit/83d7f5d55f06b153809c611511e64f2a842504fa))
+* **server:** add multi-replica cluster mode ([#1281](https://github.com/a2aproject/a2a-python/issues/1281)) ([942d621](https://github.com/a2aproject/a2a-python/commit/942d6215bdcc4a3ea8871c26effe83c7eed6910f))
+* **server:** add opt-in validation of message media types against the agent card ([#1269](https://github.com/a2aproject/a2a-python/issues/1269)) ([8037b24](https://github.com/a2aproject/a2a-python/commit/8037b246192225734b9ad9e56163fc4b49f40d2b))
+
+
+### Bug Fixes
+
+* compare in-memory task timestamps numerically ([#1233](https://github.com/a2aproject/a2a-python/issues/1233)) ([0d5473c](https://github.com/a2aproject/a2a-python/commit/0d5473ca4fa6d40034a6a7c8d65bce5cd85d8167))
+* **server:** ignore unrecognized request fields and fix parse-error data shape ([#1273](https://github.com/a2aproject/a2a-python/issues/1273)) ([83f1cf8](https://github.com/a2aproject/a2a-python/commit/83f1cf88219e3a13157c498e8baea9d64705630e))
+* **server:** reject a message whose contextId disagrees with its task ([#1270](https://github.com/a2aproject/a2a-python/issues/1270)) ([c25022f](https://github.com/a2aproject/a2a-python/commit/c25022ff0f0832ea82d6873051665f7dd46626c6))
+* **server:** reject terminal-task operations with UnsupportedOperationError ([#1268](https://github.com/a2aproject/a2a-python/issues/1268)) ([6cce91b](https://github.com/a2aproject/a2a-python/commit/6cce91beb57da1d6337a90dfbb75e21004f57fd1))
+* **server:** send PushNotificationConfig.authentication as an Authorization header ([#1271](https://github.com/a2aproject/a2a-python/issues/1271)) ([5751d31](https://github.com/a2aproject/a2a-python/commit/5751d313a99ba62186626228f9ec92b914f1f014)), closes [#585](https://github.com/a2aproject/a2a-python/issues/585)
+
+
+### Documentation
+
+* **samples:** add Agent Card signing sample ([#1198](https://github.com/a2aproject/a2a-python/issues/1198)) ([f3ac824](https://github.com/a2aproject/a2a-python/commit/f3ac82489dd84ce9dcd3802357cb4e987ffdbb74))
+
 ## [1.1.5](https://github.com/a2aproject/a2a-python/compare/v1.1.4...v1.1.5) (2026-09-21)
 
 
