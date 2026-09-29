@@ -84,18 +84,29 @@ def _parse_rest_error(
 
 @trace_class(kind=SpanKind.CLIENT)
 class RestTransport(ClientTransport):
-    """A REST transport for the A2A client."""
+    """A REST transport for the A2A client.
+
+    Args:
+        httpx_client: The async HTTP client to use for requests.
+        agent_card: The AgentCard describing the remote agent.
+        url: The base URL of the agent.
+        extra_params: Optional query parameters to append to every
+            request URL. Useful for provider-specific requirements, such
+            as ``{'alt': 'sse'}`` for Google A2A API streaming endpoints.
+    """
 
     def __init__(
         self,
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard,
         url: str,
+        extra_params: dict[str, str] | None = None,
     ):
         """Initializes the RestTransport."""
         self.url = url.removesuffix('/')
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self._extra_params = dict(extra_params) if extra_params else {}
 
     async def send_message(
         self,
@@ -376,6 +387,7 @@ class RestTransport(ClientTransport):
             self._handle_http_error,
             self._handle_sse_error,
             json=json,
+            params=self._extra_params or None,
             **http_kwargs,
         ):
             event: StreamResponse = Parse(sse_data, StreamResponse())
@@ -399,11 +411,21 @@ class RestTransport(ClientTransport):
         path = self._get_path(target, tenant)
         http_kwargs = get_http_args(context)
 
+        # Merge global extra_params with per-request params.
+        # Per-request params take precedence over extra_params.
+        merged_params: dict[str, Any] | None = None
+        if self._extra_params:
+            merged_params = dict(self._extra_params)
+            if params:
+                merged_params.update(params)
+        elif params:
+            merged_params = params
+
         request = self.httpx_client.build_request(
             method,
             f'{self.url}{path}',
             json=json,
-            params=params,
+            params=merged_params,
             **http_kwargs,
         )
         return await self._send_request(request)
