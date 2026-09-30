@@ -51,6 +51,7 @@ class TestTask(unittest.TestCase):
         ListTasksCursor(timestamp_ns=-1, task_id='before-epoch'),
         ListTasksCursor(timestamp_ns=None, task_id='no-timestamp'),
         ListTasksCursor(timestamp_ns=0, task_id='ünïcode/+='),
+        ListTasksCursor(timestamp_ns=1, task_id='x' * 1_000),
     ],
 )
 def test_list_tasks_cursor_round_trips(cursor: ListTasksCursor) -> None:
@@ -63,18 +64,20 @@ def test_list_tasks_cursor_round_trips(cursor: ListTasksCursor) -> None:
 
 def test_legacy_task_id_token_is_not_a_cursor() -> None:
     assert decode_list_tasks_cursor(encode_page_token('task-1')) is None
-    assert decode_list_tasks_cursor(encode_page_token('{"v":1}')) is None
+    assert decode_list_tasks_cursor(encode_page_token('{"ts":1}')) is None
     assert decode_list_tasks_cursor('invalid') is None
 
 
 @pytest.mark.parametrize(
     'payload',
     [
-        b'{"v":1,"ts":1}',
-        b'{"v":1,"ts":1,"id":""}',
-        b'{"v":1,"ts":"1","id":"t"}',
-        b'{"v":1,"ts":true,"id":"t"}',
-        b'{"v":1,"ts":1.5,"id":"t"}',
+        b'{"ts":1}',
+        b'{"id":"t"}',
+        b'{"ts":1,"id":"t","extra":0}',
+        b'{"ts":1,"id":""}',
+        b'{"ts":"1","id":"t"}',
+        b'{"ts":true,"id":"t"}',
+        b'{"ts":1.5,"id":"t"}',
     ],
 )
 def test_incomplete_cursor_token_is_not_a_cursor(payload: bytes) -> None:
@@ -82,11 +85,6 @@ def test_incomplete_cursor_token_is_not_a_cursor(payload: bytes) -> None:
     token = urlsafe_b64encode(payload).decode().rstrip('=')
 
     assert decode_list_tasks_cursor(token) is None
-
-
-def test_overlong_page_token_is_rejected() -> None:
-    with pytest.raises(InvalidParamsError):
-        decode_list_tasks_cursor('A' * 513)
 
 
 def test_cursor_sort_key_orders_missing_timestamps_last() -> None:

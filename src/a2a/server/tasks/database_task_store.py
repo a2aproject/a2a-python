@@ -1,7 +1,7 @@
 import logging
 
 from collections.abc import Callable
-from datetime import datetime, timedelta, timezone
+from datetime import datetime
 from typing import Any, cast
 
 
@@ -23,6 +23,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.compat.v0_3.model_conversions import (
     compat_task_model_to_core,
@@ -45,22 +46,19 @@ from a2a.utils.task import (
 
 logger = logging.getLogger(__name__)
 
-_EPOCH = datetime(1970, 1, 1)  # noqa: DTZ001 -- last_updated is naive UTC
-
 
 def _datetime_to_ns(value: datetime) -> int:
     """Nanoseconds since the epoch for a stored (naive UTC) `last_updated`."""
-    if value.tzinfo is not None:
-        value = value.astimezone(timezone.utc).replace(tzinfo=None)
-    delta = value - _EPOCH
-    return (
-        delta.days * 86_400 + delta.seconds
-    ) * 1_000_000_000 + delta.microseconds * 1_000
+    timestamp = Timestamp()
+    timestamp.FromDatetime(value)
+    return timestamp.ToNanoseconds()
 
 
 def _ns_to_datetime(timestamp_ns: int) -> datetime:
-    """Inverse of `_datetime_to_ns`; exact for values it produced."""
-    return _EPOCH + timedelta(microseconds=timestamp_ns // 1_000)
+    """Inverse of `_datetime_to_ns`, as a naive UTC datetime."""
+    timestamp = Timestamp()
+    timestamp.FromNanoseconds(timestamp_ns)
+    return timestamp.ToDatetime()
 
 
 class DatabaseTaskStore(TaskStore):

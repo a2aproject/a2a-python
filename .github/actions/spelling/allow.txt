@@ -48,7 +48,6 @@ denormals
 drivername
 dsn
 DSNs
-DTZ
 dunders
 ES256
 euo

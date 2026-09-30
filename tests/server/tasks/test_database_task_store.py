@@ -1086,9 +1086,7 @@ async def test_list_tasks_pages_through_ties_and_missing_timestamps(
 async def test_list_tasks_rejects_malformed_cursor_token(
     db_store_parameterized: DatabaseTaskStore,
 ) -> None:
-    token = (
-        urlsafe_b64encode(b'{"v":1,"ts":"soon","id":"t1"}').decode().rstrip('=')
-    )
+    token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
 
     with pytest.raises(InvalidParamsError):
         await db_store_parameterized.list(

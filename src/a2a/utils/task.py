@@ -123,11 +123,6 @@ def decode_page_token(page_token: str) -> str:
     return decoded
 
 
-_CURSOR_VERSION = 1
-# Issued tokens are around 100 characters; anything much longer is not ours.
-_MAX_PAGE_TOKEN_LENGTH = 512
-
-
 @dataclass(frozen=True)
 class ListTasksCursor:
     """A position in the `ListTasks` sort order.
@@ -154,11 +149,7 @@ class ListTasksCursor:
 def encode_list_tasks_cursor(cursor: ListTasksCursor) -> str:
     """Encodes a `ListTasksCursor` as an opaque, URL-safe page token."""
     payload = json.dumps(
-        {
-            'v': _CURSOR_VERSION,
-            'ts': cursor.timestamp_ns,
-            'id': cursor.task_id,
-        },
+        {'ts': cursor.timestamp_ns, 'id': cursor.task_id},
         separators=(',', ':'),
     )
     return (
@@ -178,21 +169,16 @@ def decode_list_tasks_cursor(page_token: str) -> ListTasksCursor | None:
         The decoded cursor, or None if the token is not a valid cursor token.
         Callers treat None as a legacy task-ID token (see
         `decode_page_token`), which also rejects tampered or unknown tokens.
-
-    Raises:
-        InvalidParamsError: If the token is far longer than any issued token.
     """
-    if len(page_token) > _MAX_PAGE_TOKEN_LENGTH:
-        raise InvalidParamsError(f'Invalid page token: {page_token[:64]}...')
     padded = page_token + '=' * (-len(page_token) % 4)
     try:
         data = json.loads(urlsafe_b64decode(padded.encode(_ENCODING)))
     except (binascii.Error, ValueError):
         return None
-    if not isinstance(data, dict) or data.get('v') != _CURSOR_VERSION:
+    if not isinstance(data, dict) or data.keys() != {'ts', 'id'}:
         return None
-    timestamp_ns = data.get('ts')
-    task_id = data.get('id')
+    timestamp_ns = data['ts']
+    task_id = data['id']
     timestamp_is_valid = timestamp_ns is None or (
         isinstance(timestamp_ns, int) and not isinstance(timestamp_ns, bool)
     )
