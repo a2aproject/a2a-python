@@ -48,6 +48,7 @@ denormals
 drivername
 dsn
 DSNs
+DTZ
 dunders
 ES256
 euo
@@ -167,6 +168,7 @@ TResponse
 typ
 typeerror
 UIDs
+urlsafe
 versioned
 Versioned
 vulnz
