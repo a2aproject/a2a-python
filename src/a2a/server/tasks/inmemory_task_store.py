@@ -1,6 +1,8 @@
 import logging
 import threading
 
+from collections.abc import Sequence
+
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.copying_task_store import CopyingTaskStoreAdapter
@@ -9,10 +11,34 @@ from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
-from a2a.utils.task import decode_page_token, encode_page_token
+from a2a.utils.task import (
+    ListTasksCursor,
+    decode_list_tasks_cursor,
+    decode_page_token,
+    encode_list_tasks_cursor,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+def _list_sort_key(task: Task) -> tuple[bool, int, str]:
+    """`ListTasks` sort key: `(has timestamp, timestamp, id)`, sorted descending."""
+    has_timestamp = task.HasField('status') and task.status.HasField(
+        'timestamp'
+    )
+    return (
+        has_timestamp,
+        task.status.timestamp.ToNanoseconds() if has_timestamp else 0,
+        task.id,
+    )
+
+
+def _cursor_for(task: Task) -> ListTasksCursor:
+    has_timestamp, timestamp_ns, task_id = _list_sort_key(task)
+    return ListTasksCursor(
+        timestamp_ns=timestamp_ns if has_timestamp else None, task_id=task_id
+    )
 
 
 class _InMemoryTaskStoreImpl(TaskStore):
@@ -108,38 +134,31 @@ class _InMemoryTaskStoreImpl(TaskStore):
             ]
 
         # Order tasks by last update time. To ensure stable sorting, in cases where timestamps are null or not unique, do a second order comparison of IDs.
-        tasks.sort(
-            key=lambda task: (
-                task.status.HasField('timestamp')
-                if task.HasField('status')
-                else False,
-                task.status.timestamp.ToNanoseconds()
-                if task.HasField('status') and task.status.HasField('timestamp')
-                else 0,
-                task.id,
-            ),
-            reverse=True,
-        )
+        tasks.sort(key=_list_sort_key, reverse=True)
 
-        # Paginate tasks
+        # Paginate tasks. The page token carries the position of the last task
+        # returned, so it stays valid if that task is updated or deleted. A
+        # task updated mid-listing can move above the cursor and be skipped.
         total_size = len(tasks)
         start_idx = 0
         if params.page_token:
-            start_task_id = decode_page_token(params.page_token)
-            valid_token = False
-            for i, task in enumerate(tasks):
-                if task.id == start_task_id:
-                    start_idx = i
-                    valid_token = True
-                    break
-            if not valid_token:
-                raise InvalidParamsError(
-                    f'Invalid page token: {params.page_token}'
+            cursor = decode_list_tasks_cursor(params.page_token)
+            if cursor is None:
+                start_idx = self._legacy_start_index(tasks, params.page_token)
+            else:
+                after = cursor.sort_key()
+                start_idx = next(
+                    (
+                        i
+                        for i, task in enumerate(tasks)
+                        if _list_sort_key(task) < after
+                    ),
+                    total_size,
                 )
         page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
         end_idx = start_idx + page_size
         next_page_token = (
-            encode_page_token(tasks[end_idx].id)
+            encode_list_tasks_cursor(_cursor_for(tasks[end_idx - 1]))
             if end_idx < total_size
             else None
         )
@@ -151,6 +170,15 @@ class _InMemoryTaskStoreImpl(TaskStore):
             total_size=total_size,
             page_size=page_size,
         )
+
+    @staticmethod
+    def _legacy_start_index(tasks: Sequence[Task], page_token: str) -> int:
+        """Resolves a legacy page token, which names the first task of the page."""
+        start_task_id = decode_page_token(page_token)
+        for i, task in enumerate(tasks):
+            if task.id == start_task_id:
+                return i
+        raise InvalidParamsError(f'Invalid page token: {page_token}')
 
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the in-memory store by ID, for the given owner."""
