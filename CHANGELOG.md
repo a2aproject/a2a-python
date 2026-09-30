@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.2.1](https://github.com/a2aproject/a2a-python/compare/v1.2.0...v1.2.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **server:** use keyset cursors for ListTasks page tokens ([#1282](https://github.com/a2aproject/a2a-python/issues/1282)) ([b7cba7c](https://github.com/a2aproject/a2a-python/commit/b7cba7c905bc1872d5591f0ce439afc02a3d9eed)), closes [#1280](https://github.com/a2aproject/a2a-python/issues/1280)
+
 ## [1.2.0](https://github.com/a2aproject/a2a-python/compare/v1.1.5...v1.2.0) (2026-09-29)
 
 
