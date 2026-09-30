@@ -50,9 +50,9 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import TransportProtocol
 from a2a.utils.errors import (
     InvalidAgentResponseError,
-    InvalidParamsError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 
 
@@ -428,8 +428,9 @@ async def test_scenarios_simple_errors(use_legacy, streaming):
         role=Role.ROLE_USER,
         parts=[Part(text='message to completed task')],
     )
-    # TODO: Is it correct error code ?
-    with pytest.raises(InvalidParamsError):
+    # Spec 3.1.1: messages sent to a task in a terminal state are rejected
+    # with UnsupportedOperationError.
+    with pytest.raises(UnsupportedOperationError):
         async for _ in client.send_message(SendMessageRequest(message=msg2)):
             pass
 
@@ -489,7 +490,7 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
 
         if streaming:
             with pytest.raises(
-                InvalidParamsError,
+                UnsupportedOperationError,
                 match='Task .* is in terminal state',
             ):
                 await client.subscribe(
