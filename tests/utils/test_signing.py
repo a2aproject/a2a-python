@@ -21,6 +21,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import signing
 from cryptography.hazmat.primitives.asymmetric import ec
 from google.protobuf.json_format import MessageToDict
+from jwt import api_jws
 from jwt.utils import base64url_encode
 
 
@@ -195,7 +196,8 @@ def test_canonicalize_agent_card(sample_agent_card: AgentCard):
     """Test canonicalize_agent_card with defaults, optionals, and exceptions.
 
     - extensions is omitted as it's not set and optional.
-    - protocolVersion is included because it's always added by canonicalize_agent_card.
+    - protocolVersion is REQUIRED on AgentInterface, so it is kept at its
+      default value (A2A specification section 8.4.1).
     - signatures should be omitted.
     """
     expected_jcs = (
@@ -203,7 +205,7 @@ def test_canonicalize_agent_card(sample_agent_card: AgentCard):
         '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
         '"description":"A test agent","name":"Test Agent",'
         '"skills":[{"description":"A test skill","id":"skill1","name":"Test Skill","tags":["test"]}],'
-        '"supportedInterfaces":[{"protocolBinding":"HTTP+JSON","url":"http://localhost"}],'
+        '"supportedInterfaces":[{"protocolBinding":"HTTP+JSON","protocolVersion":"","url":"http://localhost"}],'
         '"version":"1.0.0"}'
     )
     result = signing._canonicalize_agent_card(sample_agent_card)
@@ -365,10 +367,43 @@ def full_agent_card() -> AgentCard:
     return card
 
 
+def test_required_fields_are_read_from_descriptors():
+    """REQUIRED comes from `google.api.field_behavior`, not from a name list."""
+    card = AgentCard.DESCRIPTOR
+    required = {f.json_name for f in card.fields if signing._is_required(f)}
+    assert required == {
+        'name',
+        'description',
+        'supportedInterfaces',
+        'version',
+        'capabilities',
+        'defaultInputModes',
+        'defaultOutputModes',
+        'skills',
+    }
+    skill = AgentSkill.DESCRIPTOR
+    assert {f.json_name for f in skill.fields if signing._is_required(f)} == {
+        'id',
+        'name',
+        'description',
+        'tags',
+    }
+
+
+def test_implicit_presence_fields_are_not_all_required():
+    """Fields that the blanket `always_print` flag emits stay non-REQUIRED."""
+    tenant = AgentInterface.DESCRIPTOR.fields_by_name['tenant']
+    ext_required = AgentExtension.DESCRIPTOR.fields_by_name['required']
+    ext_list = AgentCapabilities.DESCRIPTOR.fields_by_name['extensions']
+    assert not signing._is_required(tenant)
+    assert not signing._is_required(ext_required)
+    assert not signing._is_required(ext_list)
+
+
 def test_clean_message_matches_clean_empty_on_full_card(
     full_agent_card: AgentCard,
 ):
-    """Descriptor-aware cleaning gives the same result as `_clean_empty`."""
+    """With no empty REQUIRED field, descriptor-aware cleaning changes nothing."""
     card_dict = MessageToDict(full_agent_card)
     assert signing._clean_message(
         card_dict, AgentCard.DESCRIPTOR
@@ -404,3 +439,189 @@ def test_clean_message_bounds_depth():
     card_dict = {'capabilities': {'extensions': [{'params': nested}]}}
     with pytest.raises(signing.CanonicalizationError):
         signing._clean_message(card_dict, AgentCard.DESCRIPTOR)
+
+
+def _reachable_messages(descriptor, seen=None):
+    seen = {} if seen is None else seen
+    if descriptor.full_name in seen or signing._is_well_known(descriptor):
+        return seen
+    seen[descriptor.full_name] = descriptor
+    for field in descriptor.fields:
+        message_type = field.message_type
+        if message_type is None:
+            continue
+        if signing._is_map(field):
+            message_type = message_type.fields_by_name['value'].message_type
+            if message_type is None:
+                continue
+        _reachable_messages(message_type, seen)
+    return seen
+
+
+def _example_card(**overrides: Any) -> AgentCard:
+    fields: dict[str, Any] = {
+        'name': 'Example Agent',
+        'description': 'An example',
+        'version': '1.0.0',
+        'supported_interfaces': [
+            AgentInterface(
+                url='https://example.com/a2a/v1',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        'capabilities': AgentCapabilities(
+            streaming=False, push_notifications=False
+        ),
+        'default_input_modes': ['text/plain'],
+        'default_output_modes': ['text/plain'],
+        'skills': [
+            AgentSkill(
+                id='skill1', name='Skill', description='A skill', tags=['t']
+            )
+        ],
+    }
+    fields.update(overrides)
+    return AgentCard(**fields)
+
+
+def test_canonicalize_keeps_required_fields_at_default():
+    """Section 8.4.1: `description: ""` and `skills: []` stay in the payload.
+
+    The card is the worked example of section 8.4.1 with the remaining
+    REQUIRED fields of AgentCard filled in.
+    """
+    card = _example_card(description='', skills=[])
+    card.capabilities.extensions.extend([])
+    expected_jcs = (
+        '{"capabilities":{"pushNotifications":false,"streaming":false},'
+        '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
+        '"description":"","name":"Example Agent","skills":[],'
+        '"supportedInterfaces":[{"protocolBinding":"JSONRPC",'
+        '"protocolVersion":"1.0","url":"https://example.com/a2a/v1"}],'
+        '"version":"1.0.0"}'
+    )
+    assert signing._canonicalize_agent_card(card) == expected_jcs
+
+
+@pytest.mark.parametrize(
+    ('overrides', 'kept'),
+    [
+        pytest.param({'description': ''}, '"description":""', id='description'),
+        pytest.param({'skills': []}, '"skills":[]', id='skills'),
+        pytest.param({'version': ''}, '"version":""', id='version'),
+        pytest.param(
+            {'default_input_modes': []},
+            '"defaultInputModes":[]',
+            id='default-input-modes',
+        ),
+        pytest.param(
+            {
+                'skills': [
+                    AgentSkill(id='s', name='Skill', description='A skill')
+                ]
+            },
+            '"tags":[]',
+            id='skill-tags',
+        ),
+    ],
+)
+def test_canonicalize_keeps_each_empty_required_field(
+    overrides: dict[str, Any], kept: str
+):
+    assert kept in signing._canonicalize_agent_card(_example_card(**overrides))
+
+
+def test_canonicalize_still_prunes_non_required_defaults():
+    """Implicit-presence fields that are not REQUIRED stay out of the payload."""
+    card = _example_card(description='', skills=[])
+    card.supported_interfaces[0].tenant = ''
+    card.capabilities.extensions.add(
+        uri='https://example.com/ext', required=False
+    )
+    result = signing._canonicalize_agent_card(card)
+    assert '"tenant"' not in result
+    assert '"required"' not in result
+    assert '"extensions":[{"uri":"https://example.com/ext"}]' in result
+    assert '"securitySchemes"' not in result
+    assert '"securityRequirements"' not in result
+
+
+def test_canonicalize_keeps_an_unset_required_message():
+    """A REQUIRED message is present even when it was never set."""
+    card = _example_card()
+    card.ClearField('capabilities')
+    assert not card.HasField('capabilities')
+    assert '"capabilities":{}' in signing._canonicalize_agent_card(card)
+
+
+def test_canonicalize_keeps_a_set_but_empty_required_message():
+    card = _example_card(capabilities=AgentCapabilities())
+    assert '"capabilities":{}' in signing._canonicalize_agent_card(card)
+
+
+def test_every_required_field_has_a_default_this_module_can_emit():
+    """Fails when a REQUIRED field of an unhandled scalar type is added."""
+    unhandled = []
+    for descriptor in _reachable_messages(AgentCard.DESCRIPTOR).values():
+        for field in descriptor.fields:
+            if not signing._is_required(field):
+                continue
+            if signing._required_default(field) is None:
+                unhandled.append(f'{descriptor.name}.{field.name}')
+    assert unhandled == []
+
+
+def test_required_messages_have_no_required_fields_of_their_own():
+    """`{}` is the complete default of every REQUIRED singular message.
+
+    Fails when a REQUIRED message gains a REQUIRED field, because an injected
+    empty object would then be missing it.
+    """
+    incomplete = []
+    for descriptor in _reachable_messages(AgentCard.DESCRIPTOR).values():
+        for field in descriptor.fields:
+            message_type = field.message_type
+            if (
+                not signing._is_required(field)
+                or message_type is None
+                or signing._is_map(field)
+                or signing._field_is_repeated(field)
+            ):
+                continue
+            if any(signing._is_required(f) for f in message_type.fields):
+                incomplete.append(f'{descriptor.name}.{field.name}')
+    assert incomplete == []
+
+
+def test_signature_over_spec_canonical_bytes_verifies():
+    """A card signed over the section 8.4.1 form of its payload verifies.
+
+    The signing input is built by hand, not by this module, which is how a
+    signer in another SDK that keeps REQUIRED fields at their default value
+    produces it.
+    """
+    card = _example_card(description='', skills=[])
+    payload = (
+        '{"capabilities":{"pushNotifications":false,"streaming":false},'
+        '"defaultInputModes":["text/plain"],"defaultOutputModes":["text/plain"],'
+        '"description":"","name":"Example Agent","skills":[],'
+        '"supportedInterfaces":[{"protocolBinding":"JSONRPC",'
+        '"protocolVersion":"1.0","url":"https://example.com/a2a/v1"}],'
+        '"version":"1.0.0"}'
+    )
+    key = 'key12345'
+    token = api_jws.encode(
+        payload.encode('utf-8'),
+        key,
+        algorithm='HS384',
+        headers={'kid': 'key1'},
+    )
+    protected, _, signature = token.split('.')
+    card.signatures.append(
+        AgentCardSignature(protected=protected, signature=signature)
+    )
+    verifier = signing.create_signature_verifier(
+        create_key_provider(key), ['HS384']
+    )
+    verifier(card)
