@@ -110,7 +110,7 @@ async def test_validate_version_no_context():
 
 
 @pytest.mark.asyncio
-async def test_validate_version_ignore_minor_patch():
+async def test_validate_version_ignores_patch_but_requires_matching_minor():
     handler = TestHandler()
 
     # 1.0.1 should match 1.0
@@ -127,12 +127,12 @@ async def test_validate_version_ignore_minor_patch():
     result = await handler.async_method(None, context_zero_patch)
     assert result == 'success'
 
-    # 1.1.0 should match 1.0
+    # 1.1.0 should NOT match 1.0
     context_diff_minor = ServerCallContext(
         state={'headers': {constants.VERSION_HEADER: '1.1.0'}}
     )
-    result = await handler.async_method(None, context_diff_minor)
-    assert result == 'success'
+    with pytest.raises(VersionNotSupportedError):
+        await handler.async_method(None, context_diff_minor)
 
     # 2.0.0 should NOT match 1.0
     context_diff_major = ServerCallContext(
@@ -140,6 +140,35 @@ async def test_validate_version_ignore_minor_patch():
     )
     with pytest.raises(VersionNotSupportedError):
         await handler.async_method(None, context_diff_major)
+
+
+@pytest.mark.asyncio
+async def test_validate_version_uses_query_parameter_when_header_missing():
+    handler = TestHandler()
+    context = ServerCallContext(
+        state={
+            'headers': {},
+            'query_params': {constants.VERSION_HEADER: '1.0'},
+        }
+    )
+
+    result = await handler.async_method(None, context)
+
+    assert result == 'success'
+
+
+@pytest.mark.asyncio
+async def test_validate_version_prefers_header_over_query_parameter():
+    handler = TestHandler()
+    context = ServerCallContext(
+        state={
+            'headers': {constants.VERSION_HEADER: '0.3'},
+            'query_params': {constants.VERSION_HEADER: '1.0'},
+        }
+    )
+
+    with pytest.raises(VersionNotSupportedError):
+        await handler.async_method(None, context)
 
 
 @pytest.mark.asyncio

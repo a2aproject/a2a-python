@@ -82,6 +82,7 @@ class DefaultServerCallContextBuilder(ServerCallContextBuilder):
         if 'auth' in request.scope:
             state['auth'] = request.auth
         state['headers'] = dict(request.headers)
+        state['query_params'] = dict(request.query_params)
         return ServerCallContext(
             user=self.build_user(request),
             state=state,

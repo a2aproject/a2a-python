@@ -82,22 +82,31 @@ def client(test_app):
 @pytest.mark.parametrize('endpoint_ver', ['0.3', '1.0'])
 @pytest.mark.parametrize('is_streaming', [False, True])
 @pytest.mark.parametrize(
-    'header_val, should_succeed',
+    'header_val, query_val, should_succeed',
     [
-        (None, '0.3'),
-        ('0.3', '0.3'),
-        ('1.0', '1.0'),
-        ('1.2', '1.0'),
-        ('2', 'none'),
-        ('INVALID', 'none'),
+        (None, None, '0.3'),
+        ('0.3', None, '0.3'),
+        ('1.0', None, '1.0'),
+        ('1.2', None, 'none'),
+        ('2', None, 'none'),
+        ('INVALID', None, 'none'),
+        (None, '1.0', '1.0'),
+        ('0.3', '1.0', '0.3'),
     ],
 )
-def test_version_header_integration(
-    client, transport, endpoint_ver, is_streaming, header_val, should_succeed
+def test_version_transport_integration(
+    client,
+    transport,
+    endpoint_ver,
+    is_streaming,
+    header_val,
+    query_val,
+    should_succeed,
 ):
     headers = {}
     if header_val is not None:
         headers[VERSION_HEADER] = header_val
+    params = {VERSION_HEADER: query_val} if query_val is not None else None
 
     expect_success = endpoint_ver == should_succeed
 
@@ -131,7 +140,7 @@ def test_version_header_integration(
         if is_streaming:
             headers['Accept'] = 'text/event-stream'
             with client.stream(
-                'POST', url, json=payload, headers=headers
+                'POST', url, json=payload, headers=headers, params=params
             ) as response:
                 response.read()
 
@@ -140,7 +149,9 @@ def test_version_header_integration(
                 else:
                     assert response.status_code == 400, response.text
         else:
-            response = client.post(url, json=payload, headers=headers)
+            response = client.post(
+                url, json=payload, headers=headers, params=params
+            )
             if expect_success:
                 assert response.status_code == 200, response.text
             else:
@@ -180,7 +191,7 @@ def test_version_header_integration(
         if is_streaming:
             headers['Accept'] = 'text/event-stream'
             with client.stream(
-                'POST', url, json=payload, headers=headers
+                'POST', url, json=payload, headers=headers, params=params
             ) as response:
                 response.read()
 
@@ -193,7 +204,9 @@ def test_version_header_integration(
                     assert response.status_code == 200
                     assert 'error' in response.text.lower(), response.text
         else:
-            response = client.post(url, json=payload, headers=headers)
+            response = client.post(
+                url, json=payload, headers=headers, params=params
+            )
             assert response.status_code == 200, response.text
             resp_data = response.json()
             if expect_success:
