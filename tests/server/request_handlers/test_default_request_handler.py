@@ -1984,6 +1984,8 @@ async def test_create_task_push_notification_config_returns_stored_id(
 ):
     """Test on_create_task_push_notification_config returns the id that was stored."""
     if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
         from a2a.server.tasks.database_push_notification_config_store import (
             DatabasePushNotificationConfigStore,
         )
@@ -2018,7 +2020,8 @@ async def test_create_task_push_notification_config_returns_stored_id(
 
     stored = await push_config_store.get_info(task.id, context)
     assert response.id == task.id
-    assert [config.id for config in stored] == [response.id]
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
 
 
 @pytest.mark.asyncio

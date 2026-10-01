@@ -40,30 +40,37 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> None:
+    ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
+        stored = TaskPushNotificationConfig()
+        stored.CopyFrom(notification_config)
+        stored.task_id = task_id
+        if not stored.id:
+            stored.id = task_id
+
         with self.lock:
             owner_infos = self._push_notification_infos.setdefault(owner, {})
             if task_id not in owner_infos:
                 owner_infos[task_id] = []
 
-            if not notification_config.id:
-                notification_config.id = task_id
-
             # Remove existing config with the same ID
             for config in owner_infos[task_id]:
-                if config.id == notification_config.id:
+                if config.id == stored.id:
                     owner_infos[task_id].remove(config)
                     break
 
-            owner_infos[task_id].append(notification_config)
+            owner_infos[task_id].append(stored)
             logger.debug(
                 'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
-                notification_config.id,
+                stored.id,
                 owner,
             )
+
+        result = TaskPushNotificationConfig()
+        result.CopyFrom(stored)
+        return result
 
     async def get_info(
         self,

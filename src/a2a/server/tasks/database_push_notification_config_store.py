@@ -283,7 +283,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> None:
+    ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
@@ -291,6 +291,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         # Create a copy of the config using proto CopyFrom
         config_to_save = TaskPushNotificationConfig()
         config_to_save.CopyFrom(notification_config)
+        config_to_save.task_id = task_id
         if not config_to_save.id:
             config_to_save.id = task_id
 
@@ -303,6 +304,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 config_to_save.id,
                 owner,
             )
+        return config_to_save
 
     async def _select_configs(
         self,

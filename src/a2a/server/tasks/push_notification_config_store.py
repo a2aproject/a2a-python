@@ -18,8 +18,13 @@ class PushNotificationConfigStore(ABC):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> None:
-        """Sets or updates the push notification configuration for a task."""
+    ) -> TaskPushNotificationConfig:
+        """Sets or updates the push notification configuration for a task.
+
+        Implementations MUST NOT mutate notification_config. They store a
+        copy with task_id set to the given task and an empty id defaulted to
+        the task id, and return that stored configuration.
+        """
 
     @abstractmethod
     async def get_info(

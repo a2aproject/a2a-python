@@ -520,6 +520,8 @@ async def test_create_task_push_notification_config_returns_stored_id(
 ):
     """Test on_create_task_push_notification_config returns the id that was stored."""
     if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
         from a2a.server.tasks.database_push_notification_config_store import (
             DatabasePushNotificationConfigStore,
         )
@@ -553,7 +555,8 @@ async def test_create_task_push_notification_config_returns_stored_id(
 
     stored = await push_config_store.get_info(task.id, context)
     assert response.id == task.id
-    assert [config.id for config in stored] == [response.id]
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
 
 
 @pytest.mark.asyncio
@@ -1751,6 +1754,40 @@ async def test_on_message_send_with_push_notification():
     push_store.set_info.assert_awaited_once_with(
         result.id, push_config, context
     )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stores_inline_push_config_under_its_task():
+    task_store = InMemoryTaskStore()
+    push_store = InMemoryPushNotificationConfigStore()
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+        agent_card=create_default_agent_card(),
+    )
+    # SendMessageConfiguration carries neither task_id nor id for the config.
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_inline',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            task_push_notification_config=TaskPushNotificationConfig(
+                url='http://example.com/webhook'
+            )
+        ),
+    )
+
+    context = create_server_call_context()
+    result = await request_handler.on_message_send(params, context)
+
+    stored = await push_store.get_info(result.id, context)
+    assert [(config.task_id, config.id) for config in stored] == [
+        (result.id, result.id)
+    ]
 
 
 @pytest.mark.asyncio
