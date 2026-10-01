@@ -9,6 +9,7 @@ from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
+    AuthenticationInfo,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -36,8 +37,11 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    authentication: AuthenticationInfo | None = None,
 ) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
+    return TaskPushNotificationConfig(
+        id=config_id, url=url, token=token, authentication=authentication
+    )
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
@@ -73,7 +77,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.assert_called_once()
 
@@ -102,6 +106,84 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
+
+    async def _post_headers_for(self, **config_kwargs) -> dict[str, str] | None:
+        """Sends one notification and returns the headers it posted with."""
+        task_data = _create_sample_task(task_id='task_auth')
+        self.mock_config_store.get_info_for_dispatch.return_value = [
+            _create_sample_push_config(**config_kwargs)
+        ]
+        self.mock_httpx_client.post.return_value = AsyncMock(
+            spec=httpx.Response, status_code=200
+        )
+
+        await self.sender.send_notification(task_data.id, task_data)
+
+        return self.mock_httpx_client.post.await_args.kwargs['headers']
+
+    async def test_authentication_becomes_an_authorization_header(self) -> None:
+        """Authentication becomes `Authorization: {scheme} {credentials}`."""
+        headers = await self._post_headers_for(
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='test-token'
+            )
+        )
+
+        assert headers == {'Authorization': 'Bearer test-token'}
+
+    async def test_authentication_and_token_are_sent_together(self) -> None:
+        headers = await self._post_headers_for(
+            token='notification-token',
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='test-token'
+            ),
+        )
+
+        assert headers == {
+            'X-A2A-Notification-Token': 'notification-token',
+            'Authorization': 'Bearer test-token',
+        }
+
+    async def test_authentication_without_credentials_sends_no_header(
+        self,
+    ) -> None:
+        """A half-filled AuthenticationInfo yields no 'Bearer ' with nothing after it."""
+        headers = await self._post_headers_for(
+            authentication=AuthenticationInfo(scheme='Bearer')
+        )
+
+        assert headers == {}
+
+    async def test_authentication_without_credentials_warns(self) -> None:
+        """A scheme with no credentials is valid to send, so say why it was dropped."""
+        with self.assertLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ) as logs:
+            await self._post_headers_for(
+                config_id='cfg-half-auth',
+                authentication=AuthenticationInfo(scheme='Bearer'),
+            )
+
+        assert any(
+            'cfg-half-auth' in line and 'no ' in line for line in logs.output
+        )
+
+    async def test_complete_authentication_does_not_warn(self) -> None:
+        with self.assertNoLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ):
+            await self._post_headers_for(
+                authentication=AuthenticationInfo(
+                    scheme='Bearer', credentials='test-token'
+                )
+            )
+
+    async def test_no_authentication_sends_no_authorization_header(
+        self,
+    ) -> None:
+        headers = await self._post_headers_for()
+
+        assert headers == {}
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
@@ -140,7 +222,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_logger.exception.assert_called_once()
 
@@ -173,13 +255,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.call_count = 2
 
@@ -204,7 +286,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(status_update=event)),
-            headers=None,
+            headers={},
         )
 
     async def test_send_notification_artifact_update_event(self) -> None:
@@ -228,7 +310,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),
-            headers=None,
+            headers={},
         )
 
 

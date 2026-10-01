@@ -97,9 +97,23 @@ class BasePushNotificationSender(PushNotificationSender):
         ):
             return False
         try:
-            headers = None
+            headers: dict[str, str] = {}
             if push_info.token:
-                headers = {'X-A2A-Notification-Token': push_info.token}
+                headers['X-A2A-Notification-Token'] = push_info.token
+            auth = push_info.authentication
+            if push_info.HasField('authentication'):
+                if auth.scheme and auth.credentials:
+                    headers['Authorization'] = (
+                        f'{auth.scheme} {auth.credentials}'
+                    )
+                elif auth.scheme:
+                    logger.warning(
+                        'Push config %s sets an authentication scheme with no '
+                        'credentials; sending no Authorization header for '
+                        'task_id=%s',
+                        push_info.id,
+                        task_id,
+                    )
 
             response = await self._client.post(
                 url,

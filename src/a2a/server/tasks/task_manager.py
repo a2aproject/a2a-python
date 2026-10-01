@@ -1,8 +1,9 @@
+from __future__ import annotations
+
 import logging
 
-from a2a.server.context import ServerCallContext
-from a2a.server.events.event_queue import Event
-from a2a.server.tasks.task_store import TaskStore
+from typing import TYPE_CHECKING
+
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
@@ -14,6 +15,14 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 from a2a.utils.telemetry import trace_function
+
+
+if TYPE_CHECKING:
+    from a2a.server.cluster.task_store import VersionedTaskStore
+    from a2a.server.cluster.version import TaskVersion
+    from a2a.server.context import ServerCallContext
+    from a2a.server.events.event_queue import Event
+    from a2a.server.tasks.task_store import TaskStore
 
 
 logger = logging.getLogger(__name__)
@@ -96,7 +105,7 @@ class TaskManager:
 
     def __init__(
         self,
-        task_store: TaskStore,
+        task_store: TaskStore | VersionedTaskStore,
         context: ServerCallContext,
         task_id: str | None,
         context_id: str | None,
@@ -105,7 +114,8 @@ class TaskManager:
         """Initializes the TaskManager.
 
         Args:
-            task_store: The `TaskStore` instance for persistence.
+            task_store: The `TaskStore` (or `VersionedTaskStore`) for
+                persistence.
             context: The `ServerCallContext` that this task is produced under.
             task_id: The ID of the task, if known from the request.
             context_id: The ID of the context, if known from the request.
@@ -115,17 +125,51 @@ class TaskManager:
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
 
+        # Imported lazily to avoid an import cycle: the cluster package imports
+        # from a2a.server.tasks, which imports this module.
+        from a2a.server.cluster.task_store import (  # noqa: PLC0415
+            LegacyTaskStoreAdapter,
+            VersionedTaskStore,
+        )
+        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
+
         self.task_store = task_store
+        self._versioned_store: VersionedTaskStore = (
+            task_store
+            if isinstance(task_store, VersionedTaskStore)
+            else LegacyTaskStoreAdapter(task_store)
+        )
         self._call_context: ServerCallContext = context
         self.task_id = task_id
         self.context_id = context_id
         self._initial_message = initial_message
         self._current_task: Task | None = None
+        # Version of `_current_task` as last read/written. MISSING until a
+        # versioned store reports a real version.
+        self._current_version: TaskVersion = TaskVersion.MISSING
+        # Transient: the event currently being persisted, read by _save_task.
+        self._pending_event: Event | None = None
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
             context_id,
         )
+
+    def invalidate(self) -> None:
+        """Drops the cached snapshot so the next read hits the store.
+
+        Only safe at a request boundary; used to pick up state another replica
+        may have advanced.
+        """
+        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
+
+        self._current_task = None
+        self._current_version = TaskVersion.MISSING
+
+    @property
+    def current_version(self) -> TaskVersion:
+        """The version of the most recently read/written task snapshot."""
+        return self._current_version
 
     async def get_task(self) -> Task | None:
         """Retrieves the current task object, either from memory or the store.
@@ -146,12 +190,18 @@ class TaskManager:
         logger.debug(
             'Attempting to get task from store with id: %s', self.task_id
         )
-        self._current_task = await self.task_store.get(
+        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
+
+        stored = await self._versioned_store.get(
             self.task_id, self._call_context
         )
-        if self._current_task:
+        if stored is not None:
+            self._current_task = stored.task
+            self._current_version = stored.version
             logger.debug('Task %s retrieved successfully.', self.task_id)
         else:
+            self._current_task = None
+            self._current_version = TaskVersion.MISSING
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
@@ -195,7 +245,11 @@ class TaskManager:
             task_id_from_event,
         )
         if isinstance(event, Task):
-            await self._save_task(event)
+            self._pending_event = event
+            try:
+                await self._save_task(event)
+            finally:
+                self._pending_event = None
             return event
 
         task: Task = await self.ensure_task(event)
@@ -213,7 +267,11 @@ class TaskManager:
             logger.debug('Appending artifact to task %s', task.id)
             append_artifact_to_task(task, event)
 
-        await self._save_task(task)
+        self._pending_event = event
+        try:
+            await self._save_task(task)
+        finally:
+            self._pending_event = None
         return task
 
     async def ensure_task_id(self, task_id: str, context_id: str) -> Task:
@@ -226,12 +284,21 @@ class TaskManager:
         Returns:
             An existing or newly created `Task` object.
         """
+        from a2a.server.cluster.version import TaskVersion  # noqa: PLC0415
+
         task: Task | None = self._current_task
         if not task and self.task_id:
             logger.debug(
                 'Attempting to retrieve existing task with id: %s', self.task_id
             )
-            task = await self.task_store.get(self.task_id, self._call_context)
+            stored = await self._versioned_store.get(
+                self.task_id, self._call_context
+            )
+            if stored is not None:
+                task = stored.task
+                self._current_version = stored.version
+            else:
+                self._current_version = TaskVersion.MISSING
 
         if not task:
             logger.info(
@@ -302,13 +369,20 @@ class TaskManager:
         )
 
     async def _save_task(self, task: Task) -> None:
-        """Saves the given task to the task store and updates the in-memory `_current_task`.
+        """Saves the task and updates the snapshot.
 
-        Args:
-            task: The `Task` object to save.
+        Threads `_current_version` so a VersionedTaskStore can compare-and-swap;
+        raises ConcurrentTaskModificationError on a stale write.
         """
         logger.debug('Saving task with id: %s', task.id)
-        await self.task_store.save(task, self._call_context)
+        prev = self._current_task
+        self._current_version = await self._versioned_store.save(
+            task,
+            event=self._pending_event,
+            prev=prev,
+            prev_version=self._current_version,
+            context=self._call_context,
+        )
         self._current_task = task
         if not self.task_id:
             logger.info('New task created with id: %s', task.id)

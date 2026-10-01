@@ -21,7 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils._async_queue_compat import QueueShutDown, create_async_queue
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import UnsupportedOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -805,7 +805,7 @@ class TestActiveTask:
         await active_task._is_finished.wait()
 
         with pytest.raises(
-            InvalidParamsError, match=r'Task .* is already completed'
+            UnsupportedOperationError, match=r'Task .* is already completed'
         ):
             async for _ in active_task.subscribe():
                 pass
