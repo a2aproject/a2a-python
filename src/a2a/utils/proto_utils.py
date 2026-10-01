@@ -17,7 +17,7 @@
 This module provides helper functions for common proto type operations.
 """
 
-from typing import TYPE_CHECKING, Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
 from google.protobuf.descriptor import FieldDescriptor
@@ -150,6 +150,15 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
     return value
 
 
+def _field_is_repeated(field: FieldDescriptor) -> bool:
+    """protobuf>=6.31.0 exposes `is_repeated`; older (floor >=5.29.5) does not."""
+    is_repeated = getattr(field, 'is_repeated', None)
+    if is_repeated is not None:
+        return is_repeated
+    # protobuf 7 removed `label`; only reached on the <6.31 fallback path.
+    return getattr(field, 'label', None) == FieldDescriptor.LABEL_REPEATED
+
+
 def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
     """Converts REST query parameters back into a Protobuf message.
 
@@ -162,7 +171,9 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         https://a2a-protocol.org/latest/specification/#115-query-parameter-naming-for-request-parameters
     """
     descriptor = message.DESCRIPTOR
-    fields = {f.camelcase_name: f for f in descriptor.fields}
+    fields = {
+        f.camelcase_name: cast('FieldDescriptor', f) for f in descriptor.fields
+    }
     processed: dict[str, Any] = {}
 
     keys = params.keys()
@@ -174,10 +185,7 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         field = fields[k]
         v_list = params.getlist(k)
 
-        # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-        # deprecated `field.label` with `field.is_repeated` once the minimum
-        # protobuf version requirement is bumped.
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if _field_is_repeated(field):
             accumulated: list[Any] = []
             for v in v_list:
                 if not v:
@@ -211,10 +219,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label == FieldDescriptor.LABEL_REPEATED:
+    if _field_is_repeated(field):
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -255,14 +260,14 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label != FieldDescriptor.LABEL_REPEATED:
+    if not _field_is_repeated(field):
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
-    elif field.message_type.GetOptions().map_entry:
+    elif (
+        field.message_type is not None
+        and field.message_type.GetOptions().map_entry
+    ):
         for k, v in val.items():
             if isinstance(v, ProtobufMessage):
                 sub_errs = _validate_proto_required_fields_internal(v)
@@ -281,9 +286,12 @@ def _validate_proto_required_fields_internal(
     desc = msg.DESCRIPTOR
     errors: list[ValidationDetail] = []
 
-    for field in desc.fields:
+    for raw_field in desc.fields:
+        # `desc.fields` is typed as a union of the pure-Python and C-extension
+        # FieldDescriptor; narrow to the canonical one for the helpers below.
+        field = cast('FieldDescriptor', raw_field)
         options = field.GetOptions()
-        if FieldBehavior.REQUIRED in options.Extensions[field_behavior]:
+        if FieldBehavior.REQUIRED in options.Extensions[field_behavior]:  # type: ignore[index]  # ty: ignore[invalid-argument-type]
             violation = _check_required_field_violation(msg, field)
             if violation:
                 errors.append(violation)
