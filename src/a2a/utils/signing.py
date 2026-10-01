@@ -3,7 +3,6 @@ import json
 from collections.abc import Callable
 from typing import Any, TypedDict
 
-from google.api import field_behavior_pb2 as fb
 from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.json_format import MessageToDict
 
@@ -198,11 +197,6 @@ def _clean_empty(d: Any, depth: int = 0) -> Any:
     return d
 
 
-def _is_required(field: FieldDescriptor) -> bool:
-    """Returns True if the field carries google.api.field_behavior = REQUIRED."""
-    return fb.REQUIRED in field.GetOptions().Extensions[fb.field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
-
-
 def _is_map(field: FieldDescriptor) -> bool:
     """Returns True if the field is a protobuf map."""
     message_type = field.message_type
@@ -212,25 +206,6 @@ def _is_map(field: FieldDescriptor) -> bool:
 def _is_well_known(descriptor: Descriptor | Any) -> bool:
     """Returns True for `google.protobuf` types, which carry free-form JSON."""
     return descriptor.full_name.startswith('google.protobuf.')
-
-
-def _required_default(field: FieldDescriptor) -> Any:
-    """Returns the JSON value a REQUIRED field has when it is empty, or None.
-
-    A REQUIRED message is an empty object whether or not it was set, so the
-    REQUIRED set does not depend on what the serializer chose to emit. REQUIRED
-    fields of a scalar type other than string do not exist in the Agent Card
-    today and are left out.
-    """
-    if _is_map(field):
-        return {}
-    if _field_is_repeated(field):
-        return []
-    if field.message_type is not None:
-        return {}
-    if field.type == FieldDescriptor.TYPE_STRING:
-        return ''
-    return None
 
 
 def _clean_field(value: Any, field: FieldDescriptor, depth: int) -> Any:
@@ -265,9 +240,6 @@ def _clean_message(
 ) -> dict[str, Any]:
     """Removes empty values from the JSON form of a message, by descriptor.
 
-    REQUIRED fields are kept at their default value. Every other empty value
-    is removed.
-
     `message_dict` is the `MessageToDict` output for a message of type
     `descriptor`. Walking the descriptor alongside the JSON keeps the field
     each value belongs to known at every level, which `_clean_empty` alone
@@ -288,15 +260,6 @@ def _clean_message(
             cleaned_value = _clean_field(value, field, depth + 1)
         if cleaned_value is not None:
             cleaned[key] = cleaned_value
-    # A2A specification section 8.4.1: a REQUIRED field stays in the canonical
-    # payload even when its value matches the default.
-    for field in descriptor.fields:
-        name = field.json_name
-        if name in cleaned or not _is_required(field):
-            continue
-        default = _required_default(field)
-        if default is not None:
-            cleaned[name] = default
     return cleaned
 
 
