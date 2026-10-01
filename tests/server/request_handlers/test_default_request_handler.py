@@ -2019,6 +2019,9 @@ async def test_create_task_push_notification_config_returns_stored_id(
     )
 
     stored = await push_config_store.get_info(task.id, context)
+    if store_kind == 'database':
+        await engine.dispose()
+
     assert response.id == task.id
     assert list(stored) == [response]
     assert params.id == '', 'the request object must not be mutated'
