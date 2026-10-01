@@ -9,12 +9,15 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from a2a.server.agent_execution.agent_executor import AgentExecutor
+    from a2a.server.cluster.event_stream import TaskEventStream
+    from a2a.server.cluster.task_store import VersionedTaskStore
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import PushNotificationSender
     from a2a.server.tasks.task_store import TaskStore
     from a2a.types.a2a_pb2 import Message
 
 from a2a.server.agent_execution.active_task import ActiveTask
+from a2a.server.cluster.task_store import StoredTask
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.utils.errors import TaskNotFoundError
 
@@ -28,12 +31,14 @@ class ActiveTaskRegistry:
     def __init__(
         self,
         agent_executor: AgentExecutor,
-        task_store: TaskStore,
+        task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
+        event_stream: TaskEventStream | None = None,
     ):
         self._agent_executor = agent_executor
         self._task_store = task_store
         self._push_sender = push_sender
+        self._event_stream = event_stream
         self._active_tasks: dict[str, ActiveTask] = {}
         self._lock = threading.RLock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
@@ -67,6 +72,7 @@ class ActiveTaskRegistry:
                     task_manager=task_manager,
                     push_sender=self._push_sender,
                     on_cleanup=self._on_active_task_cleanup,
+                    event_stream=self._event_stream,
                 )
                 self._active_tasks[task_id] = active_task
 
@@ -84,10 +90,16 @@ class ActiveTaskRegistry:
             # ownership. Masked as not-found so existence is not leaked. Done
             # outside _lock because the store read is I/O and the miss-path
             # check runs outside the lock too.
-            if not create_task_if_missing and not await self._task_store.get(
-                task_id, call_context
-            ):
-                raise TaskNotFoundError
+            if not create_task_if_missing:
+                existing_task = await self._task_store.get(
+                    task_id, call_context
+                )
+                # A VersionedTaskStore returns a StoredTask; a plain store
+                # returns the task (or None). Normalize before the check.
+                if isinstance(existing_task, StoredTask):
+                    existing_task = existing_task.task
+                if not existing_task:
+                    raise TaskNotFoundError
             return existing
 
         await active_task.start(

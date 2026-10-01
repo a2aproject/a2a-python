@@ -1,8 +1,10 @@
 """Utility functions for creating A2A Task objects."""
 
 import binascii
+import json
 
-from base64 import b64decode, b64encode
+from base64 import b64decode, b64encode, urlsafe_b64decode, urlsafe_b64encode
+from dataclasses import dataclass
 from typing import Literal, Protocol, runtime_checkable
 
 from a2a.types.a2a_pb2 import Task
@@ -119,3 +121,67 @@ def decode_page_token(page_token: str) -> str:
             'Token is not a valid base64-encoded cursor.'
         ) from e
     return decoded
+
+
+@dataclass(frozen=True)
+class ListTasksCursor:
+    """A position in the `ListTasks` sort order.
+
+    Tasks are listed by `(has timestamp, timestamp, id)` in descending order,
+    so tasks without a timestamp come last. A cursor names the last task of a
+    page; the next page starts strictly after it. Because the position is
+    carried in the token rather than looked up again, a page token stays valid
+    when that task is later updated or deleted.
+    """
+
+    timestamp_ns: int | None
+    task_id: str
+
+    def sort_key(self) -> tuple[bool, int, str]:
+        """The cursor's position as a `(has timestamp, timestamp, id)` key."""
+        return (
+            self.timestamp_ns is not None,
+            self.timestamp_ns or 0,
+            self.task_id,
+        )
+
+
+def encode_list_tasks_cursor(cursor: ListTasksCursor) -> str:
+    """Encodes a `ListTasksCursor` as an opaque, URL-safe page token."""
+    payload = json.dumps(
+        {'ts': cursor.timestamp_ns, 'id': cursor.task_id},
+        separators=(',', ':'),
+    )
+    return (
+        urlsafe_b64encode(payload.encode(_ENCODING))
+        .decode(_ENCODING)
+        .rstrip('=')
+    )
+
+
+def decode_list_tasks_cursor(page_token: str) -> ListTasksCursor | None:
+    """Decodes a page token produced by `encode_list_tasks_cursor`.
+
+    Args:
+        page_token: The page token from a previous `ListTasks` response.
+
+    Returns:
+        The decoded cursor, or None if the token is not a valid cursor token.
+        Callers treat None as a legacy task-ID token (see
+        `decode_page_token`), which also rejects tampered or unknown tokens.
+    """
+    padded = page_token + '=' * (-len(page_token) % 4)
+    try:
+        data = json.loads(urlsafe_b64decode(padded.encode(_ENCODING)))
+    except (binascii.Error, ValueError):
+        return None
+    if not isinstance(data, dict) or data.keys() != {'ts', 'id'}:
+        return None
+    timestamp_ns = data['ts']
+    task_id = data['id']
+    timestamp_is_valid = timestamp_ns is None or (
+        isinstance(timestamp_ns, int) and not isinstance(timestamp_ns, bool)
+    )
+    if not timestamp_is_valid or not isinstance(task_id, str) or not task_id:
+        return None
+    return ListTasksCursor(timestamp_ns=timestamp_ns, task_id=task_id)

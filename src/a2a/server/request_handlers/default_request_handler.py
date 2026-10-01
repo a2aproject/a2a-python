@@ -59,6 +59,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -104,6 +105,7 @@ class LegacyRequestHandler(RequestHandler):
         ]
         | None = None,
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -123,6 +125,13 @@ class LegacyRequestHandler(RequestHandler):
               library screening). The spec lists these checks as SHOULD,
               so deployments that want the built-in policy should pass
               ``validate_push_notification_url``.
+            validate_input_modes: Reject message parts whose ``media_type``
+              the card declares nowhere -- neither in
+              ``default_input_modes`` nor in any skill's ``input_modes`` --
+              with ``ContentTypeNotSupportedError``. Defaults to False,
+              because an agent whose declared modes do not spell the media
+              types its clients really send would start refusing traffic it
+              previously accepted.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -131,6 +140,7 @@ class LegacyRequestHandler(RequestHandler):
         self._push_config_store = push_config_store
         self._push_sender = push_sender
         self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -277,6 +287,9 @@ class LegacyRequestHandler(RequestHandler):
         Returns:
             A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
         """
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
+
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
@@ -292,7 +305,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 

@@ -1,7 +1,8 @@
 import os
 
+from base64 import urlsafe_b64encode
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -35,6 +36,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
+from a2a.utils.task import decode_list_tasks_cursor
 from google.protobuf.json_format import MessageToDict
 from sqlalchemy.ext.asyncio import create_async_engine
 from sqlalchemy.inspection import inspect
@@ -56,6 +58,21 @@ class SampleUser(User):
 
 
 TEST_CONTEXT = ServerCallContext(user=SampleUser('test_user'))
+
+
+def _decoded_cursor(page_token: str) -> tuple[datetime | None, str] | None:
+    """The (timestamp, task ID) a page token resumes after; None on the last page."""
+    if not page_token:
+        return None
+    cursor = decode_list_tasks_cursor(page_token)
+    assert cursor is not None, 'expected a cursor token, not a legacy one'
+    timestamp = (
+        datetime(1970, 1, 1, tzinfo=timezone.utc)
+        + timedelta(microseconds=cursor.timestamp_ns // 1_000)
+        if cursor.timestamp_ns is not None
+        else None
+    )
+    return (timestamp, cursor.task_id)
 
 
 # DSNs for different databases
@@ -208,7 +225,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
-    'params, expected_ids, total_count, next_page_token',
+    'params, expected_ids, total_count, next_cursor',
     [
         # No parameters, should return all tasks
         (
@@ -229,7 +246,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             ListTasksRequest(page_size=2),
             ['task-2', 'task-1'],
             5,
-            'dGFzay0w',  # base64 for 'task-0'
+            (datetime(2025, 1, 1, tzinfo=timezone.utc), 'task-1'),
         ),
         # Pagination (same timestamp)
         (
@@ -239,7 +256,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             ),
             ['task-1', 'task-0'],
             5,
-            'dGFzay00',  # base64 for 'task-4'
+            (datetime(2025, 1, 1, tzinfo=timezone.utc), 'task-0'),
         ),
         # Pagination (final page)
         (
@@ -282,7 +299,7 @@ async def test_get_task(db_store_parameterized: DatabaseTaskStore) -> None:
             ),
             ['task-2'],
             3,
-            'dGFzay0w',  # base64 for 'task-0'
+            (datetime(2025, 1, 2, tzinfo=timezone.utc), 'task-2'),
         ),
     ],
 )
@@ -291,7 +308,7 @@ async def test_list_tasks(
     params: ListTasksRequest,
     expected_ids: list[str],
     total_count: int,
-    next_page_token: str,
+    next_cursor: tuple[datetime, str] | None,
 ) -> None:
     """Test listing tasks with various filters and pagination."""
     tasks_to_create = [
@@ -338,7 +355,7 @@ async def test_list_tasks(
     retrieved_ids = [task.id for task in page.tasks]
     assert retrieved_ids == expected_ids
     assert page.total_size == total_count
-    assert page.next_page_token == (next_page_token or '')
+    assert _decoded_cursor(page.next_page_token) == next_cursor
     assert page.page_size == (params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE)
 
     # Cleanup
@@ -976,6 +993,105 @@ async def test_core_to_0_3_model_conversion(
     # Reset conversion attributes
     store.core_to_model_conversion = None
     await store.delete('v03-persistence-task', TEST_CONTEXT)
+
+
+def _task(task_id: str, seconds: int | None) -> Task:
+    task = Task(
+        id=task_id,
+        context_id='ctx',
+        status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+    )
+    if seconds is not None:
+        task.status.timestamp.FromSeconds(seconds)
+    return task
+
+
+async def _list_all(store: DatabaseTaskStore, page_size: int) -> list[str]:
+    seen: list[str] = []
+    params = ListTasksRequest(page_size=page_size)
+    while True:
+        page = await store.list(params, TEST_CONTEXT)
+        seen.extend(task.id for task in page.tasks)
+        if not page.next_page_token:
+            return seen
+        params.page_token = page.next_page_token
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'change, task_id, expected_second_page',
+    [
+        # The last task returned moves to the top: the listing continues.
+        ('update', 't4', ['t3', 't2']),
+        # The next task moves above the cursor: skipped this pass, no repeats.
+        ('update', 't3', ['t2', 't1']),
+        # Deleting either task does not invalidate the token.
+        ('delete', 't4', ['t3', 't2']),
+        ('delete', 't3', ['t2', 't1']),
+    ],
+)
+async def test_list_tasks_page_token_survives_task_changes(
+    db_store_parameterized: DatabaseTaskStore,
+    change: str,
+    task_id: str,
+    expected_second_page: list[str],
+) -> None:
+    """Regression test for #1280: the token is a position, not a task lookup."""
+    store = db_store_parameterized
+    for i in range(1, 6):
+        await store.save(_task(f't{i}', 1_700_000_000 + i), TEST_CONTEXT)
+    first = await store.list(ListTasksRequest(page_size=2), TEST_CONTEXT)
+    assert [task.id for task in first.tasks] == ['t5', 't4']
+
+    if change == 'update':
+        await store.save(_task(task_id, 1_800_000_000), TEST_CONTEXT)
+    else:
+        await store.delete(task_id, TEST_CONTEXT)
+    second = await store.list(
+        ListTasksRequest(page_size=2, page_token=first.next_page_token),
+        TEST_CONTEXT,
+    )
+
+    assert [task.id for task in second.tasks] == expected_second_page
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('page_size', [1, 2, 20])
+async def test_list_tasks_pages_through_ties_and_missing_timestamps(
+    db_store_parameterized: DatabaseTaskStore, page_size: int
+) -> None:
+    """Equal timestamps (as on second-precision backends) and missing ones."""
+    store = db_store_parameterized
+    for task in (
+        _task('a', 1_700_000_000),
+        _task('b', 1_700_000_000),
+        _task('c', 1_700_000_000),
+        _task('newest', 1_700_000_100),
+        _task('undated-a', None),
+        _task('undated-b', None),
+    ):
+        await store.save(task, TEST_CONTEXT)
+
+    assert await _list_all(store, page_size) == [
+        'newest',
+        'c',
+        'b',
+        'a',
+        'undated-b',
+        'undated-a',
+    ]
+
+
+@pytest.mark.asyncio
+async def test_list_tasks_rejects_malformed_cursor_token(
+    db_store_parameterized: DatabaseTaskStore,
+) -> None:
+    token = urlsafe_b64encode(b'{"ts":"soon","id":"t1"}').decode().rstrip('=')
+
+    with pytest.raises(InvalidParamsError):
+        await db_store_parameterized.list(
+            ListTasksRequest(page_size=2, page_token=token), TEST_CONTEXT
+        )
 
 
 # Ensure aiosqlite, asyncpg, and aiomysql are installed in the test environment (added to pyproject.toml).

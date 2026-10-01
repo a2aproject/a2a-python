@@ -1,6 +1,7 @@
 import logging
 
 from collections.abc import Callable
+from datetime import datetime
 from typing import Any, cast
 
 
@@ -22,6 +23,7 @@ except ImportError as e:
         "or 'pip install a2a-sdk[sql]'"
     ) from e
 from google.protobuf.json_format import MessageToDict, ParseDict
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.compat.v0_3.model_conversions import (
     compat_task_model_to_core,
@@ -34,10 +36,29 @@ from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import Task
 from a2a.utils.constants import DEFAULT_LIST_TASKS_PAGE_SIZE
 from a2a.utils.errors import InvalidParamsError
-from a2a.utils.task import decode_page_token, encode_page_token
+from a2a.utils.task import (
+    ListTasksCursor,
+    decode_list_tasks_cursor,
+    decode_page_token,
+    encode_list_tasks_cursor,
+)
 
 
 logger = logging.getLogger(__name__)
+
+
+def _datetime_to_ns(value: datetime) -> int:
+    """Nanoseconds since the epoch for a stored (naive UTC) `last_updated`."""
+    timestamp = Timestamp()
+    timestamp.FromDatetime(value)
+    return timestamp.ToNanoseconds()
+
+
+def _ns_to_datetime(timestamp_ns: int) -> datetime:
+    """Inverse of `_datetime_to_ns`, as a naive UTC datetime."""
+    timestamp = Timestamp()
+    timestamp.FromNanoseconds(timestamp_ns)
+    return timestamp.ToDatetime()
 
 
 class DatabaseTaskStore(TaskStore):
@@ -257,63 +278,108 @@ class DatabaseTaskStore(TaskStore):
                 self.task_model.id.desc(),
             )
 
-            # Get paginated results
+            # Get paginated results. The page token carries the position of the
+            # last task returned, so it stays valid if that task is updated or
+            # deleted. A task updated mid-listing can move above the cursor and
+            # be skipped.
             if params.page_token:
-                start_task_id = decode_page_token(params.page_token)
-                start_task = (
-                    await session.execute(
-                        select(self.task_model).where(
-                            and_(
-                                self.task_model.id == start_task_id,
-                                self.task_model.owner == owner,
-                            )
+                cursor = decode_list_tasks_cursor(params.page_token)
+                if cursor is None:
+                    stmt = stmt.where(
+                        await self._legacy_page_clause(
+                            session, owner, params.page_token
                         )
                     )
-                ).scalar_one_or_none()
-                if not start_task:
-                    raise InvalidParamsError(
-                        f'Invalid page token: {params.page_token}'
-                    )
-
-                start_task_timestamp = start_task.last_updated
-                where_clauses = []
-                if start_task_timestamp:
-                    where_clauses.append(
-                        and_(
-                            timestamp_col == start_task_timestamp,
-                            self.task_model.id <= start_task_id,
-                        )
-                    )
-                    where_clauses.append(timestamp_col < start_task_timestamp)
-                    where_clauses.append(timestamp_col.is_(None))
                 else:
-                    where_clauses.append(
-                        and_(
-                            timestamp_col.is_(None),
-                            self.task_model.id <= start_task_id,
-                        )
-                    )
-                stmt = stmt.where(or_(*where_clauses))
+                    stmt = stmt.where(self._after_cursor(cursor))
 
             page_size = params.page_size or DEFAULT_LIST_TASKS_PAGE_SIZE
             stmt = stmt.limit(page_size + 1)  # Add 1 for next page token
 
             result = await session.execute(stmt)
             tasks_models = result.scalars().all()
-            tasks = [self._from_orm(task_model) for task_model in tasks_models]
+            page_models = tasks_models[:page_size]
 
             next_page_token = (
-                encode_page_token(tasks[-1].id)
-                if len(tasks) == page_size + 1
+                encode_list_tasks_cursor(self._cursor_for(page_models[-1]))
+                if len(tasks_models) == page_size + 1
                 else None
             )
 
             return a2a_pb2.ListTasksResponse(
-                tasks=tasks[:page_size],
+                tasks=[
+                    self._from_orm(task_model) for task_model in page_models
+                ],
                 total_size=total_count,
                 next_page_token=next_page_token,
                 page_size=page_size,
             )
+
+    @staticmethod
+    def _cursor_for(task_model: TaskModel) -> ListTasksCursor:
+        # From the stored column, not the proto, so the cursor compares equal
+        # at the database's own timestamp precision.
+        last_updated = task_model.last_updated
+        return ListTasksCursor(
+            timestamp_ns=_datetime_to_ns(last_updated)
+            if last_updated is not None
+            else None,
+            task_id=task_model.id,
+        )
+
+    def _after_cursor(self, cursor: ListTasksCursor) -> Any:
+        """Rows strictly after `cursor` in the `ListTasks` sort order."""
+        timestamp_col = self.task_model.last_updated
+        if cursor.timestamp_ns is None:
+            return and_(
+                timestamp_col.is_(None), self.task_model.id < cursor.task_id
+            )
+        try:
+            cursor_timestamp = _ns_to_datetime(cursor.timestamp_ns)
+        except OverflowError as e:
+            raise InvalidParamsError('Invalid page token') from e
+        return or_(
+            timestamp_col < cursor_timestamp,
+            and_(
+                timestamp_col == cursor_timestamp,
+                self.task_model.id < cursor.task_id,
+            ),
+            timestamp_col.is_(None),
+        )
+
+    async def _legacy_page_clause(
+        self, session: AsyncSession, owner: str, page_token: str
+    ) -> Any:
+        """Resolves a legacy page token, which names the first task of the page."""
+        timestamp_col = self.task_model.last_updated
+        start_task_id = decode_page_token(page_token)
+        start_task = (
+            await session.execute(
+                select(self.task_model).where(
+                    and_(
+                        self.task_model.id == start_task_id,
+                        self.task_model.owner == owner,
+                    )
+                )
+            )
+        ).scalar_one_or_none()
+        if not start_task:
+            raise InvalidParamsError(f'Invalid page token: {page_token}')
+
+        start_task_timestamp = start_task.last_updated
+        if start_task_timestamp:
+            return or_(
+                and_(
+                    timestamp_col == start_task_timestamp,
+                    self.task_model.id <= start_task_id,
+                ),
+                timestamp_col < start_task_timestamp,
+                timestamp_col.is_(None),
+            )
+        return and_(
+            timestamp_col.is_(None),
+            self.task_model.id <= start_task_id,
+        )
 
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task from the database by ID, for the given owner."""
