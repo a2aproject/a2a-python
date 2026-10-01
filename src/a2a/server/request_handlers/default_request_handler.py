@@ -59,6 +59,7 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -103,6 +104,8 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -117,6 +120,18 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
+            push_url_validator: Async callable that returns True to accept
+              a push URL, or False to reject it. Defaults to None (no
+              library screening). The spec lists these checks as SHOULD,
+              so deployments that want the built-in policy should pass
+              ``validate_push_notification_url``.
+            validate_input_modes: Reject message parts whose ``media_type``
+              the card declares nowhere -- neither in
+              ``default_input_modes`` nor in any skill's ``input_modes`` --
+              with ``ContentTypeNotSupportedError``. Defaults to False,
+              because an agent whose declared modes do not spell the media
+              types its clients really send would start refusing traffic it
+              previously accepted.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -124,6 +139,8 @@ class LegacyRequestHandler(RequestHandler):
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
         self._request_context_builder = (
@@ -138,6 +155,13 @@ class LegacyRequestHandler(RequestHandler):
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     @validate_request_params
     async def on_get_task(
@@ -263,6 +287,9 @@ class LegacyRequestHandler(RequestHandler):
         Returns:
             A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
         """
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
+
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
@@ -278,7 +305,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     message=f'Task {task.id} is in terminal state: {task.status.state}'
                 )
 
@@ -305,6 +332,9 @@ class LegacyRequestHandler(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -527,6 +557,8 @@ class LegacyRequestHandler(RequestHandler):
         task: Task | None = await self.task_store.get(task_id, context)
         if not task:
             raise TaskNotFoundError
+
+        await self._reject_unsafe_push_url(params.url)
 
         await self._push_config_store.set_info(
             task_id,

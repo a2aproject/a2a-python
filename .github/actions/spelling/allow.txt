@@ -15,6 +15,7 @@ AGrpc
 aio
 aiomysql
 AIP
+AJSON
 alg
 amannn
 aproject
@@ -33,14 +34,19 @@ buf
 bufbuild
 cla
 cls
+clustermode
 coc
 codegen
 coro
 culsans
+cyberphone
 datamodel
 datapart
 deepwiki
+denormal
+denormals
 drivername
+dsn
 DSNs
 dunders
 ES256
@@ -48,6 +54,7 @@ euo
 EUR
 evt
 excinfo
+EXTCARD
 FastAPI
 fernet
 fetchrow
@@ -56,6 +63,7 @@ GBP
 genai
 getkwargs
 gle
+gowebpki
 GVsb
 hazmat
 HS256
@@ -91,6 +99,8 @@ middleware
 mikeas
 mockurl
 mysqladmin
+noncharacter
+noncharacters
 notif
 npx
 oauthoidc
@@ -103,6 +113,7 @@ openapiv
 openapiv2
 opensource
 otherurl
+outerjoin
 pb2
 podman
 Podman
@@ -110,6 +121,7 @@ poolclass
 postgres
 POSTGRES
 postgresql
+procs
 proot
 proto
 protobuf
@@ -128,13 +140,19 @@ resub
 rmi
 RS256
 RUF
+Rundgren
+SECP
 SECP256R1
 SFIXED
+signings
 SLF
 socio
+sourced
+sqlstate
 sse
 starlette
 Starlette
+stringified
 subgids
 subuids
 sut
@@ -149,5 +167,8 @@ TResponse
 typ
 typeerror
 UIDs
+urlsafe
+versioned
+Versioned
 vulnz
 whl

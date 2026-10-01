@@ -21,7 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils._async_queue_compat import QueueShutDown, create_async_queue
-from a2a.utils.errors import InvalidParamsError
+from a2a.utils.errors import UnsupportedOperationError
 
 
 logger = logging.getLogger(__name__)
@@ -127,6 +127,109 @@ class TestActiveTask:
         await active_task.cancel(request_context)
 
         agent_executor.cancel.assert_called_once()
+        stop_event.set()
+
+    @pytest.mark.asyncio
+    async def test_active_task_cancel_producer_cancelled_on_cancellederror(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Regression: executor.cancel() raising asyncio.CancelledError must
+        still cancel the producer task.
+
+        asyncio.CancelledError is a BaseException, so `except Exception` does
+        not catch it. The producer cancel therefore lives in a `finally`;
+        without it the producer would leak as a pending task on this path.
+        """
+        hang = asyncio.Event()
+        producer_cancelled = asyncio.Event()
+
+        async def execute_mock(req, q):
+            try:
+                await hang.wait()
+            except asyncio.CancelledError:
+                producer_cancelled.set()
+                raise
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock(side_effect=asyncio.CancelledError)
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)  # let the producer reach `await hang.wait()`
+        assert active_task._producer_task is not None
+
+        # The CancelledError from executor.cancel propagates out of cancel()...
+        with pytest.raises(asyncio.CancelledError):
+            await active_task.cancel(request_context)
+        agent_executor.cancel.assert_awaited_once()
+
+        # ...but the producer must have received the cancellation, not been
+        # left blocked on `hang.wait()`. `_run_producer` swallows the
+        # CancelledError and returns, so the executor's coroutine seeing it is
+        # the signal that `_producer_task.cancel()` actually fired. Without the
+        # `finally` this event never sets and the producer leaks pending.
+        for _ in range(50):
+            if producer_cancelled.is_set():
+                break
+            await asyncio.sleep(0.01)
+        assert producer_cancelled.is_set(), (
+            'producer was never cancelled -> it leaked as a pending task'
+        )
+        hang.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
+    async def test_active_task_cancel_does_not_mutate_shared_task(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """cancel() must not write the terminal state onto the shared task.
+
+        get_task() returns _task_manager._current_task, which may already have
+        been yielded to a subscriber. The terminal write goes onto a copy so
+        that reference does not change under the reader.
+        """
+        stop_event = asyncio.Event()
+
+        async def execute_mock(req, q):
+            await stop_event.wait()
+
+        shared = Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        agent_executor.cancel = AsyncMock()
+        task_manager.get_task = AsyncMock(return_value=shared)
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        await asyncio.sleep(0.1)
+
+        result = await active_task.cancel(request_context)
+
+        # The returned task is CANCELED...
+        assert result.status.state == TaskState.TASK_STATE_CANCELED
+        # ...but the shared object get_task handed out is untouched.
+        assert result is not shared
+        assert shared.status.state == TaskState.TASK_STATE_WORKING
         stop_event.set()
 
     @pytest.mark.asyncio
@@ -702,7 +805,7 @@ class TestActiveTask:
         await active_task._is_finished.wait()
 
         with pytest.raises(
-            InvalidParamsError, match=r'Task .* is already completed'
+            UnsupportedOperationError, match=r'Task .* is already completed'
         ):
             async for _ in active_task.subscribe():
                 pass

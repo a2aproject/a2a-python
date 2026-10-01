@@ -1,3 +1,6 @@
+import asyncio
+import concurrent.futures
+import threading
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -61,6 +64,29 @@ class SampleUser(User):
 
 
 MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
+
+
+def _lock_is_owned(lock: threading.RLock) -> bool:
+    is_owned = getattr(lock, '_is_owned', None)
+    return bool(is_owned()) if callable(is_owned) else False
+
+
+def _set_info_in_thread(
+    store: InMemoryPushNotificationConfigStore,
+    task_id: str,
+    config_id: str,
+    context: ServerCallContext,
+) -> None:
+    asyncio.run(
+        store.set_info(
+            task_id,
+            _create_sample_push_config(
+                url=f'http://example.com/{config_id}',
+                config_id=config_id,
+            ),
+            context,
+        )
+    )
 
 
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
@@ -425,6 +451,66 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         # Cleanup remaining
         await self.config_store.delete_info('task1', context=context_user1)
         await self.config_store.delete_info('task1', context=context_user2)
+
+    async def test_set_info_creates_owner_bucket_under_lock(self) -> None:
+        """Creating the first owner bucket must happen while the RLock is held."""
+        store = InMemoryPushNotificationConfigStore()
+        lock_held: list[bool] = []
+
+        class _LockHeldOwnerMap(
+            dict[str, dict[str, list[TaskPushNotificationConfig]]]
+        ):
+            def setdefault(
+                self,
+                key: str,
+                default: (
+                    dict[str, list[TaskPushNotificationConfig]] | None
+                ) = None,
+            ) -> dict[str, list[TaskPushNotificationConfig]]:
+                lock_held.append(_lock_is_owned(store.lock))
+                if default is None:
+                    default = {}
+                return super().setdefault(key, default)
+
+            def __setitem__(
+                self,
+                key: str,
+                value: dict[str, list[TaskPushNotificationConfig]],
+            ) -> None:
+                lock_held.append(_lock_is_owned(store.lock))
+                super().__setitem__(key, value)
+
+        store._push_notification_infos = _LockHeldOwnerMap()
+        await store.set_info(
+            'task-a',
+            _create_sample_push_config(config_id='cfg-a'),
+            MINIMAL_CALL_CONTEXT,
+        )
+        self.assertTrue(lock_held)
+        self.assertTrue(all(lock_held))
+
+    async def test_concurrent_first_owner_set_info_keeps_both(
+        self,
+    ) -> None:
+        """Concurrent first configs for a new owner must both persist."""
+        store = InMemoryPushNotificationConfigStore()
+        context = ServerCallContext(user=SampleUser(user_name='race-owner'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(
+                    _set_info_in_thread, store, 'task-a', 'cfg-a', context
+                ),
+                pool.submit(
+                    _set_info_in_thread, store, 'task-b', 'cfg-b', context
+                ),
+            ]
+            for future in futures:
+                future.result(timeout=10)
+
+        configs_a = await store.get_info('task-a', context)
+        configs_b = await store.get_info('task-b', context)
+        self.assertEqual([config.id for config in configs_a], ['cfg-a'])
+        self.assertEqual([config.id for config in configs_b], ['cfg-b'])
 
 
 class TestPushNotificationDispatchAcrossOwners(

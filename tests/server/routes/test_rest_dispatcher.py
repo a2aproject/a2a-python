@@ -73,7 +73,7 @@ def rest_dispatcher_instance(mock_handler):
     return RestDispatcher(request_handler=mock_handler)
 
 
-from starlette.datastructures import Headers
+from starlette.datastructures import Headers, QueryParams
 
 
 def make_mock_request(
@@ -215,6 +215,34 @@ class TestRestDispatcherEndpoints:
         req = make_mock_request(method='GET')
         response = await rest_dispatcher_instance.list_tasks(req)
         assert response.status_code == 200
+
+    @pytest.mark.parametrize(
+        ('query_params', 'artifacts_expected'),
+        [
+            pytest.param(QueryParams(), False, id='default'),
+            pytest.param(
+                QueryParams({'includeArtifacts': 'true'}),
+                True,
+                id='included',
+            ),
+        ],
+    )
+    async def test_list_tasks_artifact_presence(
+        self,
+        rest_dispatcher_instance: RestDispatcher,
+        mock_handler: AsyncMock,
+        query_params: QueryParams,
+        artifacts_expected: bool,
+    ) -> None:
+        mock_handler.on_list_tasks.return_value = ListTasksResponse(
+            tasks=[Task(id='test_task')]
+        )
+        req = make_mock_request(method='GET', query_params=query_params)
+
+        response = await rest_dispatcher_instance.list_tasks(req)
+
+        task = json.loads(response.body)['tasks'][0]
+        assert ('artifacts' in task) is artifacts_expected
 
     async def test_get_push_notification(
         self, rest_dispatcher_instance, mock_handler

@@ -1,6 +1,10 @@
 from abc import ABC, abstractmethod
 from typing import TYPE_CHECKING, Any
 
+from google.protobuf.json_format import MessageToDict
+
+from a2a.types.a2a_pb2 import ListTasksResponse
+
 
 if TYPE_CHECKING:
     from starlette.authentication import BaseUser
@@ -19,6 +23,21 @@ from a2a.extensions.common import (
     get_requested_extensions,
 )
 from a2a.server.context import ServerCallContext
+
+
+def serialize_list_tasks_response(
+    response: ListTasksResponse, include_artifacts: bool
+) -> dict[str, Any]:
+    """Serializes a ListTasks response according to artifact semantics."""
+    result = MessageToDict(
+        response,
+        preserving_proto_field_name=False,
+        always_print_fields_with_no_presence=True,
+    )
+    if not include_artifacts:
+        for task in result['tasks']:
+            task.pop('artifacts', None)
+    return result
 
 
 class StarletteUser(User):

@@ -1,3 +1,4 @@
+import asyncio
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -8,6 +9,7 @@ from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
 )
 from a2a.types.a2a_pb2 import (
+    AuthenticationInfo,
     StreamResponse,
     Task,
     TaskArtifactUpdateEvent,
@@ -16,6 +18,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.push_url_validator import validate_push_notification_url
 from google.protobuf.json_format import MessageToDict
 
 
@@ -34,8 +37,11 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    authentication: AuthenticationInfo | None = None,
 ) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
+    return TaskPushNotificationConfig(
+        id=config_id, url=url, token=token, authentication=authentication
+    )
 
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
@@ -71,7 +77,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.assert_called_once()
 
@@ -100,6 +106,84 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             headers={'X-A2A-Notification-Token': 'unique_token'},
         )
         mock_response.raise_for_status.assert_called_once()
+
+    async def _post_headers_for(self, **config_kwargs) -> dict[str, str] | None:
+        """Sends one notification and returns the headers it posted with."""
+        task_data = _create_sample_task(task_id='task_auth')
+        self.mock_config_store.get_info_for_dispatch.return_value = [
+            _create_sample_push_config(**config_kwargs)
+        ]
+        self.mock_httpx_client.post.return_value = AsyncMock(
+            spec=httpx.Response, status_code=200
+        )
+
+        await self.sender.send_notification(task_data.id, task_data)
+
+        return self.mock_httpx_client.post.await_args.kwargs['headers']
+
+    async def test_authentication_becomes_an_authorization_header(self) -> None:
+        """Authentication becomes `Authorization: {scheme} {credentials}`."""
+        headers = await self._post_headers_for(
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='test-token'
+            )
+        )
+
+        assert headers == {'Authorization': 'Bearer test-token'}
+
+    async def test_authentication_and_token_are_sent_together(self) -> None:
+        headers = await self._post_headers_for(
+            token='notification-token',
+            authentication=AuthenticationInfo(
+                scheme='Bearer', credentials='test-token'
+            ),
+        )
+
+        assert headers == {
+            'X-A2A-Notification-Token': 'notification-token',
+            'Authorization': 'Bearer test-token',
+        }
+
+    async def test_authentication_without_credentials_sends_no_header(
+        self,
+    ) -> None:
+        """A half-filled AuthenticationInfo yields no 'Bearer ' with nothing after it."""
+        headers = await self._post_headers_for(
+            authentication=AuthenticationInfo(scheme='Bearer')
+        )
+
+        assert headers == {}
+
+    async def test_authentication_without_credentials_warns(self) -> None:
+        """A scheme with no credentials is valid to send, so say why it was dropped."""
+        with self.assertLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ) as logs:
+            await self._post_headers_for(
+                config_id='cfg-half-auth',
+                authentication=AuthenticationInfo(scheme='Bearer'),
+            )
+
+        assert any(
+            'cfg-half-auth' in line and 'no ' in line for line in logs.output
+        )
+
+    async def test_complete_authentication_does_not_warn(self) -> None:
+        with self.assertNoLogs(
+            'a2a.server.tasks.base_push_notification_sender', level='WARNING'
+        ):
+            await self._post_headers_for(
+                authentication=AuthenticationInfo(
+                    scheme='Bearer', credentials='test-token'
+                )
+            )
+
+    async def test_no_authentication_sends_no_authorization_header(
+        self,
+    ) -> None:
+        headers = await self._post_headers_for()
+
+        assert headers == {}
 
     async def test_send_notification_no_config(self) -> None:
         task_id = 'task_send_no_config'
@@ -138,7 +222,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_logger.exception.assert_called_once()
 
@@ -171,13 +255,13 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_any_call(
             config1.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         # Check calls for config2
         self.mock_httpx_client.post.assert_any_call(
             config2.url,
             json=MessageToDict(StreamResponse(task=task_data)),
-            headers=None,
+            headers={},
         )
         mock_response.raise_for_status.call_count = 2
 
@@ -202,7 +286,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(status_update=event)),
-            headers=None,
+            headers={},
         )
 
     async def test_send_notification_artifact_update_event(self) -> None:
@@ -226,5 +310,84 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         self.mock_httpx_client.post.assert_awaited_once_with(
             config.url,
             json=MessageToDict(StreamResponse(artifact_update=event)),
-            headers=None,
+            headers={},
         )
+
+
+def _gai_result(ip: str, port: int = 80):
+    return [(2, 1, 6, '', (ip, port))]
+
+
+class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
+    """SSRF hardening: when validate_push_notification_url is installed, client
+    push URLs must not reach non-public destinations."""
+
+    def setUp(self) -> None:
+        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_config_store = AsyncMock()
+        self.sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.mock_config_store,
+            push_url_validator=validate_push_notification_url,
+        )
+
+    async def _dispatch(self, url: str) -> None:
+        task = _create_sample_task()
+        config = _create_sample_push_config(url=url)
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+        await self.sender.send_notification(task.id, task)
+
+    def _patch_gai(self, *, return_value=None, side_effect=None):
+        loop = asyncio.get_running_loop()
+        mock_gai = AsyncMock(return_value=return_value, side_effect=side_effect)
+        return patch.object(loop, 'getaddrinfo', mock_gai)
+
+    async def test_metadata_endpoint_blocked(self) -> None:
+        with self._patch_gai(return_value=_gai_result('169.254.169.254')):
+            await self._dispatch('http://metadata.google.internal/latest')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_loopback_blocked(self) -> None:
+        with self._patch_gai(return_value=_gai_result('127.0.0.1')):
+            await self._dispatch('http://localhost:8080/admin')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_private_range_blocked(self) -> None:
+        with self._patch_gai(return_value=_gai_result('10.0.0.5')):
+            await self._dispatch('http://internal-service/endpoint')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_non_http_scheme_blocked(self) -> None:
+        await self._dispatch('ftp://example.com/file')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_invalid_port_blocked(self) -> None:
+        await self._dispatch('http://example.com:99999/hook')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_unresolvable_host_blocked_fail_closed(self) -> None:
+        with self._patch_gai(side_effect=OSError('no DNS')):
+            await self._dispatch('http://does-not-resolve.invalid/')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_public_host_allowed(self) -> None:
+        with self._patch_gai(return_value=_gai_result('93.184.216.34')):
+            await self._dispatch('http://notify.me/here')
+        self.mock_httpx_client.post.assert_awaited_once()
+
+    async def test_default_hook_none_skips_validation(self) -> None:
+        sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.mock_config_store,
+        )
+        task = _create_sample_task()
+        config = _create_sample_push_config(url='http://localhost:9000/hook')
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.status_code = 200
+        self.mock_httpx_client.post.return_value = mock_response
+        await sender.send_notification(task.id, task)
+        self.mock_httpx_client.post.assert_awaited_once()

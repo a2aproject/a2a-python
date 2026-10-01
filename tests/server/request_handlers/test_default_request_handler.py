@@ -45,6 +45,7 @@ from a2a.server.tasks import (
     TaskUpdater,
 )
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -75,6 +76,9 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+)
+from a2a.utils.push_url_validator import (
+    validate_push_notification_url,
 )
 
 
@@ -555,7 +559,7 @@ async def test_on_message_send_with_push_notification(agent_card):
         agent_card=agent_card,
     )
 
-    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://example.com/push')
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
@@ -663,7 +667,7 @@ async def test_on_message_send_with_push_notification_in_non_blocking_request(
     )
 
     # Configure push notification
-    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://example.com/push')
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],
@@ -790,7 +794,7 @@ async def test_on_message_send_with_push_notification_no_existing_Task(
         agent_card=agent_card,
     )
 
-    push_config = TaskPushNotificationConfig(url='http://callback.com/push')
+    push_config = TaskPushNotificationConfig(url='http://example.com/push')
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
@@ -981,6 +985,47 @@ class HelloAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('validate_input_modes', 'expect_rejection'), [(True, True), (False, False)]
+)
+async def test_on_message_send_input_mode_validation_is_opt_in(
+    validate_input_modes, expect_rejection
+):
+    """The legacy handler gates the same check behind the same flag."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+    if expect_rejection:
+        with pytest.raises(ContentTypeNotSupportedError):
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+    else:
+        assert (
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+            is not None
+        )
 
 
 @pytest.mark.asyncio
@@ -1233,9 +1278,7 @@ async def test_on_message_send_stream_with_push_notification(agent_card):
         agent_card=agent_card,
     )
 
-    push_config = TaskPushNotificationConfig(
-        url='http://callback.stream.com/push'
-    )
+    push_config = TaskPushNotificationConfig(url='http://example.com/push')
     message_config = SendMessageConfiguration(
         task_push_notification_config=push_config,
         accepted_output_modes=['text/plain'],  # Added required field
@@ -2028,7 +2071,7 @@ async def test_get_task_push_notification_config_info_with_config(agent_card):
     )
 
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', id='config_id', url='http://1.example.com'
+        task_id='task_1', id='config_id', url='http://example.com'
     )
     context = create_server_call_context()
     await request_handler.on_create_task_push_notification_config(
@@ -2070,7 +2113,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id(
 
     set_config_params = TaskPushNotificationConfig(
         task_id='task_1',
-        url='http://1.example.com',
+        url='http://example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
@@ -2304,7 +2347,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id(
     # multiple calls without config id should replace the existing
     set_config_params1 = TaskPushNotificationConfig(
         task_id='task_1',
-        url='http://1.example.com',
+        url='http://example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
@@ -2312,7 +2355,7 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id(
 
     set_config_params2 = TaskPushNotificationConfig(
         task_id='task_1',
-        url='http://2.example.com',
+        url='http://example.com',
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
@@ -2552,7 +2595,7 @@ async def test_on_message_send_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
@@ -2596,7 +2639,7 @@ async def test_on_message_send_stream_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
@@ -2947,7 +2990,7 @@ async def test_on_create_task_push_notification_config_unsupported(agent_card):
         agent_card=agent_card,
     )
 
-    params = TaskPushNotificationConfig(url='http://callback.com/push')
+    params = TaskPushNotificationConfig(url='http://example.com/push')
 
     context = create_server_call_context()
 
@@ -3143,3 +3186,98 @@ async def test_on_get_task_push_notification_config_is_owner_scoped(
             ),
             _ctx('bob'),
         )
+
+
+@pytest.mark.asyncio
+async def test_on_create_task_push_notification_config_rejects_invalid_url(
+    agent_card,
+):
+    """Test on_create_task_push_notification_config rejects non-public URLs."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
+    push_store = InMemoryPushNotificationConfigStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+        push_url_validator=validate_push_notification_url,
+    )
+    context = create_server_call_context()
+
+    set_config_params = TaskPushNotificationConfig(
+        task_id='task_1', id='config_id', url='http://127.0.0.1/hook'
+    )
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
+        await request_handler.on_create_task_push_notification_config(
+            set_config_params, context
+        )
+
+    set_config_params = TaskPushNotificationConfig(
+        task_id='task_1', id='config_id', url='file:///etc/passwd'
+    )
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
+        await request_handler.on_create_task_push_notification_config(
+            set_config_params, context
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_create_task_push_notification_config_skips_when_validator_none(
+    agent_card,
+):
+    """Default push_url_validator is None, so library screening is off."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = Task(id='task_1', context_id='ctx_1')
+    push_store = InMemoryPushNotificationConfigStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+    )
+    context = create_server_call_context()
+    set_config_params = TaskPushNotificationConfig(
+        task_id='task_1', id='config_id', url='http://127.0.0.1/hook'
+    )
+    result = await request_handler.on_create_task_push_notification_config(
+        set_config_params, context
+    )
+    assert result.url == 'http://127.0.0.1/hook'
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_invalid_push_url(agent_card):
+    """Inline push config on message send is screened before set_info."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = None
+    push_store = InMemoryPushNotificationConfigStore()
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        push_config_store=push_store,
+        agent_card=agent_card,
+        push_url_validator=validate_push_notification_url,
+    )
+    context = create_server_call_context()
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_push',
+            parts=[Part(text='Test')],
+        ),
+        configuration=SendMessageConfiguration(
+            task_push_notification_config=TaskPushNotificationConfig(
+                url='http://127.0.0.1/hook'
+            ),
+            accepted_output_modes=['text/plain'],
+        ),
+    )
+    with pytest.raises(
+        InvalidParamsError, match='Invalid push notification URL'
+    ):
+        await request_handler.on_message_send(params, context)

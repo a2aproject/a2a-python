@@ -2,6 +2,7 @@ import asyncio
 import logging
 import time
 import uuid
+import warnings
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -20,7 +21,7 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue
+from a2a.server.events import EventQueue, InMemoryQueueManager
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
@@ -33,11 +34,13 @@ from a2a.server.tasks import (
 )
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -137,7 +140,49 @@ def test_init_default_dependencies():
         handler._request_context_builder._should_populate_referred_tasks
         is False
     )
-    assert handler._request_context_builder._task_store == task_store
+    assert handler._request_context_builder._task_store is None
+
+
+def test_init_warns_when_queue_manager_passed(caplog):
+    """A caller-supplied queue_manager is not honored in v2, so passing one
+    must emit a warning instead of being silently ignored (issue #1135).
+
+    Both channels are checked: the DeprecationWarning points at the caller's
+    construction site and is filterable in test suites, while the log line
+    still reaches headless servers, where DeprecationWarning is hidden by
+    Python's default filters outside __main__.
+    """
+    queue_manager = InMemoryQueueManager()
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.warns(DeprecationWarning, match='queue_manager') as record,
+    ):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+            queue_manager=queue_manager,
+        )
+    # stacklevel=2 must attribute the warning to this file, not to the handler.
+    assert record[0].filename == __file__
+    assert any(
+        'queue_manager' in rec.message and rec.levelno == logging.WARNING
+        for rec in caplog.records
+    )
+
+
+def test_init_no_warning_without_queue_manager(caplog):
+    """No warning is emitted when queue_manager is omitted."""
+    with caplog.at_level(logging.WARNING), warnings.catch_warnings():
+        warnings.simplefilter('error', DeprecationWarning)
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+        )
+    assert not any(
+        'queue_manager' in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
@@ -338,6 +383,33 @@ class LateFailingTerminalAgentExecutor(AgentExecutor):
         pass
 
 
+class FailedStatusAgentExecutor(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(TaskState.TASK_STATE_FAILED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+class FailedStatusThenRaisesAgentExecutor(FailedStatusAgentExecutor):
+    def __init__(self) -> None:
+        self.exception = RuntimeError('late producer failure')
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await super().execute(context, event_queue)
+        raise self.exception
+
+
 async def send_message_with_early_failure(
     request_handler: DefaultRequestHandlerV2,
     params: SendMessageRequest,
@@ -524,7 +596,7 @@ async def test_get_task_push_notification_config_info_with_config():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', id='config_id', url='http://1.example.com'
+        task_id='task_1', id='config_id', url='http://example.com'
     )
     context = create_server_call_context()
     await request_handler.on_create_task_push_notification_config(
@@ -557,7 +629,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
@@ -740,13 +812,13 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params1 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
     )
     set_config_params2 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://2.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
@@ -916,6 +988,69 @@ TERMINAL_TASK_STATES = {
 }
 
 
+def create_input_mode_handler(*, validate_input_modes: bool):
+    """A handler whose card declares text/plain as its only input mode."""
+    return DefaultRequestHandlerV2(
+        # HelloAgentExecutor reaches a terminal state; MockAgentExecutor
+        # streams forever, so a blocking send against it never returns.
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+
+
+def create_undeclared_media_type_request():
+    return SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_undeclared_media_type_when_enabled():
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        await handler.on_message_send(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_allows_undeclared_media_type_by_default():
+    """The check is opt-in, so an unflagged handler keeps accepting the part."""
+    handler = create_input_mode_handler(validate_input_modes=False)
+
+    result = await handler.on_message_send(
+        create_undeclared_media_type_request(), create_server_call_context()
+    )
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_rejects_undeclared_media_type():
+    """Streaming shares _setup_active_task, so it is gated by the same flag."""
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        async for _ in handler.on_message_send_stream(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        ):
+            pass
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_message_send_task_in_terminal_state(terminal_state):
@@ -944,7 +1079,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
             return_value=terminal_task,
         ),
-        pytest.raises(InvalidParamsError) as exc_info,
+        pytest.raises(UnsupportedOperationError) as exc_info,
     ):
         await request_handler.on_message_send(
             params, create_server_call_context()
@@ -983,12 +1118,137 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
             'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
             return_value=terminal_task,
         ),
-        pytest.raises(InvalidParamsError) as exc_info,
+        pytest.raises(UnsupportedOperationError) as exc_info,
     ):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
             pass
+    assert (
+        f'Task {task_id} is in terminal state: {terminal_state}'
+        in exc_info.value.message
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_context_id_not_matching_task():
+    """A contextId disagreeing with the named task's is rejected.
+
+    Asserted on the executor never running, not merely on the error type.
+    TaskManager already rejects this mismatch once the agent emits an event
+    (`Context in event doesn't match TaskManager`), so an assertion on
+    InvalidParamsError alone passes with or without the handler's guard.
+    What the guard changes is that the request is refused before any agent
+    work starts.
+    """
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    executor = HelloAgentExecutor()
+    executor.execute = AsyncMock(wraps=executor.execute)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=executor,
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-mismatch',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='wrong-context',
+        )
+    )
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+
+    assert (
+        'Context wrong-context does not match context real-context'
+        in exc_info.value.message
+    )
+    executor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_matching_task():
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-match',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='real-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_without_task_id():
+    """A contextId alone starts a new task in that context, so it is not checked."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-context-only',
+            parts=[Part(text='hello')],
+            context_id='client-chosen-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
+async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
+    """Subscribing to a terminal task is rejected with UnsupportedOperationError."""
+    state_name = TaskState.Name(terminal_state)
+    task_id = f'subscribe_terminal_task_{state_name}'
+    terminal_task = create_sample_task(
+        task_id=task_id, status_state=terminal_state
+    )
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        async for _ in request_handler.on_subscribe_to_task(
+            SubscribeToTaskRequest(id=task_id), create_server_call_context()
+        ):
+            pass
+
     assert (
         f'Task {task_id} is in terminal state: {terminal_state}'
         in exc_info.value.message
@@ -1252,6 +1512,54 @@ async def test_on_message_send_late_producer_exception_preserves_persisted_termi
     stored_task = await task_store.get(params.message.task_id, context)
     assert stored_task is not None
     assert stored_task.status.state == terminal_state
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failed_task_does_not_hide_producer_exception() -> (
+    None
+):
+    agent_executor = FailedStatusThenRaisesAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failed_then_raised',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='late producer failure') as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+    assert exc_info.value is agent_executor.exception
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_returns_agent_declared_failed_task() -> None:
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=FailedStatusAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_declared_failure',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_FAILED
 
 
 @pytest.mark.asyncio
@@ -1745,4 +2053,281 @@ async def test_aclose_is_idempotent_and_handles_empty():
     )
 
     await handler.aclose()
+    await handler.aclose()
+
+
+# --- Issue #1159: SubscribeToTask / CancelTask must be owner-scoped even when
+# the task is LIVE in the ActiveTaskRegistry (the cached-active path that
+# previously skipped the owner-aware TaskStore). ------------------------------
+
+
+class _HangingAgent(AgentExecutor):
+    """Stays in ``working`` so the task remains live in the registry.
+
+    ``cancel`` writes a terminal CANCELED state, so a legitimate owner cancel
+    resolves the same way regardless of the #1170 fix.
+    """
+
+    def __init__(self) -> None:
+        self.working = asyncio.Event()
+        self.release = asyncio.Event()
+        self.cancel_called = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_WORKING)
+        self.working.set()
+        await self.release.wait()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.cancel_called.set()
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.cancel()
+
+
+class _ParkThenHangAgent(AgentExecutor):
+    """Parks the task in the non-terminal ``input-required`` state and keeps
+    the producer alive, so the ActiveTask stays in the registry. ``cancel`` is
+    cleanup-only (writes no terminal state)."""
+
+    def __init__(self) -> None:
+        self.parked = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+        self.parked.set()
+        await self.release.wait()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+async def _start_live_task(handler, ctx, text):
+    task = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                message_id=f'msg-{text}',
+                role=Role.ROLE_USER,
+                parts=[Part(text=text)],
+            ),
+            configuration=SendMessageConfiguration(return_immediately=True),
+        ),
+        ctx,
+    )
+    return task.id
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_task_is_owner_scoped_for_live_task():
+    """Issue #1159: a non-owner must not cancel another user's LIVE task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    # The task is live in the registry -> exercises the cached-active path.
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # Bob (non-owner) is rejected, masked as not-found, and never reaches the
+    # executor's cancel().
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_cancel_task(CancelTaskRequest(id=task_id), bob)
+    assert not agent.cancel_called.is_set()
+
+    # Alice (owner) can still cancel her own task.
+    result = await handler.on_cancel_task(CancelTaskRequest(id=task_id), alice)
+    assert result.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_called.is_set()
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_subscribe_to_task_is_owner_scoped_for_live_task():
+    """Issue #1159: a non-owner must not subscribe to another user's LIVE task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # Bob (non-owner) is rejected on the first iteration of the stream.
+    with pytest.raises(TaskNotFoundError):
+        async for _ in handler.on_subscribe_to_task(
+            SubscribeToTaskRequest(id=task_id), bob
+        ):
+            break
+
+    # Alice (owner) can subscribe and receives her own task.
+    received = None
+    async for event in handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(id=task_id), alice
+    ):
+        received = event
+        break
+    assert received is not None
+    assert getattr(received, 'id', None) == task_id
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_of_parked_task_is_owner_scoped():
+    """Issue #1159 x #1170: a non-owner cancel of another user's PARKED
+    (input-required) live task must be rejected and must NOT write a terminal
+    CANCELED state. This is the exact cross-tenant regression the #1170 fix
+    (cancel writes a terminal state) would otherwise expose on the un-guarded
+    cached-active path."""
+    agent = _ParkThenHangAgent()
+    store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'park')
+    await asyncio.wait_for(agent.parked.wait(), timeout=5)
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # update_status enqueues the input-required transition; wait until it is
+    # persisted to the store before the cross-tenant cancel so the assertions
+    # below do not race the event pipeline.
+    alice_view = None
+    for _ in range(500):
+        alice_view = await store.get(task_id, alice)
+        if (
+            alice_view is not None
+            and alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert alice_view is not None
+    assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    # Bob (non-owner) is rejected...
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_cancel_task(CancelTaskRequest(id=task_id), bob)
+
+    # ...and Alice's task is untouched: still input-required, not CANCELED.
+    alice_view = await store.get(task_id, alice)
+    assert alice_view is not None
+    assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    agent.release.set()
+    await handler.aclose()
+
+
+class _AsksForInputAgent(AgentExecutor):
+    """Always asks for more input; counts execute() and cancel() calls."""
+
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.cancel_calls = 0
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        self.execute_calls += 1
+        if context.current_task is None:
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+        updater = TaskUpdater(
+            event_queue, context.task_id or '', context.context_id or ''
+        )
+        await updater.requires_input(
+            message=updater.new_agent_message([Part(text='need input')])
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        self.cancel_calls += 1
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_cancel_of_input_required_task_cannot_be_undone():
+    """Cancelling a task that waits for input cancels the agent, drops the
+    ActiveTask, and a follow-up message cannot revive the task."""
+    agent = _AsksForInputAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = _ctx('alice')
+    task = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER, message_id='m1', parts=[Part(text='hi')]
+            )
+        ),
+        ctx,
+    )
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    # Wait until the turn has fully ended and the task is parked for input.
+    active = await handler._active_task_registry.get(task.id)
+    assert active is not None
+    for _ in range(100):
+        if not active._request_lock.locked():
+            break
+        await asyncio.sleep(0.01)
+    assert not active._request_lock.locked()
+
+    cancelled = await handler.on_cancel_task(CancelTaskRequest(id=task.id), ctx)
+    assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_calls == 1
+    for _ in range(100):
+        if await handler._active_task_registry.get(task.id) is None:
+            break
+        await asyncio.sleep(0.01)
+    assert await handler._active_task_registry.get(task.id) is None
+
+    follow_up = Message(
+        role=Role.ROLE_USER,
+        message_id='m2',
+        parts=[Part(text='more')],
+        task_id=task.id,
+        context_id=task.context_id,
+    )
+    with pytest.raises(UnsupportedOperationError, match='terminal state'):
+        await handler.on_message_send(
+            SendMessageRequest(message=follow_up), ctx
+        )
+
+    stored = await handler.on_get_task(GetTaskRequest(id=task.id), ctx)
+    assert stored.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.execute_calls == 1
     await handler.aclose()

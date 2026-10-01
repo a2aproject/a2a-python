@@ -1104,7 +1104,11 @@ async def test_server_rejects_stream_on_validation_error(
                 'json': {
                     'jsonrpc': '2.0',
                     'method': 'SendMessage',
-                    'params': {'message': 'should be an object'},
+                    # A field of the wrong shape, not merely an unknown
+                    # one: `{'message': 'a string'}` now parses to an empty
+                    # Message and is rejected by the handler's required-field
+                    # validation, which a mock handler does not run.
+                    'params': {'message': {'parts': 'should be a list'}},
                     'id': 1,
                 }
             },
@@ -1146,7 +1150,8 @@ async def test_jsonrpc_malformed_payload(
         pytest.param(
             'POST',
             '/message:send',
-            {'json': {'message': 'should be an object'}},
+            # Wrong shape rather than an unknown name; see the JSON-RPC case.
+            {'json': {'message': {'parts': 'should be a list'}}},
             id='wrong-body-type',
         ),
         pytest.param(

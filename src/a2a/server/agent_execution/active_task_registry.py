@@ -9,13 +9,17 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from a2a.server.agent_execution.agent_executor import AgentExecutor
+    from a2a.server.cluster.event_stream import TaskEventStream
+    from a2a.server.cluster.task_store import VersionedTaskStore
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import PushNotificationSender
     from a2a.server.tasks.task_store import TaskStore
     from a2a.types.a2a_pb2 import Message
 
 from a2a.server.agent_execution.active_task import ActiveTask
+from a2a.server.cluster.task_store import StoredTask
 from a2a.server.tasks.task_manager import TaskManager
+from a2a.utils.errors import TaskNotFoundError
 
 
 logger = logging.getLogger(__name__)
@@ -27,12 +31,14 @@ class ActiveTaskRegistry:
     def __init__(
         self,
         agent_executor: AgentExecutor,
-        task_store: TaskStore,
+        task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
+        event_stream: TaskEventStream | None = None,
     ):
         self._agent_executor = agent_executor
         self._task_store = task_store
         self._push_sender = push_sender
+        self._event_stream = event_stream
         self._active_tasks: dict[str, ActiveTask] = {}
         self._lock = threading.RLock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
@@ -50,25 +56,51 @@ class ActiveTaskRegistry:
         with self._lock:
             if self._closed:
                 raise RuntimeError('ActiveTaskRegistry is closed')
-            if task_id in self._active_tasks:
-                return self._active_tasks[task_id]
+            existing = self._active_tasks.get(task_id)
+            if existing is None:
+                task_manager = TaskManager(
+                    task_id=task_id,
+                    context_id=context_id,
+                    task_store=self._task_store,
+                    initial_message=initial_message,
+                    context=call_context,
+                )
 
-            task_manager = TaskManager(
-                task_id=task_id,
-                context_id=context_id,
-                task_store=self._task_store,
-                initial_message=initial_message,
-                context=call_context,
-            )
+                active_task = ActiveTask(
+                    agent_executor=self._agent_executor,
+                    task_id=task_id,
+                    task_manager=task_manager,
+                    push_sender=self._push_sender,
+                    on_cleanup=self._on_active_task_cleanup,
+                    event_stream=self._event_stream,
+                )
+                self._active_tasks[task_id] = active_task
 
-            active_task = ActiveTask(
-                agent_executor=self._agent_executor,
-                task_id=task_id,
-                task_manager=task_manager,
-                push_sender=self._push_sender,
-                on_cleanup=self._on_active_task_cleanup,
-            )
-            self._active_tasks[task_id] = active_task
+        if existing is not None:
+            # Owner-aware guard on the cache-hit path. The miss path below is
+            # owner-scoped by ActiveTask.start(), which reads through the task
+            # store with call_context and raises TaskNotFoundError when the
+            # task is not owned and create_task_if_missing is false. A cache
+            # hit returned before that check, so resolving a live task by id
+            # was an unauthenticated lookup (issue #1159, CWE-639): every
+            # call site had to guard first. Enforce it here instead, so the
+            # hit path is symmetric with the miss path and no future caller
+            # can reintroduce the gap. Skipped when create_task_if_missing is
+            # set, which is the on_message_send create path establishing
+            # ownership. Masked as not-found so existence is not leaked. Done
+            # outside _lock because the store read is I/O and the miss-path
+            # check runs outside the lock too.
+            if not create_task_if_missing:
+                existing_task = await self._task_store.get(
+                    task_id, call_context
+                )
+                # A VersionedTaskStore returns a StoredTask; a plain store
+                # returns the task (or None). Normalize before the check.
+                if isinstance(existing_task, StoredTask):
+                    existing_task = existing_task.task
+                if not existing_task:
+                    raise TaskNotFoundError
+            return existing
 
         await active_task.start(
             call_context=call_context,

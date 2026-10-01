@@ -1,6 +1,8 @@
 import asyncio
 import logging
 
+from collections.abc import Awaitable, Callable
+
 import httpx
 
 from google.protobuf.json_format import MessageToDict
@@ -28,6 +30,8 @@ class BasePushNotificationSender(PushNotificationSender):
         httpx_client: httpx.AsyncClient,
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
+        *,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -41,6 +45,11 @@ class BasePushNotificationSender(PushNotificationSender):
               Pass None (the default) in new code. A non-None
               value logs a deprecation warning and is otherwise
               ignored.
+            push_url_validator: Async callable that returns True to
+              accept a push URL, or False to reject it. Defaults to
+              None (no library screening). The spec lists these checks
+              as SHOULD, so deployments that want the built-in policy
+              should pass ``validate_push_notification_url``.
         """
         if context is not None:
             logger.warning(
@@ -54,6 +63,7 @@ class BasePushNotificationSender(PushNotificationSender):
             )
         self._client = httpx_client
         self._config_store = config_store
+        self._push_url_validator = push_url_validator
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
@@ -81,10 +91,29 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
+        if (
+            self._push_url_validator is not None
+            and not await self._push_url_validator(url)
+        ):
+            return False
         try:
-            headers = None
+            headers: dict[str, str] = {}
             if push_info.token:
-                headers = {'X-A2A-Notification-Token': push_info.token}
+                headers['X-A2A-Notification-Token'] = push_info.token
+            auth = push_info.authentication
+            if push_info.HasField('authentication'):
+                if auth.scheme and auth.credentials:
+                    headers['Authorization'] = (
+                        f'{auth.scheme} {auth.credentials}'
+                    )
+                elif auth.scheme:
+                    logger.warning(
+                        'Push config %s sets an authentication scheme with no '
+                        'credentials; sending no Authorization header for '
+                        'task_id=%s',
+                        push_info.id,
+                        task_id,
+                    )
 
             response = await self._client.post(
                 url,

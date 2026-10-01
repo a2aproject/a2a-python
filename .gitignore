@@ -19,3 +19,8 @@ itk/a2a-itk/
 itk/pyproto/
 itk/instruction.proto
 itk/logs/
+
+# ACTS Conformance Run Output
+itk/acts-report-*.json
+itk/acts_results_*.json
+itk/acts_python.json

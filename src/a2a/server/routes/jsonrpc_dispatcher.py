@@ -15,8 +15,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
-    InvalidParamsError,
-    InvalidRequestError,
     JSONParseError,
     JSONRPCError,
     MethodNotFoundError,
@@ -26,6 +24,7 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    serialize_list_tasks_response,
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -42,6 +41,8 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import constants, json_utils, proto_utils
 from a2a.utils.errors import (
     A2AError,
+    InvalidParamsError,
+    InvalidRequestError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -253,7 +254,7 @@ class JsonRpcDispatcher:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    InvalidRequestError(data=str(e)),
+                    InvalidRequestError(data={'parseError': str(e)}),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
@@ -284,14 +285,18 @@ class JsonRpcDispatcher:
                     request_id, MethodNotFoundError()
                 )
             try:
-                # Parse the params field into the proto message type
+                # Unknown fields are ignored for forward compatibility. The
+                # flag also defaults unknown enum values to 0, which protobuf
+                # gives no way to opt out of separately.
                 params = body.get('params', {})
-                specific_request = ParseDict(params, model_class())
+                specific_request = ParseDict(
+                    params, model_class(), ignore_unknown_fields=True
+                )
             except Exception as e:
                 logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    InvalidParamsError(data=str(e)),
+                    InvalidParamsError(data={'parseError': str(e)}),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
@@ -427,10 +432,8 @@ class JsonRpcDispatcher:
         tasks_response = await self.request_handler.on_list_tasks(
             request_obj, context
         )
-        return MessageToDict(
-            tasks_response,
-            preserving_proto_field_name=False,
-            always_print_fields_with_no_presence=True,
+        return serialize_list_tasks_response(
+            tasks_response, request_obj.include_artifacts
         )
 
     async def _handle_create_task_push_notification_config(

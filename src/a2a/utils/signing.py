@@ -9,6 +9,7 @@ from google.protobuf.json_format import MessageToDict
 try:
     import jwt
 
+    from jwt import api_jws
     from jwt.api_jwk import PyJWK
     from jwt.exceptions import PyJWTError
     from jwt.utils import base64url_decode, base64url_encode
@@ -20,6 +21,7 @@ except ImportError as e:
     ) from e
 
 from a2a.types import AgentCard, AgentCardSignature
+from a2a.utils._jcs import MAX_DEPTH, CanonicalizationError, canonicalize
 
 
 class SignatureVerificationError(Exception):
@@ -69,16 +71,19 @@ def create_agent_card_signer(
     def agent_card_signer(agent_card: AgentCard) -> AgentCard:
         """Signs agent card."""
         canonical_payload = _canonicalize_agent_card(agent_card)
-        payload_dict = json.loads(canonical_payload)
 
-        jws_string = jwt.encode(
-            payload=payload_dict,
+        # The JWS payload has to be the canonical bytes themselves. Handing a
+        # parsed dict to the JWT layer would let PyJWT re-serialize it with its
+        # own json.dumps, which escapes non-ASCII, so the bytes signed would
+        # differ from the bytes the verifier canonicalizes and checks.
+        jws_string = api_jws.encode(
+            payload=canonical_payload.encode('utf-8'),
             key=signing_key,
             algorithm=protected_header.get('alg', 'HS256'),
-            headers=dict(protected_header),  # ty:ignore[no-matching-overload]
+            headers=dict(protected_header),
         )
 
-        # The result of jwt.encode is a compact serialization: HEADER.PAYLOAD.SIGNATURE
+        # The result is a compact serialization: HEADER.PAYLOAD.SIGNATURE
         protected, _, signature = jws_string.split('.')
 
         agent_card_signature = AgentCardSignature(
@@ -117,6 +122,20 @@ def create_signature_verifier(
         if not agent_card.signatures:
             raise NoSignatureError('AgentCard has no signatures to verify.')
 
+        # The canonical form does not depend on which signature is being
+        # checked, so it is computed once. A card with no canonical form has no
+        # verifiable signature, and reporting that as InvalidSignaturesError
+        # keeps every failure on this path a SignatureVerificationError.
+        try:
+            canonical_payload = _canonicalize_agent_card(agent_card)
+        except CanonicalizationError as e:
+            raise InvalidSignaturesError(
+                'AgentCard cannot be canonicalized for verification'
+            ) from e
+        encoded_payload = base64url_encode(
+            canonical_payload.encode('utf-8')
+        ).decode('utf-8')
+
         for agent_card_signature in agent_card.signatures:
             try:
                 # get verification key
@@ -127,11 +146,6 @@ def create_signature_verifier(
                 kid = protected_header.get('kid')
                 jku = protected_header.get('jku')
                 verification_key = key_provider(kid, jku)
-
-                canonical_payload = _canonicalize_agent_card(agent_card)
-                encoded_payload = base64url_encode(
-                    canonical_payload.encode('utf-8')
-                ).decode('utf-8')
 
                 token = f'{agent_card_signature.protected}.{encoded_payload}.{agent_card_signature.signature}'
                 jwt.decode(
@@ -150,18 +164,30 @@ def create_signature_verifier(
     return signature_verifier
 
 
-def _clean_empty(d: Any) -> Any:
-    """Recursively remove empty strings, lists and dicts from a dictionary."""
+def _clean_empty(d: Any, depth: int = 0) -> Any:
+    """Recursively remove empty strings, lists and dicts from a dictionary.
+
+    Depth is bounded for the same reason canonicalization is: nesting reaches
+    this function from `AgentExtension.params`, and without the bound a deeply
+    nested card exhausts the interpreter stack here, before the canonicalizer
+    ever gets the chance to reject it.
+    """
+    if depth > MAX_DEPTH:
+        raise CanonicalizationError(
+            f'nesting exceeds the maximum depth of {MAX_DEPTH}'
+        )
     if isinstance(d, dict):
         cleaned_dict = {
             k: cleaned_v
             for k, v in d.items()
-            if (cleaned_v := _clean_empty(v)) is not None
+            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
         }
         return cleaned_dict or None
     if isinstance(d, list):
         cleaned_list = [
-            cleaned_v for v in d if (cleaned_v := _clean_empty(v)) is not None
+            cleaned_v
+            for v in d
+            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
         ]
         return cleaned_list or None
     if isinstance(d, str) and not d:
@@ -179,4 +205,4 @@ def _canonicalize_agent_card(agent_card: AgentCard) -> str:
 
     # Recursively remove empty values
     cleaned_dict = _clean_empty(card_dict)
-    return json.dumps(cleaned_dict, separators=(',', ':'), sort_keys=True)
+    return canonicalize(cleaned_dict)
