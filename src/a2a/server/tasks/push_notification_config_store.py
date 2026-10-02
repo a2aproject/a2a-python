@@ -9,6 +9,18 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 logger = logging.getLogger(__name__)
 
 
+def normalize_push_notification_config(
+    task_id: str, notification_config: TaskPushNotificationConfig
+) -> TaskPushNotificationConfig:
+    """Returns a copy with task_id set and an empty id defaulted to the task id."""
+    normalized = TaskPushNotificationConfig()
+    normalized.CopyFrom(notification_config)
+    normalized.task_id = task_id
+    if not normalized.id:
+        normalized.id = task_id
+    return normalized
+
+
 class PushNotificationConfigStore(ABC):
     """Interface for storing and retrieving push notification configurations for tasks."""
 
@@ -18,12 +30,13 @@ class PushNotificationConfigStore(ABC):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> TaskPushNotificationConfig:
+    ) -> TaskPushNotificationConfig | None:
         """Sets or updates the push notification configuration for a task.
 
-        Implementations MUST NOT mutate notification_config. They store a
-        copy with task_id set to the given task and an empty id defaulted to
-        the task id, and return that stored configuration.
+        Implementations should not mutate notification_config. They store a
+        copy normalized by normalize_push_notification_config and return it.
+        Returning None is still accepted for existing implementations; the
+        request handlers then normalize the request themselves.
         """
 
     @abstractmethod

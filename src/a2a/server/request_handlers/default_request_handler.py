@@ -32,6 +32,9 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -560,11 +563,15 @@ class LegacyRequestHandler(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
-        return await self._push_config_store.set_info(
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(

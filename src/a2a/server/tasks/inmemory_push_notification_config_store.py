@@ -5,6 +5,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
+    normalize_push_notification_config,
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
@@ -43,11 +44,9 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
-        stored = TaskPushNotificationConfig()
-        stored.CopyFrom(notification_config)
-        stored.task_id = task_id
-        if not stored.id:
-            stored.id = task_id
+        stored = normalize_push_notification_config(
+            task_id, notification_config
+        )
 
         with self.lock:
             owner_infos = self._push_notification_infos.setdefault(owner, {})

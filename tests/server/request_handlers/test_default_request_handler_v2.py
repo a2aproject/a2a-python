@@ -563,6 +563,35 @@ async def test_create_task_push_notification_config_returns_stored_id(
 
 
 @pytest.mark.asyncio
+async def test_create_task_push_notification_config_normalizes_when_store_returns_none():
+    """A custom store that still returns None from set_info keeps working."""
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    push_config_store.set_info.return_value = None
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    assert (response.task_id, response.id) == (task.id, task.id)
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store():
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandlerV2(
