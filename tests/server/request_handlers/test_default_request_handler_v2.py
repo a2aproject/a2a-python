@@ -2331,3 +2331,83 @@ async def test_cancel_of_input_required_task_cannot_be_undone():
     assert stored.status.state == TaskState.TASK_STATE_CANCELED
     assert agent.execute_calls == 1
     await handler.aclose()
+
+
+class _MessageOnlyAgent(AgentExecutor):
+    """Answers every request with a single direct Message (no task)."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        await event_queue.enqueue_event(new_text_message('hello'))
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+async def _wait_until_released(
+    handler: DefaultRequestHandlerV2, baseline: set[asyncio.Task]
+) -> set[asyncio.Task]:
+    """Waits for the handler to drop its ActiveTasks; returns tasks still pending."""
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not handler._active_task_registry._active_tasks and not leftover:
+            break
+        await asyncio.sleep(0.01)
+    return leftover
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_message_response_releases_active_task():
+    """A direct Message ends the interaction, so its ActiveTask (producer,
+    consumer, dispatchers) must not stay alive waiting for a follow-up."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    for i in range(3):
+        result = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id=f'm{i}',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+        assert isinstance(result, Message)
+
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_message_response_releases_active_task():
+    """Same for a message-only stream: one Message, then nothing left running."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    events = [
+        event
+        async for event in handler.on_message_send_stream(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='m1',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+    ]
+
+    assert [type(event) for event in events] == [Message]
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
