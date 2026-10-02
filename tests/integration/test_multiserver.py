@@ -313,7 +313,12 @@ async def dsn(request) -> AsyncGenerator[str, None]:
 @pytest.mark.asyncio
 @pytest.mark.timeout(60)
 async def test_concurrent_followups_no_lost_update(dsn: str) -> None:
-    """Racing follow-up sends from both replicas never lose a write (OCC)."""
+    """Racing follow-up sends from both replicas never lose an accepted write.
+
+    A replica that keeps losing the compare-and-swap rejects its follow-up
+    with an A2AError instead of retrying forever; only a follow-up that
+    returned successfully must be persisted.
+    """
     cluster = Cluster(
         dsn,
         InputRequiredThenCompleteAgent(),
@@ -349,14 +354,22 @@ async def test_concurrent_followups_no_lost_update(dsn: str) -> None:
             if isinstance(r, BaseException):
                 assert isinstance(r, A2AError), r
 
-        # Durable task intact: all three user turns (q1, a, b) survived.
+        # Durable task intact: q1 and every accepted follow-up survived.
         final = await cluster.replica_a.task_store.get(task_id, ctx)
         assert final is not None
         assert not final.version.is_missing
-        user_turns = sum(
-            1 for m in final.task.history if m.role == Role.ROLE_USER
-        )
-        assert user_turns == 3, [m.message_id for m in final.task.history]
+        user_turns = {
+            m.message_id for m in final.task.history if m.role == Role.ROLE_USER
+        }
+        accepted = {
+            message_id
+            for message_id, r in zip(('ma', 'mb'), results, strict=True)
+            if not isinstance(r, BaseException)
+        }
+        assert accepted, results
+        assert {'m1', *accepted} <= user_turns, [
+            m.message_id for m in final.task.history
+        ]
     finally:
         await cluster.aclose()
 
