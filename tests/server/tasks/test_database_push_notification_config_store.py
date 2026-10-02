@@ -204,7 +204,9 @@ async def test_set_and_get_info_single_config(
 ):
     """Test setting and retrieving a single configuration."""
     task_id = 'task-1'
-    config = TaskPushNotificationConfig(id='config-1', url='http://example.com')
+    config = TaskPushNotificationConfig(
+        task_id=task_id, id='config-1', url='http://example.com'
+    )
 
     await db_store_parameterized.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
     retrieved_configs = await db_store_parameterized.get_info(
@@ -213,6 +215,26 @@ async def test_set_and_get_info_single_config(
 
     assert len(retrieved_configs) == 1
     assert retrieved_configs[0] == config
+
+
+@pytest.mark.asyncio
+async def test_set_info_returns_the_stored_config_without_mutating_input(
+    db_store_parameterized: DatabasePushNotificationConfigStore,
+):
+    """set_info returns what it stored and leaves the caller's config alone."""
+    task_id = 'task-normalize'
+    config = TaskPushNotificationConfig(url='http://example.com')
+
+    stored = await db_store_parameterized.set_info(
+        task_id, config, MINIMAL_CALL_CONTEXT
+    )
+
+    assert (stored.task_id, stored.id) == (task_id, task_id)
+    assert (config.task_id, config.id) == ('', '')
+    retrieved_configs = await db_store_parameterized.get_info(
+        task_id, MINIMAL_CALL_CONTEXT
+    )
+    assert retrieved_configs == [stored]
 
 
 @pytest.mark.asyncio
@@ -306,8 +328,12 @@ async def test_delete_info_specific_config(
 ):
     """Test deleting a single, specific configuration."""
     task_id = 'task-1'
-    config1 = TaskPushNotificationConfig(id='config-1', url='http://a.com')
-    config2 = TaskPushNotificationConfig(id='config-2', url='http://b.com')
+    config1 = TaskPushNotificationConfig(
+        task_id=task_id, id='config-1', url='http://a.com'
+    )
+    config2 = TaskPushNotificationConfig(
+        task_id=task_id, id='config-2', url='http://b.com'
+    )
 
     await db_store_parameterized.set_info(
         task_id, config1, MINIMAL_CALL_CONTEXT
@@ -372,7 +398,10 @@ async def test_data_is_encrypted_in_db(
     """Verify that the data stored in the database is actually encrypted."""
     task_id = 'encrypted-task'
     config = TaskPushNotificationConfig(
-        id='config-1', url='http://secret.url', token='secret-token'
+        task_id=task_id,
+        id='config-1',
+        url='http://secret.url',
+        token='secret-token',
     )
     plain_json = MessageToJson(config)
 
@@ -481,7 +510,7 @@ async def test_custom_table_name(
 
         task_id = 'custom-table-task'
         config = TaskPushNotificationConfig(
-            id='config-1', url='http://custom.url'
+            task_id=task_id, id='config-1', url='http://custom.url'
         )
 
         # This will create the table on first use
@@ -530,10 +559,10 @@ async def test_set_and_get_info_multiple_configs_no_key(
 
     task_id = 'task-1'
     config1 = TaskPushNotificationConfig(
-        id='config-1', url='http://example.com/1'
+        task_id=task_id, id='config-1', url='http://example.com/1'
     )
     config2 = TaskPushNotificationConfig(
-        id='config-2', url='http://example.com/2'
+        task_id=task_id, id='config-2', url='http://example.com/2'
     )
 
     await store.set_info(task_id, config1, MINIMAL_CALL_CONTEXT)
@@ -560,7 +589,7 @@ async def test_data_is_not_encrypted_in_db_if_no_key_is_set(
 
     task_id = 'task-1'
     config = TaskPushNotificationConfig(
-        id='config-1', url='http://example.com/1'
+        task_id=task_id, id='config-1', url='http://example.com/1'
     )
     plain_json = MessageToJson(config)
 
@@ -594,7 +623,9 @@ async def test_decryption_fallback_for_unencrypted_data(
     await unencrypted_store.initialize()
 
     task_id = 'mixed-encryption-task'
-    config = TaskPushNotificationConfig(id='config-1', url='http://plain.url')
+    config = TaskPushNotificationConfig(
+        task_id=task_id, id='config-1', url='http://plain.url'
+    )
     await unencrypted_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
     # 2. Try to read with the encryption-enabled store from the fixture
