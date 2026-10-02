@@ -137,6 +137,7 @@ def test_shutdown_grace_period_is_forwarded_to_v03_adapter(
         shutdown_grace_period=30.0,
     )
 
+
 def test_send_message_response_uses_the_a2a_media_type(
     agent_card, mock_handler
 ):
