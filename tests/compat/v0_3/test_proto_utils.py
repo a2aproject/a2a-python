@@ -263,6 +263,18 @@ class TestProtoUtils:
             exc_info.value
         )
 
+    @pytest.mark.parametrize(
+        ('history_length', 'expected'), [(0, None), (5, 5)]
+    )
+    def test_message_send_configuration_history_length(
+        self, history_length: int, expected: int | None
+    ):
+        """A v0.3 history_length of 0 means unlimited, as in task_query_params."""
+        config = proto_utils.FromProto.message_send_configuration(
+            a2a_pb2.SendMessageConfiguration(history_length=history_length)
+        )
+        assert config.history_length == expected
+
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""
         assert proto_utils.ToProto.message(None) is None
