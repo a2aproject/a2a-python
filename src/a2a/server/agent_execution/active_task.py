@@ -274,13 +274,14 @@ class EventConsumer:
     async def _handle_initial_task(self, event: Task) -> None:
         existing_task = await self.active_task._task_manager.get_task()
         if existing_task:
-            logger.error(
-                'Task %s already exists. Ignoring task replacement.',
-                self.active_task._task_id,
-            )
+            if self.message_to_save is None:
+                logger.error(
+                    'Task %s already exists. Ignoring task replacement.',
+                    self.active_task._task_id,
+                )
         else:
             await self.active_task._task_manager.save_task_event(event)
-        self.message_to_save = None
+            self.message_to_save = None
 
     async def _handle_task_modification_event(
         self,

@@ -1190,6 +1190,82 @@ def test_input_required_followup_across_per_rpc_event_loops():
     assert result2.status.state == TaskState.TASK_STATE_COMPLETED
 
 
+# Scenario: Streaming resumption that enqueues the current Task first
+@pytest.mark.timeout(2.0)
+@pytest.mark.asyncio
+async def test_scenario_streaming_resumption_enqueues_current_task(caplog):
+    class CurrentTaskAgent(AgentExecutor):
+        async def execute(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            task = context.current_task or new_task_from_user_message(
+                context.message
+            )
+            await event_queue.enqueue_event(task)
+            await event_queue.enqueue_event(
+                TaskStatusUpdateEvent(
+                    task_id=task.id,
+                    context_id=task.context_id,
+                    status=TaskStatus(
+                        state=TaskState.TASK_STATE_COMPLETED
+                        if context.current_task
+                        else TaskState.TASK_STATE_INPUT_REQUIRED
+                    ),
+                )
+            )
+
+        async def cancel(
+            self, context: RequestContext, event_queue: EventQueue
+        ):
+            pass
+
+    handler = create_handler(CurrentTaskAgent(), use_legacy=False)
+    client = await create_client(
+        handler, agent_card=agent_card(), streaming=True
+    )
+
+    msg1 = Message(
+        message_id='msg-start', role=Role.ROLE_USER, parts=[Part(text='start')]
+    )
+    it = client.send_message(
+        SendMessageRequest(
+            message=msg1,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events1 = [event async for event in it]
+    task_id = get_task_id(events1[0])
+    context_id = get_task_context_id(events1[0])
+
+    msg2 = Message(
+        task_id=task_id,
+        context_id=context_id,
+        message_id='msg-resume',
+        role=Role.ROLE_USER,
+        parts=[Part(text='here is input')],
+    )
+    it2 = client.send_message(
+        SendMessageRequest(
+            message=msg2,
+            configuration=SendMessageConfiguration(return_immediately=False),
+        )
+    )
+    events2 = [event async for event in it2]
+
+    assert events2[0].HasField('task')
+    validate_state(events2[-1], TaskState.TASK_STATE_COMPLETED)
+
+    final_task = await client.get_task(GetTaskRequest(id=task_id))
+    assert [message.message_id for message in final_task.history] == [
+        'msg-start',
+        'msg-resume',
+    ]
+    assert not any(
+        'Ignoring task replacement' in record.message
+        for record in caplog.records
+    )
+
+
 # Scenario: Auth required and side channel unblocking
 # Migrated from: test_workflow_auth_required_side_channel in test_handler_comparison
 @pytest.mark.timeout(2.0)
