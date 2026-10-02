@@ -465,13 +465,40 @@ async def test_on_cancel_task_completes_during_cancellation(agent_card):
         return_value=mock_result_aggregator_instance,
     ):
         params = CancelTaskRequest(id=f'{task_id}')
-        with pytest.raises(TaskNotCancelableError):
+        with pytest.raises(
+            TaskNotCancelableError,
+            match='current state: TASK_STATE_COMPLETED',
+        ):
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
             )
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_cancel_task_already_terminal_names_state(agent_card):
+    """Cancelling a finished task reports the state by name."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(
+        task_id='finished_task', status_state=TaskState.TASK_STATE_FAILED
+    )
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    with pytest.raises(
+        TaskNotCancelableError, match='current state: TASK_STATE_FAILED'
+    ):
+        await request_handler.on_cancel_task(
+            CancelTaskRequest(id='finished_task'), create_server_call_context()
+        )
+
+    mock_agent_executor.cancel.assert_not_awaited()
 
 
 @pytest.mark.asyncio

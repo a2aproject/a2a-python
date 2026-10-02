@@ -222,7 +222,7 @@ class LegacyRequestHandler(RequestHandler):
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {task.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(task.status.state)}'
             )
 
         task_manager = TaskManager(
@@ -261,7 +261,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {result.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(result.status.state)}'
             )
 
         return result
