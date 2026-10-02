@@ -136,3 +136,25 @@ def test_shutdown_grace_period_is_forwarded_to_v03_adapter(
         context_builder=None,
         shutdown_grace_period=30.0,
     )
+def test_send_message_response_uses_the_a2a_media_type(
+    agent_card, mock_handler
+):
+    """HTTP+JSON responses are labelled application/a2a+json."""
+    mock_handler.on_message_send.return_value = Task(id='123')
+    client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
+
+    response = client.post(
+        '/message:send', json={}, headers={'A2A-Version': '1.0'}
+    )
+
+    assert response.headers['content-type'].startswith('application/a2a+json')
+
+
+def test_list_tasks_response_uses_the_a2a_media_type(agent_card, mock_handler):
+    """The list path serializes separately, so it is asserted separately."""
+    mock_handler.on_list_tasks.return_value = ListTasksResponse()
+    client = TestClient(Starlette(routes=create_rest_routes(mock_handler)))
+
+    response = client.get('/tasks', headers={'A2A-Version': '1.0'})
+
+    assert response.headers['content-type'].startswith('application/a2a+json')

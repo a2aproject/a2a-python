@@ -640,6 +640,43 @@ class TestProtoUtils:
             ),
         ]
 
+    def test_task_status_timestamp_roundtrip(self):
+        """TaskStatus.timestamp survives conversion to proto and back."""
+        status = types.TaskStatus(
+            state=types.TaskState.working, timestamp='2026-03-15T10:30:00Z'
+        )
+
+        proto_status = proto_utils.ToProto.task_status(status)
+        assert proto_status.HasField('timestamp')
+
+        roundtrip_status = proto_utils.FromProto.task_status(proto_status)
+        assert roundtrip_status.timestamp == '2026-03-15T10:30:00Z'
+
+    def test_agent_card_optional_fields_roundtrip(
+        self, sample_agent_card: types.AgentCard
+    ):
+        """icon_url, oauth2_metadata_url and skill security survive conversion."""
+        card = sample_agent_card.model_copy(deep=True)
+        card.icon_url = 'http://localhost/icon.png'
+        card.skills[0].security = [{'oauth_scheme': ['read']}]
+        card.security_schemes[
+            'oauth_scheme'
+        ].root.oauth2_metadata_url = (
+            'http://localhost/.well-known/oauth-authorization-server'
+        )
+
+        roundtrip_card = proto_utils.FromProto.agent_card(
+            proto_utils.ToProto.agent_card(card)
+        )
+        assert roundtrip_card.icon_url == 'http://localhost/icon.png'
+        assert roundtrip_card.skills[0].security == [{'oauth_scheme': ['read']}]
+        assert (
+            roundtrip_card.security_schemes[
+                'oauth_scheme'
+            ].root.oauth2_metadata_url
+            == 'http://localhost/.well-known/oauth-authorization-server'
+        )
+
     @pytest.mark.parametrize(
         'signature_data, expected_data',
         [

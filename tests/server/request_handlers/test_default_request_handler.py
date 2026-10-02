@@ -44,10 +44,8 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
-from a2a.server.tasks.base_push_notification_sender import (
-    push_url_validation_error,
-)
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
@@ -78,6 +76,9 @@ from a2a.types.a2a_pb2 import (
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
+)
+from a2a.utils.push_url_validator import (
+    validate_push_notification_url,
 )
 
 
@@ -984,6 +985,47 @@ class HelloAgentExecutor(AgentExecutor):
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('validate_input_modes', 'expect_rejection'), [(True, True), (False, False)]
+)
+async def test_on_message_send_input_mode_validation_is_opt_in(
+    validate_input_modes, expect_rejection
+):
+    """The legacy handler gates the same check behind the same flag."""
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+    if expect_rejection:
+        with pytest.raises(ContentTypeNotSupportedError):
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+    else:
+        assert (
+            await request_handler.on_message_send(
+                params, create_server_call_context()
+            )
+            is not None
+        )
 
 
 @pytest.mark.asyncio
@@ -1936,6 +1978,87 @@ async def test_set_task_push_notification_config_task_not_found(agent_card):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('store_kind', ['inmemory', 'database'])
+async def test_create_task_push_notification_config_returns_stored_id(
+    agent_card, store_kind
+):
+    """Test on_create_task_push_notification_config returns the id that was stored."""
+    if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
+        from a2a.server.tasks.database_push_notification_config_store import (
+            DatabasePushNotificationConfigStore,
+        )
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///file:pushid?mode=memory&cache=shared&uri=true'
+        )
+        push_config_store = DatabasePushNotificationConfigStore(engine=engine)
+    else:
+        push_config_store = InMemoryPushNotificationConfigStore()
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id,
+        url='http://example.com',
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    stored = await push_config_store.get_info(task.id, context)
+    if store_kind == 'database':
+        await engine.dispose()
+
+    assert response.id == task.id
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
+async def test_create_task_push_notification_config_normalizes_when_store_returns_none(
+    agent_card,
+):
+    """A custom store that still returns None from set_info keeps working."""
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    push_config_store.set_info.return_value = None
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    assert (response.task_id, response.id) == (task.id, task.id)
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store(agent_card):
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
@@ -2553,7 +2676,7 @@ async def test_on_message_send_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             await request_handler.on_message_send(
                 params, create_server_call_context()
             )
@@ -2597,7 +2720,7 @@ async def test_on_message_send_stream_task_in_terminal_state(
         'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
         return_value=terminal_task,
     ):
-        with pytest.raises(InvalidParamsError) as exc_info:
+        with pytest.raises(UnsupportedOperationError) as exc_info:
             async for _ in request_handler.on_message_send_stream(
                 params, create_server_call_context()
             ):
@@ -3159,7 +3282,7 @@ async def test_on_create_task_push_notification_config_rejects_invalid_url(
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
-        push_url_validator=push_url_validation_error,
+        push_url_validator=validate_push_notification_url,
     )
     context = create_server_call_context()
 
@@ -3219,7 +3342,7 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         task_store=mock_task_store,
         push_config_store=push_store,
         agent_card=agent_card,
-        push_url_validator=push_url_validation_error,
+        push_url_validator=validate_push_notification_url,
     )
     context = create_server_call_context()
     params = SendMessageRequest(

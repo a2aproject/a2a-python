@@ -1,5 +1,71 @@
 # Changelog
 
+## [1.2.1](https://github.com/a2aproject/a2a-python/compare/v1.2.0...v1.2.1) (2026-09-30)
+
+
+### Bug Fixes
+
+* **server:** use keyset cursors for ListTasks page tokens ([#1282](https://github.com/a2aproject/a2a-python/issues/1282)) ([b7cba7c](https://github.com/a2aproject/a2a-python/commit/b7cba7c905bc1872d5591f0ce439afc02a3d9eed)), closes [#1280](https://github.com/a2aproject/a2a-python/issues/1280)
+
+## [1.2.0](https://github.com/a2aproject/a2a-python/compare/v1.1.5...v1.2.0) (2026-09-29)
+
+
+### Features
+
+* **rest:** serve HTTP+JSON responses as application/a2a+json ([#1274](https://github.com/a2aproject/a2a-python/issues/1274)) ([dc5a5da](https://github.com/a2aproject/a2a-python/commit/dc5a5da79e2063c9a309dcc44dcc021f656d4c77))
+* **server:** add caching headers to the agent card endpoint ([#1272](https://github.com/a2aproject/a2a-python/issues/1272)) ([83d7f5d](https://github.com/a2aproject/a2a-python/commit/83d7f5d55f06b153809c611511e64f2a842504fa))
+* **server:** add multi-replica cluster mode ([#1281](https://github.com/a2aproject/a2a-python/issues/1281)) ([942d621](https://github.com/a2aproject/a2a-python/commit/942d6215bdcc4a3ea8871c26effe83c7eed6910f))
+* **server:** add opt-in validation of message media types against the agent card ([#1269](https://github.com/a2aproject/a2a-python/issues/1269)) ([8037b24](https://github.com/a2aproject/a2a-python/commit/8037b246192225734b9ad9e56163fc4b49f40d2b))
+
+
+### Bug Fixes
+
+* compare in-memory task timestamps numerically ([#1233](https://github.com/a2aproject/a2a-python/issues/1233)) ([0d5473c](https://github.com/a2aproject/a2a-python/commit/0d5473ca4fa6d40034a6a7c8d65bce5cd85d8167))
+* **server:** ignore unrecognized request fields and fix parse-error data shape ([#1273](https://github.com/a2aproject/a2a-python/issues/1273)) ([83f1cf8](https://github.com/a2aproject/a2a-python/commit/83f1cf88219e3a13157c498e8baea9d64705630e))
+* **server:** reject a message whose contextId disagrees with its task ([#1270](https://github.com/a2aproject/a2a-python/issues/1270)) ([c25022f](https://github.com/a2aproject/a2a-python/commit/c25022ff0f0832ea82d6873051665f7dd46626c6))
+* **server:** reject terminal-task operations with UnsupportedOperationError ([#1268](https://github.com/a2aproject/a2a-python/issues/1268)) ([6cce91b](https://github.com/a2aproject/a2a-python/commit/6cce91beb57da1d6337a90dfbb75e21004f57fd1))
+* **server:** send PushNotificationConfig.authentication as an Authorization header ([#1271](https://github.com/a2aproject/a2a-python/issues/1271)) ([5751d31](https://github.com/a2aproject/a2a-python/commit/5751d313a99ba62186626228f9ec92b914f1f014)), closes [#585](https://github.com/a2aproject/a2a-python/issues/585)
+
+
+### Documentation
+
+* **samples:** add Agent Card signing sample ([#1198](https://github.com/a2aproject/a2a-python/issues/1198)) ([f3ac824](https://github.com/a2aproject/a2a-python/commit/f3ac82489dd84ce9dcd3802357cb4e987ffdbb74))
+
+## [1.1.5](https://github.com/a2aproject/a2a-python/compare/v1.1.4...v1.1.5) (2026-09-21)
+
+
+### Bug Fixes
+
+* **deps:** support protobuf 7 ([#1260](https://github.com/a2aproject/a2a-python/issues/1260)) ([67ba0a4](https://github.com/a2aproject/a2a-python/commit/67ba0a41d4f5bc4cfef3db4073c3b981888f7efd))
+* replace deprecated FieldDescriptor.label with is_repeated in proto_utils ([#1158](https://github.com/a2aproject/a2a-python/issues/1158)) ([4554e2d](https://github.com/a2aproject/a2a-python/commit/4554e2d6279b560bfcf61050799c6ea66da17583))
+* **server:** avoid out-of-range datetime task ordering ([#1220](https://github.com/a2aproject/a2a-python/issues/1220)) ([d55a3d3](https://github.com/a2aproject/a2a-python/commit/d55a3d323733ddf416d98d7d702d0bd73e22a3e4))
+
+## [1.1.4](https://github.com/a2aproject/a2a-python/compare/v1.1.3...v1.1.4) (2026-09-07)
+
+
+### Features
+
+* **itk:** register itk-python-v10-agent as a uv workspace member and update dependency version markers ([#1203](https://github.com/a2aproject/a2a-python/issues/1203)) ([6eee895](https://github.com/a2aproject/a2a-python/commit/6eee8956fa0e3d6378e4a61b52cf674d05b81229))
+* **itk:** use shared scenarios ([#1201](https://github.com/a2aproject/a2a-python/issues/1201)) ([b4a0b21](https://github.com/a2aproject/a2a-python/commit/b4a0b212df4bbe44bc1d41a6165037f77dd7a993))
+
+
+### Bug Fixes
+
+* make event queue sink removal idempotent ([#1134](https://github.com/a2aproject/a2a-python/issues/1134)) ([58c72c6](https://github.com/a2aproject/a2a-python/commit/58c72c646deab1ff3a1d239bda52a09a48f3a821))
+* omit artifacts from list tasks responses ([#1212](https://github.com/a2aproject/a2a-python/issues/1212)) ([35ef52e](https://github.com/a2aproject/a2a-python/commit/35ef52e8b0dcba8a85f5f12bd8e5b9aa21354d79))
+* owner-scope cancel/subscribe and write terminal state on cancel ([#1159](https://github.com/a2aproject/a2a-python/issues/1159), [#1170](https://github.com/a2aproject/a2a-python/issues/1170)) ([#1172](https://github.com/a2aproject/a2a-python/issues/1172)) ([ddbf853](https://github.com/a2aproject/a2a-python/commit/ddbf853d692ea207dad2be610e675298e0365511))
+* prevent first-owner write loss in in-memory stores ([#1194](https://github.com/a2aproject/a2a-python/issues/1194)) ([bcc489c](https://github.com/a2aproject/a2a-python/commit/bcc489c4f19f0fd5898cc8c4dac0ef54ae7b4de7))
+* **server:** let subscriber taps evict on full instead of wedging dispatch ([#1137](https://github.com/a2aproject/a2a-python/issues/1137)) ([0c2126f](https://github.com/a2aproject/a2a-python/commit/0c2126fbf1e2b418872181ce2ae200f972b4c202))
+* **server:** surface producer errors after failed tasks ([#1229](https://github.com/a2aproject/a2a-python/issues/1229)) ([bc32d7e](https://github.com/a2aproject/a2a-python/commit/bc32d7e5a94976ffb3c3e5ed706457bea530da4f))
+* **server:** validate push-notification URLs at config creation ([#1173](https://github.com/a2aproject/a2a-python/issues/1173)) ([3eb88e2](https://github.com/a2aproject/a2a-python/commit/3eb88e223e62ec510128a8fb51e3ccfe7aa6d596))
+* **server:** validate push-notification URLs before dispatch (SSRF hardening) ([#1164](https://github.com/a2aproject/a2a-python/issues/1164)) ([57a9df3](https://github.com/a2aproject/a2a-python/commit/57a9df3e2bd79a4b6d889e17511f789baa038dac))
+* **server:** warn when queue_manager is ignored in DefaultRequestHandlerV2 ([#1153](https://github.com/a2aproject/a2a-python/issues/1153)) ([08fd223](https://github.com/a2aproject/a2a-python/commit/08fd223882749a90c498ce835de9ac136eca375e))
+
+
+### Documentation
+
+* **server:** say what the evict-on-full check actually tests ([#1209](https://github.com/a2aproject/a2a-python/issues/1209)) ([4b7b242](https://github.com/a2aproject/a2a-python/commit/4b7b24293c55518e3f8b815b04fadf77ed488505))
+
 ## [1.1.3](https://github.com/a2aproject/a2a-python/compare/v1.1.2...v1.1.3) (2026-08-18)
 
 
