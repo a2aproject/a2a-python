@@ -43,7 +43,9 @@ async def test_shutdown_grace_period_is_passed_to_event_source_response(
     )
     request_obj = MagicMock(method='message/stream')
 
-    with patch.object(jsonrpc_adapter, 'EventSourceResponse') as response_class:
+    with patch.object(
+        jsonrpc_adapter, 'create_event_source_response'
+    ) as response_class:
         await adapter._process_streaming_request(
             request_id='1',
             request_obj=request_obj,

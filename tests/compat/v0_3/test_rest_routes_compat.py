@@ -50,7 +50,9 @@ async def test_shutdown_grace_period_is_passed_to_event_source_response(
     mock_req.auth = None
     mock_req.scope = {}
 
-    with patch.object(rest_adapter, 'EventSourceResponse') as response_class:
+    with patch.object(
+        rest_adapter, 'create_event_source_response'
+    ) as response_class:
         await adapter._handle_streaming_request(stream, mock_req)
 
     response_class.assert_called_once()

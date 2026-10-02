@@ -24,6 +24,7 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
     serialize_list_tasks_response,
 )
 from a2a.types.a2a_pb2 import (
@@ -604,7 +605,7 @@ class JsonRpcDispatcher:
                     }
 
             stream = cast('AsyncGenerator[dict[str, Any]]', handler_result)
-            return EventSourceResponse(
+            return create_event_source_response(
                 event_generator(stream),
                 shutdown_grace_period=self._shutdown_grace_period,
             )

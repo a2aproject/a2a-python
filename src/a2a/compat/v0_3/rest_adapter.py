@@ -35,6 +35,7 @@ from a2a.compat.v0_3.rest_handler import REST03Handler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
 )
 from a2a.utils import json_utils
 from a2a.utils.error_handlers import (
@@ -98,7 +99,7 @@ class REST03Adapter:
             async for item in stream:
                 yield json_utils.dumps(item)
 
-        return EventSourceResponse(
+        return create_event_source_response(
             event_generator(method(request, call_context)),
             shutdown_grace_period=self._shutdown_grace_period,
         )

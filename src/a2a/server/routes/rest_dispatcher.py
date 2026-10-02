@@ -10,6 +10,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
     serialize_list_tasks_response,
 )
 from a2a.types import a2a_pb2
@@ -147,7 +148,7 @@ class RestDispatcher:
         try:
             first_item = await anext(stream)
         except StopAsyncIteration:
-            return EventSourceResponse(
+            return create_event_source_response(
                 iter([]),
                 shutdown_grace_period=self._shutdown_grace_period,
             )
@@ -164,7 +165,7 @@ class RestDispatcher:
                     event='error',
                 )
 
-        return EventSourceResponse(
+        return create_event_source_response(
             event_generator(),
             shutdown_grace_period=self._shutdown_grace_period,
         )
