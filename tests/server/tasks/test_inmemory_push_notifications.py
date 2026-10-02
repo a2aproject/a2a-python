@@ -112,6 +112,21 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(retrieved, [config])
 
+    async def test_set_info_copies_caller_and_returned_config(self) -> None:
+        task_id = 'task_copy'
+        config = _create_sample_push_config(url='http://orig.url/callback')
+        await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
+
+        config.url = 'http://mutated.url/callback'
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
+        self.assertEqual(retrieved[0].url, 'http://orig.url/callback')
+
+        retrieved[0].url = 'http://got.url/callback'
+        again = await self.config_store.get_info(task_id, MINIMAL_CALL_CONTEXT)
+        self.assertEqual(again[0].url, 'http://orig.url/callback')
+
     async def test_set_info_appends_to_existing_config(self) -> None:
         task_id = 'task_update'
         initial_config = _create_sample_push_config(

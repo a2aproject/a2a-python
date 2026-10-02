@@ -12,6 +12,14 @@ from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 logger = logging.getLogger(__name__)
 
 
+def _copy_config(
+    notification_config: TaskPushNotificationConfig,
+) -> TaskPushNotificationConfig:
+    stored = TaskPushNotificationConfig()
+    stored.CopyFrom(notification_config)
+    return stored
+
+
 class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
     """In-memory implementation of PushNotificationConfigStore interface.
 
@@ -48,16 +56,18 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
             if task_id not in owner_infos:
                 owner_infos[task_id] = []
 
-            if not notification_config.id:
-                notification_config.id = task_id
+            stored = TaskPushNotificationConfig()
+            stored.CopyFrom(notification_config)
+            if not stored.id:
+                stored.id = task_id
 
             # Remove existing config with the same ID
             for config in owner_infos[task_id]:
-                if config.id == notification_config.id:
+                if config.id == stored.id:
                     owner_infos[task_id].remove(config)
                     break
 
-            owner_infos[task_id].append(notification_config)
+            owner_infos[task_id].append(stored)
             logger.debug(
                 'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
@@ -77,7 +87,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         owner = self.owner_resolver(context)
         with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
-            return list(owner_infos.get(task_id, []))
+            return [_copy_config(item) for item in owner_infos.get(task_id, [])]
 
     async def get_info_for_dispatch(
         self,
@@ -90,7 +100,9 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         with self.lock:
             results: list[TaskPushNotificationConfig] = []
             for all_configs in self._push_notification_infos.values():
-                results.extend(all_configs.get(task_id, []))
+                results.extend(
+                    _copy_config(item) for item in all_configs.get(task_id, [])
+                )
             return results
 
     async def delete_info(
