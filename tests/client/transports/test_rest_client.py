@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import A2A_ERROR_MAPPING
+from a2a.utils.errors import A2A_ERROR_MAPPING, MethodNotFoundError
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
@@ -151,6 +151,42 @@ class TestRestTransport:
 
         with pytest.raises(error_cls):
             await client.send_message(request=params)
+
+    @pytest.mark.parametrize(
+        ('status_code', 'body', 'expected_error'),
+        [
+            (401, {'error': 'invalid_token'}, A2AClientError),
+            (404, {'error': 'Not Found'}, MethodNotFoundError),
+            (502, ['bad gateway'], A2AClientError),
+            (500, 'Internal Server Error', A2AClientError),
+            (503, None, A2AClientError),
+        ],
+    )
+    def test_rest_non_status_error_bodies(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        status_code,
+        body,
+        expected_error,
+    ):
+        """JSON error bodies that are not a google.rpc.Status (e.g. from a proxy) fall back to the HTTP status."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = status_code
+        mock_response.json.return_value = body
+        error = httpx.HTTPStatusError(
+            'Error',
+            request=httpx.Request('GET', 'http://test.url'),
+            response=mock_response,
+        )
+
+        with pytest.raises(expected_error):
+            client._handle_http_error(error)
 
     @pytest.mark.asyncio
     async def test_send_message_with_timeout_context(

@@ -351,6 +351,8 @@ class CompatRestTransport(ClientTransport):
                 error_data = e.response.json()
             except (json.JSONDecodeError, ValueError, httpx.ResponseNotRead):
                 error_data = {}
+            if not isinstance(error_data, dict):
+                error_data = {}
 
             error_type = error_data.get('type')
             message = error_data.get('message', str(e))
