@@ -164,7 +164,7 @@ def create_signature_verifier(
     return signature_verifier
 
 
-def _clean_empty(d: Any, depth: int = 0) -> Any:
+def _clean_empty(d: Any, depth: int = 1) -> Any:
     """Recursively remove empty strings, lists and dicts from a dictionary.
 
     Depth is bounded for the same reason canonicalization is: nesting reaches
@@ -172,7 +172,7 @@ def _clean_empty(d: Any, depth: int = 0) -> Any:
     nested card exhausts the interpreter stack here, before the canonicalizer
     ever gets the chance to reject it.
     """
-    if depth > MAX_DEPTH:
+    if isinstance(d, (dict, list)) and depth > MAX_DEPTH:
         raise CanonicalizationError(
             f'nesting exceeds the maximum depth of {MAX_DEPTH}'
         )
@@ -180,14 +180,24 @@ def _clean_empty(d: Any, depth: int = 0) -> Any:
         cleaned_dict = {
             k: cleaned_v
             for k, v in d.items()
-            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
+            if (
+                cleaned_v := _clean_empty(
+                    v, depth + 1 if isinstance(v, (dict, list)) else depth
+                )
+            )
+            is not None
         }
         return cleaned_dict or None
     if isinstance(d, list):
         cleaned_list = [
             cleaned_v
             for v in d
-            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
+            if (
+                cleaned_v := _clean_empty(
+                    v, depth + 1 if isinstance(v, (dict, list)) else depth
+                )
+            )
+            is not None
         ]
         return cleaned_list or None
     if isinstance(d, str) and not d:
