@@ -158,6 +158,23 @@ class TestParseErrorDataShape:
         assert 'parts' in parse_error['data'][0]['metadata']['parseError']
 
 
+class TestMalformedJsonBody:
+    def test_reported_through_logging_not_stderr(self, client, capsys, caplog):
+        response = client.post(
+            '/',
+            content=b'{not json',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        assert response.json()['error']['code'] == -32700
+        assert 'Traceback' not in capsys.readouterr().err
+        assert any(
+            record.name == jsonrpc_dispatcher.__name__
+            and record.levelname == 'WARNING'
+            for record in caplog.records
+        )
+
+
 class TestJsonRpcDispatcherOptionalDependencies:
     @pytest.fixture(scope='class')
     def mock_app_params(self) -> dict:
