@@ -2,7 +2,6 @@
 
 import json
 import logging
-import traceback
 
 from collections.abc import AsyncGenerator
 from typing import TYPE_CHECKING, Any
@@ -327,7 +326,6 @@ class JsonRpcDispatcher:
                     handler_result = build_error_response(request_id, e)
             return self._create_response(call_context, handler_result)
         except json.decoder.JSONDecodeError as e:
-            traceback.print_exc()
             return self._generate_error_response(
                 None, JSONParseError(message=str(e))
             )
