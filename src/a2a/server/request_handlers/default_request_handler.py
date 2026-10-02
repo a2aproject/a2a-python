@@ -309,7 +309,7 @@ class LegacyRequestHandler(RequestHandler):
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
                 raise UnsupportedOperationError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
@@ -629,7 +629,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
-                message=f'Task {task.id} is in terminal state: {task.status.state}'
+                message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
             )
 
         # The operation MUST return a Task object as the first event in the stream

@@ -2682,7 +2682,7 @@ async def test_on_message_send_task_in_terminal_state(
             )
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2727,7 +2727,7 @@ async def test_on_message_send_stream_task_in_terminal_state(
                 pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2762,7 +2762,7 @@ async def test_on_subscribe_to_task_in_terminal_state(
             pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
     mock_task_store.get.assert_awaited_once_with(f'{task_id}', context)

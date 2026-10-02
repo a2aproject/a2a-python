@@ -528,7 +528,7 @@ class ActiveTask:
                     self._task_created.set()
                     if task.status.state in TERMINAL_TASK_STATES:
                         raise UnsupportedOperationError(
-                            message=f'Task {task.id} is in terminal state: {task.status.state}'
+                            message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                         )
                 elif not create_task_if_missing:
                     raise TaskNotFoundError
@@ -590,7 +590,7 @@ class ActiveTask:
                     and task.status.state in TERMINAL_TASK_STATES
                 ):
                     raise UnsupportedOperationError(
-                        message=f'Task {task.id} is in terminal state: {task.status.state}'
+                        message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                     )
                 request_context.current_task = task
 

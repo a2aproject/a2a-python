@@ -1163,7 +1163,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             params, create_server_call_context()
         )
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -1203,7 +1203,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         ):
             pass
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -1328,7 +1328,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
             pass
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
