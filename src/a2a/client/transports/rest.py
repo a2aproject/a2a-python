@@ -34,7 +34,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
+from a2a.utils.errors import A2A_REASON_TO_ERROR, A2AError, MethodNotFoundError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -64,22 +64,38 @@ def _parse_rest_error(
     # We extract the first `ErrorInfo` object because it contains the
     # specific `reason` code needed to map this back to a Python A2AError.
     for d in details:
-        if (
-            isinstance(d, dict)
-            and d.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo'
-        ):
-            reason = d.get('reason')
-            metadata = d.get('metadata') or {}
-            if isinstance(reason, str):
-                exception_cls = A2A_REASON_TO_ERROR.get(reason)
-                if exception_cls:
-                    exc = exception_cls(message)
-                    if metadata:
-                        exc.data = metadata
-                    return exc
+        exc = _extract_error_info(d, message)
+        if exc is not None:
+            return exc
+        if _is_error_info(d):
             break
 
     return None
+
+
+def _is_error_info(d: Any) -> bool:
+    """Checks if a detail entry is an ErrorInfo object."""
+    return (
+        isinstance(d, dict)
+        and d.get('@type') == 'type.googleapis.com/google.rpc.ErrorInfo'
+    )
+
+
+def _extract_error_info(d: Any, message: str) -> A2AError | None:
+    """Extracts an A2AError from an ErrorInfo detail entry."""
+    if not _is_error_info(d):
+        return None
+    reason = d.get('reason')
+    if not isinstance(reason, str):
+        return None
+    exception_cls = A2A_REASON_TO_ERROR.get(reason)
+    if not exception_cls:
+        return None
+    exc = exception_cls(message)
+    metadata = d.get('metadata') or {}
+    if metadata:
+        exc.data = metadata
+    return exc
 
 
 @trace_class(kind=SpanKind.CLIENT)
@@ -338,7 +354,7 @@ class RestTransport(ClientTransport):
             mapped = _parse_rest_error(error_payload, str(e))
             if mapped:
                 raise mapped from e
-        except (json.JSONDecodeError, ValueError):
+        except ValueError:
             pass
 
         status_code = e.response.status_code
