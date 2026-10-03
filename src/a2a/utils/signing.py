@@ -3,6 +3,7 @@ import json
 from collections.abc import Callable
 from typing import Any, TypedDict
 
+from google.protobuf.descriptor import Descriptor, FieldDescriptor
 from google.protobuf.json_format import MessageToDict
 
 
@@ -22,6 +23,7 @@ except ImportError as e:
 
 from a2a.types import AgentCard, AgentCardSignature
 from a2a.utils._jcs import MAX_DEPTH, CanonicalizationError, canonicalize
+from a2a.utils.proto_utils import _field_is_repeated
 
 
 class SignatureVerificationError(Exception):
@@ -195,6 +197,72 @@ def _clean_empty(d: Any, depth: int = 0) -> Any:
     return d
 
 
+def _is_map(field: FieldDescriptor) -> bool:
+    """Returns True if the field is a protobuf map."""
+    message_type = field.message_type
+    return message_type is not None and message_type.GetOptions().map_entry
+
+
+def _is_well_known(descriptor: Descriptor | Any) -> bool:
+    """Returns True for `google.protobuf` types, which carry free-form JSON."""
+    return descriptor.full_name.startswith('google.protobuf.')
+
+
+def _clean_field(value: Any, field: FieldDescriptor, depth: int) -> Any:
+    """Removes empty values from the JSON form of one message field."""
+    message_type = field.message_type
+    if message_type is None or _is_well_known(message_type):
+        return _clean_empty(value, depth)
+    if _is_map(field):
+        value_type = message_type.fields_by_name['value'].message_type
+        if value_type is None or _is_well_known(value_type):
+            return _clean_empty(value, depth)
+        cleaned_map = {
+            k: cleaned_v
+            for k, v in value.items()
+            if (cleaned_v := _clean_message(v, value_type, depth + 1))
+        }
+        return cleaned_map or None
+    if _field_is_repeated(field):
+        cleaned_list = [
+            cleaned_v
+            for v in value
+            if (cleaned_v := _clean_message(v, message_type, depth + 1))
+        ]
+        return cleaned_list or None
+    return _clean_message(value, message_type, depth) or None
+
+
+def _clean_message(
+    message_dict: dict[str, Any],
+    descriptor: Descriptor | Any,
+    depth: int = 0,
+) -> dict[str, Any]:
+    """Removes empty values from the JSON form of a message, by descriptor.
+
+    `message_dict` is the `MessageToDict` output for a message of type
+    `descriptor`. Walking the descriptor alongside the JSON keeps the field
+    each value belongs to known at every level, which `_clean_empty` alone
+    cannot tell. Free-form values (`google.protobuf.Struct` and friends) and
+    keys the descriptor does not know fall back to `_clean_empty`.
+    """
+    if depth > MAX_DEPTH:
+        raise CanonicalizationError(
+            f'nesting exceeds the maximum depth of {MAX_DEPTH}'
+        )
+    fields = {field.json_name: field for field in descriptor.fields}
+    cleaned: dict[str, Any] = {}
+    for key, value in message_dict.items():
+        field = fields.get(key)
+        if field is None:
+            cleaned_value = _clean_empty(value, depth + 1)
+        else:
+            cleaned_value = _clean_field(value, field, depth + 1)
+        if cleaned_value is not None:
+            cleaned[key] = cleaned_value
+    return cleaned
+
+
 def _canonicalize_agent_card(agent_card: AgentCard) -> str:
     """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
     card_dict = MessageToDict(
@@ -203,6 +271,6 @@ def _canonicalize_agent_card(agent_card: AgentCard) -> str:
     # Remove signatures field if present
     card_dict.pop('signatures', None)
 
-    # Recursively remove empty values
-    cleaned_dict = _clean_empty(card_dict)
-    return canonicalize(cleaned_dict)
+    # Remove empty values, walking the AgentCard descriptor
+    cleaned_dict = _clean_message(card_dict, AgentCard.DESCRIPTOR)
+    return canonicalize(cleaned_dict or None)

@@ -3,14 +3,24 @@ from typing import Any
 import pytest
 
 from a2a.types.a2a_pb2 import (
+    APIKeySecurityScheme,
     AgentCapabilities,
     AgentCard,
     AgentCardSignature,
+    AgentExtension,
     AgentInterface,
+    AgentProvider,
     AgentSkill,
+    AuthorizationCodeOAuthFlow,
+    OAuth2SecurityScheme,
+    OAuthFlows,
+    SecurityRequirement,
+    SecurityScheme,
+    StringList,
 )
 from a2a.utils import signing
 from cryptography.hazmat.primitives.asymmetric import ec
+from google.protobuf.json_format import MessageToDict
 from jwt.utils import base64url_encode
 
 
@@ -287,3 +297,110 @@ def test_clean_empty_does_not_mutate_input():
     signing._clean_empty(original)
 
     assert original == original_copy
+
+
+@pytest.fixture
+def full_agent_card() -> AgentCard:
+    """A card that exercises nested messages, maps and free-form values."""
+    card = AgentCard(
+        name='Full Agent',
+        description='A card that exercises nested messages',
+        supported_interfaces=[
+            AgentInterface(
+                url='https://example.com/a2a/v1',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+                tenant='',
+            )
+        ],
+        provider=AgentProvider(
+            url='https://example.com', organization='Example'
+        ),
+        version='1.0.0',
+        capabilities=AgentCapabilities(
+            streaming=False,
+            extensions=[
+                AgentExtension(uri='https://example.com/ext/1'),
+                AgentExtension(uri='https://example.com/ext/2', description=''),
+            ],
+        ),
+        security_schemes={
+            'key': SecurityScheme(
+                api_key_security_scheme=APIKeySecurityScheme(
+                    location='header', name='X-API-Key', description=''
+                )
+            ),
+            'oauth': SecurityScheme(
+                oauth2_security_scheme=OAuth2SecurityScheme(
+                    flows=OAuthFlows(
+                        authorization_code=AuthorizationCodeOAuthFlow(
+                            authorization_url='https://example.com/auth',
+                            token_url='https://example.com/token',
+                            scopes={'read': 'Read access'},
+                        )
+                    )
+                )
+            ),
+        },
+        security_requirements=[
+            SecurityRequirement(schemes={'oauth': StringList(list=['read'])}),
+            SecurityRequirement(),
+        ],
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='skill1',
+                name='Skill',
+                description='A skill',
+                tags=['test'],
+                examples=[],
+            )
+        ],
+        icon_url='',
+    )
+    card.capabilities.extensions[0].params.update(
+        {'empty': '', 'nested': {'list': [], 'kept': 0}}
+    )
+    return card
+
+
+def test_clean_message_matches_clean_empty_on_full_card(
+    full_agent_card: AgentCard,
+):
+    """Descriptor-aware cleaning gives the same result as `_clean_empty`."""
+    card_dict = MessageToDict(full_agent_card)
+    assert signing._clean_message(
+        card_dict, AgentCard.DESCRIPTOR
+    ) == signing._clean_empty(card_dict)
+
+
+def test_canonicalize_full_card_prunes_optional_defaults(
+    full_agent_card: AgentCard,
+):
+    """Optional and free-form empty values are pruned at every level."""
+    result = signing._canonicalize_agent_card(full_agent_card)
+    assert '"tenant"' not in result
+    assert '"iconUrl"' not in result
+    assert '"examples"' not in result
+    assert '"empty"' not in result
+    assert '"list"' in result  # the StringList inside the security requirement
+    assert '"params":{"nested":{"kept":0}}' in result
+    assert '"streaming":false' in result
+    # The empty SecurityRequirement element is dropped, the other one stays.
+    assert (
+        '"securityRequirements":[{"schemes":{"oauth":{"list":["read"]}}}]'
+        in result
+    )
+
+
+def test_clean_message_bounds_depth():
+    """Descriptor-aware cleaning keeps the depth bound of `_clean_empty`."""
+    nested: dict[str, Any] = {}
+    cursor = nested
+    for _ in range(signing.MAX_DEPTH + 5):
+        cursor['a'] = {}
+        cursor = cursor['a']
+    card_dict = {'capabilities': {'extensions': [{'params': nested}]}}
+    with pytest.raises(signing.CanonicalizationError):
+        signing._clean_message(card_dict, AgentCard.DESCRIPTOR)
