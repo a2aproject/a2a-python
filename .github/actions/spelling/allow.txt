@@ -166,6 +166,7 @@ tiangolo
 TResponse
 typ
 typeerror
+ufeff
 UIDs
 urlsafe
 versioned
