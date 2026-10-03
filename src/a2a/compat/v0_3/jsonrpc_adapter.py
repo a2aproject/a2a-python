@@ -39,6 +39,7 @@ from a2a.server.jsonrpc_models import (
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
 )
 from a2a.utils import constants
 from a2a.utils.version_validator import validate_version
@@ -67,13 +68,15 @@ class JSONRPC03Adapter:
         self,
         http_handler: 'RequestHandler',
         context_builder: 'ServerCallContextBuilder | None' = None,
-    ):
+        shutdown_grace_period: float = 0,
+    ) -> None:
         self.handler = RequestHandler03(
             request_handler=http_handler,
         )
         self._context_builder = V03ServerCallContextBuilder(
             context_builder or DefaultServerCallContextBuilder()
         )
+        self._shutdown_grace_period = shutdown_grace_period
 
     def supports_method(self, method: str) -> bool:
         """Returns True if the v0.3 adapter supports the given method name."""
@@ -277,4 +280,7 @@ class JSONRPC03Adapter:
                     )
                 }
 
-        return EventSourceResponse(event_generator(stream_gen))
+        return create_event_source_response(
+            event_generator(stream_gen),
+            shutdown_grace_period=self._shutdown_grace_period,
+        )

@@ -1,4 +1,5 @@
 from abc import ABC, abstractmethod
+from inspect import signature
 from typing import TYPE_CHECKING, Any
 
 from google.protobuf.json_format import MessageToDict
@@ -7,13 +8,16 @@ from a2a.types.a2a_pb2 import ListTasksResponse
 
 
 if TYPE_CHECKING:
+    from sse_starlette.sse import EventSourceResponse
     from starlette.authentication import BaseUser
     from starlette.requests import Request
 else:
     try:
+        from sse_starlette.sse import EventSourceResponse
         from starlette.authentication import BaseUser
         from starlette.requests import Request
     except ImportError:
+        EventSourceResponse = Any
         Request = Any
         BaseUser = Any
 
@@ -38,6 +42,33 @@ def serialize_list_tasks_response(
         for task in result['tasks']:
             task.pop('artifacts', None)
     return result
+
+
+def create_event_source_response(
+    content: Any,
+    shutdown_grace_period: float = 0,
+) -> 'EventSourceResponse':
+    """Creates an SSE response, preserving support for older sse-starlette.
+
+    A non-zero grace period requires cooperative shutdown support from
+    sse-starlette, provided by the HTTP server optional dependencies.
+    """
+    if shutdown_grace_period < 0:
+        raise ValueError('shutdown_grace_period must be >= 0')
+    if shutdown_grace_period:
+        if (
+            'shutdown_grace_period'
+            not in signature(EventSourceResponse.__init__).parameters
+        ):
+            raise RuntimeError(
+                'Configuring shutdown_grace_period requires sse-starlette with '
+                'cooperative shutdown support. Upgrade the dependencies for '
+                'a2a-sdk[http-server].'
+            )
+        return EventSourceResponse(
+            content, shutdown_grace_period=shutdown_grace_period
+        )
+    return EventSourceResponse(content)
 
 
 class StarletteUser(User):

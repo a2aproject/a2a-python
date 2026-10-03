@@ -32,6 +32,9 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -219,7 +222,7 @@ class LegacyRequestHandler(RequestHandler):
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {task.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(task.status.state)}'
             )
 
         task_manager = TaskManager(
@@ -258,7 +261,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {result.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(result.status.state)}'
             )
 
         return result
@@ -306,7 +309,7 @@ class LegacyRequestHandler(RequestHandler):
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
                 raise UnsupportedOperationError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                    message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
@@ -560,13 +563,15 @@ class LegacyRequestHandler(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
-        await self._push_config_store.set_info(
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
-
-        return params
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(
@@ -624,7 +629,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
-                message=f'Task {task.id} is in terminal state: {task.status.state}'
+                message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
             )
 
         # The operation MUST return a Task object as the first event in the stream

@@ -29,6 +29,9 @@ from a2a.server.request_handlers.request_handler import (
     validate,
     validate_request_params,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -497,13 +500,15 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
-        await self._push_config_store.set_info(
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
-
-        return params
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(
@@ -555,7 +560,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
                 message=f'Task {task_id} is in terminal state: '
-                f'{task.status.state}'
+                f'{TaskState.Name(task.status.state)}'
             )
 
         if self._event_stream is None:

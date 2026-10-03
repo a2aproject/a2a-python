@@ -1,5 +1,6 @@
 import asyncio
 
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -157,6 +158,23 @@ class TestParseErrorDataShape:
         assert 'parts' in parse_error['data'][0]['metadata']['parseError']
 
 
+class TestMalformedJsonBody:
+    def test_reported_through_logging_not_stderr(self, client, capsys, caplog):
+        response = client.post(
+            '/',
+            content=b'{not json',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        assert response.json()['error']['code'] == -32700
+        assert 'Traceback' not in capsys.readouterr().err
+        assert any(
+            record.name == jsonrpc_dispatcher.__name__
+            and record.levelname == 'WARNING'
+            for record in caplog.records
+        )
+
+
 class TestJsonRpcDispatcherOptionalDependencies:
     @pytest.fixture(scope='class')
     def mock_app_params(self) -> dict:
@@ -188,6 +206,25 @@ class TestJsonRpcDispatcherOptionalDependencies:
             ),
         ):
             JsonRpcDispatcher(**mock_app_params)
+
+
+class TestJsonRpcDispatcherStreamingResponse:
+    def test_shutdown_grace_period_is_passed_to_event_source_response(
+        self, mock_handler
+    ) -> None:
+        async def stream_generator() -> AsyncGenerator[dict[str, Any]]:
+            yield {'result': {}}
+
+        dispatcher = JsonRpcDispatcher(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+
+        response = dispatcher._create_response(
+            ServerCallContext(), stream_generator()
+        )
+
+        assert getattr(response, '_shutdown_grace_period') == 30.0
 
 
 class TestJsonRpcDispatcherExtensions:
@@ -260,6 +297,22 @@ class TestJsonRpcDispatcherTenant:
 
 
 class TestJsonRpcDispatcherV03Compat:
+    def test_shutdown_grace_period_is_forwarded_to_adapter(
+        self, mock_handler
+    ) -> None:
+        with patch.object(
+            jsonrpc_dispatcher, 'JSONRPC03Adapter'
+        ) as adapter_class:
+            JsonRpcDispatcher(
+                request_handler=mock_handler,
+                enable_v0_3_compat=True,
+                shutdown_grace_period=30.0,
+            )
+
+        adapter_class.assert_called_once()
+        assert adapter_class.call_args.kwargs['http_handler'] is mock_handler
+        assert adapter_class.call_args.kwargs['shutdown_grace_period'] == 30.0
+
     def test_v0_3_compat_flag_routes_to_adapter(self, mock_handler):
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://mockurl.com'
