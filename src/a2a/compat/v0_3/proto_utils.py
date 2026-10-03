@@ -793,7 +793,9 @@ class FromProto:
             )
             if config.HasField('push_notification')
             else None,
-            history_length=config.history_length,
+            history_length=config.history_length
+            if config.history_length
+            else None,
             blocking=config.blocking,
         )
 

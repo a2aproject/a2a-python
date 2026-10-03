@@ -591,6 +591,32 @@ def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
         transport._handle_http_error(error)
 
 
+@pytest.mark.parametrize(
+    ('status_code', 'body', 'expected_error'),
+    [
+        (401, 'invalid_token', A2AClientError),
+        (404, ['Not Found'], MethodNotFoundError),
+        (503, None, A2AClientError),
+    ],
+)
+def test_compat_rest_transport_handle_http_error_non_object_body(
+    transport, status_code, body, expected_error
+):
+    mock_response = MagicMock(spec=httpx.Response)
+    mock_response.status_code = status_code
+    mock_response.json.return_value = body
+
+    mock_request = MagicMock(spec=httpx.Request)
+    mock_request.url = 'http://example.com'
+
+    error = httpx.HTTPStatusError(
+        'Error', request=mock_request, response=mock_response
+    )
+
+    with pytest.raises(expected_error):
+        transport._handle_http_error(error)
+
+
 def test_compat_rest_transport_handle_http_error_unknown_error_type(transport):
     mock_response = MagicMock(spec=httpx.Response)
     mock_response.status_code = 500
