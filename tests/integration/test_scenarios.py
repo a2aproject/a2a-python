@@ -491,7 +491,7 @@ async def test_scenario_9_error_before_blocking(use_legacy, streaming):
         if streaming:
             with pytest.raises(
                 UnsupportedOperationError,
-                match='Task .* is in terminal state',
+                match='Task .* is in terminal state: TASK_STATE_FAILED',
             ):
                 await client.subscribe(
                     SubscribeToTaskRequest(id=task.id)
@@ -1800,7 +1800,7 @@ async def test_restore_task_terminal_state(
     if subscribe_first and streaming:
         with pytest.raises(
             Exception,
-            match=r'terminal state',
+            match=r'terminal state: TASK_STATE_COMPLETED',
         ):
             async for _ in client2.subscribe(
                 SubscribeToTaskRequest(id=task_id)
@@ -1814,14 +1814,16 @@ async def test_restore_task_terminal_state(
         parts=[Part(text='message to completed task')],
     )
 
-    with pytest.raises(Exception, match=r'terminal state'):
+    with pytest.raises(
+        Exception, match=r'terminal state: TASK_STATE_COMPLETED'
+    ):
         async for _ in client2.send_message(SendMessageRequest(message=msg2)):
             pass
 
     if streaming:
         with pytest.raises(
             Exception,
-            match=r'terminal state',
+            match=r'terminal state: TASK_STATE_COMPLETED',
         ):
             async for _ in client2.subscribe(
                 SubscribeToTaskRequest(id=task_id)
