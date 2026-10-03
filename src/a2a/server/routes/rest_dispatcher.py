@@ -10,6 +10,7 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
     serialize_list_tasks_response,
 )
 from a2a.types import a2a_pb2
@@ -78,6 +79,7 @@ class RestDispatcher:
         self,
         request_handler: RequestHandler,
         context_builder: ServerCallContextBuilder | None = None,
+        shutdown_grace_period: float = 0,
     ) -> None:
         """Initializes the RestDispatcher.
 
@@ -86,6 +88,8 @@ class RestDispatcher:
             context_builder: The ServerCallContextBuilder used to construct the
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
+            shutdown_grace_period: Seconds to allow active SSE streams to
+              finish before force-cancellation during shutdown.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -98,6 +102,7 @@ class RestDispatcher:
             context_builder or DefaultServerCallContextBuilder()
         )
         self.request_handler = request_handler
+        self._shutdown_grace_period = shutdown_grace_period
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
         call_context = self._context_builder.build(request)
@@ -143,7 +148,10 @@ class RestDispatcher:
         try:
             first_item = await anext(stream)
         except StopAsyncIteration:
-            return EventSourceResponse(iter([]))
+            return create_event_source_response(
+                iter([]),
+                shutdown_grace_period=self._shutdown_grace_period,
+            )
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
             yield ServerSentEvent(data=json_utils.dumps(first_item))
@@ -157,7 +165,10 @@ class RestDispatcher:
                     event='error',
                 )
 
-        return EventSourceResponse(event_generator())
+        return create_event_source_response(
+            event_generator(),
+            shutdown_grace_period=self._shutdown_grace_period,
+        )
 
     @rest_error_handler
     async def on_message_send(self, request: Request) -> Response:
