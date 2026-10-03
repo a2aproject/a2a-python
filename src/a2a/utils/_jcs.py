@@ -81,7 +81,7 @@ def canonicalize(obj: Any) -> str:
             than `MAX_DEPTH`.
     """
     out: list[str] = []
-    _write(obj, out, 0)
+    _write(obj, out, 1)
     canonical = ''.join(out)
     try:
         # RFC 8785 canonical output is UTF-8. Round-tripping here rejects
@@ -95,9 +95,14 @@ def canonicalize(obj: Any) -> str:
     return canonical
 
 
+def _child_depth(value: Any, depth: int) -> int:
+    """Returns the depth to hand a child: containers open a level, scalars do not."""
+    return depth + 1 if isinstance(value, (list, tuple, dict)) else depth
+
+
 def _write(obj: Any, out: list[str], depth: int) -> None:
     """Appends the canonical form of `obj` to `out`."""
-    if depth > MAX_DEPTH:
+    if isinstance(obj, (list, tuple, dict)) and depth > MAX_DEPTH:
         raise CanonicalizationError(
             f'nesting exceeds the maximum depth of {MAX_DEPTH}'
         )
@@ -107,7 +112,7 @@ def _write(obj: Any, out: list[str], depth: int) -> None:
         for index, element in enumerate(obj):
             if index:
                 out.append(',')
-            _write(element, out, depth + 1)
+            _write(element, out, _child_depth(element, depth))
         out.append(']')
     elif isinstance(obj, dict):
         out.append('{')
@@ -116,7 +121,7 @@ def _write(obj: Any, out: list[str], depth: int) -> None:
                 out.append(',')
             out.append(_quote(key))
             out.append(':')
-            _write(value, out, depth + 1)
+            _write(value, out, _child_depth(value, depth))
         out.append('}')
     else:
         out.append(_format_scalar(obj))

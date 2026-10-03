@@ -6,6 +6,8 @@ these tests check conformance against the RFC rather than against this SDK's
 own output.
 """
 
+import base64
+import hashlib
 import json
 import math
 import random
@@ -366,6 +368,106 @@ def test_deep_arrays_are_bounded():
         value = [value]
     with pytest.raises(CanonicalizationError):
         canonicalize(value)
+
+
+# --- Nesting bound: the jcs_depth_v1 corpus -------------------------------
+
+# `jcs_depth_vectors.json` is the `jcs_depth_v1` corpus. It pins the input a
+# canonicalizer must REFUSE rather than the bytes it must produce, because RFC
+# 8785 states no nesting limit and canonicalization runs before signature
+# verification. Depth counts open containers, the outermost at depth 1, and an
+# empty container is its own level.
+_DEPTH_VECTORS = json.loads(
+    (Path(__file__).parent / 'jcs_depth_vectors.json').read_text(
+        encoding='utf-8'
+    )
+)
+_DEPTH_ACCEPT = [
+    v for v in _DEPTH_VECTORS['vectors'] if v['outcome'] == 'accept'
+]
+_DEPTH_REJECT = [
+    v for v in _DEPTH_VECTORS['vectors'] if v['outcome'] == 'reject'
+]
+
+_DEPTH_OPENERS = {'object': '{"a":', 'array': '['}
+_DEPTH_CLOSERS = {'object': '}', 'array': ']'}
+
+
+def _materialise_depth(rule: dict[str, Any]) -> str:
+    """Materialises a preimage rule into the JSON text it describes."""
+    containers = rule['containers']
+    opened = ''.join(
+        _DEPTH_OPENERS[containers[i % len(containers)]]
+        for i in range(rule['count'])
+    )
+    closed = ''.join(
+        _DEPTH_CLOSERS[containers[i % len(containers)]]
+        for i in range(rule['count'] - 1, -1, -1)
+    )
+    return opened + rule['leaf'] + closed
+
+
+def _empty_leaf_nest(depth: int) -> dict[str, Any]:
+    """Wraps `{}` in `depth` objects: the shape an empty container sits in."""
+    value: Any = {}
+    for _ in range(depth):
+        value = {'a': value}
+    return value
+
+
+@pytest.mark.parametrize(
+    'vector', _DEPTH_VECTORS['vectors'], ids=lambda v: v['vector_id']
+)
+def test_depth_vector_preimage_is_the_pinned_one(vector):
+    """The input is checked before the output: a vector built wrong proves nothing."""
+    encoded = _materialise_depth(vector['preimage_rule']).encode('utf-8')
+    assert len(encoded) == vector['preimage_bytes']
+    assert hashlib.sha256(encoded).hexdigest() == vector['preimage_sha256']
+
+
+@pytest.mark.parametrize('vector', _DEPTH_ACCEPT, ids=lambda v: v['vector_id'])
+def test_depth_at_the_bound_is_canonicalised(vector):
+    """The deepest input the limit admits, the empty-container leaf included."""
+    canonical = canonicalize(
+        json.loads(_materialise_depth(vector['preimage_rule']))
+    )
+    encoded = canonical.encode('utf-8')
+    assert encoded == base64.b64decode(vector['expected_jcs_bytes_b64'])
+    assert hashlib.sha256(encoded).hexdigest() == vector['expected_sha256']
+
+
+@pytest.mark.parametrize('vector', _DEPTH_REJECT, ids=lambda v: v['vector_id'])
+def test_depth_past_the_bound_is_refused(vector):
+    """One container past the limit is refused whatever the innermost value is.
+
+    `jcs-depth-104` never reaches the walk: the JSON decoder refuses a
+    ten-million-level input first. Both refusals are catchable and neither
+    returns bytes, which is what the vector asks for.
+    """
+    with pytest.raises((CanonicalizationError, RecursionError)):
+        canonicalize(json.loads(_materialise_depth(vector['preimage_rule'])))
+
+
+def test_an_empty_container_leaf_is_its_own_level():
+    """The case a per-child counter misses.
+
+    A counter that charges a level on recursion into a child never charges an
+    empty container, so it accepts one container too many here while still
+    refusing the same depth wrapped around a scalar.
+    """
+    at_bound = _empty_leaf_nest(MAX_DEPTH - 1)
+    assert canonicalize(at_bound) == (
+        '{"a":' * (MAX_DEPTH - 1) + '{}' + '}' * (MAX_DEPTH - 1)
+    )
+    with pytest.raises(CanonicalizationError):
+        canonicalize(_empty_leaf_nest(MAX_DEPTH))
+
+
+def test_clean_empty_counts_containers_too():
+    """`_clean_empty` runs first, so it has to hold the same bound."""
+    signing._clean_empty(_empty_leaf_nest(MAX_DEPTH - 1))
+    with pytest.raises(CanonicalizationError):
+        signing._clean_empty(_empty_leaf_nest(MAX_DEPTH))
 
 
 # --- Types with no canonical form ---
