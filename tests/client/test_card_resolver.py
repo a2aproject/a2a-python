@@ -30,6 +30,7 @@ from a2a.types.a2a_pb2 import (
     StringList,
 )
 from a2a.utils import AGENT_CARD_WELL_KNOWN_PATH
+from google.protobuf.json_format import ParseError
 
 
 @pytest.fixture
@@ -309,6 +310,35 @@ class TestGetAgentCard:
         mock_httpx_client.get.assert_called_once_with(
             f'{base_url}/{AGENT_CARD_WELL_KNOWN_PATH[1:]}',
         )
+
+    @pytest.mark.parametrize(
+        'response_body',
+        [
+            'null',
+            '[]',
+            '[{"name":"TestAgent"}]',
+            '"TestAgent"',
+            '42',
+            '1.5',
+            'true',
+            'false',
+        ],
+    )
+    @pytest.mark.asyncio
+    async def test_get_agent_card_non_object_json(
+        self, response_body: str
+    ) -> None:
+        """Non-object JSON responses use the documented resolution error."""
+        transport = httpx.MockTransport(
+            lambda _request: httpx.Response(200, content=response_body)
+        )
+        async with httpx.AsyncClient(transport=transport) as client:
+            resolver = A2ACardResolver(client, 'https://example.com')
+            with pytest.raises(AgentCardResolutionError) as exc_info:
+                await resolver.get_agent_card()
+
+        assert 'Failed to validate agent card structure' in str(exc_info.value)
+        assert isinstance(exc_info.value.__cause__, ParseError)
 
     @pytest.mark.asyncio
     async def test_get_agent_card_logs_success(  # noqa: PLR0913

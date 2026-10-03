@@ -20,6 +20,8 @@ logger = logging.getLogger(__name__)
 
 def parse_agent_card(agent_card_data: dict[str, Any]) -> AgentCard:
     """Parse AgentCard JSON dictionary and handle backward compatibility."""
+    if not isinstance(agent_card_data, dict):
+        raise ParseError('Agent card must be a JSON object')
     _handle_extended_card_compatibility(agent_card_data)
     _handle_connection_fields_compatibility(agent_card_data)
     _handle_security_compatibility(agent_card_data)
