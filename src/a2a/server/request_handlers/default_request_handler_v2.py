@@ -560,7 +560,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
                 message=f'Task {task_id} is in terminal state: '
-                f'{task.status.state}'
+                f'{TaskState.Name(task.status.state)}'
             )
 
         if self._event_stream is None:
