@@ -164,15 +164,16 @@ def create_signature_verifier(
     return signature_verifier
 
 
-def _clean_empty(d: Any, depth: int = 0) -> Any:
+def _clean_empty(d: Any, depth: int = 1) -> Any:
     """Recursively remove empty strings, lists and dicts from a dictionary.
 
     Depth is bounded for the same reason canonicalization is: nesting reaches
     this function from `AgentExtension.params`, and without the bound a deeply
     nested card exhausts the interpreter stack here, before the canonicalizer
-    ever gets the chance to reject it.
+    ever gets the chance to reject it. `depth` counts open containers on the
+    path to `d`, the outermost at 1, and matches `_jcs.MAX_DEPTH`'s rule.
     """
-    if depth > MAX_DEPTH:
+    if isinstance(d, (dict, list)) and depth > MAX_DEPTH:
         raise CanonicalizationError(
             f'nesting exceeds the maximum depth of {MAX_DEPTH}'
         )
