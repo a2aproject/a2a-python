@@ -4,7 +4,7 @@ import json
 import logging
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
@@ -23,6 +23,7 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
     serialize_list_tasks_response,
 )
 from a2a.types.a2a_pb2 import (
@@ -129,6 +130,7 @@ class JsonRpcDispatcher:
         request_handler: RequestHandler,
         context_builder: ServerCallContextBuilder | None = None,
         enable_v0_3_compat: bool = False,
+        shutdown_grace_period: float = 0,
     ) -> None:
         """Initializes the JsonRpcDispatcher.
 
@@ -139,6 +141,8 @@ class JsonRpcDispatcher:
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
+            shutdown_grace_period: Seconds to allow active SSE streams to
+              finish before force-cancellation during shutdown.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -152,12 +156,14 @@ class JsonRpcDispatcher:
             context_builder or DefaultServerCallContextBuilder()
         )
         self.enable_v0_3_compat = enable_v0_3_compat
+        self._shutdown_grace_period = shutdown_grace_period
         self._v03_adapter: JSONRPC03Adapter | None = None
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
                 http_handler=request_handler,
                 context_builder=self._context_builder,
+                shutdown_grace_period=shutdown_grace_period,
             )
 
     def _generate_error_response(
@@ -596,7 +602,11 @@ class JsonRpcDispatcher:
                         'data': json_utils.dumps(error_response),
                     }
 
-            return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]
+            stream = cast('AsyncGenerator[dict[str, Any]]', handler_result)
+            return create_event_source_response(
+                event_generator(stream),
+                shutdown_grace_period=self._shutdown_grace_period,
+            )
 
         # handler_result is a dict (JSON-RPC response)
         return JSONResponse(handler_result)

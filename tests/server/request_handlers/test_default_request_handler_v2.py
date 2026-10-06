@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 import time
 import uuid
@@ -1163,7 +1164,7 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             params, create_server_call_context()
         )
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -1203,7 +1204,7 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
         ):
             pass
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -1328,7 +1329,7 @@ async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
             pass
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2442,4 +2443,88 @@ async def test_cancel_of_input_required_task_cannot_be_undone():
     stored = await handler.on_get_task(GetTaskRequest(id=task.id), ctx)
     assert stored.status.state == TaskState.TASK_STATE_CANCELED
     assert agent.execute_calls == 1
+    await handler.aclose()
+
+
+_REQUEST_TAG: contextvars.ContextVar[str] = contextvars.ContextVar(
+    'request_tag', default='unset'
+)
+
+
+class _InputRequiredThenCompleteAgent(AgentExecutor):
+    """Asks for input on the first message of a task and completes on the next."""
+
+    def __init__(self) -> None:
+        self.seen_tags: list[str] = []
+        self.task: Task | None = None
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_tags.append(_REQUEST_TAG.get())
+        if context.current_task:
+            updater = TaskUpdater(
+                event_queue, context.task_id, context.context_id
+            )
+            await updater.complete()
+            return
+        self.task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(self.task)
+        updater = TaskUpdater(event_queue, self.task.id, self.task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('streaming', [False, True])
+async def test_follow_up_message_runs_in_sender_contextvars(streaming):
+    """A follow-up message on a live task must see its own request's contextvars."""
+    agent = _InputRequiredThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    async def send(tag: str, message: Message) -> None:
+        _REQUEST_TAG.set(tag)
+        params = SendMessageRequest(message=message)
+        if streaming:
+            async for _ in handler.on_message_send_stream(
+                params, create_server_call_context()
+            ):
+                pass
+        else:
+            await handler.on_message_send(params, create_server_call_context())
+
+    await asyncio.create_task(
+        send(
+            'request-1',
+            Message(
+                message_id='msg-1',
+                role=Role.ROLE_USER,
+                parts=[Part(text='book a flight')],
+            ),
+        )
+    )
+    assert agent.task is not None
+    await asyncio.create_task(
+        send(
+            'request-2',
+            Message(
+                message_id='msg-2',
+                role=Role.ROLE_USER,
+                parts=[Part(text='Friday')],
+                task_id=agent.task.id,
+                context_id=agent.task.context_id,
+            ),
+        )
+    )
+
+    assert agent.seen_tags == ['request-1', 'request-2']
     await handler.aclose()
