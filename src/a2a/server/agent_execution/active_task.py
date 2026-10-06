@@ -36,6 +36,7 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import uuid
 
@@ -468,9 +469,9 @@ class ActiveTask:
         self._reference_count = 0
 
         # Queue for incoming requests
-        self._request_queue: AsyncQueue[tuple[RequestContext, uuid.UUID]] = (
-            create_async_queue()
-        )
+        self._request_queue: AsyncQueue[
+            tuple[RequestContext, uuid.UUID, contextvars.Context]
+        ] = create_async_queue()
 
     @property
     def task_id(self) -> str:
@@ -480,9 +481,16 @@ class ActiveTask:
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:
-        """Enqueues a request for the active task to process."""
+        """Enqueues a request for the active task to process.
+
+        The caller's contextvars are captured so the producer runs
+        `AgentExecutor.execute` in the context of the request that sent the
+        message, not the request that started the producer.
+        """
         request_id = uuid.uuid4()
-        await self._request_queue.put((request_context, request_id))
+        await self._request_queue.put(
+            (request_context, request_id, contextvars.copy_context())
+        )
         return request_id
 
     async def start(
@@ -573,6 +581,7 @@ class ActiveTask:
                 (
                     request_context,
                     request_id,
+                    sender_context,
                 ) = await self._request_queue.get()
                 await self._request_lock.acquire()
                 # TODO: Should we create task manager every time?
@@ -607,8 +616,12 @@ class ActiveTask:
                             _RequestStarted(request_id, request_context),
                         )
                     )
-                    await self._agent_executor.execute(
-                        request_context, self._event_queue_agent
+                    # Awaiting the child task propagates producer cancellation.
+                    await sender_context.run(
+                        asyncio.create_task,
+                        self._agent_executor.execute(
+                            request_context, self._event_queue_agent
+                        ),
                     )
                     logger.debug(
                         'Producer[%s]: Execution finished successfully',
