@@ -55,12 +55,13 @@ TransportProducer = Callable[
 ]
 
 
-def _major_minor(version: str) -> tuple[int, ...] | None:
+def _major_minor(version: str) -> tuple[int, int] | None:
     """Returns the `Major.Minor` release of a protocol version, if valid."""
     try:
-        return Version(version).release[:2]
+        v = Version(version)
     except InvalidVersion:
         return None
+    return (v.major, v.minor)
 
 
 class ClientFactory:
@@ -240,6 +241,7 @@ class ClientFactory:
         # Prefer interface with version 1.0. Patch versions must not affect
         # negotiation, so '1.0.0' counts as '1.0'.
         v1_0 = _major_minor(PROTOCOL_VERSION_1_0)
+        v0_3 = _major_minor(PROTOCOL_VERSION_0_3)
         for i in candidates:
             if _major_minor(i.protocol_version) == v1_0:
                 return i
@@ -254,14 +256,13 @@ class ClientFactory:
                     best_no_version = i
                 continue
 
-            try:
-                v = Version(i.protocol_version)
-                if best_gt_1_0 is None and v > Version(PROTOCOL_VERSION_1_0):
-                    best_gt_1_0 = i
-                if best_ge_0_3 is None and v >= Version(PROTOCOL_VERSION_0_3):
-                    best_ge_0_3 = i
-            except InvalidVersion:
-                pass
+            v = _major_minor(i.protocol_version)
+            if v is None:
+                continue
+            if best_gt_1_0 is None and v > v1_0:
+                best_gt_1_0 = i
+            if best_ge_0_3 is None and v >= v0_3:
+                best_ge_0_3 = i
 
         return best_gt_1_0 or best_ge_0_3 or best_no_version
 
