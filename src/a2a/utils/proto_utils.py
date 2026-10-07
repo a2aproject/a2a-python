@@ -321,8 +321,14 @@ def validate_proto_required_fields(msg: ProtobufMessage) -> None:
         )
 
 
+_SPEC_FIELD_PRESENCE_URL = (
+    'https://a2a-protocol.org/latest/specification/'
+    '#57-field-presence-and-optionality'
+)
+
+
 def warn_on_missing_required_fields(msg: ProtobufMessage, source: str) -> bool:
-    """Log a warning if fields marked as REQUIRED are missing on the message.
+    """Log a warning if fields marked as REQUIRED are missing or empty.
 
     Unlike `validate_proto_required_fields`, this never raises, so it can
     surface spec violations without breaking callers that currently rely on
@@ -333,7 +339,7 @@ def warn_on_missing_required_fields(msg: ProtobufMessage, source: str) -> bool:
         source: Where the message was passed in, used in the log message.
 
     Returns:
-        True if every REQUIRED field is present, False otherwise. Objects that
+        True if every REQUIRED field is set, False otherwise. Objects that
         are not Protobuf messages (for example test doubles) are not checked.
     """
     if not isinstance(msg, ProtobufMessage):
@@ -342,10 +348,14 @@ def warn_on_missing_required_fields(msg: ProtobufMessage, source: str) -> bool:
     if not errors:
         return True
     logger.warning(
-        '%s %s is missing fields marked REQUIRED by the A2A spec: %s',
+        '%s %s is not spec-compliant - REQUIRED fields missing or empty: '
+        '%s. This is allowed and does not raise, but it may not verify or '
+        'interoperate across SDKs and could be rejected in a future major '
+        'release. See %s',
         source,
         msg.DESCRIPTOR.name,
         ', '.join(err['field'] for err in errors),
+        _SPEC_FIELD_PRESENCE_URL,
     )
     return False
 

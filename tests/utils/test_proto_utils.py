@@ -359,8 +359,12 @@ class TestWarnOnMissingRequiredFields:
         [record] = caplog.records
         assert record.levelno == logging.WARNING
         assert record.getMessage() == (
-            'message passed to test: Message is missing fields marked '
-            'REQUIRED by the A2A spec: message_id, role, parts'
+            'message passed to test: Message is not spec-compliant - '
+            'REQUIRED fields missing or empty: message_id, role, parts. '
+            'This is allowed and does not raise, but it may not verify or '
+            'interoperate across SDKs and could be rejected in a future '
+            'major release. See '
+            'https://a2a-protocol.org/latest/specification/#57-field-presence-and-optionality'
         )
 
     def test_non_message_objects_are_not_checked(
@@ -386,3 +390,11 @@ class TestWarnOnMissingRequiredFields:
                 task, 'test:'
             )
         assert 'history[0].message_id' in caplog.text
+
+    def test_empty_repeated_field_is_reported(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        msg = Message(message_id='msg-1', role=Role.ROLE_USER, parts=[])
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(msg, 'test:')
+        assert 'REQUIRED fields missing or empty: parts.' in caplog.text
