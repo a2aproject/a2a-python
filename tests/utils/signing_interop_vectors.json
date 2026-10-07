@@ -1,0 +1,252 @@
+{
+  "_comment": "Cross-SDK Agent Card signature vectors: the five vectors of the s0-control group of the language-neutral a2a-card-sign-v01 corpus (Layer C of the corpus whose Layers A and B are a2a-tck#228 and #245), keeping only the fields these tests read. Every card carries every REQUIRED field and no field at its default value, so the canonical readings in use today agree on its bytes and these expectations hold however a2aproject/A2A#2122 is settled. The key is a published test key (derivation in `test_key`); it signs test vectors only. The jku in each protected header is a placeholder that is never fetched.",
+  "corpus": "a2a-card-sign-v01",
+  "specRef": "https://a2a-protocol.org/latest/specification/#841-canonicalization-requirements",
+  "oracles": [
+    "rfc8785 (PyPI, 0.1.4)",
+    "gowebpki/jcs (Go, v1.0.1)"
+  ],
+  "test_key": {
+    "kid": "hs-interop-test-v1",
+    "alg": "ES256",
+    "jwk": {
+      "kty": "EC",
+      "crv": "P-256",
+      "x": "khLaGq9LmIvsjFv8YF0N4IJwRGvldb36SwqntLYct04",
+      "y": "XCMP49DgLRfdGJKDr5MacrOCNaDXIwSvoFjID8ORkmQ",
+      "kid": "hs-interop-test-v1",
+      "alg": "ES256",
+      "use": "sig"
+    },
+    "derivation": "d = int.from_bytes(sha256(phrase), 'big') mod (n - 1) + 1 on P-256",
+    "phrase": "HORIZON SHIELD A2A card-signing interop test key v1 (public, test vectors only)",
+    "note": "Published test key, so anyone can re-create the private key and re-sign every reference vector byte for byte (RFC 6979). It signs test vectors only and is nobody's production key."
+  },
+  "counts": {
+    "accept": 4,
+    "reject": 1,
+    "total": 5
+  },
+  "vectors": [
+    {
+      "id": "S0-001",
+      "disposition": "MUST-ACCEPT",
+      "signer": "reference (ES256, RFC 6979)",
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c2264656661756c74496e7075744d6f646573223a5b22746578742f706c61696e225d2c2264656661756c744f75747075744d6f646573223a5b22746578742f706c61696e225d2c226465736372697074696f6e223a2250726f6265206361726420666f722063726f73732d53444b207369676e617475726520636865636b73222c226e616d65223a22496e7465726f702050726f6265222c22736b696c6c73223a5b7b226465736372697074696f6e223a22416e737765727320612070726f6265222c226964223a2270726f6265222c226e616d65223a2250726f6265222c2274616773223a5b2270726f6265225d7d5d2c22737570706f72746564496e7465726661636573223a5b7b2270726f746f636f6c42696e64696e67223a224a534f4e525043222c2270726f746f636f6c56657273696f6e223a22312e30222c2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d5d2c2276657273696f6e223a22312e302e30227d",
+      "served_card": {
+        "name": "Interop Probe",
+        "description": "Probe card for cross-SDK signature checks",
+        "version": "1.0.0",
+        "supportedInterfaces": [
+          {
+            "url": "https://example.com/a2a/v1",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0"
+          }
+        ],
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "defaultInputModes": [
+          "text/plain"
+        ],
+        "defaultOutputModes": [
+          "text/plain"
+        ],
+        "skills": [
+          {
+            "id": "probe",
+            "name": "Probe",
+            "description": "Answers a probe",
+            "tags": [
+              "probe"
+            ]
+          }
+        ],
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiIsImprdSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYTJhLWNhcmQtc2lnbi12MDEvdGVzdGtleV9qd2tzLmpzb24iLCJraWQiOiJocy1pbnRlcm9wLXRlc3QtdjEiLCJ0eXAiOiJKT1NFIn0",
+            "signature": "jkAX98oJc4IUm6400xBQWnk5_dN33PH6KSz3KYVh6mA6gvdaroVnSVxSkzT5NoNLVIN3IoAaxvHK4etXsDMelQ"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S0-002",
+      "disposition": "MUST-ACCEPT",
+      "signer": "a2a-sdk 1.2.1",
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c2264656661756c74496e7075744d6f646573223a5b22746578742f706c61696e225d2c2264656661756c744f75747075744d6f646573223a5b22746578742f706c61696e225d2c226465736372697074696f6e223a2250726f6265206361726420666f722063726f73732d53444b207369676e617475726520636865636b73222c226e616d65223a22496e7465726f702050726f6265222c22736b696c6c73223a5b7b226465736372697074696f6e223a22416e737765727320612070726f6265222c226964223a2270726f6265222c226e616d65223a2250726f6265222c2274616773223a5b2270726f6265225d7d5d2c22737570706f72746564496e7465726661636573223a5b7b2270726f746f636f6c42696e64696e67223a224a534f4e525043222c2270726f746f636f6c56657273696f6e223a22312e30222c2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d5d2c2276657273696f6e223a22312e302e30227d",
+      "served_card": {
+        "name": "Interop Probe",
+        "description": "Probe card for cross-SDK signature checks",
+        "version": "1.0.0",
+        "supportedInterfaces": [
+          {
+            "url": "https://example.com/a2a/v1",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0"
+          }
+        ],
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "defaultInputModes": [
+          "text/plain"
+        ],
+        "defaultOutputModes": [
+          "text/plain"
+        ],
+        "skills": [
+          {
+            "id": "probe",
+            "name": "Probe",
+            "description": "Answers a probe",
+            "tags": [
+              "probe"
+            ]
+          }
+        ],
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiIsImprdSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYTJhLWNhcmQtc2lnbi12MDEvdGVzdGtleV9qd2tzLmpzb24iLCJraWQiOiJocy1pbnRlcm9wLXRlc3QtdjEiLCJ0eXAiOiJKT1NFIn0",
+            "signature": "nw-32J6gLi6LsENaVDE6Qjz1oiagGEGtY6hYEc-LLXD3hmMLSYZ6cIZH7U9YHja3Hkqk-Uh4CUq2EtZY_TnjDg"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S0-003",
+      "disposition": "MUST-ACCEPT",
+      "signer": "@a2a-js/sdk 1.3.0",
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c2264656661756c74496e7075744d6f646573223a5b22746578742f706c61696e225d2c2264656661756c744f75747075744d6f646573223a5b22746578742f706c61696e225d2c226465736372697074696f6e223a2250726f6265206361726420666f722063726f73732d53444b207369676e617475726520636865636b73222c226e616d65223a22496e7465726f702050726f6265222c22736b696c6c73223a5b7b226465736372697074696f6e223a22416e737765727320612070726f6265222c226964223a2270726f6265222c226e616d65223a2250726f6265222c2274616773223a5b2270726f6265225d7d5d2c22737570706f72746564496e7465726661636573223a5b7b2270726f746f636f6c42696e64696e67223a224a534f4e525043222c2270726f746f636f6c56657273696f6e223a22312e30222c2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d5d2c2276657273696f6e223a22312e302e30227d",
+      "served_card": {
+        "name": "Interop Probe",
+        "description": "Probe card for cross-SDK signature checks",
+        "version": "1.0.0",
+        "supportedInterfaces": [
+          {
+            "url": "https://example.com/a2a/v1",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0"
+          }
+        ],
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "defaultInputModes": [
+          "text/plain"
+        ],
+        "defaultOutputModes": [
+          "text/plain"
+        ],
+        "skills": [
+          {
+            "id": "probe",
+            "name": "Probe",
+            "description": "Answers a probe",
+            "tags": [
+              "probe"
+            ]
+          }
+        ],
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiIsInR5cCI6IkpPU0UiLCJraWQiOiJocy1pbnRlcm9wLXRlc3QtdjEiLCJqa3UiOiJodHRwczovL2V4YW1wbGUuY29tL2EyYS1jYXJkLXNpZ24tdjAxL3Rlc3RrZXlfandrcy5qc29uIn0",
+            "signature": "aJbacfQKkE_YmVBGBCqwVtLZR9HOIPLlbzhVkF27T6ISnYiSJPeXX9xcVl9EhhRu-bk8P2iRQGtBmMd_eWR1oQ"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S0-004",
+      "disposition": "MUST-ACCEPT",
+      "signer": "a2a-go main 534a60fc",
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c2264656661756c74496e7075744d6f646573223a5b22746578742f706c61696e225d2c2264656661756c744f75747075744d6f646573223a5b22746578742f706c61696e225d2c226465736372697074696f6e223a2250726f6265206361726420666f722063726f73732d53444b207369676e617475726520636865636b73222c226e616d65223a22496e7465726f702050726f6265222c22736b696c6c73223a5b7b226465736372697074696f6e223a22416e737765727320612070726f6265222c226964223a2270726f6265222c226e616d65223a2250726f6265222c2274616773223a5b2270726f6265225d7d5d2c22737570706f72746564496e7465726661636573223a5b7b2270726f746f636f6c42696e64696e67223a224a534f4e525043222c2270726f746f636f6c56657273696f6e223a22312e30222c2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d5d2c2276657273696f6e223a22312e302e30227d",
+      "served_card": {
+        "name": "Interop Probe",
+        "description": "Probe card for cross-SDK signature checks",
+        "version": "1.0.0",
+        "supportedInterfaces": [
+          {
+            "url": "https://example.com/a2a/v1",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0"
+          }
+        ],
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "defaultInputModes": [
+          "text/plain"
+        ],
+        "defaultOutputModes": [
+          "text/plain"
+        ],
+        "skills": [
+          {
+            "id": "probe",
+            "name": "Probe",
+            "description": "Answers a probe",
+            "tags": [
+              "probe"
+            ]
+          }
+        ],
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiIsImprdSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYTJhLWNhcmQtc2lnbi12MDEvdGVzdGtleV9qd2tzLmpzb24iLCJraWQiOiJocy1pbnRlcm9wLXRlc3QtdjEiLCJ0eXAiOiJKT1NFIn0",
+            "signature": "Sm8gkamh8mcy5OsA5q84-GHO_hL5hyGrkyB8k4qJ1gm_4M64eMB6Av_m3sZSVNzgvygKXTTpeWM_wL22COXTww"
+          }
+        ]
+      }
+    },
+    {
+      "id": "S0-REJECT-005",
+      "disposition": "MUST-REJECT",
+      "signer": "reference (ES256, RFC 6979)",
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c2264656661756c74496e7075744d6f646573223a5b22746578742f706c61696e225d2c2264656661756c744f75747075744d6f646573223a5b22746578742f706c61696e225d2c226465736372697074696f6e223a2250726f6265206361726420666f722063726f73732d53444b207369676e617475726520636865636b732e222c226e616d65223a22496e7465726f702050726f6265222c22736b696c6c73223a5b7b226465736372697074696f6e223a22416e737765727320612070726f6265222c226964223a2270726f6265222c226e616d65223a2250726f6265222c2274616773223a5b2270726f6265225d7d5d2c22737570706f72746564496e7465726661636573223a5b7b2270726f746f636f6c42696e64696e67223a224a534f4e525043222c2270726f746f636f6c56657273696f6e223a22312e30222c2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d5d2c2276657273696f6e223a22312e302e30227d",
+      "served_card": {
+        "name": "Interop Probe",
+        "description": "Probe card for cross-SDK signature checks.",
+        "version": "1.0.0",
+        "supportedInterfaces": [
+          {
+            "url": "https://example.com/a2a/v1",
+            "protocolBinding": "JSONRPC",
+            "protocolVersion": "1.0"
+          }
+        ],
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "defaultInputModes": [
+          "text/plain"
+        ],
+        "defaultOutputModes": [
+          "text/plain"
+        ],
+        "skills": [
+          {
+            "id": "probe",
+            "name": "Probe",
+            "description": "Answers a probe",
+            "tags": [
+              "probe"
+            ]
+          }
+        ],
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiIsImprdSI6Imh0dHBzOi8vZXhhbXBsZS5jb20vYTJhLWNhcmQtc2lnbi12MDEvdGVzdGtleV9qd2tzLmpzb24iLCJraWQiOiJocy1pbnRlcm9wLXRlc3QtdjEiLCJ0eXAiOiJKT1NFIn0",
+            "signature": "jkAX98oJc4IUm6400xBQWnk5_dN33PH6KSz3KYVh6mA6gvdaroVnSVxSkzT5NoNLVIN3IoAaxvHK4etXsDMelQ"
+          }
+        ]
+      }
+    }
+  ]
+}
