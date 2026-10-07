@@ -42,19 +42,25 @@ logger = logging.getLogger(__name__)
 
 
 def _parse_rest_error(
-    error_payload: dict[str, Any],
+    error_payload: Any,
     fallback_message: str,
 ) -> Exception | None:
     """Parses a REST error payload and returns the appropriate A2AError.
 
     Args:
-        error_payload: The parsed JSON error payload.
+        error_payload: The parsed JSON error payload. Any JSON value is
+            accepted, since a proxy or gateway may answer with a body that
+            is not a ``google.rpc.Status``.
         fallback_message: Message to use if the payload has no ``message``.
 
     Returns:
         The mapped A2AError if a known reason was found, otherwise ``None``.
     """
-    error_data = error_payload.get('error', {})
+    if not isinstance(error_payload, dict):
+        return None
+    error_data = error_payload.get('error')
+    if not isinstance(error_data, dict):
+        return None
     message = error_data.get('message', fallback_message)
     details = error_data.get('details', [])
     if not isinstance(details, list):

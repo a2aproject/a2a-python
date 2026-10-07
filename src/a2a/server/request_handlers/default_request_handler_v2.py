@@ -29,6 +29,9 @@ from a2a.server.request_handlers.request_handler import (
     validate,
     validate_request_params,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -58,6 +61,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
 )
 from a2a.utils.input_mode_validator import validate_input_modes
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -148,6 +152,14 @@ class DefaultRequestHandlerV2(RequestHandler):
             )
             warnings.warn(message, stacklevel=2)
             logger.warning(message)
+        warn_on_missing_required_fields(
+            agent_card, 'agent_card passed to DefaultRequestHandlerV2:'
+        )
+        if extended_agent_card is not None:
+            warn_on_missing_required_fields(
+                extended_agent_card,
+                'extended_agent_card passed to DefaultRequestHandlerV2:',
+            )
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -497,13 +509,15 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         await self._reject_unsafe_push_url(params.url)
 
-        await self._push_config_store.set_info(
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
-
-        return params
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(
@@ -555,7 +569,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
                 message=f'Task {task_id} is in terminal state: '
-                f'{task.status.state}'
+                f'{TaskState.Name(task.status.state)}'
             )
 
         if self._event_stream is None:

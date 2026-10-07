@@ -38,6 +38,7 @@ from a2a.server.models import (
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
+    normalize_push_notification_config,
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
@@ -283,16 +284,14 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> None:
+    ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a task."""
         await self._ensure_initialized()
         owner = self.owner_resolver(context)
 
-        # Create a copy of the config using proto CopyFrom
-        config_to_save = TaskPushNotificationConfig()
-        config_to_save.CopyFrom(notification_config)
-        if not config_to_save.id:
-            config_to_save.id = task_id
+        config_to_save = normalize_push_notification_config(
+            task_id, notification_config
+        )
 
         db_config = self._to_orm(task_id, config_to_save, owner)
         async with self.async_session_maker.begin() as session:
@@ -303,6 +302,7 @@ class DatabasePushNotificationConfigStore(PushNotificationConfigStore):
                 config_to_save.id,
                 owner,
             )
+        return config_to_save
 
     async def _select_configs(
         self,

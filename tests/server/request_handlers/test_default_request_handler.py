@@ -56,6 +56,8 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
+    AgentSkill,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -465,13 +467,40 @@ async def test_on_cancel_task_completes_during_cancellation(agent_card):
         return_value=mock_result_aggregator_instance,
     ):
         params = CancelTaskRequest(id=f'{task_id}')
-        with pytest.raises(TaskNotCancelableError):
+        with pytest.raises(
+            TaskNotCancelableError,
+            match='current state: TASK_STATE_COMPLETED',
+        ):
             await request_handler.on_cancel_task(
                 params, create_server_call_context()
             )
 
     mock_producer_task.cancel.assert_called_once()
     mock_agent_executor.cancel.assert_awaited_once()
+
+
+@pytest.mark.asyncio
+async def test_on_cancel_task_already_terminal_names_state(agent_card):
+    """Cancelling a finished task reports the state by name."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = create_sample_task(
+        task_id='finished_task', status_state=TaskState.TASK_STATE_FAILED
+    )
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    with pytest.raises(
+        TaskNotCancelableError, match='current state: TASK_STATE_FAILED'
+    ):
+        await request_handler.on_cancel_task(
+            CancelTaskRequest(id='finished_task'), create_server_call_context()
+        )
+
+    mock_agent_executor.cancel.assert_not_awaited()
 
 
 @pytest.mark.asyncio
@@ -1978,6 +2007,87 @@ async def test_set_task_push_notification_config_task_not_found(agent_card):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('store_kind', ['inmemory', 'database'])
+async def test_create_task_push_notification_config_returns_stored_id(
+    agent_card, store_kind
+):
+    """Test on_create_task_push_notification_config returns the id that was stored."""
+    if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
+        from a2a.server.tasks.database_push_notification_config_store import (
+            DatabasePushNotificationConfigStore,
+        )
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///file:pushid?mode=memory&cache=shared&uri=true'
+        )
+        push_config_store = DatabasePushNotificationConfigStore(engine=engine)
+    else:
+        push_config_store = InMemoryPushNotificationConfigStore()
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id,
+        url='http://example.com',
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    stored = await push_config_store.get_info(task.id, context)
+    if store_kind == 'database':
+        await engine.dispose()
+
+    assert response.id == task.id
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
+async def test_create_task_push_notification_config_normalizes_when_store_returns_none(
+    agent_card,
+):
+    """A custom store that still returns None from set_info keeps working."""
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    push_config_store.set_info.return_value = None
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=agent_card,
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    assert (response.task_id, response.id) == (task.id, task.id)
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store(agent_card):
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandler(
@@ -2601,7 +2711,7 @@ async def test_on_message_send_task_in_terminal_state(
             )
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2646,7 +2756,7 @@ async def test_on_message_send_stream_task_in_terminal_state(
                 pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -2681,7 +2791,7 @@ async def test_on_subscribe_to_task_in_terminal_state(
             pass  # pragma: no cover
 
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
     mock_task_store.get.assert_awaited_once_with(f'{task_id}', context)
@@ -3281,3 +3391,63 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         InvalidParamsError, match='Invalid push notification URL'
     ):
         await request_handler.on_message_send(params, context)
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_init_warns_about_incomplete_agent_cards(
+    agent_card: AgentCard,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cards missing REQUIRED fields are accepted, but each one is logged."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=agent_card,
+            extended_agent_card=AgentCard(),
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 2
+    assert messages[0].startswith('agent_card passed to DefaultRequestHandler:')
+    assert messages[1].startswith(
+        'extended_agent_card passed to DefaultRequestHandler:'
+    )
+
+
+def test_init_does_not_warn_for_complete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=_complete_agent_card(),
+            extended_agent_card=_complete_agent_card(),
+        )
+    assert caplog.records == []
