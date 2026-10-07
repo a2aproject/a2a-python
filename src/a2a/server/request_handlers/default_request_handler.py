@@ -63,6 +63,7 @@ from a2a.utils.errors import (
     UnsupportedOperationError,
 )
 from a2a.utils.input_mode_validator import validate_input_modes
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -146,6 +147,14 @@ class LegacyRequestHandler(RequestHandler):
         self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        warn_on_missing_required_fields(
+            agent_card, 'agent_card passed to DefaultRequestHandler:'
+        )
+        if extended_agent_card is not None:
+            warn_on_missing_required_fields(
+                extended_agent_card,
+                'extended_agent_card passed to DefaultRequestHandler:',
+            )
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
