@@ -35,7 +35,7 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskPushNotificationConfig,
 )
-from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, A2AError
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -315,7 +315,7 @@ class JsonRpcTransport(ClientTransport):
         """Closes the httpx client."""
         await self.httpx_client.aclose()
 
-    def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
+    def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> A2AError:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
         code = error_dict.get('code')
         message = error_dict.get('message', str(error_dict))
