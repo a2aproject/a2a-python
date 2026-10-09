@@ -9,12 +9,30 @@ import urllib.parse
 
 logger = logging.getLogger(__name__)
 
+# RFC 6598. ipaddress leaves is_private false for this range on every
+# Python this package supports (3.10 through 3.14), while is_global is
+# also false. The flag checks below would accept it.
+_SHARED_ADDRESS_SPACE = ipaddress.ip_network('100.64.0.0/10')
+
 
 def _ip_is_blocked(ip_str: str) -> bool:
-    """Whether an address is not a public unicast destination."""
+    """Whether an address is not a public unicast destination.
+
+    RFC 6598 shared address space (100.64.0.0/10) is not public, but
+    ``ipaddress`` leaves ``is_private`` false for it. An IPv4-mapped
+    IPv6 address is judged as the IPv4 address inside it.
+    """
     try:
         addr = ipaddress.ip_address(ip_str.split('%', maxsplit=1)[0])
     except ValueError:
+        return True
+    mapped = getattr(addr, 'ipv4_mapped', None)
+    if mapped is not None:
+        addr = mapped
+    if (
+        isinstance(addr, ipaddress.IPv4Address)
+        and addr in _SHARED_ADDRESS_SPACE
+    ):
         return True
     return (
         addr.is_private
@@ -30,14 +48,14 @@ async def validate_push_notification_url(url: str) -> bool:
     """Return True if a push-notification URL is safe to fetch.
 
     Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
-    link-local, private, reserved, multicast, or unspecified addresses
-    (e.g. 169.254.169.254 cloud metadata, internal services). A host
-    that cannot be resolved is rejected: the POST would fail anyway,
-    and failing closed avoids treating resolution errors as a bypass.
+    link-local, private, shared (100.64.0.0/10), reserved, multicast,
+    or unspecified addresses (e.g. 169.254.169.254 cloud metadata,
+    internal services). A host that cannot be resolved is rejected:
+    the POST would fail anyway, and failing closed avoids treating
+    resolution errors as a bypass.
 
-    IPv4-mapped IPv6 forms are covered: ``ipaddress`` maps them to the
-    underlying IPv4 address, so the ``is_private``/``is_loopback``
-    checks apply to the mapped value.
+    IPv4-mapped IPv6 forms are judged as the IPv4 address they carry,
+    so the private, shared, and loopback checks apply to that address.
 
     Uses the running event-loop resolver so request handlers and the
     sender stay non-blocking. Deployments can pass this function as

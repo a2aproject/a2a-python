@@ -360,6 +360,21 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
             await self._dispatch('http://internal-service/endpoint')
         self.mock_httpx_client.post.assert_not_called()
 
+    async def test_shared_address_space_blocked(self) -> None:
+        with self._patch_gai(return_value=_gai_result('100.64.0.1')):
+            await self._dispatch('http://shared.example/hook')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_ipv4_mapped_shared_address_blocked(self) -> None:
+        with self._patch_gai(return_value=_gai_result('::ffff:100.64.0.1')):
+            await self._dispatch('http://shared.example/hook')
+        self.mock_httpx_client.post.assert_not_called()
+
+    async def test_address_below_shared_space_allowed(self) -> None:
+        with self._patch_gai(return_value=_gai_result('100.63.255.255')):
+            await self._dispatch('http://notify.me/here')
+        self.mock_httpx_client.post.assert_awaited_once()
+
     async def test_non_http_scheme_blocked(self) -> None:
         await self._dispatch('ftp://example.com/file')
         self.mock_httpx_client.post.assert_not_called()
