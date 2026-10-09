@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from unittest.mock import AsyncMock, Mock, patch
@@ -921,6 +922,88 @@ class TestActiveTask:
         ):
             async for _ in active_task.subscribe():
                 pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(5)
+    async def test_active_task_cancel_while_subscribed_frees_producer(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Regression (#1322): a cancel while a subscriber is streaming must
+        not leave the producer wedged.
+
+        The producer closes `_event_queue_subscribers` with
+        `immediate=False`, which blocks until every tap has marked all of its
+        items done. ``subscribe`` consumes the internal ``_RequestStarted``
+        event without yielding it, so it must also mark it done -- otherwise a
+        cancel that ends the subscriber before ``_RequestCompleted`` is sent
+        leaves that item unacknowledged, the producer blocks forever on
+        ``close(immediate=False)``, and both the producer task and the
+        ``ActiveTask`` leak until the whole handler is ``aclose``-d.
+        """
+        hang = asyncio.Event()
+
+        async def execute_mock(req, q):
+            await hang.wait()  # long-running work, cancelled from outside
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        producer = active_task._producer_task
+        assert producer is not None
+
+        # Drive a subscriber far enough to dequeue and skip _RequestStarted,
+        # then stop reading -- exactly the state a cancelled stream leaves.
+        subscription = active_task.subscribe(request=request_context)
+
+        async def drain() -> None:
+            async for _event in subscription:
+                # The internal _RequestStarted the producer enqueues is
+                # consumed inside subscribe() and never reaches us; real work
+                # items would.
+                pass
+
+        reader = asyncio.create_task(drain())
+        # Let the producer enqueue _RequestStarted and the subscriber consume it.
+        await asyncio.sleep(0.1)
+
+        # Cancel the producer: this is what the SDK does after the executor's
+        # cancel() returns on a streamed task. execute() never gets to emit
+        # _RequestCompleted.
+        producer.cancel()
+
+        # The producer must reach completion. Before the fix it blocks forever
+        # inside `_event_queue_subscribers.close(immediate=False)` waiting on
+        # the unacknowledged _RequestStarted, and this await times out.
+        await asyncio.wait_for(asyncio.shield(_settle(producer)), timeout=2)
+        assert producer.done(), (
+            'producer never finished -> it leaked waiting on an '
+            'unacknowledged _RequestStarted (#1322)'
+        )
+
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader
+        hang.set()
+        await active_task.aclose()
+
+
+async def _settle(task: asyncio.Task) -> None:
+    """Wait for ``task`` to finish, swallowing its CancelledError/result."""
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
 
 
 @pytest.mark.asyncio
