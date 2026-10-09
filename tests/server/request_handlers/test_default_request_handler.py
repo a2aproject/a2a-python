@@ -3451,3 +3451,27 @@ def test_init_does_not_warn_for_complete_agent_cards(
             extended_agent_card=_complete_agent_card(),
         )
     assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_push_sender_failure_does_not_propagate(agent_card):
+    """A push-notification infrastructure failure raised by the sender must
+    not propagate out of _send_push_notification_if_needed into the task
+    lifecycle (#1313)."""
+    mock_push_sender = AsyncMock(spec=PushNotificationSender)
+    mock_push_sender.send_notification.side_effect = RuntimeError(
+        'transient push infrastructure error'
+    )
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        push_config_store=AsyncMock(spec=PushNotificationConfigStore),
+        push_sender=mock_push_sender,
+        agent_card=agent_card,
+    )
+    event = create_sample_task()
+
+    # Must not raise: push delivery is best-effort.
+    await request_handler._send_push_notification_if_needed(event.id, event)
+
+    mock_push_sender.send_notification.assert_awaited_once_with(event.id, event)

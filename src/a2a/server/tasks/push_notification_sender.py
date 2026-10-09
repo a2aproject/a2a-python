@@ -17,4 +17,9 @@ class PushNotificationSender(ABC):
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
     ) -> None:
-        """Sends a push notification containing the latest task state."""
+        """Sends a push notification containing the latest task state.
+
+        Implementations are treated as best-effort: the framework catches
+        and logs any exception raised here, so a failure never affects the
+        task lifecycle or the event stream.
+        """
