@@ -313,6 +313,46 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             headers={},
         )
 
+    @patch('a2a.server.tasks.base_push_notification_sender.logger')
+    async def test_send_notification_config_store_failure_is_swallowed(
+        self, mock_logger: MagicMock
+    ) -> None:
+        """A config store read failure is logged and delivery is skipped
+        instead of propagating into the task lifecycle (issue #1313)."""
+        task_id = 'task_store_error'
+        task_data = _create_sample_task(task_id=task_id)
+        self.mock_config_store.get_info_for_dispatch.side_effect = RuntimeError(
+            'transient DB error'
+        )
+
+        await self.sender.send_notification(task_id, task_data)
+
+        self.mock_config_store.get_info_for_dispatch.assert_awaited_once_with(
+            task_id
+        )
+        self.mock_httpx_client.post.assert_not_called()
+        mock_logger.exception.assert_called_once()
+
+    @patch('a2a.server.tasks.base_push_notification_sender.logger')
+    async def test_push_url_validator_raising_rejects_url(
+        self, mock_logger: MagicMock
+    ) -> None:
+        """A raising push_url_validator is treated as a rejected URL rather
+        than propagating into the task lifecycle (issue #1313)."""
+        sender = BasePushNotificationSender(
+            httpx_client=self.mock_httpx_client,
+            config_store=self.mock_config_store,
+            push_url_validator=AsyncMock(side_effect=RuntimeError('boom')),
+        )
+        task_data = _create_sample_task(task_id='task_validator_error')
+        config = _create_sample_push_config(url='http://notify.me/here')
+        self.mock_config_store.get_info_for_dispatch.return_value = [config]
+
+        await sender.send_notification(task_data.id, task_data)
+
+        self.mock_httpx_client.post.assert_not_called()
+        mock_logger.exception.assert_called_once()
+
 
 def _gai_result(ip: str, port: int = 80):
     return [(2, 1, 6, '', (ip, port))]
