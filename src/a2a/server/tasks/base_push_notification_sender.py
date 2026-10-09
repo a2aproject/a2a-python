@@ -68,7 +68,11 @@ class BasePushNotificationSender(PushNotificationSender):
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
     ) -> None:
-        """Sends a push notification for an event if configuration exists."""
+        """Sends a push notification for an event if configuration exists.
+
+        Best-effort by design: failures to read the configuration store or
+        to deliver a notification are logged and do not raise.
+        """
         try:
             push_configs = await self._config_store.get_info_for_dispatch(
                 task_id
