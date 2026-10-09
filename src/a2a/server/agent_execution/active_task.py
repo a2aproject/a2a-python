@@ -688,6 +688,14 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
+    def request_in_flight(self) -> bool:
+        """True while this replica is executing a turn for the task.
+
+        The lock is held from the start of a request until its completion
+        event. An interrupted turn releases it and leaves the task registered.
+        """
+        return self._request_lock.locked()
+
     async def subscribe(
         self,
         *,
