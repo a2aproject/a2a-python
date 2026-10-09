@@ -2606,6 +2606,13 @@ class FlakyPushConfigStore(InMemoryPushNotificationConfigStore):
         raise RuntimeError('transient DB error while reading push configs')
 
 
+class RaisingPushSender(PushNotificationSender):
+    """A custom (public-interface) sender that always fails (issue #1313)."""
+
+    async def send_notification(self, task_id, event) -> None:
+        raise RuntimeError('sender exploded')
+
+
 @pytest.mark.asyncio
 async def test_push_config_store_failure_does_not_fail_task():
     """A push-notification infrastructure failure must not rewrite a
@@ -2617,7 +2624,7 @@ async def test_push_config_store_failure_does_not_fail_task():
         task_store=task_store,
         push_config_store=FlakyPushConfigStore(),
         push_sender=BasePushNotificationSender(
-            httpx_client=httpx.AsyncClient(),
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
             config_store=FlakyPushConfigStore(),
         ),
         agent_card=create_default_agent_card(),
@@ -2626,6 +2633,44 @@ async def test_push_config_store_failure_does_not_fail_task():
         message=Message(
             role=Role.ROLE_USER,
             message_id='msg_push_store_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_custom_push_sender_failure_does_not_fail_task():
+    """A raising custom PushNotificationSender must not rewrite a
+    completed task as FAILED — the consumer-level guard is
+    defense-in-depth behind the BasePushNotificationSender boundary
+    (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_sender_fail',
             parts=[Part(text='Hi')],
         ),
         configuration=SendMessageConfiguration(

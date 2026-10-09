@@ -352,7 +352,10 @@ class EventConsumer:
                 )
             except Exception:
                 # Push delivery is best-effort: a sender failure must not
-                # fail the task or disturb the event stream.
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
                 logger.exception(
                     'Consumer[%s]: Push notification sender raised; '
                     'ignoring the failure.',

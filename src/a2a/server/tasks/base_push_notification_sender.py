@@ -110,7 +110,7 @@ class BasePushNotificationSender(PushNotificationSender):
             except Exception:
                 logger.exception(
                     'Push URL validator raised for task_id=%s, URL: %s. '
-                    'Treating the URL as rejected.',
+                    'Failing closed and treating the URL as rejected.',
                     task_id,
                     url,
                 )
