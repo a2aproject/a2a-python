@@ -238,6 +238,21 @@ class EventConsumer:
 
         await self._enqueue_to_subscribers(event, updated_task)
 
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message is a complete response without task tracking: no
+        # task exists that a follow-up could continue. Finish like a terminal
+        # state so the producer, consumer and queues are released instead of
+        # waiting for another request forever.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
+
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
             raise InvalidAgentResponseError(
