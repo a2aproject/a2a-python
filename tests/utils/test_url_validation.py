@@ -146,6 +146,30 @@ async def test_block_private_networks_allow_cidrs_still_blocks_outside():
 
 
 @pytest.mark.asyncio
+async def test_block_private_networks_allow_hosts_is_case_insensitive():
+    """Allowlist matching must survive host casing: parsed hostnames are
+    lowercased by urlparse, so configured exemptions are normalized too."""
+    rules = (
+        RequireScheme(('http', 'https')),
+        BlockPrivateNetworks(allow_hosts=('Internal.Corp',)),
+    )
+    resolved = await _validate(
+        'http://INTERNAL.corp/api', rules=rules, ips=('10.1.2.3',)
+    )
+
+    assert resolved.hostname == 'internal.corp'
+
+
+@pytest.mark.asyncio
+async def test_duplicate_resolved_addresses_are_deduplicated():
+    resolved = await _validate(
+        'http://example.com/hook', ips=(PUBLIC_IP, PUBLIC_IP)
+    )
+
+    assert [str(a) for a in resolved.addresses] == [PUBLIC_IP]
+
+
+@pytest.mark.asyncio
 async def test_block_private_networks_ignores_public_addresses():
     resolved = await _validate('http://example.com/hook')
 

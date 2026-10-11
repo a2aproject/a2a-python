@@ -28,7 +28,7 @@ from dataclasses import dataclass
 
 logger = logging.getLogger(__name__)
 
-_Address = ipaddress.IPv4Address | ipaddress.IPv6Address
+UrlAddress = ipaddress.IPv4Address | ipaddress.IPv6Address
 
 Resolver = Callable[[str, int], Awaitable[list[tuple]]]
 
@@ -43,7 +43,7 @@ class ResolvedUrl:
 
     raw: str
     parsed: urllib.parse.SplitResult
-    addresses: tuple[_Address, ...]
+    addresses: tuple[UrlAddress, ...]
 
     @property
     def hostname(self) -> str:
@@ -51,7 +51,7 @@ class ResolvedUrl:
         return self.parsed.hostname or ''
 
 
-def _is_non_public(address: _Address) -> bool:
+def _is_non_public(address: UrlAddress) -> bool:
     """Whether an address is not a public unicast destination."""
     return (
         address.is_private
@@ -106,12 +106,14 @@ class BlockPrivateNetworks(UrlValidationRule):
         allow_hosts: Sequence[str] = (),
         allow_cidrs: Sequence[str] = (),
     ) -> None:
-        self._allow_hosts = frozenset(allow_hosts)
+        # Hostnames are matched case-insensitively: urlparse lowercases
+        # parsed hostnames, so the exemptions are normalized too.
+        self._allow_hosts = frozenset(host.lower() for host in allow_hosts)
         self._allow_cidrs = tuple(
             ipaddress.ip_network(cidr, strict=False) for cidr in allow_cidrs
         )
 
-    def _is_allowed(self, url: ResolvedUrl, address: _Address) -> bool:
+    def _is_allowed(self, url: ResolvedUrl, address: UrlAddress) -> bool:
         if url.hostname in self._allow_hosts:
             return True
         return any(address in network for network in self._allow_cidrs)
@@ -165,7 +167,7 @@ class UrlValidator:
         if not host:
             raise InvalidUrlError(f'URL has no hostname: {url}')
 
-        addresses: tuple[_Address, ...] = ()
+        addresses: tuple[UrlAddress, ...] = ()
         if self._resolve:
             try:
                 infos = await self._resolver(host, port)
@@ -173,7 +175,7 @@ class UrlValidator:
                 raise InvalidUrlError(
                     f'Host {host!r} could not be resolved: {url}'
                 ) from e
-            resolved: list[_Address] = []
+            resolved: list[UrlAddress] = []
             for info in infos:
                 raw_ip = str(info[4][0]).split('%', maxsplit=1)[0]
                 try:
@@ -182,7 +184,10 @@ class UrlValidator:
                     raise InvalidUrlError(
                         f'Host {host!r} resolved to an unparseable address'
                     ) from e
-            addresses = tuple(resolved)
+            # getaddrinfo can return the same address several times (CNAME
+            # chains, multi-record families); deduplicate while keeping the
+            # resolver's order.
+            addresses = tuple(dict.fromkeys(resolved))
 
         resolved_url = ResolvedUrl(raw=url, parsed=parsed, addresses=addresses)
         for rule in self._rules:
