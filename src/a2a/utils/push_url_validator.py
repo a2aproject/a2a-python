@@ -6,15 +6,8 @@ composition of :class:`a2a.utils.url_validation.UrlValidator` rules
 entry point.
 """
 
-import logging
+from a2a.utils.url_validation import PushNotificationUrlValidator
 
-from a2a.utils.url_validation import (
-    InvalidUrlError,
-    PushNotificationUrlValidator,
-)
-
-
-logger = logging.getLogger(__name__)
 
 _validator = PushNotificationUrlValidator()
 
@@ -39,8 +32,4 @@ async def validate_push_notification_url(url: str) -> bool:
     The default on those constructors is ``None`` (no library
     screening).
     """
-    try:
-        return await _validator.validate(url)
-    except InvalidUrlError:
-        logger.warning('Push-notification URL rejected: %s', url)
-        return False
+    return await _validator.validate(url)
