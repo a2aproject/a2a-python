@@ -968,7 +968,15 @@ class TestActiveTask:
         # then stop reading -- exactly the state a cancelled stream leaves.
         subscription = active_task.subscribe(request=request_context)
 
+        consuming = asyncio.Event()
+
         async def drain() -> None:
+            # Signal once the subscriber generator has entered its loop: at
+            # that point the tap exists and the async-for is actively pulling,
+            # so the producer's _RequestStarted will be dequeued and skipped
+            # here. This replaces a fixed sleep with a real happens-before
+            # edge, so the test does not flake on a slow runner.
+            consuming.set()
             async for _event in subscription:
                 # The internal _RequestStarted the producer enqueues is
                 # consumed inside subscribe() and never reaches us; real work
@@ -976,21 +984,34 @@ class TestActiveTask:
                 pass
 
         reader = asyncio.create_task(drain())
-        # Let the producer enqueue _RequestStarted and the subscriber consume it.
-        await asyncio.sleep(0.1)
+        # Wait until the subscriber is actively consuming, then yield once more
+        # so the producer's enqueued _RequestStarted is dequeued and skipped.
+        await asyncio.wait_for(consuming.wait(), timeout=2)
+        await asyncio.sleep(0)
 
         # Cancel the producer: this is what the SDK does after the executor's
         # cancel() returns on a streamed task. execute() never gets to emit
         # _RequestCompleted.
         producer.cancel()
 
-        # The producer must reach completion. Before the fix it blocks forever
-        # inside `_event_queue_subscribers.close(immediate=False)` waiting on
-        # the unacknowledged _RequestStarted, and this await times out.
-        await asyncio.wait_for(asyncio.shield(_settle(producer)), timeout=2)
+        # The producer must reach completion CLEANLY. Before the fix it blocks
+        # forever inside `_event_queue_subscribers.close(immediate=False)`
+        # waiting on the unacknowledged _RequestStarted, and this await times
+        # out. We do NOT swallow the producer's exception: a cancel leaves it
+        # with CancelledError (expected), but any other exception means
+        # teardown crashed rather than completed, and the test must fail
+        # instead of passing on a merely-``done()`` task.
+        try:
+            await asyncio.wait_for(asyncio.shield(producer), timeout=2)
+        except asyncio.CancelledError:
+            pass  # expected: the producer was cancelled
         assert producer.done(), (
             'producer never finished -> it leaked waiting on an '
             'unacknowledged _RequestStarted (#1322)'
+        )
+        exc = producer.exception()
+        assert exc is None or isinstance(exc, asyncio.CancelledError), (
+            f'producer did not shut down cleanly; teardown raised {exc!r}'
         )
 
         reader.cancel()
@@ -998,12 +1019,6 @@ class TestActiveTask:
             await reader
         hang.set()
         await active_task.aclose()
-
-
-async def _settle(task: asyncio.Task) -> None:
-    """Wait for ``task`` to finish, swallowing its CancelledError/result."""
-    with contextlib.suppress(asyncio.CancelledError, Exception):
-        await task
 
 
 @pytest.mark.asyncio
