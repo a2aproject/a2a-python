@@ -2601,6 +2601,7 @@ class _ScriptedLocal:
         self._events = events
         self.subscribed = False
 
+    @property
     def request_in_flight(self) -> bool:
         return self._in_flight
 

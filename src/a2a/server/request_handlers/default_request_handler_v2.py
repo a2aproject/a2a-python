@@ -582,11 +582,9 @@ class DefaultRequestHandlerV2(RequestHandler):
             return
 
         # Shared-stream mode. Tap this replica only while it is executing.
-        # A registry entry also outlives an interrupted turn, and that cached
-        # snapshot is not the live task.
         stream = self._event_stream
         local = await self._active_task_registry.get(task_id)
-        if local is not None and local.request_in_flight():
+        if local is not None and local.request_in_flight:
             async for event in local.subscribe(include_initial_task=True):
                 yield event
             return
