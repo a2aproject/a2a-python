@@ -971,11 +971,13 @@ class TestActiveTask:
         consuming = asyncio.Event()
 
         async def drain() -> None:
-            # Signal once the subscriber generator has entered its loop: at
-            # that point the tap exists and the async-for is actively pulling,
-            # so the producer's _RequestStarted will be dequeued and skipped
-            # here. This replaces a fixed sleep with a real happens-before
-            # edge, so the test does not flake on a slow runner.
+            # Signalled just before the first await on the subscription. This
+            # does NOT by itself prove _RequestStarted has been consumed -- it
+            # marks that the drain coroutine is scheduled and about to pull --
+            # but combined with the sleep(0) below it reliably hands control to
+            # the reader so it dequeues and skips the started event. It is still
+            # tighter than a fixed sleep, and the final assertion (the producer
+            # must complete) is what actually proves the leak is gone.
             consuming.set()
             async for _event in subscription:
                 # The internal _RequestStarted the producer enqueues is
@@ -984,8 +986,9 @@ class TestActiveTask:
                 pass
 
         reader = asyncio.create_task(drain())
-        # Wait until the subscriber is actively consuming, then yield once more
-        # so the producer's enqueued _RequestStarted is dequeued and skipped.
+        # Wait until the reader is about to consume, then yield the event loop
+        # so it runs far enough to dequeue and skip the producer's
+        # _RequestStarted before we cancel.
         await asyncio.wait_for(consuming.wait(), timeout=2)
         await asyncio.sleep(0)
 
@@ -994,25 +997,15 @@ class TestActiveTask:
         # _RequestCompleted.
         producer.cancel()
 
-        # The producer must reach completion CLEANLY. Before the fix it blocks
-        # forever inside `_event_queue_subscribers.close(immediate=False)`
-        # waiting on the unacknowledged _RequestStarted, and this await times
-        # out. We do NOT swallow the producer's exception: a cancel leaves it
-        # with CancelledError (expected), but any other exception means
-        # teardown crashed rather than completed, and the test must fail
-        # instead of passing on a merely-``done()`` task.
-        try:
-            await asyncio.wait_for(asyncio.shield(producer), timeout=2)
-        except asyncio.CancelledError:
-            pass  # expected: the producer was cancelled
-        assert producer.done(), (
-            'producer never finished -> it leaked waiting on an '
-            'unacknowledged _RequestStarted (#1322)'
-        )
-        exc = producer.exception()
-        assert exc is None or isinstance(exc, asyncio.CancelledError), (
-            f'producer did not shut down cleanly; teardown raised {exc!r}'
-        )
+        # The producer must reach completion CLEANLY. _run_producer catches
+        # asyncio.CancelledError internally and returns normally, so awaiting
+        # it here does NOT re-raise -- it returns the producer's result once
+        # teardown finishes. Before the fix, teardown blocks forever inside
+        # `_event_queue_subscribers.close(immediate=False)` waiting on the
+        # unacknowledged _RequestStarted, and this await times out. If teardown
+        # instead raises, the await re-raises it and the test fails -- which is
+        # the stronger property we want than merely asserting ``done()``.
+        await asyncio.wait_for(asyncio.shield(producer), timeout=2)
 
         reader.cancel()
         with contextlib.suppress(asyncio.CancelledError):
