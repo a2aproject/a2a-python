@@ -22,6 +22,7 @@ except ImportError as e:
 
 from a2a.types import AgentCard, AgentCardSignature
 from a2a.utils._jcs import MAX_DEPTH, CanonicalizationError, canonicalize
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 
 
 class SignatureVerificationError(Exception):
@@ -198,6 +199,9 @@ def _clean_empty(d: Any, depth: int = 1) -> Any:
 
 def _canonicalize_agent_card(agent_card: AgentCard) -> str:
     """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
+    warn_on_missing_required_fields(
+        agent_card, 'agent_card passed to _canonicalize_agent_card:'
+    )
     card_dict = MessageToDict(
         agent_card,
     )

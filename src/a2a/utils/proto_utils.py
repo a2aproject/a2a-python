@@ -17,6 +17,8 @@
 This module provides helper functions for common proto type operations.
 """
 
+import logging
+
 from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
@@ -43,6 +45,9 @@ from a2a.types.a2a_pb2 import (
     TaskArtifactUpdateEvent,
     TaskStatusUpdateEvent,
 )
+
+
+logger = logging.getLogger(__name__)
 
 
 # Define Event type locally to avoid circular imports
@@ -314,6 +319,45 @@ def validate_proto_required_fields(msg: ProtobufMessage) -> None:
         raise InvalidParamsError(
             message='Validation failed', data={'errors': errors}
         )
+
+
+_SPEC_FIELD_PRESENCE_URL = (
+    'https://a2a-protocol.org/latest/specification/'
+    '#57-field-presence-and-optionality'
+)
+
+
+def warn_on_missing_required_fields(msg: ProtobufMessage, source: str) -> bool:
+    """Log a warning if fields marked as REQUIRED are missing or empty.
+
+    Unlike `validate_proto_required_fields`, this never raises, so it can
+    surface spec violations without breaking callers that currently rely on
+    non-compliant messages.
+
+    Args:
+        msg: The Protobuf message to check.
+        source: Where the message was passed in, used in the log message.
+
+    Returns:
+        True if every REQUIRED field is set, False otherwise. Objects that
+        are not Protobuf messages (for example test doubles) are not checked.
+    """
+    if not isinstance(msg, ProtobufMessage):
+        return True
+    errors = _validate_proto_required_fields_internal(msg)
+    if not errors:
+        return True
+    logger.warning(
+        '%s %s is not spec-compliant - REQUIRED fields missing or empty: '
+        '%s. This is allowed and does not raise, but it may not verify or '
+        'interoperate across SDKs and could be rejected in a future major '
+        'release. See %s',
+        source,
+        msg.DESCRIPTOR.name,
+        ', '.join(err['field'] for err in errors),
+        _SPEC_FIELD_PRESENCE_URL,
+    )
+    return False
 
 
 def validation_errors_to_bad_request(
