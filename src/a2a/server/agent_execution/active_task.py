@@ -690,7 +690,6 @@ class ActiveTask:
 
     @property
     def request_in_flight(self) -> bool:
-        """True while this replica is executing a turn for the task."""
         return self._request_lock.locked()
 
     async def subscribe(
