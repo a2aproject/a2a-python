@@ -688,6 +688,10 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
+    @property
+    def request_in_flight(self) -> bool:
+        return self._request_lock.locked()
+
     async def subscribe(
         self,
         *,
