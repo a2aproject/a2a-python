@@ -945,8 +945,10 @@ class TestActiveTask:
         ``ActiveTask`` leak until the whole handler is ``aclose``-d.
         """
         hang = asyncio.Event()
+        executing = asyncio.Event()
 
         async def execute_mock(req, q):
+            executing.set()
             await hang.wait()  # long-running work, cancelled from outside
 
         agent_executor.execute = AsyncMock(side_effect=execute_mock)
@@ -971,12 +973,7 @@ class TestActiveTask:
         # dequeued item is never marked done, so the close waits forever.
         subscription = active_task.subscribe(request=request_context)
 
-        consuming = asyncio.Event()
-
         async def drain() -> None:
-            # Scheduling handoff only: this shows the reader task has started.
-            # It does not show that any event has been dequeued.
-            consuming.set()
             async for _event in subscription:
                 # The internal _RequestStarted the producer enqueues is
                 # consumed inside subscribe() and never reaches us; real work
@@ -984,10 +981,11 @@ class TestActiveTask:
                 pass
 
         reader = asyncio.create_task(drain())
-        # Let the reader start, then yield once. This is a scheduling handoff,
-        # not a guarantee that _RequestStarted has been consumed yet.
-        await asyncio.wait_for(consuming.wait(), timeout=2)
-        await asyncio.sleep(0)
+        # Wait until the producer is inside execute(), so it has already
+        # enqueued _RequestStarted. Cancelling a task before it starts running
+        # would skip _run_producer's CancelledError handler entirely, so the
+        # test would not exercise the real streamed-cancel path.
+        await asyncio.wait_for(executing.wait(), timeout=2)
 
         # Cancel the producer: this is what the SDK does after the executor's
         # cancel() returns on a streamed task. execute() never gets to emit
