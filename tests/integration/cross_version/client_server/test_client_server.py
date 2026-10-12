@@ -123,7 +123,7 @@ def running_servers():
     s03_grpc_port = get_free_port()
     s03_deps = [
         '--with',
-        'a2a-sdk[grpc]==0.3.24',
+        'a2a-sdk[grpc,http-server]==0.3.24',
         '--with',
         'uvicorn',
         '--with',
