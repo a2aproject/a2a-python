@@ -964,20 +964,18 @@ class TestActiveTask:
         producer = active_task._producer_task
         assert producer is not None
 
-        # Drive a subscriber far enough to dequeue and skip _RequestStarted,
-        # then stop reading -- exactly the state a cancelled stream leaves.
+        # Attach a subscriber while the producer is running. The subscriber
+        # does not need to consume _RequestStarted before the cancel: the
+        # producer's teardown, `_event_queue_subscribers.close(immediate=False)`,
+        # drains the queued event through this tap. Without the fix that
+        # dequeued item is never marked done, so the close waits forever.
         subscription = active_task.subscribe(request=request_context)
 
         consuming = asyncio.Event()
 
         async def drain() -> None:
-            # Signalled just before the first await on the subscription. This
-            # does NOT by itself prove _RequestStarted has been consumed -- it
-            # marks that the drain coroutine is scheduled and about to pull --
-            # but combined with the sleep(0) below it reliably hands control to
-            # the reader so it dequeues and skips the started event. It is still
-            # tighter than a fixed sleep, and the final assertion (the producer
-            # must complete) is what actually proves the leak is gone.
+            # Scheduling handoff only: this shows the reader task has started.
+            # It does not show that any event has been dequeued.
             consuming.set()
             async for _event in subscription:
                 # The internal _RequestStarted the producer enqueues is
@@ -986,9 +984,8 @@ class TestActiveTask:
                 pass
 
         reader = asyncio.create_task(drain())
-        # Wait until the reader is about to consume, then yield the event loop
-        # so it runs far enough to dequeue and skip the producer's
-        # _RequestStarted before we cancel.
+        # Let the reader start, then yield once. This is a scheduling handoff,
+        # not a guarantee that _RequestStarted has been consumed yet.
         await asyncio.wait_for(consuming.wait(), timeout=2)
         await asyncio.sleep(0)
 
