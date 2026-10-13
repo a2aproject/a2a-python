@@ -346,9 +346,21 @@ class EventConsumer:
                 'Consumer[%s]: Sending push notification',
                 self.active_task._task_id,
             )
-            await self.active_task._push_sender.send_notification(
-                self.active_task._task_id, event
-            )
+            try:
+                await self.active_task._push_sender.send_notification(
+                    self.active_task._task_id, event
+                )
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
+                logger.exception(
+                    'Consumer[%s]: Push notification sender raised; '
+                    'ignoring the failure.',
+                    self.active_task._task_id,
+                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
