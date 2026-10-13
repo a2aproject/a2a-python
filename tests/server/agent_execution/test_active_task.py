@@ -1008,6 +1008,30 @@ class TestActiveTask:
         hang.set()
         await active_task.aclose()
 
+    @pytest.mark.asyncio
+    async def test_active_task_subscribe_acks_raised_exception(
+        self,
+        active_task: ActiveTask,
+    ) -> None:
+        """A re-raised queue exception is still acknowledged."""
+        tapped_queue = Mock(spec=EventQueue)
+        tapped_queue.dequeue_event = AsyncMock(
+            return_value=(RuntimeError('boom'), None)
+        )
+        tapped_queue.close = AsyncMock()
+
+        with (
+            patch.object(
+                active_task._event_queue_subscribers,
+                'tap',
+                return_value=tapped_queue,
+            ),
+            pytest.raises(RuntimeError, match='boom'),
+        ):
+            await anext(active_task.subscribe())
+
+        tapped_queue.task_done.assert_called_once_with()
+
 
 @pytest.mark.asyncio
 async def test_active_task_subscribe_include_initial_task():

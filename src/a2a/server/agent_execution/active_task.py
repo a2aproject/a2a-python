@@ -761,6 +761,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -772,12 +773,7 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
-                    # Internal lifecycle events are consumed here rather than
-                    # yielded, so mark them done before skipping. Otherwise the
-                    # producer's `_event_queue_subscribers.close(immediate=False)`
-                    # waits forever on an item this tap never acknowledges, which
-                    # leaks the producer and the ActiveTask after a cancel ends
-                    # the subscriber before _RequestCompleted is sent (#1322).
+                    # Acknowledge internal lifecycle events before skipping them.
                     if isinstance(event, _RequestStarted | _RequestCompleted):
                         tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
