@@ -9,17 +9,13 @@ import urllib.parse
 
 logger = logging.getLogger(__name__)
 
-# RFC 6598. ipaddress leaves is_private false for this range on every
-# Python this package supports (3.10 through 3.14), while is_global is
-# also false. The flag checks below would accept it.
-_SHARED_ADDRESS_SPACE = ipaddress.ip_network('100.64.0.0/10')
-
 
 def _ip_is_blocked(ip_str: str) -> bool:
     """Whether an address is not a public unicast destination.
 
-    RFC 6598 shared address space (100.64.0.0/10) is not public, but
-    ``ipaddress`` leaves ``is_private`` false for it. An IPv4-mapped
+    RFC 6598 shared address space (100.64.0.0/10) is not public.
+    ``ipaddress`` leaves ``is_private`` false for it and ``is_global``
+    false as well, so ``not is_global`` still rejects it. An IPv4-mapped
     IPv6 address is judged as the IPv4 address inside it.
     """
     try:
@@ -29,13 +25,8 @@ def _ip_is_blocked(ip_str: str) -> bool:
     mapped = getattr(addr, 'ipv4_mapped', None)
     if mapped is not None:
         addr = mapped
-    if (
-        isinstance(addr, ipaddress.IPv4Address)
-        and addr in _SHARED_ADDRESS_SPACE
-    ):
-        return True
     return (
-        addr.is_private
+        not addr.is_global
         or addr.is_loopback
         or addr.is_link_local
         or addr.is_multicast
