@@ -2966,3 +2966,196 @@ async def test_on_message_send_stream_message_response_releases_active_task() ->
     assert [type(event) for event in events] == [Message]
     assert await _wait_until_released(handler, baseline) == set()
     assert handler._active_task_registry._active_tasks == {}
+
+
+class _InterruptingAgent(AgentExecutor):
+    """Interrupts a new task with `state`; completes it on the follow-up."""
+
+    def __init__(
+        self,
+        state: TaskState = TaskState.TASK_STATE_INPUT_REQUIRED,
+        complete_on_follow_up: bool = True,
+        linger: float = 0,
+    ) -> None:
+        self.state = state
+        self.complete_on_follow_up = complete_on_follow_up
+        self.linger = linger
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            task_id, context_id = task.id, task.context_id
+        else:
+            task_id, context_id = context.task_id, context.context_id
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        if context.current_task is not None and self.complete_on_follow_up:
+            await updater.complete()
+            return
+        await updater.update_status(self.state)
+        # Keeps the request running after the interruption was delivered.
+        await asyncio.sleep(self.linger)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+def _interrupting_handler(
+    agent: AgentExecutor, interrupted_task_timeout: float | None
+) -> DefaultRequestHandlerV2:
+    return DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+        interrupted_task_timeout=interrupted_task_timeout,
+    )
+
+
+async def _send(
+    handler: DefaultRequestHandlerV2, text: str, task: Task | None = None
+) -> Task:
+    message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_USER,
+        parts=[Part(text=text)],
+        task_id=task.id if task else '',
+        context_id=task.context_id if task else '',
+    )
+    result = await handler.on_message_send(
+        SendMessageRequest(message=message), create_server_call_context()
+    )
+    assert isinstance(result, Task)
+    return result
+
+
+async def _wait_for_release(
+    handler: DefaultRequestHandlerV2, task_id: str, timeout: float = 2.0
+) -> bool:
+    """Waits until the task's ActiveTask has left the registry."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if task_id not in handler._active_task_registry._active_tasks:
+            return True
+        await asyncio.sleep(0.01)
+    return False
+
+
+@pytest.mark.asyncio
+async def test_interrupted_task_stays_active_without_timeout() -> None:
+    """The default keeps today's behavior: no timeout, the ActiveTask waits."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state',
+    [TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_AUTH_REQUIRED],
+)
+async def test_interrupted_task_released_after_timeout(
+    state: TaskState,
+) -> None:
+    """A parked task's runtime is released, but the stored task is kept."""
+    handler = _interrupting_handler(_InterruptingAgent(state), 0.1)
+    baseline = asyncio.all_tasks()
+
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == state
+    assert await _wait_for_release(handler, task.id)
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not leftover:
+            break
+        await asyncio.sleep(0.01)
+    assert leftover == set()
+    stored = await handler.on_get_task(
+        GetTaskRequest(id=task.id), create_server_call_context()
+    )
+    assert stored is not None
+    assert stored.status.state == state
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_after_release_resumes_from_store() -> None:
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    assert await _wait_for_release(handler, task.id)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    assert [m.parts[0].text for m in result.history] == [
+        'book a flight',
+        'Friday',
+    ]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_resets_interrupted_task_timeout() -> None:
+    handler = _interrupting_handler(
+        _InterruptingAgent(complete_on_follow_up=False), 0.5
+    )
+    task = await _send(handler, 'book a flight')
+    await asyncio.sleep(0.3)
+
+    await _send(handler, 'Friday', task)
+
+    # 0.6s after the first request, but only 0.3s after the follow-up.
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_subscriber_keeps_interrupted_task_active() -> None:
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    subscription = handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(id=task.id), create_server_call_context()
+    )
+    await anext(subscription)
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    await subscription.aclose()
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_running_request_keeps_interrupted_task_active() -> None:
+    """The timer only counts once the executor has returned."""
+    handler = _interrupting_handler(_InterruptingAgent(linger=0.4), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_replaces_finished_registered_active_task() -> None:
+    """A finished ActiveTask still in the registry must not reject a follow-up."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+    # Finish it the way a release does, before its registry cleanup has run.
+    active_task._is_finished.set()
+    active_task._request_queue.shutdown(immediate=True)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
