@@ -932,18 +932,7 @@ class TestActiveTask:
         request_context: Mock,
         task_manager: Mock,
     ) -> None:
-        """Regression (#1322): a cancel while a subscriber is streaming must
-        not leave the producer wedged.
-
-        The producer closes `_event_queue_subscribers` with
-        `immediate=False`, which blocks until every tap has marked all of its
-        items done. ``subscribe`` consumes the internal ``_RequestStarted``
-        event without yielding it, so it must also mark it done -- otherwise a
-        cancel that ends the subscriber before ``_RequestCompleted`` is sent
-        leaves that item unacknowledged, the producer blocks forever on
-        ``close(immediate=False)``, and both the producer task and the
-        ``ActiveTask`` leak until the whole handler is ``aclose``-d.
-        """
+        """Regression (#1322): cancelling a stream frees its producer."""
         hang = asyncio.Event()
         executing = asyncio.Event()
 
@@ -966,40 +955,19 @@ class TestActiveTask:
         producer = active_task._producer_task
         assert producer is not None
 
-        # Attach a subscriber while the producer is running. The subscriber
-        # does not need to consume _RequestStarted before the cancel: the
-        # producer's teardown, `_event_queue_subscribers.close(immediate=False)`,
-        # drains the queued event through this tap. Without the fix that
-        # dequeued item is never marked done, so the close waits forever.
+        # Subscribe before cancellation so the lifecycle event requires an ack.
         subscription = active_task.subscribe(request=request_context)
 
         async def drain() -> None:
             async for _event in subscription:
-                # The internal _RequestStarted the producer enqueues is
-                # consumed inside subscribe() and never reaches us; real work
-                # items would.
                 pass
 
         reader = asyncio.create_task(drain())
-        # Wait until the producer is inside execute(), so it has already
-        # enqueued _RequestStarted. Cancelling a task before it starts running
-        # would skip _run_producer's CancelledError handler entirely, so the
-        # test would not exercise the real streamed-cancel path.
+        # Ensure cancellation reaches _run_producer's cleanup path.
         await asyncio.wait_for(executing.wait(), timeout=2)
-
-        # Cancel the producer: this is what the SDK does after the executor's
-        # cancel() returns on a streamed task. execute() never gets to emit
-        # _RequestCompleted.
         producer.cancel()
 
-        # The producer must reach completion CLEANLY. _run_producer catches
-        # asyncio.CancelledError internally and returns normally, so awaiting
-        # it here does NOT re-raise -- it returns the producer's result once
-        # teardown finishes. Before the fix, teardown blocks forever inside
-        # `_event_queue_subscribers.close(immediate=False)` waiting on the
-        # unacknowledged _RequestStarted, and this await times out. If teardown
-        # instead raises, the await re-raises it and the test fails -- which is
-        # the stronger property we want than merely asserting ``done()``.
+        # Graceful cleanup must not wait on an unacknowledged lifecycle event.
         await asyncio.wait_for(asyncio.shield(producer), timeout=2)
 
         reader.cancel()
