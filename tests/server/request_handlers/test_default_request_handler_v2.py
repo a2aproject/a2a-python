@@ -7,6 +7,7 @@ import warnings
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -32,6 +33,9 @@ from a2a.server.tasks import (
     PushNotificationSender,
     TaskStore,
     TaskUpdater,
+)
+from a2a.server.tasks.base_push_notification_sender import (
+    BasePushNotificationSender,
 )
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
@@ -2591,3 +2595,184 @@ def test_init_does_not_warn_for_complete_agent_cards(
             extended_agent_card=_complete_agent_card(),
         )
     assert caplog.records == []
+
+
+class FlakyPushConfigStore(InMemoryPushNotificationConfigStore):
+    """Config store whose dispatch read fails transiently (issue #1313)."""
+
+    async def get_info_for_dispatch(
+        self, task_id: str
+    ) -> list[TaskPushNotificationConfig]:
+        raise RuntimeError('transient DB error while reading push configs')
+
+
+class RaisingPushSender(PushNotificationSender):
+    """A custom (public-interface) sender that always fails (issue #1313)."""
+
+    async def send_notification(self, task_id, event) -> None:
+        raise RuntimeError('sender exploded')
+
+
+@pytest.mark.asyncio
+async def test_push_config_store_failure_does_not_fail_task():
+    """A push-notification infrastructure failure must not rewrite a
+    successfully completed task as FAILED, and message/send must still
+    return the task result (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=FlakyPushConfigStore(),
+        push_sender=BasePushNotificationSender(
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            config_store=FlakyPushConfigStore(),
+        ),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_store_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_custom_push_sender_failure_does_not_fail_task():
+    """A raising custom PushNotificationSender must not rewrite a
+    completed task as FAILED — the consumer-level guard is
+    defense-in-depth behind the BasePushNotificationSender boundary
+    (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_sender_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+class _MessageOnlyAgent(AgentExecutor):
+    """Answers every request with a single direct Message (no task)."""
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await event_queue.enqueue_event(new_text_message('hello'))
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+async def _wait_until_released(
+    handler: DefaultRequestHandlerV2, baseline: set[asyncio.Task]
+) -> set[asyncio.Task]:
+    """Waits for the handler to drop its ActiveTasks; returns tasks still pending."""
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not handler._active_task_registry._active_tasks and not leftover:
+            break
+        await asyncio.sleep(0.01)
+    return leftover
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_message_response_releases_active_task() -> None:
+    """A direct Message ends the interaction, so its ActiveTask (producer,
+    consumer, dispatchers) must not stay alive waiting for a follow-up."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    for i in range(3):
+        result = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id=f'm{i}',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+        assert isinstance(result, Message)
+
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_message_response_releases_active_task() -> (
+    None
+):
+    """Same for a message-only stream: one Message, then nothing left running."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    events = [
+        event
+        async for event in handler.on_message_send_stream(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='m1',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+    ]
+
+    assert [type(event) for event in events] == [Message]
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}

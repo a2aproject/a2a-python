@@ -238,6 +238,18 @@ class EventConsumer:
 
         await self._enqueue_to_subscribers(event, updated_task)
 
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message has no task to continue, so finish like a terminal state.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
+
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
             raise InvalidAgentResponseError(
@@ -346,9 +358,21 @@ class EventConsumer:
                 'Consumer[%s]: Sending push notification',
                 self.active_task._task_id,
             )
-            await self.active_task._push_sender.send_notification(
-                self.active_task._task_id, event
-            )
+            try:
+                await self.active_task._push_sender.send_notification(
+                    self.active_task._task_id, event
+                )
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
+                logger.exception(
+                    'Consumer[%s]: Push notification sender raised; '
+                    'ignoring the failure.',
+                    self.active_task._task_id,
+                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
