@@ -773,6 +773,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -784,6 +785,9 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
+                    # Acknowledge internal lifecycle events before skipping them.
+                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                        tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None
