@@ -242,10 +242,7 @@ class EventConsumer:
             self._handle_message_completion()
 
     def _handle_message_completion(self) -> None:
-        # A direct Message is a complete response without task tracking: no
-        # task exists that a follow-up could continue. Finish like a terminal
-        # state so the producer, consumer and queues are released instead of
-        # waiting for another request forever.
+        # A direct Message has no task to continue, so finish like a terminal state.
         logger.debug(
             'Consumer[%s]: Message response, finishing',
             self.active_task._task_id,
