@@ -40,6 +40,7 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.constants import PROTOCOL_VERSION_0_3, VERSION_HEADER
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.task import apply_history_length
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -105,8 +106,11 @@ class CompatJsonRpcTransport(ClientTransport):
 
         if kind == 'task':
             return SendMessageResponse(
-                task=conversions.to_core_task(
-                    types_v03.Task.model_validate(result_dict)
+                task=apply_history_length(
+                    conversions.to_core_task(
+                        types_v03.Task.model_validate(result_dict)
+                    ),
+                    request.configuration,
                 )
             )
         if kind == 'message':
@@ -164,8 +168,13 @@ class CompatJsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        return conversions.to_core_task(
-            types_v03.Task.model_validate(json_rpc_response.result)
+        # v0.3 has no way to ask for an empty history (0 means unlimited), so
+        # the v1.0 `history_length` semantics are applied to the result here.
+        return apply_history_length(
+            conversions.to_core_task(
+                types_v03.Task.model_validate(json_rpc_response.result)
+            ),
+            request,
         )
 
     async def list_tasks(
