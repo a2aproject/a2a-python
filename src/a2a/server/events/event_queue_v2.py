@@ -20,7 +20,10 @@ from a2a.utils.telemetry import SpanKind, trace_class
 logger = logging.getLogger(__name__)
 
 
-@trace_class(kind=SpanKind.SERVER)
+@trace_class(
+    kind=SpanKind.SERVER,
+    exclude_list=['enqueue_event', 'dequeue_event', 'task_done', 'is_closed'],
+)
 class EventQueueSource(EventQueue):
     """The Parent EventQueue.
 
