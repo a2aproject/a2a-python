@@ -317,6 +317,7 @@ def to_core_send_message_configuration(
                 compat_config.push_notification_config
             )
         )
+    # v0.3 treats 0 as unlimited, so leave it unset.
     if compat_config.history_length:
         core_config.history_length = compat_config.history_length
     if compat_config.blocking is not None:
@@ -1074,6 +1075,7 @@ def to_core_get_task_request(
     """Convert get task request to v1.0 core type."""
     core_req = pb2_v10.GetTaskRequest()
     core_req.id = compat_req.params.id
+    # v0.3 treats 0 as unlimited, so leave it unset.
     if compat_req.params.history_length:
         core_req.history_length = compat_req.params.history_length
     return core_req
