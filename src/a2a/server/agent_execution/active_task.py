@@ -238,6 +238,18 @@ class EventConsumer:
 
         await self._enqueue_to_subscribers(event, updated_task)
 
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message has no task to continue, so finish like a terminal state.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
+
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
             raise InvalidAgentResponseError(
@@ -762,6 +774,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -773,6 +786,9 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
+                    # Acknowledge internal lifecycle events before skipping them.
+                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                        tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None
