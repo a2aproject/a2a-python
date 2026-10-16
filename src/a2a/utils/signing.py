@@ -22,6 +22,7 @@ except ImportError as e:
 
 from a2a.types import AgentCard, AgentCardSignature
 from a2a.utils._jcs import MAX_DEPTH, CanonicalizationError, canonicalize
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 
 
 class SignatureVerificationError(Exception):
@@ -164,15 +165,16 @@ def create_signature_verifier(
     return signature_verifier
 
 
-def _clean_empty(d: Any, depth: int = 0) -> Any:
+def _clean_empty(d: Any, depth: int = 1) -> Any:
     """Recursively remove empty strings, lists and dicts from a dictionary.
 
     Depth is bounded for the same reason canonicalization is: nesting reaches
     this function from `AgentExtension.params`, and without the bound a deeply
     nested card exhausts the interpreter stack here, before the canonicalizer
-    ever gets the chance to reject it.
+    ever gets the chance to reject it. `depth` counts open containers on the
+    path to `d`, the outermost at 1, and matches `_jcs.MAX_DEPTH`'s rule.
     """
-    if depth > MAX_DEPTH:
+    if isinstance(d, (dict, list)) and depth > MAX_DEPTH:
         raise CanonicalizationError(
             f'nesting exceeds the maximum depth of {MAX_DEPTH}'
         )
@@ -197,6 +199,9 @@ def _clean_empty(d: Any, depth: int = 0) -> Any:
 
 def _canonicalize_agent_card(agent_card: AgentCard) -> str:
     """Canonicalizes the Agent Card JSON according to RFC 8785 (JCS)."""
+    warn_on_missing_required_fields(
+        agent_card, 'agent_card passed to _canonicalize_agent_card:'
+    )
     card_dict = MessageToDict(
         agent_card,
     )

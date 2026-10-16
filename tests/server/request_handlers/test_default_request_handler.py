@@ -56,6 +56,8 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
+    AgentSkill,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -3389,3 +3391,87 @@ async def test_on_message_send_rejects_invalid_push_url(agent_card):
         InvalidParamsError, match='Invalid push notification URL'
     ):
         await request_handler.on_message_send(params, context)
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_init_warns_about_incomplete_agent_cards(
+    agent_card: AgentCard,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cards missing REQUIRED fields are accepted, but each one is logged."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=agent_card,
+            extended_agent_card=AgentCard(),
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 2
+    assert messages[0].startswith('agent_card passed to DefaultRequestHandler:')
+    assert messages[1].startswith(
+        'extended_agent_card passed to DefaultRequestHandler:'
+    )
+
+
+def test_init_does_not_warn_for_complete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandler(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=_complete_agent_card(),
+            extended_agent_card=_complete_agent_card(),
+        )
+    assert caplog.records == []
+
+
+@pytest.mark.asyncio
+async def test_push_sender_failure_does_not_propagate(agent_card):
+    """A push-notification infrastructure failure raised by the sender must
+    not propagate out of _send_push_notification_if_needed into the task
+    lifecycle (#1313)."""
+    mock_push_sender = AsyncMock(spec=PushNotificationSender)
+    mock_push_sender.send_notification.side_effect = RuntimeError(
+        'transient push infrastructure error'
+    )
+    request_handler = DefaultRequestHandler(
+        agent_executor=AsyncMock(spec=AgentExecutor),
+        task_store=AsyncMock(spec=TaskStore),
+        push_config_store=AsyncMock(spec=PushNotificationConfigStore),
+        push_sender=mock_push_sender,
+        agent_card=agent_card,
+    )
+    event = create_sample_task()
+
+    # Must not raise: push delivery is best-effort.
+    await request_handler._send_push_notification_if_needed(event.id, event)
+
+    mock_push_sender.send_notification.assert_awaited_once_with(event.id, event)

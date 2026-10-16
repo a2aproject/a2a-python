@@ -1,4 +1,5 @@
 import asyncio
+import contextvars
 import logging
 import time
 import uuid
@@ -6,6 +7,7 @@ import warnings
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -32,6 +34,9 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.base_push_notification_sender import (
+    BasePushNotificationSender,
+)
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
     ContentTypeNotSupportedError,
@@ -45,6 +50,8 @@ from a2a.types import (
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
+    AgentSkill,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -2443,3 +2450,329 @@ async def test_cancel_of_input_required_task_cannot_be_undone():
     assert stored.status.state == TaskState.TASK_STATE_CANCELED
     assert agent.execute_calls == 1
     await handler.aclose()
+
+
+_REQUEST_TAG: contextvars.ContextVar[str] = contextvars.ContextVar(
+    'request_tag', default='unset'
+)
+
+
+class _InputRequiredThenCompleteAgent(AgentExecutor):
+    """Asks for input on the first message of a task and completes on the next."""
+
+    def __init__(self) -> None:
+        self.seen_tags: list[str] = []
+        self.task: Task | None = None
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_tags.append(_REQUEST_TAG.get())
+        if context.current_task:
+            updater = TaskUpdater(
+                event_queue, context.task_id, context.context_id
+            )
+            await updater.complete()
+            return
+        self.task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(self.task)
+        updater = TaskUpdater(event_queue, self.task.id, self.task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('streaming', [False, True])
+async def test_follow_up_message_runs_in_sender_contextvars(streaming):
+    """A follow-up message on a live task must see its own request's contextvars."""
+    agent = _InputRequiredThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    async def send(tag: str, message: Message) -> None:
+        _REQUEST_TAG.set(tag)
+        params = SendMessageRequest(message=message)
+        if streaming:
+            async for _ in handler.on_message_send_stream(
+                params, create_server_call_context()
+            ):
+                pass
+        else:
+            await handler.on_message_send(params, create_server_call_context())
+
+    await asyncio.create_task(
+        send(
+            'request-1',
+            Message(
+                message_id='msg-1',
+                role=Role.ROLE_USER,
+                parts=[Part(text='book a flight')],
+            ),
+        )
+    )
+    assert agent.task is not None
+    await asyncio.create_task(
+        send(
+            'request-2',
+            Message(
+                message_id='msg-2',
+                role=Role.ROLE_USER,
+                parts=[Part(text='Friday')],
+                task_id=agent.task.id,
+                context_id=agent.task.context_id,
+            ),
+        )
+    )
+
+    assert agent.seen_tags == ['request-1', 'request-2']
+    await handler.aclose()
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_init_warns_about_incomplete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cards missing REQUIRED fields are accepted, but each one is logged."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+            extended_agent_card=AgentCard(),
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 2
+    assert messages[0].startswith(
+        'agent_card passed to DefaultRequestHandlerV2:'
+    )
+    assert messages[1].startswith(
+        'extended_agent_card passed to DefaultRequestHandlerV2:'
+    )
+
+
+def test_init_does_not_warn_for_complete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=_complete_agent_card(),
+            extended_agent_card=_complete_agent_card(),
+        )
+    assert caplog.records == []
+
+
+class FlakyPushConfigStore(InMemoryPushNotificationConfigStore):
+    """Config store whose dispatch read fails transiently (issue #1313)."""
+
+    async def get_info_for_dispatch(
+        self, task_id: str
+    ) -> list[TaskPushNotificationConfig]:
+        raise RuntimeError('transient DB error while reading push configs')
+
+
+class RaisingPushSender(PushNotificationSender):
+    """A custom (public-interface) sender that always fails (issue #1313)."""
+
+    async def send_notification(self, task_id, event) -> None:
+        raise RuntimeError('sender exploded')
+
+
+@pytest.mark.asyncio
+async def test_push_config_store_failure_does_not_fail_task():
+    """A push-notification infrastructure failure must not rewrite a
+    successfully completed task as FAILED, and message/send must still
+    return the task result (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=FlakyPushConfigStore(),
+        push_sender=BasePushNotificationSender(
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            config_store=FlakyPushConfigStore(),
+        ),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_store_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_custom_push_sender_failure_does_not_fail_task():
+    """A raising custom PushNotificationSender must not rewrite a
+    completed task as FAILED — the consumer-level guard is
+    defense-in-depth behind the BasePushNotificationSender boundary
+    (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_sender_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+class _MessageOnlyAgent(AgentExecutor):
+    """Answers every request with a single direct Message (no task)."""
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await event_queue.enqueue_event(new_text_message('hello'))
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+async def _wait_until_released(
+    handler: DefaultRequestHandlerV2, baseline: set[asyncio.Task]
+) -> set[asyncio.Task]:
+    """Waits for the handler to drop its ActiveTasks; returns tasks still pending."""
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not handler._active_task_registry._active_tasks and not leftover:
+            break
+        await asyncio.sleep(0.01)
+    return leftover
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_message_response_releases_active_task() -> None:
+    """A direct Message ends the interaction, so its ActiveTask (producer,
+    consumer, dispatchers) must not stay alive waiting for a follow-up."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    for i in range(3):
+        result = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id=f'm{i}',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+        assert isinstance(result, Message)
+
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_message_response_releases_active_task() -> (
+    None
+):
+    """Same for a message-only stream: one Message, then nothing left running."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    events = [
+        event
+        async for event in handler.on_message_send_stream(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='m1',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+    ]
+
+    assert [type(event) for event in events] == [Message]
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}

@@ -1,3 +1,5 @@
+import logging
+
 from typing import Any
 
 import pytest
@@ -287,3 +289,15 @@ def test_clean_empty_does_not_mutate_input():
     signing._clean_empty(original)
 
     assert original == original_copy
+
+
+def test_canonicalize_agent_card_warns_about_missing_required_fields(
+    caplog: pytest.LogCaptureFixture,
+):
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        signing._canonicalize_agent_card(AgentCard(name='partial'))
+    [record] = caplog.records
+    assert record.getMessage().startswith(
+        'agent_card passed to _canonicalize_agent_card: AgentCard is not '
+        'spec-compliant'
+    )

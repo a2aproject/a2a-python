@@ -36,6 +36,7 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import uuid
 
@@ -237,6 +238,18 @@ class EventConsumer:
 
         await self._enqueue_to_subscribers(event, updated_task)
 
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message has no task to continue, so finish like a terminal state.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
+
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
             raise InvalidAgentResponseError(
@@ -345,9 +358,21 @@ class EventConsumer:
                 'Consumer[%s]: Sending push notification',
                 self.active_task._task_id,
             )
-            await self.active_task._push_sender.send_notification(
-                self.active_task._task_id, event
-            )
+            try:
+                await self.active_task._push_sender.send_notification(
+                    self.active_task._task_id, event
+                )
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
+                logger.exception(
+                    'Consumer[%s]: Push notification sender raised; '
+                    'ignoring the failure.',
+                    self.active_task._task_id,
+                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
@@ -468,9 +493,9 @@ class ActiveTask:
         self._reference_count = 0
 
         # Queue for incoming requests
-        self._request_queue: AsyncQueue[tuple[RequestContext, uuid.UUID]] = (
-            create_async_queue()
-        )
+        self._request_queue: AsyncQueue[
+            tuple[RequestContext, uuid.UUID, contextvars.Context]
+        ] = create_async_queue()
 
     @property
     def task_id(self) -> str:
@@ -480,9 +505,16 @@ class ActiveTask:
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:
-        """Enqueues a request for the active task to process."""
+        """Enqueues a request for the active task to process.
+
+        The caller's contextvars are captured so the producer runs
+        `AgentExecutor.execute` in the context of the request that sent the
+        message, not the request that started the producer.
+        """
         request_id = uuid.uuid4()
-        await self._request_queue.put((request_context, request_id))
+        await self._request_queue.put(
+            (request_context, request_id, contextvars.copy_context())
+        )
         return request_id
 
     async def start(
@@ -573,6 +605,7 @@ class ActiveTask:
                 (
                     request_context,
                     request_id,
+                    sender_context,
                 ) = await self._request_queue.get()
                 await self._request_lock.acquire()
                 # TODO: Should we create task manager every time?
@@ -607,8 +640,12 @@ class ActiveTask:
                             _RequestStarted(request_id, request_context),
                         )
                     )
-                    await self._agent_executor.execute(
-                        request_context, self._event_queue_agent
+                    # Awaiting the child task propagates producer cancellation.
+                    await sender_context.run(
+                        asyncio.create_task,
+                        self._agent_executor.execute(
+                            request_context, self._event_queue_agent
+                        ),
                     )
                     logger.debug(
                         'Producer[%s]: Execution finished successfully',
@@ -736,6 +773,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -747,6 +785,9 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
+                    # Acknowledge internal lifecycle events before skipping them.
+                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                        tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None

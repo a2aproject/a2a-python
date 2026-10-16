@@ -804,7 +804,9 @@ class FromProto:
         cls, request: a2a_pb2.SendMessageRequest
     ) -> types.MessageSendParams:
         return types.MessageSendParams(
-            configuration=cls.message_send_configuration(request.configuration),
+            configuration=cls.message_send_configuration(request.configuration)
+            if request.HasField('configuration')
+            else None,
             message=cls.message(request.request),
             metadata=cls.metadata(request.metadata),
         )

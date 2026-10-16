@@ -115,6 +115,36 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     assert client._transport.url == 'http://primary-url.com'  # type: ignore[attr-defined]
 
 
+@pytest.mark.parametrize('v1_version', ['1.0', '1.0.0'])
+def test_client_factory_prefers_1_0_ignoring_patch_version(
+    base_agent_card: AgentCard, v1_version: str
+):
+    """A patch version must not affect protocol negotiation (spec: Versioning)."""
+    del base_agent_card.supported_interfaces[:]
+    base_agent_card.supported_interfaces.extend(
+        [
+            AgentInterface(
+                protocol_binding=TransportProtocol.JSONRPC,
+                url='http://legacy-url.com',
+                protocol_version='0.3.0',
+            ),
+            AgentInterface(
+                protocol_binding=TransportProtocol.JSONRPC,
+                url='http://v1-url.com',
+                protocol_version=v1_version,
+            ),
+        ]
+    )
+    config = ClientConfig(
+        httpx_client=httpx.AsyncClient(),
+        supported_protocol_bindings=[TransportProtocol.JSONRPC],
+    )
+    client = ClientFactory(config).create(base_agent_card)
+
+    assert isinstance(client._transport, JsonRpcTransport)  # type: ignore[attr-defined]
+    assert client._transport.url == 'http://v1-url.com'  # type: ignore[attr-defined]
+
+
 def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
     """Verify that the factory raises an error if no compatible transport is found."""
     config = ClientConfig(
