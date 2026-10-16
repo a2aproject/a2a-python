@@ -5,6 +5,7 @@ import logging
 import warnings
 
 from contextlib import aclosing
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
 
 from a2a.plugins.manager import get_global
@@ -354,6 +355,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         cancelled = Task()
         cancelled.CopyFrom(current)
         cancelled.status.state = TaskState.TASK_STATE_CANCELED
+        # CopyFrom carried over the previous state's timestamp; stamping here
+        # also covers the event built from this status below.
+        cancelled.status.timestamp.FromDatetime(datetime.now(timezone.utc))
         event = TaskStatusUpdateEvent(
             task_id=task_id,
             context_id=current.context_id,

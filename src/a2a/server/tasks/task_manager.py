@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import logging
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
 from a2a.plugins.types import TaskEventInfo
@@ -14,6 +15,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 from a2a.utils.telemetry import trace_function
 
@@ -220,6 +222,16 @@ class TaskManager:
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
+    def _stamp_terminal_timestamp(
+        self, holder: Task | TaskStatusUpdateEvent
+    ) -> None:
+        """Auto-stamps a terminal status that arrives without a timestamp."""
+        if (
+            holder.status.state in TERMINAL_TASK_STATES
+            and not holder.status.HasField('timestamp')
+        ):
+            holder.status.timestamp.FromDatetime(datetime.now(timezone.utc))
+
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ) -> Task | None:
@@ -260,6 +272,7 @@ class TaskManager:
             task_id_from_event,
         )
         if isinstance(event, Task):
+            self._stamp_terminal_timestamp(event)
             self._pending_event = event
             try:
                 await self._save_task(event)
@@ -278,6 +291,10 @@ class TaskManager:
             logger.debug(
                 'Updating task %s status to: %s', task.id, event.status.state
             )
+            # Stamped on the event, not the copy below: the same event object
+            # is published to subscribers, push notifications and the event
+            # table, so it has to carry the timestamp too.
+            self._stamp_terminal_timestamp(event)
             if task.status.HasField('message'):
                 task.history.append(task.status.message)
             if event.metadata:
