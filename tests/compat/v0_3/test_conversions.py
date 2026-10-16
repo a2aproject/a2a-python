@@ -464,6 +464,12 @@ def test_send_message_configuration_conversion_minimal():
     assert v03_restored == v03_expected_restored
 
 
+def test_send_message_configuration_conversion_history_length_zero():
+    v03_config = types_v03.MessageSendConfiguration(history_length=0)
+    v10_config = to_core_send_message_configuration(v03_config)
+    assert not v10_config.HasField('history_length')
+
+
 def test_artifact_conversion_full():
     v03_artifact = types_v03.Artifact(
         artifact_id='a1',
@@ -1346,6 +1352,14 @@ def test_get_task_request_conversion_minimal():
     assert v10_req == v10_expected
     v03_restored = to_compat_get_task_request(v10_req, request_id='conv')
     assert v03_restored == v03_req
+
+
+def test_get_task_request_conversion_history_length_zero():
+    v03_req = types_v03.GetTaskRequest(
+        id='conv', params=types_v03.TaskQueryParams(id='t1', history_length=0)
+    )
+    v10_req = to_core_get_task_request(v03_req)
+    assert not v10_req.HasField('history_length')
 
 
 def test_cancel_task_request_conversion():
