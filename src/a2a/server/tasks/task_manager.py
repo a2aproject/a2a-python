@@ -2,7 +2,10 @@ from __future__ import annotations
 
 import logging
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING
+
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.types.a2a_pb2 import (
     Artifact,
@@ -15,6 +18,14 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import InvalidAgentResponseError, InvalidParamsError
 from a2a.utils.telemetry import trace_function
+
+
+TERMINAL_TASK_STATES = {
+    TaskState.TASK_STATE_COMPLETED,
+    TaskState.TASK_STATE_CANCELED,
+    TaskState.TASK_STATE_FAILED,
+    TaskState.TASK_STATE_REJECTED,
+}
 
 
 if TYPE_CHECKING:
@@ -205,6 +216,22 @@ class TaskManager:
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
+    def _stamp_terminal_timestamp(self, task: Task) -> None:
+        """Auto-stamp terminal states that arrive without a timestamp.
+
+        Defensive backstop for issue #1331: failure paths that mutate a
+        task (or build a status event) can leave a terminal state
+        unstamped, which DatabaseTaskStore would persist as
+        last_updated = NULL.
+        """
+        if (
+            task.status.state in TERMINAL_TASK_STATES
+            and not task.status.HasField('timestamp')
+        ):
+            ts = Timestamp()
+            ts.FromDatetime(datetime.now(timezone.utc))
+            task.status.timestamp.CopyFrom(ts)
+
     async def save_task_event(
         self, event: Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
     ) -> Task | None:
@@ -245,6 +272,7 @@ class TaskManager:
             task_id_from_event,
         )
         if isinstance(event, Task):
+            self._stamp_terminal_timestamp(event)
             self._pending_event = event
             try:
                 await self._save_task(event)
@@ -263,6 +291,7 @@ class TaskManager:
             if event.metadata:
                 task.metadata.MergeFrom(event.metadata)
             task.status.CopyFrom(event.status)
+            self._stamp_terminal_timestamp(task)
         else:
             logger.debug('Appending artifact to task %s', task.id)
             append_artifact_to_task(task, event)
