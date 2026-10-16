@@ -3369,3 +3369,52 @@ async def test_failed_cancel_restarts_idle_release() -> None:
 
     assert await _wait_for_release(handler, task.id)
     await handler.aclose()
+
+
+class ExplodingExecutor(AgentExecutor):
+    """Creates the task, then crashes mid-flight (issue #1331)."""
+
+    task_id = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task = new_task_from_user_message(context.message)
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        raise RuntimeError('agent crashed mid-flight')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_framework_failure_persists_timestamp_on_failed_task():
+    """A framework-written FAILED status carries a timestamp (#1331)."""
+    task_store = InMemoryTaskStore()
+    executor = ExplodingExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_explode',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    with pytest.raises(RuntimeError, match='agent crashed mid-flight'):
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+
+    stored = await task_store.get(
+        executor.task_id, create_server_call_context()
+    )
+    assert stored is not None
+    assert stored.status.state == TaskState.TASK_STATE_FAILED
+    assert stored.status.HasField('timestamp')

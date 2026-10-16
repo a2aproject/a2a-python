@@ -971,6 +971,9 @@ class ActiveTask:
             updated = Task()
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED
+            # CopyFrom carried over the previous state's timestamp; a terminal
+            # transition has to be stamped with its own time.
+            updated.status.timestamp.FromDatetime(datetime.now(timezone.utc))
             await self._task_manager.save_task_event(updated)
             task = updated
         return task
@@ -1105,6 +1108,7 @@ class ActiveTask:
                             context_id=task.context_id,
                             status=TaskStatus(
                                 state=TaskState.TASK_STATE_FAILED,
+                                timestamp=datetime.now(timezone.utc),
                             ),
                         )
                     )
