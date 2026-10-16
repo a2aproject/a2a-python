@@ -72,9 +72,13 @@ async def parse_sse_stream(
     """
     event_name = 'message'
     payload_chunks: list[str] = []
+    first_line = True
 
     async for line in response.aiter_lines():
         raw_line = line.rstrip('\r\n')
+        if first_line:
+            raw_line = raw_line.removeprefix('\ufeff')
+            first_line = False
 
         # Empty line denotes the completion of the current event block
         if not raw_line:

@@ -39,6 +39,30 @@ async def test_parse_sse_stream_edge_cases():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'content, expected',
+    [
+        ('\ufeffdata: hello\n\n', [('message', 'hello')]),
+        ('\ufeffevent: error\ndata: failure\n\n', [('error', 'failure')]),
+        ('\ufeff\ufeffdata: ignored\n\n', []),
+        ('data: \ufeffhello\n\n', [('message', '\ufeffhello')]),
+        ('\ndata: first\n\n\ufeffdata: ignored\n\n', [('message', 'first')]),
+    ],
+)
+async def test_parse_sse_stream_leading_bom(
+    content: str, expected: list[tuple[str, str]]
+) -> None:
+    """Ignore exactly one BOM at the beginning of the event stream."""
+    response = httpx.Response(
+        200,
+        headers={'Content-Type': 'text/event-stream'},
+        content=content.encode('utf-8'),
+    )
+
+    assert [event async for event in parse_sse_stream(response)] == expected
+
+
+@pytest.mark.asyncio
 async def test_send_http_stream_request_non_sse(mocker):
     client = httpx.AsyncClient()
     request = httpx.Request('GET', 'http://test')
