@@ -444,6 +444,14 @@ class DefaultRequestHandlerV2(RequestHandler):
                 # pushed after a Message.
 
         if result is None:
+            if not active_task.task_created_is_set():
+                # The executor finished without emitting a single event:
+                # there is no task to fall back to, and awaiting
+                # get_task() would block forever on _task_created
+                # (issue #1330).
+                raise InternalError(
+                    message='Agent execution produced no events'
+                )
             logger.debug('Missing result for task %s', request_context.task_id)
             result = await active_task.get_task()
 
