@@ -1,4 +1,5 @@
 from collections.abc import AsyncGenerator, AsyncIterator, Awaitable, Callable
+from contextlib import aclosing
 from typing import Any
 
 from a2a.client.client import (
@@ -12,6 +13,8 @@ from a2a.client.interceptors import (
     ClientCallInterceptor,
 )
 from a2a.client.transports.base import ClientTransport
+from a2a.plugins.manager import PluginManager, get_global
+from a2a.plugins.types import ClientRequest, ClientResponse
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -31,21 +34,61 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-class BaseClient(Client):
-    """Base implementation of the A2A client, containing transport-independent logic."""
+# Client method names mapped to the A2A RPC names reported to plugins.
+_RPC_NAMES = {
+    'send_message': 'SendMessage',
+    'send_message_streaming': 'SendStreamingMessage',
+    'get_task': 'GetTask',
+    'list_tasks': 'ListTasks',
+    'cancel_task': 'CancelTask',
+    'create_task_push_notification_config': 'CreateTaskPushNotificationConfig',
+    'get_task_push_notification_config': 'GetTaskPushNotificationConfig',
+    'list_task_push_notification_configs': 'ListTaskPushNotificationConfigs',
+    'delete_task_push_notification_config': 'DeleteTaskPushNotificationConfig',
+    'subscribe': 'SubscribeToTask',
+    'get_extended_agent_card': 'GetExtendedAgentCard',
+}
 
-    def __init__(
+
+class BaseClient(Client):
+    """Base implementation of the A2A client, containing transport-independent logic.
+
+    Client plugin hooks run around every call: ``before_agent_call`` before
+    the interceptors, ``after_agent_call`` after them.
+    """
+
+    def __init__(  # noqa: PLR0913
         self,
         card: AgentCard,
         config: ClientConfig,
         transport: ClientTransport,
         interceptors: list[ClientCallInterceptor],
+        *,
+        plugins: PluginManager | None = None,
+        protocol_binding: str = '',
+        url: str = '',
     ):
+        """Initializes the client.
+
+        Args:
+            card: The card of the agent to call.
+            config: The client configuration.
+            transport: The transport used for calls.
+            interceptors: Interceptors applied to every call.
+            plugins: Plugin manager whose client hooks run for every call.
+                Defaults to the global manager at construction time.
+            protocol_binding: Protocol binding of ``transport``, reported to
+                plugins.
+            url: URL of the selected agent interface, reported to plugins.
+        """
         super().__init__(interceptors)
         self._card = card
         self._config = config
         self._transport = transport
         self._interceptors = interceptors
+        self._plugins = plugins if plugins is not None else get_global()
+        self._protocol_binding = protocol_binding
+        self._url = url
 
     async def send_message(
         self,
@@ -90,15 +133,20 @@ class BaseClient(Client):
             yield stream_response
             return
 
-        async for event in self._execute_stream_with_interceptors(
-            input_data=request,
-            method='send_message_streaming',
-            context=context,
-            transport_call=lambda req, ctx: (
-                self._transport.send_message_streaming(req, context=ctx)
-            ),
-        ):
-            yield event
+        # aclosing() closes the inner stream (and the transport stream) as
+        # soon as the caller stops iterating.
+        async with aclosing(
+            self._execute_stream_with_interceptors(
+                input_data=request,
+                method='send_message_streaming',
+                context=context,
+                transport_call=lambda req, ctx: (
+                    self._transport.send_message_streaming(req, context=ctx)
+                ),
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     def _apply_client_config(self, request: SendMessageRequest) -> None:
         request.configuration.return_immediately |= self._config.polling
@@ -324,15 +372,18 @@ class BaseClient(Client):
                 'client and/or server do not support resubscription.'
             )
 
-        async for event in self._execute_stream_with_interceptors(
-            input_data=request,
-            method='subscribe',
-            context=context,
-            transport_call=lambda req, ctx: self._transport.subscribe(
-                req, context=ctx
-            ),
-        ):
-            yield event
+        async with aclosing(
+            self._execute_stream_with_interceptors(
+                input_data=request,
+                method='subscribe',
+                context=context,
+                transport_call=lambda req, ctx: self._transport.subscribe(
+                    req, context=ctx
+                ),
+            )
+        ) as events:
+            async for event in events:
+                yield event
 
     async def get_extended_agent_card(
         self,
@@ -372,7 +423,50 @@ class BaseClient(Client):
         """Closes the underlying transport."""
         await self._transport.close()
 
+    def _client_request(
+        self, input_data: Any, method: str, context: ClientCallContext | None
+    ) -> ClientRequest:
+        return ClientRequest(
+            method=_RPC_NAMES.get(method, method),
+            payload=input_data,
+            agent_card=self._card,
+            context=context if context is not None else ClientCallContext(),
+            transport=self._protocol_binding,
+            url=self._url,
+        )
+
     async def _execute_with_interceptors(
+        self,
+        input_data: Any,
+        method: str,
+        context: ClientCallContext | None,
+        transport_call: Callable[
+            [Any, ClientCallContext | None], Awaitable[Any]
+        ],
+    ) -> Any:
+        plugins = self._plugins
+        if not plugins.has_client_hooks:
+            return await self._call_through_interceptors(
+                input_data, method, context, transport_call
+            )
+
+        request = self._client_request(input_data, method, context)
+        await plugins.before_agent_call(request)
+        try:
+            result = await self._call_through_interceptors(
+                request.payload, method, request.context, transport_call
+            )
+        except Exception as e:
+            await plugins.after_agent_call(
+                ClientResponse(request.method, None, request.context, error=e)
+            )
+            raise
+        await plugins.after_agent_call(
+            ClientResponse(request.method, result, request.context)
+        )
+        return result
+
+    async def _call_through_interceptors(
         self,
         input_data: Any,
         method: str,
@@ -422,8 +516,58 @@ class BaseClient(Client):
         transport_call: Callable[
             [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
         ],
-    ) -> AsyncIterator[StreamResponse]:
+    ) -> AsyncGenerator[StreamResponse, None]:
+        plugins = self._plugins
+        if not plugins.has_client_hooks:
+            async with aclosing(
+                self._stream_through_interceptors(
+                    input_data, method, context, transport_call
+                )
+            ) as events:
+                async for event in events:
+                    yield event
+            return
 
+        request = self._client_request(input_data, method, context)
+        await plugins.before_agent_call(request)
+        error: BaseException | None = None
+        try:
+            async with aclosing(
+                self._stream_through_interceptors(
+                    request.payload, method, request.context, transport_call
+                )
+            ) as events:
+                async for event in events:
+                    await plugins.after_agent_call(
+                        ClientResponse(
+                            request.method,
+                            event,
+                            request.context,
+                            is_stream_event=True,
+                            is_final=False,
+                        )
+                    )
+                    yield event
+        except Exception as e:
+            error = e
+            raise
+        finally:
+            # Also runs when the caller stops iterating early.
+            await plugins.after_agent_call(
+                ClientResponse(
+                    request.method, None, request.context, error=error
+                )
+            )
+
+    async def _stream_through_interceptors(
+        self,
+        input_data: Any,
+        method: str,
+        context: ClientCallContext | None,
+        transport_call: Callable[
+            [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
+        ],
+    ) -> AsyncGenerator[StreamResponse, None]:
         before_args = BeforeArgs(
             input=input_data,
             method=method,
