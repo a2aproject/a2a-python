@@ -233,6 +233,13 @@ class JsonRpcDispatcher:
             body = await request.json()
             if isinstance(body, dict):
                 request_id = body.get('id')
+                if isinstance(request_id, bool):
+                    return self._generate_error_response(
+                        None,
+                        InvalidRequestError(
+                            message='Invalid request: id must be a string, number, or null'
+                        ),
+                    )
                 # Ensure request_id is valid for JSON-RPC response (str/int/None only)
                 if request_id is not None and not isinstance(
                     request_id, str | int
