@@ -275,6 +275,13 @@ class TestProtoUtils:
         )
         assert config.history_length == expected
 
+    def test_message_send_params_without_configuration(self):
+        """An unset configuration stays None so the send defaults to blocking."""
+        params = proto_utils.FromProto.message_send_params(
+            a2a_pb2.SendMessageRequest(request=a2a_pb2.Message(message_id='m'))
+        )
+        assert params.configuration is None
+
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""
         assert proto_utils.ToProto.message(None) is None
