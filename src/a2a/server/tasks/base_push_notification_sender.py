@@ -126,77 +126,35 @@ class BasePushNotificationSender(PushNotificationSender):
             if not accepted:
                 return False
         plugins = current_push_plugins()
-        try:
-            headers: dict[str, str] = {}
-            if push_info.token:
-                headers['X-A2A-Notification-Token'] = push_info.token
-            auth = push_info.authentication
-            if push_info.HasField('authentication'):
-                if auth.scheme and auth.credentials:
-                    headers['Authorization'] = (
-                        f'{auth.scheme} {auth.credentials}'
-                    )
-                elif auth.scheme:
-                    logger.warning(
-                        'Push config %s sets an authentication scheme with no '
-                        'credentials; sending no Authorization header for '
-                        'task_id=%s',
-                        push_info.id,
-                        task_id,
-                    )
+        request = PushRequest(
+            task_id, url, self._build_headers(push_info, task_id), event
+        )
 
-            if plugins is not None:
-                return await self._post_with_plugins(
-                    plugins, PushRequest(task_id, url, headers, event)
+        if plugins is not None:
+            # before_push_send may add headers or set request.skip. The
+            # validated URL is captured above and cannot be redirected.
+            try:
+                await plugins.before_push_send(request)
+            except Exception as e:
+                logger.exception(
+                    'Push plugin failed before sending for task_id=%s to '
+                    'URL: %s.',
+                    task_id,
+                    url,
                 )
-            response = await self._client.post(
-                url,
-                json=MessageToDict(to_stream_response(event)),
-                headers=headers,
-            )
-            response.raise_for_status()
-            logger.info(
-                'Push-notification sent for task_id=%s to URL: %s', task_id, url
-            )
-        except Exception:
-            logger.exception(
-                'Error sending push-notification for task_id=%s to URL: %s.',
-                task_id,
-                url,
-            )
-            return False
-        return True
-
-    async def _post_with_plugins(
-        self, plugins: PluginManager, request: PushRequest
-    ) -> bool:
-        """Delivers one notification with `PushPlugin` hooks.
-
-        A raising `before_push_send` fails the delivery. The webhook URL
-        cannot be changed by plugins, since it was validated already.
-        """
-        url = request.url
-        try:
-            await plugins.before_push_send(request)
-        except Exception as e:
-            logger.exception(
-                'Push plugin failed before sending for task_id=%s to URL: %s.',
-                request.task_id,
-                request.url,
-            )
-            await plugins.on_push_sent(PushResult(request, 0.0, None, e))
-            return False
-        if request.skip:
-            logger.debug(
-                'Push-notification for task_id=%s to URL: %s skipped by a '
-                'plugin',
-                request.task_id,
-                request.url,
-            )
-            await plugins.on_push_sent(
-                PushResult(request, 0.0, None, None, skipped=True)
-            )
-            return True
+                await self._report(plugins, PushResult(request, 0.0, None, e))
+                return False
+            if request.skip:
+                logger.debug(
+                    'Push-notification for task_id=%s to URL: %s skipped by a '
+                    'plugin',
+                    task_id,
+                    url,
+                )
+                await self._report(
+                    plugins, PushResult(request, 0.0, None, None, skipped=True)
+                )
+                return True
 
         start = time.monotonic()
         status_code: int | None = None
@@ -204,7 +162,7 @@ class BasePushNotificationSender(PushNotificationSender):
         try:
             response = await self._client.post(
                 url,
-                json=MessageToDict(to_stream_response(request.event)),
+                json=MessageToDict(to_stream_response(event)),
                 headers=request.headers,
             )
             status_code = response.status_code
@@ -213,16 +171,47 @@ class BasePushNotificationSender(PushNotificationSender):
             error = e
             logger.exception(
                 'Error sending push-notification for task_id=%s to URL: %s.',
-                request.task_id,
-                request.url,
+                task_id,
+                url,
             )
-        await plugins.on_push_sent(
-            PushResult(request, time.monotonic() - start, status_code, error)
-        )
-        if error is None:
+        else:
             logger.info(
-                'Push-notification sent for task_id=%s to URL: %s',
-                request.task_id,
-                request.url,
+                'Push-notification sent for task_id=%s to URL: %s', task_id, url
+            )
+        if plugins is not None:
+            await self._report(
+                plugins,
+                PushResult(
+                    request, time.monotonic() - start, status_code, error
+                ),
             )
         return error is None
+
+    def _build_headers(
+        self, push_info: TaskPushNotificationConfig, task_id: str
+    ) -> dict[str, str]:
+        """Builds the delivery headers from the push config."""
+        headers: dict[str, str] = {}
+        if push_info.token:
+            headers['X-A2A-Notification-Token'] = push_info.token
+        auth = push_info.authentication
+        if push_info.HasField('authentication'):
+            if auth.scheme and auth.credentials:
+                headers['Authorization'] = f'{auth.scheme} {auth.credentials}'
+            elif auth.scheme:
+                logger.warning(
+                    'Push config %s sets an authentication scheme with no '
+                    'credentials; sending no Authorization header for '
+                    'task_id=%s',
+                    push_info.id,
+                    task_id,
+                )
+        return headers
+
+    @staticmethod
+    async def _report(plugins: PluginManager, result: PushResult) -> None:
+        """Calls on_push_sent, keeping a raising manager from failing delivery."""
+        try:
+            await plugins.on_push_sent(result)
+        except Exception:
+            logger.exception('Push plugin failed in on_push_sent')
