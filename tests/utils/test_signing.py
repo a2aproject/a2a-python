@@ -143,8 +143,20 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
         verifier_wrong_key(signed_card)
 
 
+@pytest.mark.parametrize(
+    'protected',
+    [
+        pytest.param('!!!not-base64url!!!', id='invalid-base64url'),
+        pytest.param(
+            base64url_encode(b'\xff').decode('utf-8'), id='invalid-utf8'
+        ),
+        pytest.param(base64url_encode(b'{').decode('utf-8'), id='invalid-json'),
+        pytest.param(base64url_encode(b'[]').decode('utf-8'), id='non-object'),
+    ],
+)
 def test_verifier_skips_malformed_protected_header(
     sample_agent_card: AgentCard,
+    protected: str,
 ):
     key = 'key12345'
     signer = signing.create_agent_card_signer(
@@ -154,9 +166,7 @@ def test_verifier_skips_malformed_protected_header(
     verifier = signing.create_signature_verifier(
         create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
     )
-    malformed = AgentCardSignature(
-        protected='!!!not-base64url!!!', signature='invalid'
-    )
+    malformed = AgentCardSignature(protected=protected, signature='invalid')
 
     invalid_card = AgentCard()
     invalid_card.CopyFrom(sample_agent_card)
