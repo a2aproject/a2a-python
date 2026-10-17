@@ -272,10 +272,11 @@ _global_manager: PluginManager = SequentialPluginManager()
 
 
 def set_global(manager: PluginManager) -> None:
-    """Sets the manager used by handlers and clients created afterwards.
+    """Sets the manager used by handlers, clients and push senders created afterwards.
 
-    Handlers and clients capture the manager when they are constructed, so
-    call this once at startup, before creating them.
+    `DefaultRequestHandlerV2`, clients and `BasePushNotificationSender`
+    capture the manager when they are constructed, so call this once at
+    startup, before creating them.
     """
     global _global_manager  # noqa: PLW0603
     if not isinstance(manager, PluginManager):

@@ -77,7 +77,6 @@ class ActiveTaskRegistry:
                     push_sender=self._push_sender,
                     on_cleanup=self._on_active_task_cleanup,
                     event_stream=self._event_stream,
-                    plugins=self._plugins,
                 )
                 self._active_tasks[task_id] = active_task
 

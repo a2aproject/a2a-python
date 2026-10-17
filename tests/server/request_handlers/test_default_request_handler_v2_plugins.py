@@ -510,6 +510,7 @@ async def test_remote_cancel_reports_task_event():
 
 def push_setup(
     responses: dict[str, int],
+    manager: plugins.PluginManager | None = None,
 ) -> tuple[
     InMemoryPushNotificationConfigStore,
     BasePushNotificationSender,
@@ -523,7 +524,9 @@ def push_setup(
 
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
-        httpx.AsyncClient(transport=httpx.MockTransport(handle)), config_store
+        httpx.AsyncClient(transport=httpx.MockTransport(handle)),
+        config_store,
+        plugins=manager,
     )
     return config_store, sender, received
 
@@ -540,8 +543,10 @@ def push_request(url: str) -> SendMessageRequest:
 
 @pytest.mark.asyncio
 async def test_push_hooks_run_for_v2_deliveries():
-    config_store, sender, received = push_setup({'http://hook/fail': 500})
     recorder = Recorder()
+    config_store, sender, received = push_setup(
+        {'http://hook/fail': 500}, plugins.sequential(recorder)
+    )
     handler = make_handler(
         recorder, push_config_store=config_store, push_sender=sender
     )
@@ -590,14 +595,15 @@ async def test_push_skip_and_rejection():
         (Fail(), lambda r: isinstance(r.error, RuntimeError)),
     ):
         seen.clear()
-        config_store, sender, received = push_setup({})
+        config_store, sender, received = push_setup(
+            {}, plugins.sequential(plugin, Seen())
+        )
         handler = DefaultRequestHandlerV2(
             agent_executor=TaskAgent(),
             task_store=InMemoryTaskStore(),
             agent_card=CARD,
             push_config_store=config_store,
             push_sender=sender,
-            plugins=plugins.sequential(plugin, Seen()),
         )
         await handler.on_message_send(
             push_request('http://hook/x'), ServerCallContext()
@@ -613,6 +619,7 @@ async def test_push_url_validator_rejection_runs_no_hooks():
         return False
 
     received: list[httpx.Request] = []
+    recorder = Recorder()
     config_store = InMemoryPushNotificationConfigStore()
     sender = BasePushNotificationSender(
         httpx.AsyncClient(
@@ -622,8 +629,8 @@ async def test_push_url_validator_rejection_runs_no_hooks():
         ),
         config_store,
         push_url_validator=reject,
+        plugins=plugins.sequential(recorder),
     )
-    recorder = Recorder()
     handler = make_handler(
         recorder, push_config_store=config_store, push_sender=sender
     )
@@ -639,7 +646,8 @@ async def test_push_url_validator_rejection_runs_no_hooks():
 
 
 @pytest.mark.asyncio
-async def test_legacy_handler_runs_no_plugin_hooks():
+async def test_legacy_handler_runs_only_push_hooks():
+    """The legacy handler is not wired for plugins; the sender is on its own."""
     recorder = Recorder()
     plugins.set_global(plugins.sequential(recorder))
     config_store, sender, received = push_setup({})
@@ -654,9 +662,46 @@ async def test_legacy_handler_runs_no_plugin_hooks():
     result = await handler.on_message_send(
         push_request('http://hook/legacy'), ServerCallContext()
     )
-    await asyncio.sleep(0.1)
+    await wait_for(lambda: bool(recorder.hooks('on_push_sent')))
 
     assert result.status.state == TaskState.TASK_STATE_COMPLETED
     assert received
+    assert all(r.headers['x-plugin'] == 'yes' for r in received)
+    assert set(recorder.names()) == {'before_push_send', 'on_push_sent'}
+
+
+def test_push_sender_uses_global_manager_unless_given_one():
+    manager = plugins.sequential(Recorder())
+    plugins.set_global(manager)
+    other = plugins.sequential()
+
+    default = BasePushNotificationSender(
+        httpx.AsyncClient(), InMemoryPushNotificationConfigStore()
+    )
+    explicit = BasePushNotificationSender(
+        httpx.AsyncClient(),
+        InMemoryPushNotificationConfigStore(),
+        plugins=other,
+    )
+
+    assert default._plugins is manager
+    assert explicit._plugins is other
+
+
+@pytest.mark.asyncio
+async def test_handler_plugins_do_not_reach_a_sender_with_its_own_manager():
+    recorder = Recorder()
+    config_store, sender, received = push_setup({})  # global: no plugins
+    handler = make_handler(
+        recorder, push_config_store=config_store, push_sender=sender
+    )
+
+    await handler.on_message_send(
+        push_request('http://hook/x'), ServerCallContext()
+    )
+    await wait_for(lambda: 'after_execution' in recorder.names())
+    await asyncio.sleep(0.05)
+
+    assert received
     assert 'x-plugin' not in received[0].headers
-    assert recorder.calls == []
+    assert recorder.hooks('before_push_send') == []

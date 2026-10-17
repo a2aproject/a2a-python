@@ -8,8 +8,7 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict
 
-from a2a.plugins._runtime import current_push_plugins
-from a2a.plugins.manager import PluginManager
+from a2a.plugins.manager import PluginManager, get_global
 from a2a.plugins.types import PushRequest, PushResult
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.push_notification_config_store import (
@@ -36,6 +35,7 @@ class BasePushNotificationSender(PushNotificationSender):
         context: ServerCallContext | None = None,
         *,
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        plugins: PluginManager | None = None,
     ) -> None:
         """Initializes the BasePushNotificationSender.
 
@@ -54,6 +54,10 @@ class BasePushNotificationSender(PushNotificationSender):
               None (no library screening). The spec lists these checks
               as SHOULD, so deployments that want the built-in policy
               should pass ``validate_push_notification_url``.
+            plugins: Plugin manager whose `PushPlugin` hooks run for every
+              delivery, whichever request handler uses this sender.
+              Defaults to the global manager at construction time; it is
+              independent of the manager passed to the request handler.
         """
         if context is not None:
             logger.warning(
@@ -68,6 +72,7 @@ class BasePushNotificationSender(PushNotificationSender):
         self._client = httpx_client
         self._config_store = config_store
         self._push_url_validator = push_url_validator
+        self._plugins = plugins if plugins is not None else get_global()
 
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
@@ -125,7 +130,7 @@ class BasePushNotificationSender(PushNotificationSender):
                 return False
             if not accepted:
                 return False
-        plugins = current_push_plugins()
+        plugins = self._plugins if self._plugins.has_push_hooks else None
         request = PushRequest(
             task_id, url, self._build_headers(push_info, task_id), event
         )
