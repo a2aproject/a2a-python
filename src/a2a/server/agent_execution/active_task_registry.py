@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.cluster.task_store import VersionedTaskStore
@@ -34,8 +35,10 @@ class ActiveTaskRegistry:
         task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
         event_stream: TaskEventStream | None = None,
+        plugins: PluginManager | None = None,
     ):
         self._agent_executor = agent_executor
+        self._plugins = plugins
         self._task_store = task_store
         self._push_sender = push_sender
         self._event_stream = event_stream
@@ -64,6 +67,7 @@ class ActiveTaskRegistry:
                     task_store=self._task_store,
                     initial_message=initial_message,
                     context=call_context,
+                    plugins=self._plugins,
                 )
 
                 active_task = ActiveTask(
@@ -73,6 +77,7 @@ class ActiveTaskRegistry:
                     push_sender=self._push_sender,
                     on_cleanup=self._on_active_task_cleanup,
                     event_stream=self._event_stream,
+                    plugins=self._plugins,
                 )
                 self._active_tasks[task_id] = active_task
 

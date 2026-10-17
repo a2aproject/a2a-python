@@ -24,6 +24,7 @@ from a2a.server.request_handlers.grpc_handler import (
     _ERROR_CODE_MAP,
     DefaultGrpcServerCallContextBuilder,
     GrpcServerCallContextBuilder,
+    set_grpc_call_metadata,
 )
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.utils.errors import A2AError, InvalidParamsError
@@ -64,6 +65,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         """Centralized error handling and context management for unary calls."""
         try:
             server_context = self._context_builder.build(context)
+            set_grpc_call_metadata(server_context, context)
             result = await handler_func(server_context)
         except A2AError as e:
             await self.abort_context(e, context)
@@ -79,6 +81,7 @@ class CompatGrpcHandler(a2a_v0_3_pb2_grpc.A2AServiceServicer):
         """Centralized error handling and context management for streaming calls."""
         try:
             server_context = self._context_builder.build(context)
+            set_grpc_call_metadata(server_context, context)
             async for item in handler_func(server_context):
                 yield item
         except A2AError as e:

@@ -48,6 +48,7 @@ from a2a.server.agent_execution.context import RequestContext
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable
 
+    from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.context import ServerCallContext
@@ -56,6 +57,7 @@ if TYPE_CHECKING:
     )
     from a2a.server.tasks.task_manager import TaskManager
 
+from a2a.plugins._runtime import push_plugins_scope
 from a2a.server.cluster.event_stream import VersionedEvent
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
@@ -359,9 +361,10 @@ class EventConsumer:
                 self.active_task._task_id,
             )
             try:
-                await self.active_task._push_sender.send_notification(
-                    self.active_task._task_id, event
-                )
+                with push_plugins_scope(self.active_task._plugins):
+                    await self.active_task._push_sender.send_notification(
+                        self.active_task._task_id, event
+                    )
             except Exception:
                 # Push delivery is best-effort: a sender failure must not
                 # fail the task or disturb the event stream. This guard is
@@ -441,6 +444,7 @@ class ActiveTask:
         push_sender: PushNotificationSender | None = None,
         on_cleanup: Callable[[ActiveTask], None] | None = None,
         event_stream: TaskEventStream | None = None,
+        plugins: PluginManager | None = None,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -454,6 +458,8 @@ class ActiveTask:
                         the task from the ActiveTaskRegistry.
             event_stream: Optional cross-replica stream; applied events are
                         published to it so other replicas can observe them.
+            plugins: Optional plugin manager whose push hooks run when
+                        `push_sender` delivers notifications.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
@@ -466,6 +472,7 @@ class ActiveTask:
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
         self._event_stream = event_stream
+        self._plugins = plugins
 
         # --- Synchronization Primitives ---
         # `_lock` protects structural lifecycle changes: start(), subscribe() counting,

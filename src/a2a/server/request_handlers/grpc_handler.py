@@ -27,10 +27,11 @@ from a2a.extensions.common import (
     HTTP_EXTENSION_HEADER,
     get_requested_extensions,
 )
-from a2a.server.context import ServerCallContext
+from a2a.server.context import TRANSPORT_STATE_KEY, ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.types import a2a_pb2
 from a2a.utils import proto_utils
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import A2A_ERROR_REASONS, A2AError, TaskNotFoundError
 from a2a.utils.grpc_status import status_to_grpc
 from a2a.utils.proto_utils import validation_errors_to_bad_request
@@ -79,6 +80,20 @@ def _get_metadata_value(
         for k, e in md
         if k.lower() == lower_key
     ]
+
+
+def set_grpc_call_metadata(
+    server_context: ServerCallContext, context: grpc.aio.ServicerContext
+) -> None:
+    """Records the transport and text invocation metadata in the call state."""
+    server_context.state.setdefault(
+        TRANSPORT_STATE_KEY, TransportProtocol.GRPC.value
+    )
+    if 'headers' not in server_context.state:
+        md = context.invocation_metadata() or ()
+        server_context.state['headers'] = {
+            k.lower(): v for k, v in md if isinstance(v, str)
+        }
 
 
 _ERROR_CODE_MAP: dict[type[A2AError], grpc.StatusCode] = {
@@ -424,5 +439,6 @@ class GrpcHandler(a2a_grpc.A2AServiceServicer):
         request: message.Message,
     ) -> ServerCallContext:
         server_context = self._context_builder.build(context)
+        set_grpc_call_metadata(server_context, context)
         server_context.tenant = getattr(request, 'tenant', '')
         return server_context

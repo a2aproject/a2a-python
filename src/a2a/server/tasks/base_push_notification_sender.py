@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import time
 
 from collections.abc import Awaitable, Callable
 
@@ -7,6 +8,9 @@ import httpx
 
 from google.protobuf.json_format import MessageToDict
 
+from a2a.plugins._runtime import current_push_plugins
+from a2a.plugins.manager import PluginManager
+from a2a.plugins.types import PushRequest, PushResult
 from a2a.server.context import ServerCallContext
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
@@ -121,6 +125,7 @@ class BasePushNotificationSender(PushNotificationSender):
                 return False
             if not accepted:
                 return False
+        plugins = current_push_plugins()
         try:
             headers: dict[str, str] = {}
             if push_info.token:
@@ -140,6 +145,10 @@ class BasePushNotificationSender(PushNotificationSender):
                         task_id,
                     )
 
+            if plugins is not None:
+                return await self._post_with_plugins(
+                    plugins, PushRequest(task_id, url, headers, event)
+                )
             response = await self._client.post(
                 url,
                 json=MessageToDict(to_stream_response(event)),
@@ -157,3 +166,63 @@ class BasePushNotificationSender(PushNotificationSender):
             )
             return False
         return True
+
+    async def _post_with_plugins(
+        self, plugins: PluginManager, request: PushRequest
+    ) -> bool:
+        """Delivers one notification with `PushPlugin` hooks.
+
+        A raising `before_push_send` fails the delivery. The webhook URL
+        cannot be changed by plugins, since it was validated already.
+        """
+        url = request.url
+        try:
+            await plugins.before_push_send(request)
+        except Exception as e:
+            logger.exception(
+                'Push plugin failed before sending for task_id=%s to URL: %s.',
+                request.task_id,
+                request.url,
+            )
+            await plugins.on_push_sent(PushResult(request, 0.0, None, e))
+            return False
+        if request.skip:
+            logger.debug(
+                'Push-notification for task_id=%s to URL: %s skipped by a '
+                'plugin',
+                request.task_id,
+                request.url,
+            )
+            await plugins.on_push_sent(
+                PushResult(request, 0.0, None, None, skipped=True)
+            )
+            return True
+
+        start = time.monotonic()
+        status_code: int | None = None
+        error: Exception | None = None
+        try:
+            response = await self._client.post(
+                url,
+                json=MessageToDict(to_stream_response(request.event)),
+                headers=request.headers,
+            )
+            status_code = response.status_code
+            response.raise_for_status()
+        except Exception as e:
+            error = e
+            logger.exception(
+                'Error sending push-notification for task_id=%s to URL: %s.',
+                request.task_id,
+                request.url,
+            )
+        await plugins.on_push_sent(
+            PushResult(request, time.monotonic() - start, status_code, error)
+        )
+        if error is None:
+            logger.info(
+                'Push-notification sent for task_id=%s to URL: %s',
+                request.task_id,
+                request.url,
+            )
+        return error is None

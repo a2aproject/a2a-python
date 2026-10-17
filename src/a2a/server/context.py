@@ -10,6 +10,9 @@ from a2a.auth.user import UnauthenticatedUser, User
 
 State = collections.abc.MutableMapping[str, typing.Any]
 
+TRANSPORT_STATE_KEY = 'a2a.transport'
+"""`ServerCallContext.state` key holding the transport of the request."""
+
 
 class ServerCallContext(BaseModel):
     """A context passed when calling a server method.

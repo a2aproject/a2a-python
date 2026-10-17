@@ -10,7 +10,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
 from a2a.compat.v0_3.jsonrpc_adapter import JSONRPC03Adapter
-from a2a.server.context import ServerCallContext
+from a2a.server.context import TRANSPORT_STATE_KEY, ServerCallContext
 from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
@@ -41,6 +41,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils import constants, json_utils, proto_utils
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.errors import (
     A2AError,
     InvalidParamsError,
@@ -308,6 +309,9 @@ class JsonRpcDispatcher:
 
             # 3) Build call context and wrap the request for downstream handling
             call_context = self._context_builder.build(request)
+            call_context.state.setdefault(
+                TRANSPORT_STATE_KEY, TransportProtocol.JSONRPC.value
+            )
             call_context.tenant = getattr(specific_request, 'tenant', '')
             call_context.state['method'] = method
             call_context.state['request_id'] = request_id

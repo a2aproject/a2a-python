@@ -32,12 +32,14 @@ else:
 
 from a2a.compat.v0_3.context_builders import V03ServerCallContextBuilder
 from a2a.compat.v0_3.rest_handler import REST03Handler
+from a2a.server.context import TRANSPORT_STATE_KEY
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
     create_event_source_response,
 )
 from a2a.utils import json_utils
+from a2a.utils.constants import TransportProtocol
 from a2a.utils.error_handlers import (
     rest_error_handler,
     rest_stream_error_handler,
@@ -75,6 +77,9 @@ class REST03Adapter:
         request: Request,
     ) -> Response:
         call_context = self._context_builder.build(request)
+        call_context.state.setdefault(
+            TRANSPORT_STATE_KEY, TransportProtocol.HTTP_JSON.value
+        )
         response = await method(request, call_context)
         return JSONResponse(content=response)
 
@@ -92,6 +97,9 @@ class REST03Adapter:
             ) from e
 
         call_context = self._context_builder.build(request)
+        call_context.state.setdefault(
+            TRANSPORT_STATE_KEY, TransportProtocol.HTTP_JSON.value
+        )
 
         async def event_generator(
             stream: AsyncIterable[Any],
