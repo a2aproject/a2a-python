@@ -28,8 +28,8 @@ class ServerRequest:
     Attributes:
         method: A2A RPC name, e.g. ``'SendMessage'`` or ``'GetTask'``.
         payload: The request proto, e.g. ``SendMessageRequest``.
-        context: The call context. ``state['headers']`` holds the transport
-            headers and ``state['a2a.transport']`` the transport name.
+        context: The call context. For HTTP transports ``state['headers']``
+            holds the request headers.
         agent_card: The agent card served by this handler.
     """
 
@@ -76,16 +76,12 @@ class ClientRequest:
         agent_card: The card of the remote agent.
         context: The call context. ``service_parameters`` holds the outgoing
             headers.
-        transport: Protocol binding used for the call, e.g. ``'JSONRPC'``.
-        url: URL of the selected agent interface.
     """
 
     method: str
     payload: Any
     agent_card: AgentCard
     context: ClientCallContext
-    transport: str = ''
-    url: str = ''
 
 
 @dataclass

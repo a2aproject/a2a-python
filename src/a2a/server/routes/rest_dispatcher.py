@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING, Any, TypeVar
 
 from google.protobuf.json_format import MessageToDict, Parse
 
-from a2a.server.context import TRANSPORT_STATE_KEY, ServerCallContext
+from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
@@ -20,7 +20,6 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
 )
 from a2a.utils import constants, json_utils, proto_utils
-from a2a.utils.constants import TransportProtocol
 from a2a.utils.error_handlers import (
     build_rest_error_payload,
     rest_error_handler,
@@ -107,9 +106,6 @@ class RestDispatcher:
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
         call_context = self._context_builder.build(request)
-        call_context.state.setdefault(
-            TRANSPORT_STATE_KEY, TransportProtocol.HTTP_JSON.value
-        )
         if 'tenant' in request.path_params:
             call_context.tenant = request.path_params['tenant']
         return call_context

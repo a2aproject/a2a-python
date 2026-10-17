@@ -26,6 +26,7 @@ from a2a.plugins import (
     TaskObserverPlugin,
 )
 from a2a.server.agent_execution import AgentExecutor, RequestContext
+from a2a.server.context import ServerCallContext
 from a2a.server.events import EventQueue
 from a2a.server.request_handlers import DefaultRequestHandlerV2, GrpcHandler
 from a2a.server.routes import (
@@ -137,6 +138,13 @@ def send_request(text: str = 'hello') -> SendMessageRequest:
     )
 
 
+def incoming_headers(context: ServerCallContext) -> dict[str, str]:
+    """Request headers: state['headers'] for HTTP, metadata for gRPC."""
+    if 'grpc_context' in context.state:
+        return dict(context.state['grpc_context'].invocation_metadata())
+    return context.state['headers']
+
+
 async def wait_for(predicate: Callable[[], bool], timeout: float = 5) -> None:
     async def poll() -> None:
         while not predicate():
@@ -233,17 +241,14 @@ async def test_streaming_message_runs_hooks_on_both_sides(setup: Setup):
     # Client side.
     (call,) = setup.caller.hooks('before_agent_call')
     assert call.method == 'SendStreamingMessage'
-    assert call.transport == setup.transport
-    assert call.url
     client_responses = setup.caller.hooks('after_agent_call')
     assert len(client_responses) == len(events) + 1
     assert client_responses[-1].is_final
 
-    # Server side: transport recorded, client header received.
+    # Server side: the header added by the client plugin arrives.
     (run,) = setup.server.hooks('before_agent_run')
     assert run.method == 'SendStreamingMessage'
-    assert run.context.state['a2a.transport'] == setup.transport
-    assert run.context.state['headers']['x-trace'] == 'trace-123'
+    assert incoming_headers(run.context)['x-trace'] == 'trace-123'
     assert run.agent_card.name == 'Plugin Agent'
     server_responses = setup.server.hooks('after_agent_run')
     assert server_responses[-1].is_final
@@ -310,7 +315,6 @@ async def test_v03_jsonrpc_requests_run_server_hooks():
     assert response.json()['result']['status']['state'] == 'completed'
     (run,) = recorder.hooks('before_agent_run')
     assert run.method == 'SendMessage'
-    assert run.context.state['a2a.transport'] == 'JSONRPC'
     assert recorder.hooks('after_agent_run')[-1].is_final
 
 

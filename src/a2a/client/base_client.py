@@ -57,7 +57,7 @@ class BaseClient(Client):
     the interceptors, ``after_agent_call`` after them.
     """
 
-    def __init__(  # noqa: PLR0913
+    def __init__(
         self,
         card: AgentCard,
         config: ClientConfig,
@@ -65,8 +65,6 @@ class BaseClient(Client):
         interceptors: list[ClientCallInterceptor],
         *,
         plugins: PluginManager | None = None,
-        protocol_binding: str = '',
-        url: str = '',
     ):
         """Initializes the client.
 
@@ -77,9 +75,6 @@ class BaseClient(Client):
             interceptors: Interceptors applied to every call.
             plugins: Plugin manager whose client hooks run for every call.
                 Defaults to the global manager at construction time.
-            protocol_binding: Protocol binding of ``transport``, reported to
-                plugins.
-            url: URL of the selected agent interface, reported to plugins.
         """
         super().__init__(interceptors)
         self._card = card
@@ -87,8 +82,6 @@ class BaseClient(Client):
         self._transport = transport
         self._interceptors = interceptors
         self._plugins = plugins if plugins is not None else get_global()
-        self._protocol_binding = protocol_binding
-        self._url = url
 
     async def send_message(
         self,
@@ -431,8 +424,6 @@ class BaseClient(Client):
             payload=input_data,
             agent_card=self._card,
             context=context if context is not None else ClientCallContext(),
-            transport=self._protocol_binding,
-            url=self._url,
         )
 
     async def _execute_with_interceptors(

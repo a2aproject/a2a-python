@@ -746,28 +746,3 @@ class TestTenantExtraction:
         server_context = call_args[0][1]
         assert isinstance(server_context, ServerCallContext)
         assert server_context.tenant == ''
-
-
-@pytest.mark.asyncio
-async def test_call_context_records_transport_and_text_metadata(
-    grpc_handler: GrpcHandler,
-    mock_request_handler: AsyncMock,
-    mock_grpc_context: AsyncMock,
-) -> None:
-    mock_grpc_context.invocation_metadata.return_value = grpc.aio.Metadata(
-        ('traceparent', '00-abc-def-01'),
-        ('X-Tenant', 'acme'),
-        ('trace-bin', b'\x00\x01'),
-    )
-    mock_request_handler.on_get_task.return_value = types.Task(id='t-1')
-
-    await grpc_handler.GetTask(
-        a2a_pb2.GetTaskRequest(id='t-1'), mock_grpc_context
-    )
-
-    call_context = mock_request_handler.on_get_task.call_args[0][1]
-    assert call_context.state['a2a.transport'] == 'GRPC'
-    assert call_context.state['headers'] == {
-        'traceparent': '00-abc-def-01',
-        'x-tenant': 'acme',
-    }

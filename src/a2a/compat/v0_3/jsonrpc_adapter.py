@@ -26,7 +26,7 @@ else:
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.context_builders import V03ServerCallContextBuilder
 from a2a.compat.v0_3.request_handler import RequestHandler03
-from a2a.server.context import TRANSPORT_STATE_KEY, ServerCallContext
+from a2a.server.context import ServerCallContext
 from a2a.server.jsonrpc_models import (
     InternalError as CoreInternalError,
 )
@@ -42,7 +42,6 @@ from a2a.server.routes.common import (
     create_event_source_response,
 )
 from a2a.utils import constants
-from a2a.utils.constants import TransportProtocol
 from a2a.utils.version_validator import validate_version
 
 
@@ -126,9 +125,6 @@ class JSONRPC03Adapter:
                 )
 
             call_context = self._context_builder.build(request)
-            call_context.state.setdefault(
-                TRANSPORT_STATE_KEY, TransportProtocol.JSONRPC.value
-            )
             call_context.tenant = (
                 getattr(specific_request.params, 'tenant', '')
                 if hasattr(specific_request, 'params')

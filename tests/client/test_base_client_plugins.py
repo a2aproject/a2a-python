@@ -69,8 +69,6 @@ def client(
         transport,
         interceptors or [],
         plugins=plugins.sequential(recorder) if recorder else None,
-        protocol_binding='JSONRPC',
-        url='http://remote:9000',
     )
 
 
@@ -98,7 +96,7 @@ def restore_global():
 
 
 @pytest.mark.asyncio
-async def test_unary_call_runs_hooks_with_transport_details():
+async def test_unary_call_runs_hooks():
     recorder = Recorder()
     transport = AsyncMock(spec=ClientTransport)
     transport.get_task.return_value = Task(id='t-1')
@@ -110,8 +108,6 @@ async def test_unary_call_runs_hooks_with_transport_details():
     assert result.id == 't-1'
     (request,) = recorder.hooks('before_agent_call')
     assert request.method == 'GetTask'
-    assert request.transport == 'JSONRPC'
-    assert request.url == 'http://remote:9000'
     assert request.agent_card.name == 'Remote'
     (response,) = recorder.hooks('after_agent_call')
     assert response.payload is result
@@ -304,7 +300,7 @@ async def test_no_plugins_keeps_context_none():
     assert transport.get_task.call_args.kwargs['context'] is None
 
 
-def test_factory_passes_selected_transport_and_global_plugins():
+def test_factory_clients_use_the_global_manager():
     manager = plugins.sequential(Recorder())
     plugins.set_global(manager)
 
@@ -314,5 +310,3 @@ def test_factory_passes_selected_transport_and_global_plugins():
 
     assert isinstance(c, BaseClient)
     assert c._plugins is manager
-    assert c._protocol_binding == 'JSONRPC'
-    assert c._url == 'http://remote:9000'

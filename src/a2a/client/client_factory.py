@@ -369,8 +369,6 @@ class ClientFactory:
             self._config,
             transport,
             interceptors or [],
-            protocol_binding=transport_protocol,
-            url=selected_interface.url,
         )
 
 
