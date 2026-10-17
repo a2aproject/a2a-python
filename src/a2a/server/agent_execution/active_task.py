@@ -40,7 +40,10 @@ import contextvars
 import logging
 import uuid
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
+
+from google.protobuf.timestamp_pb2 import Timestamp
 
 from a2a.server.agent_execution.context import RequestContext
 
@@ -95,6 +98,13 @@ INTERRUPTED_TASK_STATES = {
     TaskState.TASK_STATE_AUTH_REQUIRED,
     TaskState.TASK_STATE_INPUT_REQUIRED,
 }
+
+
+def _now_timestamp() -> Timestamp:
+    """Current UTC time as a protobuf Timestamp (issue #1331)."""
+    ts = Timestamp()
+    ts.FromDatetime(datetime.now(timezone.utc))
+    return ts
 
 
 class _RequestStarted:
@@ -166,7 +176,10 @@ class EventConsumer:
         handled_event = TaskStatusUpdateEvent(
             task_id=task.id,
             context_id=task.context_id,
-            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+            status=TaskStatus(
+                state=TaskState.TASK_STATE_FAILED,
+                timestamp=_now_timestamp(),
+            ),
         )
         try:
             return await self._handle_task_event(handled_event)
@@ -676,6 +689,7 @@ class ActiveTask:
                 )
                 if task.status.state not in TERMINAL_TASK_STATES:
                     task.status.state = TaskState.TASK_STATE_FAILED
+                    task.status.timestamp.CopyFrom(_now_timestamp())
                     await self._task_manager.save_task_event(task)
                 self._task_created.set()
             await self._event_queue_agent.enqueue_event(cast('Event', e))
@@ -996,6 +1010,7 @@ class ActiveTask:
                             context_id=task.context_id,
                             status=TaskStatus(
                                 state=TaskState.TASK_STATE_FAILED,
+                                timestamp=_now_timestamp(),
                             ),
                         )
                     )
