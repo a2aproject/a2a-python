@@ -34,22 +34,6 @@ from a2a.types.a2a_pb2 import (
 )
 
 
-# Client method names mapped to the A2A RPC names reported to plugins.
-_RPC_NAMES = {
-    'send_message': 'SendMessage',
-    'send_message_streaming': 'SendStreamingMessage',
-    'get_task': 'GetTask',
-    'list_tasks': 'ListTasks',
-    'cancel_task': 'CancelTask',
-    'create_task_push_notification_config': 'CreateTaskPushNotificationConfig',
-    'get_task_push_notification_config': 'GetTaskPushNotificationConfig',
-    'list_task_push_notification_configs': 'ListTaskPushNotificationConfigs',
-    'delete_task_push_notification_config': 'DeleteTaskPushNotificationConfig',
-    'subscribe': 'SubscribeToTask',
-    'get_extended_agent_card': 'GetExtendedAgentCard',
-}
-
-
 class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic.
 
@@ -107,6 +91,7 @@ class BaseClient(Client):
             response = await self._execute_with_interceptors(
                 input_data=request,
                 method='send_message',
+                rpc_method='SendMessage',
                 context=context,
                 transport_call=lambda req, ctx: self._transport.send_message(
                     req, context=ctx
@@ -132,6 +117,7 @@ class BaseClient(Client):
             self._execute_stream_with_interceptors(
                 input_data=request,
                 method='send_message_streaming',
+                rpc_method='SendStreamingMessage',
                 context=context,
                 transport_call=lambda req, ctx: (
                     self._transport.send_message_streaming(req, context=ctx)
@@ -193,6 +179,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='get_task',
+            rpc_method='GetTask',
             context=context,
             transport_call=lambda req, ctx: self._transport.get_task(
                 req, context=ctx
@@ -209,6 +196,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='list_tasks',
+            rpc_method='ListTasks',
             context=context,
             transport_call=lambda req, ctx: self._transport.list_tasks(
                 req, context=ctx
@@ -233,6 +221,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='cancel_task',
+            rpc_method='CancelTask',
             context=context,
             transport_call=lambda req, ctx: self._transport.cancel_task(
                 req, context=ctx
@@ -257,6 +246,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='create_task_push_notification_config',
+            rpc_method='CreateTaskPushNotificationConfig',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.create_task_push_notification_config(
@@ -283,6 +273,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='get_task_push_notification_config',
+            rpc_method='GetTaskPushNotificationConfig',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.get_task_push_notification_config(
@@ -309,6 +300,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='list_task_push_notification_configs',
+            rpc_method='ListTaskPushNotificationConfigs',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.list_task_push_notification_configs(
@@ -332,6 +324,7 @@ class BaseClient(Client):
         return await self._execute_with_interceptors(
             input_data=request,
             method='delete_task_push_notification_config',
+            rpc_method='DeleteTaskPushNotificationConfig',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.delete_task_push_notification_config(
@@ -369,6 +362,7 @@ class BaseClient(Client):
             self._execute_stream_with_interceptors(
                 input_data=request,
                 method='subscribe',
+                rpc_method='SubscribeToTask',
                 context=context,
                 transport_call=lambda req, ctx: self._transport.subscribe(
                     req, context=ctx
@@ -401,6 +395,7 @@ class BaseClient(Client):
         card = await self._execute_with_interceptors(
             input_data=request,
             method='get_extended_agent_card',
+            rpc_method='GetExtendedAgentCard',
             context=context,
             transport_call=lambda req, ctx: (
                 self._transport.get_extended_agent_card(req, context=ctx)
@@ -417,10 +412,13 @@ class BaseClient(Client):
         await self._transport.close()
 
     def _client_request(
-        self, input_data: Any, method: str, context: ClientCallContext | None
+        self,
+        input_data: Any,
+        rpc_method: str,
+        context: ClientCallContext | None,
     ) -> ClientRequest:
         return ClientRequest(
-            method=_RPC_NAMES.get(method, method),
+            method=rpc_method,
             payload=input_data,
             agent_card=self._card,
             context=context if context is not None else ClientCallContext(),
@@ -434,14 +432,23 @@ class BaseClient(Client):
         transport_call: Callable[
             [Any, ClientCallContext | None], Awaitable[Any]
         ],
+        *,
+        rpc_method: str | None = None,
     ) -> Any:
+        """Runs a unary call through plugins, interceptors and the transport.
+
+        ``method`` is passed to interceptors; ``rpc_method`` is the A2A RPC
+        name reported to plugins and defaults to ``method``.
+        """
         plugins = self._plugins
         if not plugins.has_client_hooks:
             return await self._call_through_interceptors(
                 input_data, method, context, transport_call
             )
 
-        request = self._client_request(input_data, method, context)
+        request = self._client_request(
+            input_data, rpc_method or method, context
+        )
         await plugins.before_agent_call(request)
         try:
             result = await self._call_through_interceptors(
@@ -507,7 +514,14 @@ class BaseClient(Client):
         transport_call: Callable[
             [Any, ClientCallContext | None], AsyncIterator[StreamResponse]
         ],
+        *,
+        rpc_method: str | None = None,
     ) -> AsyncGenerator[StreamResponse, None]:
+        """Runs a streaming call through plugins, interceptors and the transport.
+
+        ``method`` is passed to interceptors; ``rpc_method`` is the A2A RPC
+        name reported to plugins and defaults to ``method``.
+        """
         plugins = self._plugins
         if not plugins.has_client_hooks:
             async with aclosing(
@@ -519,7 +533,9 @@ class BaseClient(Client):
                     yield event
             return
 
-        request = self._client_request(input_data, method, context)
+        request = self._client_request(
+            input_data, rpc_method or method, context
+        )
         await plugins.before_agent_call(request)
         error: BaseException | None = None
         try:

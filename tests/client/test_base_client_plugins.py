@@ -15,14 +15,22 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    CancelTaskRequest,
+    DeleteTaskPushNotificationConfigRequest,
+    GetExtendedAgentCardRequest,
+    GetTaskPushNotificationConfigRequest,
     GetTaskRequest,
+    ListTaskPushNotificationConfigsRequest,
+    ListTasksRequest,
     Message,
     Part,
     Role,
     SendMessageRequest,
     SendMessageResponse,
     StreamResponse,
+    SubscribeToTaskRequest,
     Task,
+    TaskPushNotificationConfig,
     TaskState,
     TaskStatus,
     TaskStatusUpdateEvent,
@@ -310,3 +318,86 @@ def test_factory_clients_use_the_global_manager():
 
     assert isinstance(c, BaseClient)
     assert c._plugins is manager
+
+
+@pytest.mark.parametrize(
+    ('call', 'rpc_name'),
+    [
+        (lambda c: c.list_tasks(ListTasksRequest()), 'ListTasks'),
+        (lambda c: c.cancel_task(CancelTaskRequest(id='t-1')), 'CancelTask'),
+        (
+            lambda c: c.create_task_push_notification_config(
+                TaskPushNotificationConfig(task_id='t-1', url='http://hook')
+            ),
+            'CreateTaskPushNotificationConfig',
+        ),
+        (
+            lambda c: c.get_task_push_notification_config(
+                GetTaskPushNotificationConfigRequest(task_id='t-1', id='c-1')
+            ),
+            'GetTaskPushNotificationConfig',
+        ),
+        (
+            lambda c: c.list_task_push_notification_configs(
+                ListTaskPushNotificationConfigsRequest(task_id='t-1')
+            ),
+            'ListTaskPushNotificationConfigs',
+        ),
+        (
+            lambda c: c.delete_task_push_notification_config(
+                DeleteTaskPushNotificationConfigRequest(task_id='t-1', id='c-1')
+            ),
+            'DeleteTaskPushNotificationConfig',
+        ),
+        (
+            lambda c: c.get_extended_agent_card(GetExtendedAgentCardRequest()),
+            'GetExtendedAgentCard',
+        ),
+    ],
+)
+@pytest.mark.asyncio
+async def test_unary_methods_report_rpc_names(call, rpc_name):
+    recorder = Recorder()
+
+    await call(client(recorder, AsyncMock(spec=ClientTransport)))
+
+    assert [r.method for r in recorder.hooks('before_agent_call')] == [rpc_name]
+    assert recorder.hooks('after_agent_call')[-1].method == rpc_name
+
+
+@pytest.mark.asyncio
+async def test_subscribe_reports_rpc_name():
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+
+    async def stream(request, *, context=None):
+        yield status_event(TaskState.TASK_STATE_WORKING)
+
+    transport.subscribe = stream
+
+    async for _ in client(recorder, transport).subscribe(
+        SubscribeToTaskRequest(id='t-1')
+    ):
+        pass
+
+    assert recorder.hooks('before_agent_call')[0].method == 'SubscribeToTask'
+    assert all(
+        r.method == 'SubscribeToTask'
+        for r in recorder.hooks('after_agent_call')
+    )
+
+
+@pytest.mark.asyncio
+async def test_rpc_method_defaults_to_method():
+    recorder = Recorder()
+    transport = AsyncMock(spec=ClientTransport)
+    c = client(recorder, transport)
+
+    await c._execute_with_interceptors(
+        input_data=GetTaskRequest(id='t-1'),
+        method='custom_call',
+        context=None,
+        transport_call=AsyncMock(return_value=Task(id='t-1')),
+    )
+
+    assert recorder.hooks('before_agent_call')[0].method == 'custom_call'
