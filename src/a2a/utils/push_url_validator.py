@@ -11,13 +11,22 @@ logger = logging.getLogger(__name__)
 
 
 def _ip_is_blocked(ip_str: str) -> bool:
-    """Whether an address is not a public unicast destination."""
+    """Whether an address is not a public unicast destination.
+
+    RFC 6598 shared address space (100.64.0.0/10) is not public.
+    ``ipaddress`` leaves ``is_private`` false for it and ``is_global``
+    false as well, so ``not is_global`` still rejects it. An IPv4-mapped
+    IPv6 address is judged as the IPv4 address inside it.
+    """
     try:
         addr = ipaddress.ip_address(ip_str.split('%', maxsplit=1)[0])
     except ValueError:
         return True
+    mapped = getattr(addr, 'ipv4_mapped', None)
+    if mapped is not None:
+        addr = mapped
     return (
-        addr.is_private
+        not addr.is_global
         or addr.is_loopback
         or addr.is_link_local
         or addr.is_multicast
@@ -30,14 +39,14 @@ async def validate_push_notification_url(url: str) -> bool:
     """Return True if a push-notification URL is safe to fetch.
 
     Blocks non-HTTP(S) schemes and hosts that resolve to loopback,
-    link-local, private, reserved, multicast, or unspecified addresses
-    (e.g. 169.254.169.254 cloud metadata, internal services). A host
-    that cannot be resolved is rejected: the POST would fail anyway,
-    and failing closed avoids treating resolution errors as a bypass.
+    link-local, private, shared (100.64.0.0/10), reserved, multicast,
+    or unspecified addresses (e.g. 169.254.169.254 cloud metadata,
+    internal services). A host that cannot be resolved is rejected:
+    the POST would fail anyway, and failing closed avoids treating
+    resolution errors as a bypass.
 
-    IPv4-mapped IPv6 forms are covered: ``ipaddress`` maps them to the
-    underlying IPv4 address, so the ``is_private``/``is_loopback``
-    checks apply to the mapped value.
+    IPv4-mapped IPv6 forms are judged as the IPv4 address they carry,
+    so the private, shared, and loopback checks apply to that address.
 
     Uses the running event-loop resolver so request handlers and the
     sender stay non-blocking. Deployments can pass this function as
