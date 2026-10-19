@@ -164,6 +164,12 @@ def _field_is_repeated(field: FieldDescriptor) -> bool:
     return getattr(field, 'label', None) == FieldDescriptor.LABEL_REPEATED
 
 
+def _field_is_required(field: FieldDescriptor) -> bool:
+    """Whether the protocol annotates this field as REQUIRED."""
+    behaviors = field.GetOptions().Extensions[field_behavior]  # type: ignore[index]  # ty: ignore[invalid-argument-type]
+    return FieldBehavior.REQUIRED in behaviors
+
+
 def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
     """Converts REST query parameters back into a Protobuf message.
 
@@ -295,8 +301,7 @@ def _validate_proto_required_fields_internal(
         # `desc.fields` is typed as a union of the pure-Python and C-extension
         # FieldDescriptor; narrow to the canonical one for the helpers below.
         field = cast('FieldDescriptor', raw_field)
-        options = field.GetOptions()
-        if FieldBehavior.REQUIRED in options.Extensions[field_behavior]:  # type: ignore[index]  # ty: ignore[invalid-argument-type]
+        if _field_is_required(field):
             violation = _check_required_field_violation(msg, field)
             if violation:
                 errors.append(violation)

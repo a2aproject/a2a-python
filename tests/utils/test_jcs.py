@@ -87,11 +87,9 @@ def test_vector_must_accept(vector):
     value = vector['input']
     if vector['group'] == 'a2-signatures-exclusion':
         # Spec 8.4.1 rule 3: the signatures key is excluded unconditionally.
-        # This mirrors the two steps _canonicalize_agent_card applies to the
-        # card dict before serializing it.
+        # The production signing path excludes this field before JCS.
         value = dict(value)
         value.pop('signatures', None)
-        value = signing._clean_empty(value)
 
     actual = canonicalize(value).encode('utf-8')
     assert actual.hex() == vector['canonical_utf8_hex'], vector['rationale']
@@ -130,7 +128,6 @@ def test_vector_agrees_with_independent_implementation(vector):
     if vector['group'] == 'a2-signatures-exclusion':
         value = dict(value)
         value.pop('signatures', None)
-        value = signing._clean_empty(value)
     assert canonicalize(value).encode('utf-8') == rfc8785.dumps(value)
 
 
@@ -355,13 +352,6 @@ def test_nesting_beyond_the_limit_is_rejected(depth):
         canonicalize(_nest(depth))
 
 
-@pytest.mark.parametrize('depth', [MAX_DEPTH + 1, 5000])
-def test_clean_empty_is_bounded_too(depth):
-    """_clean_empty runs first, so an uncapped one makes the cap unreachable."""
-    with pytest.raises(CanonicalizationError):
-        signing._clean_empty(_nest(depth))
-
-
 def test_deep_arrays_are_bounded():
     value: Any = [1]
     for _ in range(5000):
@@ -464,13 +454,6 @@ def test_an_empty_container_leaf_is_its_own_level():
         canonicalize(_empty_leaf_nest(MAX_DEPTH))
 
 
-def test_clean_empty_counts_containers_too():
-    """`_clean_empty` runs first, so it has to hold the same bound."""
-    signing._clean_empty(_empty_leaf_nest(MAX_DEPTH - 1))
-    with pytest.raises(CanonicalizationError):
-        signing._clean_empty(_empty_leaf_nest(MAX_DEPTH))
-
-
 # --- Types with no canonical form ---
 
 
@@ -559,9 +542,33 @@ def _fill_struct(struct: struct_pb2.Struct, value: dict[str, Any]) -> None:
     """Builds a nested Struct without going through the proto parser."""
     for key, item in value.items():
         if isinstance(item, dict):
+            struct.fields[key].struct_value.SetInParent()
             _fill_struct(struct.fields[key].struct_value, item)
         else:
             struct.fields[key].number_value = item
+
+
+@pytest.mark.parametrize('extra_depth', [0, 1])
+def test_empty_extension_object_preserves_the_exact_jcs_depth_bound(
+    extra_depth: int,
+) -> None:
+    # card / capabilities / extensions[] / extension / params: params is
+    # already at open-container depth 5. Its empty leaf must count too.
+    nested: dict[str, Any] = {}
+    for _ in range(MAX_DEPTH - 5 + extra_depth):
+        nested = {'a': nested}
+    card = _agent_card()
+    extension = card.capabilities.extensions.add(uri='https://example.com/ext')
+    _fill_struct(extension.params, nested)
+    if extra_depth:
+        with pytest.raises(CanonicalizationError):
+            signing._canonicalize_agent_card(card)
+    else:
+        canonical = signing._canonicalize_agent_card(card)
+        assert (
+            json.loads(canonical)['capabilities']['extensions'][0]['params']
+            == nested
+        )
 
 
 def test_protected_header_is_unchanged_by_the_detached_payload_encoding():
