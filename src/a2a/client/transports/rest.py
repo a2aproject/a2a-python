@@ -118,7 +118,7 @@ class RestTransport(ClientTransport):
             json=MessageToDict(request),
         )
         response: SendMessageResponse = ParseDict(
-            response_data, SendMessageResponse()
+            response_data, SendMessageResponse(), ignore_unknown_fields=True
         )
         return response
 
@@ -160,7 +160,9 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = ParseDict(
+            response_data, Task(), ignore_unknown_fields=True
+        )
         return response
 
     async def list_tasks(
@@ -182,7 +184,7 @@ class RestTransport(ClientTransport):
             params=params,
         )
         response: ListTasksResponse = ParseDict(
-            response_data, ListTasksResponse()
+            response_data, ListTasksResponse(), ignore_unknown_fields=True
         )
         return response
 
@@ -200,7 +202,9 @@ class RestTransport(ClientTransport):
             context=context,
             json=MessageToDict(request),
         )
-        response: Task = ParseDict(response_data, Task())
+        response: Task = ParseDict(
+            response_data, Task(), ignore_unknown_fields=True
+        )
         return response
 
     async def create_task_push_notification_config(
@@ -218,7 +222,9 @@ class RestTransport(ClientTransport):
             json=MessageToDict(request),
         )
         response: TaskPushNotificationConfig = ParseDict(
-            response_data, TaskPushNotificationConfig()
+            response_data,
+            TaskPushNotificationConfig(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -245,7 +251,9 @@ class RestTransport(ClientTransport):
             params=params,
         )
         response: TaskPushNotificationConfig = ParseDict(
-            response_data, TaskPushNotificationConfig()
+            response_data,
+            TaskPushNotificationConfig(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -270,7 +278,9 @@ class RestTransport(ClientTransport):
             params=params,
         )
         response: ListTaskPushNotificationConfigsResponse = ParseDict(
-            response_data, ListTaskPushNotificationConfigsResponse()
+            response_data,
+            ListTaskPushNotificationConfigsResponse(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -327,7 +337,7 @@ class RestTransport(ClientTransport):
             'GET', '/extendedAgentCard', request.tenant, context=context
         )
 
-        return ParseDict(response_data, AgentCard())
+        return ParseDict(response_data, AgentCard(), ignore_unknown_fields=True)
 
     async def close(self) -> None:
         """Closes the httpx client."""
@@ -384,7 +394,9 @@ class RestTransport(ClientTransport):
             json=json,
             **http_kwargs,
         ):
-            event: StreamResponse = Parse(sse_data, StreamResponse())
+            event: StreamResponse = Parse(
+                sse_data, StreamResponse(), ignore_unknown_fields=True
+            )
             yield event
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:

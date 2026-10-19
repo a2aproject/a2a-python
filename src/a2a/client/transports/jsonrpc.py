@@ -81,7 +81,9 @@ class JsonRpcTransport(ClientTransport):
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
         response: SendMessageResponse = json_format.ParseDict(
-            json_rpc_response.result, SendMessageResponse()
+            json_rpc_response.result,
+            SendMessageResponse(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -121,7 +123,9 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: Task = json_format.ParseDict(json_rpc_response.result, Task())
+        response: Task = json_format.ParseDict(
+            json_rpc_response.result, Task(), ignore_unknown_fields=True
+        )
         return response
 
     async def list_tasks(
@@ -143,7 +147,9 @@ class JsonRpcTransport(ClientTransport):
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
         response: ListTasksResponse = json_format.ParseDict(
-            json_rpc_response.result, ListTasksResponse()
+            json_rpc_response.result,
+            ListTasksResponse(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -165,7 +171,9 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: Task = json_format.ParseDict(json_rpc_response.result, Task())
+        response: Task = json_format.ParseDict(
+            json_rpc_response.result, Task(), ignore_unknown_fields=True
+        )
         return response
 
     async def create_task_push_notification_config(
@@ -187,7 +195,9 @@ class JsonRpcTransport(ClientTransport):
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
-            json_rpc_response.result, TaskPushNotificationConfig()
+            json_rpc_response.result,
+            TaskPushNotificationConfig(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -210,7 +220,9 @@ class JsonRpcTransport(ClientTransport):
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
         response: TaskPushNotificationConfig = json_format.ParseDict(
-            json_rpc_response.result, TaskPushNotificationConfig()
+            json_rpc_response.result,
+            TaskPushNotificationConfig(),
+            ignore_unknown_fields=True,
         )
         return response
 
@@ -236,6 +248,7 @@ class JsonRpcTransport(ClientTransport):
             json_format.ParseDict(
                 json_rpc_response.result,
                 ListTaskPushNotificationConfigsResponse(),
+                ignore_unknown_fields=True,
             )
         )
         return response
@@ -306,7 +319,7 @@ class JsonRpcTransport(ClientTransport):
                 f'Invalid response type: {type(json_rpc_response.result)}'
             )
         response: AgentCard = json_format.ParseDict(
-            json_rpc_response.result, AgentCard()
+            json_rpc_response.result, AgentCard(), ignore_unknown_fields=True
         )
 
         return response
@@ -368,7 +381,9 @@ class JsonRpcTransport(ClientTransport):
             if json_rpc_response.error:
                 raise self._create_jsonrpc_error(json_rpc_response.error)
             response: StreamResponse = json_format.ParseDict(
-                json_rpc_response.result, StreamResponse()
+                json_rpc_response.result,
+                StreamResponse(),
+                ignore_unknown_fields=True,
             )
             yield response
 
