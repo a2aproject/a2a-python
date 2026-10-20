@@ -38,9 +38,6 @@ def handle_http_exceptions(
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
         raise A2AClientError(f'JSON Decode Error: {e}') from e
-    except RuntimeError as e:
-        # httpx raises a bare RuntimeError when the client is already closed.
-        raise A2AClientError(f'HTTP client error: {e}') from e
 
 
 def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
@@ -60,6 +57,8 @@ async def send_http_request(
     | None = None,
 ) -> dict[str, Any]:
     """Sends an HTTP request and parses the JSON response, handling common exceptions."""
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         response = await httpx_client.send(request)
         response.raise_for_status()
@@ -128,6 +127,8 @@ async def send_http_stream_request(
             Should raise an appropriate domain-specific exception.
         **kwargs: Additional keyword arguments forwarded to ``aconnect_sse``.
     """
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         async with _SSEEventSource(
             httpx_client, method, url, **kwargs
