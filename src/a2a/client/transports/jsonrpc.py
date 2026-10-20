@@ -56,11 +56,13 @@ class JsonRpcTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard,
         url: str,
+        is_shared_httpx: bool = False,
     ):
         """Initializes the JsonRpcTransport."""
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self.is_shared_httpx = is_shared_httpx
 
     async def send_message(
         self,
@@ -312,7 +314,13 @@ class JsonRpcTransport(ClientTransport):
         return response
 
     async def close(self) -> None:
-        """Closes the httpx client."""
+        """Closes the httpx client unless it is shared."""
+        if self.is_shared_httpx:
+            logger.error(
+                'Cannot close a shared httpx client; only the provider '
+                'that supplied it via ClientConfig.httpx_client can close it.'
+            )
+            return
         await self.httpx_client.aclose()
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
