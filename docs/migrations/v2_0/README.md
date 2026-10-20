@@ -22,7 +22,9 @@ Both the public signer and verifier use this single representation. There is
 no legacy-signature retry or alternate verification form. Cards whose
 canonical bytes remain unchanged retain their signature validity. If the old
 empty-value pruning changed a card's payload, its old signature does not verify
-under the new representation.
+under the new representation. Cards with unset or default REQUIRED fields
+also change because those fields were previously omitted before pruning;
+correct invalid required values and re-sign these cards as well.
 
 The required-field warning policy is unchanged. The SDK continues to warn
 about missing or empty required fields; this proposal does not make invalid
@@ -45,14 +47,21 @@ different canonical bytes.
    implementation of the agreed canonicalization contract. Test both signing
    directions, unchanged-byte controls, and tampering with optional presence
    and extension JSON.
-4. Publish the replacement cards and refresh cached copies as part of the
-   coordinated rollout. `create_agent_card_routes` versions its weak ETag's
-   signing representation, so an old ETag receives the replacement body
-   instead of a 304. Subsequent re-signings of unchanged content still
-   revalidate. Purge any intermediary that serves an unexpired old response
-   without contacting the upgraded route, and any separately implemented
-   card cache whose validator has not changed. Do not disable signature
-   verification when a peer still uses the previous representation.
+4. Deploy the replacement cards no later than the route upgrade, and refresh
+   cached copies as part of the coordinated rollout. `create_agent_card_routes`
+   versions its weak ETag so a **pre-upgrade ETag** receives the replacement
+   body instead of a 304. The marker identifies the route's representation;
+   it cannot detect which representation produced a stored, external or HSM
+   signature. If the upgraded route has already served a signature from the
+   previous representation, re-signing unchanged content keeps that new ETag:
+   purge cached card responses after re-signing, or change signed content
+   (for example the card's `version`) in the replacement. Revalidation alone
+   cannot repair this ordering. Subsequent re-signings under the same
+   representation still revalidate normally while the verification key remains
+   valid. Also purge any intermediary serving an unexpired old response without
+   contacting the route, and separately implemented caches whose validators
+   have not changed. Do not disable signature verification when a peer still
+   uses the previous representation.
 
 The precise cross-SDK canonicalization agreement and release window remain
 upstream decisions tracked in [a2a-python #1278](https://github.com/a2aproject/a2a-python/issues/1278)

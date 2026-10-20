@@ -47,9 +47,13 @@ def _etag_for(card_dict: dict[str, Any]) -> str:
     equivalence, which two signings of identical content have.
 
     The cost is that a 304 leaves the client on the signature it already
-    holds. That signature stays valid while both the content and the signing
-    representation stay unchanged. The representation marker below changes
-    when canonicalization changes, invalidating pre-upgrade cache entries.
+    holds. The representation marker below invalidates pre-upgrade ETags when
+    canonicalization changes; it identifies this route, not the algorithm that
+    produced a stored signature. Deploy newly signed cards with the route
+    upgrade. If this route has already served a pre-upgrade signature, purge
+    cached responses after re-signing or change signed content (such as the
+    card version). Revalidation alone cannot detect the corrected signature.
+    The cached signature's verification key must also remain valid.
 
     `sort_keys` rather than RFC 8785 canonicalization: an ETag is opaque and
     is only ever compared against one this server produced, so determinism
