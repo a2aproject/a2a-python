@@ -19,7 +19,9 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import (
+    TransportProtocol,
+)
 
 
 @pytest.fixture
@@ -407,3 +409,19 @@ async def test_create_client_with_url_and_config(base_agent_card: AgentCard):
         mock_resolver.assert_called_once_with(
             mock_httpx_client, 'http://example.com'
         )
+
+
+@pytest.mark.asyncio
+async def test_client_factory_creates_a_client_per_created_client(
+    base_agent_card: AgentCard,
+):
+    """Verify each created client gets its own httpx client by default."""
+    factory = ClientFactory()
+
+    client_a = factory.create(base_agent_card)
+    client_b = factory.create(base_agent_card)
+
+    assert (
+        client_a._transport.httpx_client  # type: ignore[attr-defined]
+        is not client_b._transport.httpx_client  # type: ignore[attr-defined]
+    )

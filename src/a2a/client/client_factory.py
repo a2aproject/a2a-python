@@ -77,6 +77,9 @@ class ClientFactory:
 
     The client can be used consistently regardless of the transport. This
     aligns the client configuration with the server's capabilities.
+
+    Each created client gets its own `httpx.AsyncClient` and closes it on
+    `close()`, unless `ClientConfig.httpx_client` is set.
     """
 
     def __init__(
@@ -84,15 +87,24 @@ class ClientFactory:
         config: ClientConfig | None = None,
     ):
         config = config or ClientConfig()
-        httpx_client = config.httpx_client or httpx.AsyncClient()
+        if config.httpx_client:
+            config.httpx_client.headers.setdefault(
+                VERSION_HEADER, PROTOCOL_VERSION_CURRENT
+            )
+
+        self._config = config
+        self._registry: dict[str, TransportProducer] = {}
+        self._register_defaults(config.supported_protocol_bindings)
+
+    def _get_or_create_http_client(self) -> httpx.AsyncClient:
+        """Returns the configured HTTP client if set in config, otherwise creates a new one for each client."""
+        if self._config.httpx_client:
+            return self._config.httpx_client
+        httpx_client = httpx.AsyncClient()
         httpx_client.headers.setdefault(
             VERSION_HEADER, PROTOCOL_VERSION_CURRENT
         )
-
-        self._config = config
-        self._httpx_client = httpx_client
-        self._registry: dict[str, TransportProducer] = {}
-        self._register_defaults(config.supported_protocol_bindings)
+        return httpx_client
 
     def _register_defaults(self, supported: list[str]) -> None:
         # Empty support list implies JSON-RPC only.
@@ -121,13 +133,13 @@ class ClientFactory:
                     )
 
                     return CompatJsonRpcTransport(
-                        self._httpx_client,
+                        self._get_or_create_http_client(),
                         card,
                         url,
                     )
 
                 return JsonRpcTransport(
-                    self._httpx_client,
+                    self._get_or_create_http_client(),
                     card,
                     url,
                 )
@@ -160,13 +172,13 @@ class ClientFactory:
                     )
 
                     return CompatRestTransport(
-                        self._httpx_client,
+                        self._get_or_create_http_client(),
                         card,
                         url,
                     )
 
                 return RestTransport(
-                    self._httpx_client,
+                    self._get_or_create_http_client(),
                     card,
                     url,
                 )
@@ -273,8 +285,9 @@ class ClientFactory:
     ) -> Client:
         """Create a `Client` by resolving an `AgentCard` from a URL.
 
-        Resolves the agent card from the given URL using the factory's
-        configured httpx client, then creates a client via `create`.
+        Resolves the agent card from the given URL, then creates a client
+        via `create`. The card is fetched with `ClientConfig.httpx_client`
+        when one is set, otherwise with a temporary client.
 
         If the agent card is already available, use `create` directly
         instead.
@@ -295,12 +308,17 @@ class ClientFactory:
         Returns:
           A `Client` object.
         """
-        resolver = A2ACardResolver(self._httpx_client, url)
-        card = await resolver.get_agent_card(
-            relative_card_path=relative_card_path,
-            http_kwargs=resolver_http_kwargs,
-            signature_verifier=signature_verifier,
-        )
+        httpx_client = self._get_or_create_http_client()
+        try:
+            resolver = A2ACardResolver(httpx_client, url)
+            card = await resolver.get_agent_card(
+                relative_card_path=relative_card_path,
+                http_kwargs=resolver_http_kwargs,
+                signature_verifier=signature_verifier,
+            )
+        finally:
+            if httpx_client is not self._config.httpx_client:
+                await httpx_client.aclose()
         return self.create(card, interceptors)
 
     def register(self, label: str, generator: TransportProducer) -> None:
