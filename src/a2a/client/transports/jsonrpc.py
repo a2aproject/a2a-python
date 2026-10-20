@@ -316,12 +316,17 @@ class JsonRpcTransport(ClientTransport):
     async def close(self) -> None:
         """Closes the httpx client unless it is shared."""
         if self.is_shared_httpx:
-            logger.error(
+            logger.debug(
                 'Cannot close a shared httpx client; only the provider '
                 'that supplied it via ClientConfig.httpx_client can close it.'
             )
             return
-        await self.httpx_client.aclose()
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is already closed')
+        try:
+            await self.httpx_client.aclose()
+        except Exception as e:
+            raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Creates the appropriate A2AError from a JSON-RPC error dictionary."""
