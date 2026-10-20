@@ -36,6 +36,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP
+from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -80,10 +81,8 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: SendMessageResponse = json_format.ParseDict(
-            json_rpc_response.result,
-            SendMessageResponse(),
-            ignore_unknown_fields=True,
+        response: SendMessageResponse = parse_lenient(
+            json_rpc_response.result, SendMessageResponse()
         )
         return response
 
@@ -123,9 +122,7 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: Task = json_format.ParseDict(
-            json_rpc_response.result, Task(), ignore_unknown_fields=True
-        )
+        response: Task = parse_lenient(json_rpc_response.result, Task())
         return response
 
     async def list_tasks(
@@ -146,10 +143,8 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: ListTasksResponse = json_format.ParseDict(
-            json_rpc_response.result,
-            ListTasksResponse(),
-            ignore_unknown_fields=True,
+        response: ListTasksResponse = parse_lenient(
+            json_rpc_response.result, ListTasksResponse()
         )
         return response
 
@@ -171,9 +166,7 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: Task = json_format.ParseDict(
-            json_rpc_response.result, Task(), ignore_unknown_fields=True
-        )
+        response: Task = parse_lenient(json_rpc_response.result, Task())
         return response
 
     async def create_task_push_notification_config(
@@ -194,10 +187,8 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: TaskPushNotificationConfig = json_format.ParseDict(
-            json_rpc_response.result,
-            TaskPushNotificationConfig(),
-            ignore_unknown_fields=True,
+        response: TaskPushNotificationConfig = parse_lenient(
+            json_rpc_response.result, TaskPushNotificationConfig()
         )
         return response
 
@@ -219,10 +210,8 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: TaskPushNotificationConfig = json_format.ParseDict(
-            json_rpc_response.result,
-            TaskPushNotificationConfig(),
-            ignore_unknown_fields=True,
+        response: TaskPushNotificationConfig = parse_lenient(
+            json_rpc_response.result, TaskPushNotificationConfig()
         )
         return response
 
@@ -244,12 +233,8 @@ class JsonRpcTransport(ClientTransport):
         json_rpc_response = JSONRPC20Response(**response_data)
         if json_rpc_response.error:
             raise self._create_jsonrpc_error(json_rpc_response.error)
-        response: ListTaskPushNotificationConfigsResponse = (
-            json_format.ParseDict(
-                json_rpc_response.result,
-                ListTaskPushNotificationConfigsResponse(),
-                ignore_unknown_fields=True,
-            )
+        response: ListTaskPushNotificationConfigsResponse = parse_lenient(
+            json_rpc_response.result, ListTaskPushNotificationConfigsResponse()
         )
         return response
 
@@ -318,8 +303,8 @@ class JsonRpcTransport(ClientTransport):
             raise A2AClientError(
                 f'Invalid response type: {type(json_rpc_response.result)}'
             )
-        response: AgentCard = json_format.ParseDict(
-            json_rpc_response.result, AgentCard(), ignore_unknown_fields=True
+        response: AgentCard = parse_lenient(
+            json_rpc_response.result, AgentCard()
         )
 
         return response
@@ -380,10 +365,8 @@ class JsonRpcTransport(ClientTransport):
             json_rpc_response = JSONRPC20Response.from_json(sse_data)
             if json_rpc_response.error:
                 raise self._create_jsonrpc_error(json_rpc_response.error)
-            response: StreamResponse = json_format.ParseDict(
-                json_rpc_response.result,
-                StreamResponse(),
-                ignore_unknown_fields=True,
+            response: StreamResponse = parse_lenient(
+                json_rpc_response.result, StreamResponse()
             )
             yield response
 

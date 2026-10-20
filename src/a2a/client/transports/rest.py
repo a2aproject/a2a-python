@@ -6,7 +6,7 @@ from typing import Any, NoReturn
 
 import httpx
 
-from google.protobuf.json_format import MessageToDict, Parse, ParseDict
+from google.protobuf.json_format import MessageToDict
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError
@@ -35,6 +35,7 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
 )
 from a2a.utils.errors import A2A_REASON_TO_ERROR, MethodNotFoundError
+from a2a.utils.proto_utils import parse_lenient
 from a2a.utils.telemetry import SpanKind, trace_class
 
 
@@ -117,8 +118,8 @@ class RestTransport(ClientTransport):
             context=context,
             json=MessageToDict(request),
         )
-        response: SendMessageResponse = ParseDict(
-            response_data, SendMessageResponse(), ignore_unknown_fields=True
+        response: SendMessageResponse = parse_lenient(
+            response_data, SendMessageResponse()
         )
         return response
 
@@ -160,9 +161,7 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: Task = ParseDict(
-            response_data, Task(), ignore_unknown_fields=True
-        )
+        response: Task = parse_lenient(response_data, Task())
         return response
 
     async def list_tasks(
@@ -183,8 +182,8 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: ListTasksResponse = ParseDict(
-            response_data, ListTasksResponse(), ignore_unknown_fields=True
+        response: ListTasksResponse = parse_lenient(
+            response_data, ListTasksResponse()
         )
         return response
 
@@ -202,9 +201,7 @@ class RestTransport(ClientTransport):
             context=context,
             json=MessageToDict(request),
         )
-        response: Task = ParseDict(
-            response_data, Task(), ignore_unknown_fields=True
-        )
+        response: Task = parse_lenient(response_data, Task())
         return response
 
     async def create_task_push_notification_config(
@@ -221,10 +218,8 @@ class RestTransport(ClientTransport):
             context=context,
             json=MessageToDict(request),
         )
-        response: TaskPushNotificationConfig = ParseDict(
-            response_data,
-            TaskPushNotificationConfig(),
-            ignore_unknown_fields=True,
+        response: TaskPushNotificationConfig = parse_lenient(
+            response_data, TaskPushNotificationConfig()
         )
         return response
 
@@ -250,10 +245,8 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: TaskPushNotificationConfig = ParseDict(
-            response_data,
-            TaskPushNotificationConfig(),
-            ignore_unknown_fields=True,
+        response: TaskPushNotificationConfig = parse_lenient(
+            response_data, TaskPushNotificationConfig()
         )
         return response
 
@@ -277,10 +270,8 @@ class RestTransport(ClientTransport):
             context=context,
             params=params,
         )
-        response: ListTaskPushNotificationConfigsResponse = ParseDict(
-            response_data,
-            ListTaskPushNotificationConfigsResponse(),
-            ignore_unknown_fields=True,
+        response: ListTaskPushNotificationConfigsResponse = parse_lenient(
+            response_data, ListTaskPushNotificationConfigsResponse()
         )
         return response
 
@@ -337,7 +328,7 @@ class RestTransport(ClientTransport):
             'GET', '/extendedAgentCard', request.tenant, context=context
         )
 
-        return ParseDict(response_data, AgentCard(), ignore_unknown_fields=True)
+        return parse_lenient(response_data, AgentCard())
 
     async def close(self) -> None:
         """Closes the httpx client."""
@@ -394,9 +385,7 @@ class RestTransport(ClientTransport):
             json=json,
             **http_kwargs,
         ):
-            event: StreamResponse = Parse(
-                sse_data, StreamResponse(), ignore_unknown_fields=True
-            )
+            event: StreamResponse = parse_lenient(sse_data, StreamResponse())
             yield event
 
     async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
