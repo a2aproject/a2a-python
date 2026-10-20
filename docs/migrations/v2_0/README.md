@@ -46,8 +46,13 @@ different canonical bytes.
    directions, unchanged-byte controls, and tampering with optional presence
    and extension JSON.
 4. Publish the replacement cards and refresh cached copies as part of the
-   coordinated rollout. Do not disable signature verification when a peer
-   still uses the previous representation.
+   coordinated rollout. `create_agent_card_routes` versions its weak ETag's
+   signing representation, so an old ETag receives the replacement body
+   instead of a 304. Subsequent re-signings of unchanged content still
+   revalidate. Purge any intermediary that serves an unexpired old response
+   without contacting the upgraded route, and any separately implemented
+   card cache whose validator has not changed. Do not disable signature
+   verification when a peer still uses the previous representation.
 
 The precise cross-SDK canonicalization agreement and release window remain
 upstream decisions tracked in [a2a-python #1278](https://github.com/a2aproject/a2a-python/issues/1278)

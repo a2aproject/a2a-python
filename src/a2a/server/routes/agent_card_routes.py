@@ -47,8 +47,9 @@ def _etag_for(card_dict: dict[str, Any]) -> str:
     equivalence, which two signings of identical content have.
 
     The cost is that a 304 leaves the client on the signature it already
-    holds. That signature stays valid, since it covers content that has not
-    changed.
+    holds. That signature stays valid while both the content and the signing
+    representation stay unchanged. The representation marker below changes
+    when canonicalization changes, invalidating pre-upgrade cache entries.
 
     `sort_keys` rather than RFC 8785 canonicalization: an ETag is opaque and
     is only ever compared against one this server produced, so determinism
@@ -57,7 +58,11 @@ def _etag_for(card_dict: dict[str, Any]) -> str:
     """
     unsigned = {k: v for k, v in card_dict.items() if k != 'signatures'}
     body = json.dumps(unsigned, sort_keys=True, separators=(',', ':'))
-    return f'W/"{hashlib.sha256(body.encode("utf-8")).hexdigest()}"'
+    # Version the representation, not the SDK release: routine upgrades and
+    # randomized re-signing must still revalidate unchanged content.
+    digest = hashlib.sha256(b'a2a-agent-card-field-presence-v1\x00')
+    digest.update(body.encode('utf-8'))
+    return f'W/"{digest.hexdigest()}"'
 
 
 def _if_none_match_hits(header: str, etag: str) -> bool:
