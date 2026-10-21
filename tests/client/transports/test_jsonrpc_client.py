@@ -46,6 +46,7 @@ async def async_iterable_from_list(
 def mock_httpx_client():
     """Creates a mock httpx.AsyncClient."""
     client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
     client.headers = httpx.Headers()
     client.timeout = httpx.Timeout(30.0)
     return client

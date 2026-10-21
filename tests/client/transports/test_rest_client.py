@@ -35,7 +35,9 @@ from google.protobuf.timestamp_pb2 import Timestamp
 
 @pytest.fixture
 def mock_httpx_client() -> AsyncMock:
-    return AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
+    return client
 
 
 @pytest.fixture

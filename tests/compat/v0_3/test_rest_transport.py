@@ -31,7 +31,9 @@ from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
 
 @pytest.fixture
 def mock_httpx_client():
-    return AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
+    return client
 
 
 @pytest.fixture
