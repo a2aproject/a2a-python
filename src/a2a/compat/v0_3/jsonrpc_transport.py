@@ -59,11 +59,14 @@ class CompatJsonRpcTransport(ClientTransport):
         httpx_client: httpx.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
+        *,
+        is_shared_httpx: bool = False,
     ):
         """Initializes the CompatJsonRpcTransport."""
         self.url = url
         self.httpx_client = httpx_client
         self.agent_card = agent_card
+        self.is_shared_httpx = is_shared_httpx
 
     async def send_message(
         self,
@@ -395,8 +398,19 @@ class CompatJsonRpcTransport(ClientTransport):
         return card
 
     async def close(self) -> None:
-        """Closes the httpx client."""
-        await self.httpx_client.aclose()
+        """Closes the httpx client unless it is shared."""
+        if self.is_shared_httpx:
+            logger.debug(
+                'Cannot close a shared httpx client; only the provider '
+                'that supplied it via ClientConfig.httpx_client can close it.'
+            )
+            return
+        if self.httpx_client.is_closed:
+            raise A2AClientError('HTTP client is already closed')
+        try:
+            await self.httpx_client.aclose()
+        except Exception as e:
+            raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
     def _create_jsonrpc_error(self, error_dict: dict[str, Any]) -> Exception:
         """Raises a specific error based on jsonrpc error code."""

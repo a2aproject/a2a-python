@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.2.3](https://github.com/a2aproject/a2a-python/compare/v1.2.2...v1.2.3) (2026-10-17)
+
+
+### Bug Fixes
+
+* **client:** ignore the patch version when preferring a 1.0 interface ([#1304](https://github.com/a2aproject/a2a-python/issues/1304)) ([cbb2d84](https://github.com/a2aproject/a2a-python/commit/cbb2d8418df26567b4ed4ed9e160071dd04904d8))
+* **client:** normalize malformed agent card parsing errors ([#1307](https://github.com/a2aproject/a2a-python/issues/1307)) ([486f0f6](https://github.com/a2aproject/a2a-python/commit/486f0f65b753077f401f2428490e26ca0eedc092))
+* **compat:** block on a v0.3 gRPC and REST send without configuration ([#1334](https://github.com/a2aproject/a2a-python/issues/1334)) ([8160310](https://github.com/a2aproject/a2a-python/commit/8160310dd36e55ae33879d95692e2535e1cfdab8)), closes [#1321](https://github.com/a2aproject/a2a-python/issues/1321)
+* **compat:** treat a v0.3 history_length of 0 as unlimited in JSON-RPC and REST ([#1312](https://github.com/a2aproject/a2a-python/issues/1312)) ([e86695c](https://github.com/a2aproject/a2a-python/commit/e86695cb2076874950f36f53d49771c8e09e185e))
+* **jcs:** count open containers for the nesting bound, so an empty container leaf is refused ([#1294](https://github.com/a2aproject/a2a-python/issues/1294)) ([5653daf](https://github.com/a2aproject/a2a-python/commit/5653daf8315ab58c8dacc53be720c4ed632ee7ce))
+* **server:** isolate push notification failures from the task lifecycle ([#1329](https://github.com/a2aproject/a2a-python/issues/1329)) ([0ee47d7](https://github.com/a2aproject/a2a-python/commit/0ee47d7baa47a706e33934a4e4c3d46bad16298f))
+* **server:** mark internal lifecycle events done so a cancelled stream frees its producer ([#1336](https://github.com/a2aproject/a2a-python/issues/1336)) ([a4c4fc9](https://github.com/a2aproject/a2a-python/commit/a4c4fc91a22778f3d805e5e592bf690915a33033))
+* **server:** reject push URLs in shared address space ([#1326](https://github.com/a2aproject/a2a-python/issues/1326)) ([01da00b](https://github.com/a2aproject/a2a-python/commit/01da00b0951ba6201af860d17b4c088be7902d43))
+* **server:** release the ActiveTask after a direct Message response ([#1297](https://github.com/a2aproject/a2a-python/issues/1297)) ([49ebce6](https://github.com/a2aproject/a2a-python/commit/49ebce66389171dce38b74ebefb31ae4ad042e7e))
+* **server:** run follow-up messages in the sender's contextvars ([#1317](https://github.com/a2aproject/a2a-python/issues/1317)) ([a016002](https://github.com/a2aproject/a2a-python/commit/a0160025d6d211b0be1762cb829e7a47c147191a))
+* **server:** warn when an AgentCard is missing required fields ([#1279](https://github.com/a2aproject/a2a-python/issues/1279)) ([4f4101c](https://github.com/a2aproject/a2a-python/commit/4f4101cefd5e636a932c8017a8b3b11634be1d67))
+* **telemetry:** let trace_function alone decide a span's status ([#1309](https://github.com/a2aproject/a2a-python/issues/1309)) ([59dcbfb](https://github.com/a2aproject/a2a-python/commit/59dcbfb16f73c7c596e6d60cb700ed71193c5cce))
+
 ## [1.2.2](https://github.com/a2aproject/a2a-python/compare/v1.2.1...v1.2.2) (2026-10-03)
 
 

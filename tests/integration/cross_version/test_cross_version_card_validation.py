@@ -158,6 +158,7 @@ def test_cross_version_agent_card_deserialization() -> None:
             '--with',
             'a2a-sdk==0.3.24',
             '--no-project',
+            '--isolated',
             'python',
             'tests/integration/cross_version/validate_agent_cards_030.py',
         ],

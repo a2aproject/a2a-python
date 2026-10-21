@@ -46,6 +46,7 @@ async def async_iterable_from_list(
 def mock_httpx_client():
     """Creates a mock httpx.AsyncClient."""
     client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
     client.headers = httpx.Headers()
     client.timeout = httpx.Timeout(30.0)
     return client
@@ -758,3 +759,72 @@ class TestCreateJsonRpcError:
         )
         assert isinstance(exc, JSONParseError)
         assert exc.message == 'Invalid JSON payload'
+
+
+class TestUnrecognizedResponseFields:
+    """Spec 5.7: unrecognized response fields are ignored (issue #1341)."""
+
+    @pytest.mark.asyncio
+    async def test_get_task_ignores_unrecognized_fields(
+        self, transport, mock_httpx_client
+    ):
+        """Unknown keys are skipped at every depth; known ones still parse."""
+        mock_response = MagicMock()
+        mock_response.json.return_value = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'id': 'task-1',
+                'contextId': 'ctx-1',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'someNestedField': 'y',
+                },
+                'someNewField': 'x',
+            },
+        }
+        mock_response.raise_for_status = MagicMock()
+        mock_httpx_client.send.return_value = mock_response
+
+        task = await transport.get_task(GetTaskRequest(id='task-1'))
+
+        assert task.id == 'task-1'
+        assert task.context_id == 'ctx-1'
+        assert task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_send_message_streaming_ignores_unrecognized_fields(
+        self, mock_sse_source: AsyncMock, transport
+    ):
+        """The streamed branch is as lenient as the unary one."""
+        payload = {
+            'jsonrpc': '2.0',
+            'id': '1',
+            'result': {
+                'message': {
+                    'messageId': 'r1',
+                    'role': 'ROLE_AGENT',
+                    'parts': [{'text': 'hello'}],
+                },
+                'someNewField': 'x',
+            },
+        }
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}', '']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        events = [
+            event
+            async for event in transport.send_message_streaming(
+                create_send_message_request()
+            )
+        ]
+
+        assert len(events) == 1
+        assert events[0].message.message_id == 'r1'
+        assert events[0].message.parts[0].text == 'hello'
