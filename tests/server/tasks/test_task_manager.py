@@ -444,3 +444,76 @@ def test_append_artifact_to_task():
         match='append=True for nonexistent artifact_id',
     ):
         append_artifact_to_task(task, append_event_5)
+
+
+@pytest.mark.parametrize(
+    ('current', 'new'),
+    [
+        (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_SUBMITTED),
+        (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_WORKING),
+        (TaskState.TASK_STATE_CANCELED, TaskState.TASK_STATE_SUBMITTED),
+        (TaskState.TASK_STATE_FAILED, TaskState.TASK_STATE_WORKING),
+        (TaskState.TASK_STATE_REJECTED, TaskState.TASK_STATE_COMPLETED),
+    ],
+)
+def test_validate_state_transition_blocks_terminal_escape(current, new):
+    """A terminal state must never transition to a different state."""
+    from a2a.server.tasks.task_manager import validate_state_transition
+
+    with pytest.raises(InvalidAgentResponseError):
+        validate_state_transition(current, new)
+
+
+@pytest.mark.parametrize(
+    ('current', 'new'),
+    [
+        (TaskState.TASK_STATE_COMPLETED, TaskState.TASK_STATE_COMPLETED),
+        (TaskState.TASK_STATE_SUBMITTED, TaskState.TASK_STATE_WORKING),
+        (TaskState.TASK_STATE_SUBMITTED, TaskState.TASK_STATE_COMPLETED),
+        (TaskState.TASK_STATE_WORKING, TaskState.TASK_STATE_COMPLETED),
+        (TaskState.TASK_STATE_WORKING, TaskState.TASK_STATE_INPUT_REQUIRED),
+        (TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_WORKING),
+    ],
+)
+def test_validate_state_transition_allows_legal_transitions(current, new):
+    """Legal forward transitions (and idempotent repeats) are accepted."""
+    from a2a.server.tasks.task_manager import validate_state_transition
+
+    validate_state_transition(current, new)
+
+
+@pytest.mark.asyncio
+async def test_save_task_event_blocks_terminal_overwrite():
+    """save_task_event must reject a terminal -> non-terminal status update.
+
+    Regression test for terminal-state protection: the status was blindly overwritten, so a
+    misbehaving agent could move a completed task back to SUBMITTED.
+    """
+    from a2a.server.tasks import InMemoryTaskStore
+    from a2a.server.tasks.task_manager import TaskManager
+
+    task_store = InMemoryTaskStore()
+    task_manager = TaskManager(
+        task_id=MINIMAL_TASK_ID,
+        context_id=MINIMAL_CONTEXT_ID,
+        task_store=task_store,
+        initial_message=None,
+        context=TEST_CONTEXT,
+    )
+
+    task = create_minimal_task()
+    task.status.state = TaskState.TASK_STATE_COMPLETED
+    await task_store.save(task, TEST_CONTEXT)
+
+    illegal_event = TaskStatusUpdateEvent(
+        task_id=MINIMAL_TASK_ID,
+        context_id=MINIMAL_CONTEXT_ID,
+        status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+    )
+
+    with pytest.raises(InvalidAgentResponseError):
+        await task_manager.save_task_event(illegal_event)
+
+    # The task state must be unchanged.
+    stored = await task_store.get(MINIMAL_TASK_ID, TEST_CONTEXT)
+    assert stored.status.state == TaskState.TASK_STATE_COMPLETED
