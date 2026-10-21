@@ -128,6 +128,66 @@ def create_server_call_context() -> ServerCallContext:
     return ServerCallContext(user=UnauthenticatedUser())
 
 
+class _StatusValidationRecoveryAgent(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue,
+            str(context.task_id or ''),
+            str(context.context_id or ''),
+        )
+        await updater.start_work()
+        try:
+            await updater.update_status(
+                TaskState.TASK_STATE_COMPLETED,
+                timestamp='not-a-timestamp',
+            )
+        except ValueError:
+            await updater.failed()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_status_validation_failure_returns_failed_task() -> None:
+    store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_StatusValidationRecoveryAgent(),
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    try:
+        result = await asyncio.wait_for(
+            handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        role=Role.ROLE_USER,
+                        message_id='validation-recovery',
+                        parts=[Part(text='test status recovery')],
+                    )
+                ),
+                context,
+            ),
+            timeout=5,
+        )
+        assert isinstance(result, Task)
+        assert result.status.state == TaskState.TASK_STATE_FAILED
+        stored = await store.get(result.id, context)
+        assert stored is not None
+        assert stored.status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        await handler.aclose()
+
+
 def test_init_default_dependencies():
     """Test that default dependencies are created if not provided."""
     agent_executor = MockAgentExecutor()
