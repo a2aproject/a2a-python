@@ -1,12 +1,13 @@
 # ruff: noqa: INP001, S106
 import json
 
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
 from typing import Any
 
 import httpx2
 import pytest
+import pytest_asyncio
 
 from a2a.client import (
     AuthInterceptor,
@@ -66,18 +67,6 @@ def build_message() -> Message:
     )
 
 
-def build_capturing_client() -> tuple[httpx2.AsyncClient, list[httpx2.Request]]:
-    """Builds an HTTP client that records requests and replies with a success."""
-    requests: list[httpx2.Request] = []
-
-    def handler(request: httpx2.Request) -> httpx2.Response:
-        requests.append(request)
-        return build_success_response(request)
-
-    client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
-    return client, requests
-
-
 async def send_message(
     client: Client,
     requests: list[httpx2.Request],
@@ -94,6 +83,28 @@ async def send_message(
     ):
         pass
     return requests[-1]
+
+
+@pytest.fixture
+def requests() -> list[httpx2.Request]:
+    """Requests received by the mocked HTTP transport, in order."""
+    return []
+
+
+@pytest_asyncio.fixture
+async def http_client(
+    requests: list[httpx2.Request],
+) -> AsyncIterator[httpx2.AsyncClient]:
+    """HTTP client that records requests and replies with a JSON-RPC success."""
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return build_success_response(request)
+
+    async with httpx2.AsyncClient(
+        transport=httpx2.MockTransport(handler)
+    ) as client:
+        yield client
 
 
 @pytest.fixture
@@ -255,7 +266,10 @@ bearer_test_case = AuthTestCase(
     [api_key_test_case, oauth2_test_case, oidc_test_case, bearer_test_case],
 )
 async def test_auth_interceptor_variants(
-    test_case: AuthTestCase, store: InMemoryContextCredentialStore
+    test_case: AuthTestCase,
+    store: InMemoryContextCredentialStore,
+    http_client: httpx2.AsyncClient,
+    requests: list[httpx2.Request],
 ) -> None:
     """Parametrized test verifying that AuthInterceptor correctly attaches credentials based on the defined security scheme in the AgentCard."""
     await store.set_credentials(
@@ -285,19 +299,17 @@ async def test_auth_interceptor_variants(
         },
     )
 
-    http_client, requests = build_capturing_client()
-    async with http_client:
-        config = ClientConfig(
-            httpx_client=http_client,
-            supported_protocol_bindings=[TransportProtocol.JSONRPC],
-        )
-        factory = ClientFactory(config)
-        client = factory.create(agent_card, interceptors=[auth_interceptor])
+    config = ClientConfig(
+        httpx_client=http_client,
+        supported_protocol_bindings=[TransportProtocol.JSONRPC],
+    )
+    factory = ClientFactory(config)
+    client = factory.create(agent_card, interceptors=[auth_interceptor])
 
-        request = await send_message(client, requests, test_case.session_id)
-        assert request.headers[
-            test_case.expected_header_key
-        ] == test_case.expected_header_value_func(test_case.credential)
+    request = await send_message(client, requests, test_case.session_id)
+    assert request.headers[
+        test_case.expected_header_key
+    ] == test_case.expected_header_value_func(test_case.credential)
 
 
 @pytest.mark.asyncio
