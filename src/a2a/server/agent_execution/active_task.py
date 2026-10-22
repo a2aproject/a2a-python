@@ -109,18 +109,6 @@ class _RequestCompleted:
         self.request_id = request_id
 
 
-class _RequestFailed:
-    """The executor raised while handling a request.
-
-    The consumer records the failure when it dequeues this, so FAILED is
-    written in order, after every event the executor enqueued before raising.
-    """
-
-    def __init__(self, error: Exception, context_id: str):
-        self.error = error
-        self.context_id = context_id
-
-
 class EventConsumer:
     """Consumes events from the agent and updates system state."""
 
@@ -128,9 +116,9 @@ class EventConsumer:
         self.active_task = active_task
         self.task_mode: bool | None = None
         self.message_to_save: Message | None = None
-        # Set when the executor raised, so a failure before any task was
-        # created still leaves a FAILED task behind.
-        self.failed_request: _RequestFailed | None = None
+        # Set when the producer failed, so a request that failed before any
+        # task was created still leaves a FAILED task behind.
+        self.producer_failed = False
 
     async def run(self) -> None:
         """Consumes events from the agent and updates system state."""
@@ -176,18 +164,29 @@ class EventConsumer:
                 )
 
     async def _write_failed_status(self) -> Task | None:
+        """Records FAILED once a failure ends the event stream.
+
+        After a producer failure this runs once every event the executor
+        enqueued before raising has been processed, so the write lands in
+        order. There are three cases:
+
+        - The request failed before a task was created: create one as FAILED.
+        - No task exists and the failure is the consumer's own, or the task
+          already reached a terminal state: nothing is written.
+        - Otherwise: the existing task is marked FAILED.
+        """
         task_manager = self.active_task._task_manager
         task = await task_manager.get_task()
-        if task is None and self.failed_request is not None:
+        if task is None and self.producer_failed:
             task = await task_manager.ensure_task_id(
-                self.active_task._task_id, self.failed_request.context_id
+                self.active_task._task_id, task_manager.context_id or ''
             )
             if task.status.state not in TERMINAL_TASK_STATES:
                 task.status.state = TaskState.TASK_STATE_FAILED
                 task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
                 await task_manager.save_task_event(task)
             self.active_task._task_created.set()
-            return None
+            return task
         if not task or task.status.state in TERMINAL_TASK_STATES:
             return None
         # Stamped with the failure time, which DatabaseTaskStore also uses for
@@ -252,10 +251,9 @@ class EventConsumer:
                 'Consumer[%s]: Request started', self.active_task._task_id
             )
             self.message_to_save = event.request_context.message
-        elif isinstance(event, _RequestFailed):
-            self.failed_request = event
-            raise event.error
         elif isinstance(event, BaseException):
+            # Only the producer enqueues exceptions, when a request fails.
+            self.producer_failed = True
             raise event
         elif isinstance(event, Message):
             self._handle_message_event(event)
@@ -636,7 +634,6 @@ class ActiveTask:
         Runs as a detached asyncio.Task. Safe to cancel.
         """
         logger.debug('Producer[%s]: Started', self._task_id)
-        request_context = None
         try:
             while True:
                 (
@@ -706,10 +703,7 @@ class ActiveTask:
             )
             # The consumer writes FAILED: writing here would race its save of
             # an event the executor enqueued just before raising.
-            failure: Exception | _RequestFailed = e
-            if request_context:
-                failure = _RequestFailed(e, request_context.context_id or '')
-            await self._event_queue_agent.enqueue_event(cast('Event', failure))
+            await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
             self._request_queue.shutdown(immediate=True)
