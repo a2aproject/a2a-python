@@ -2,7 +2,7 @@ import asyncio
 import time
 import uuid
 
-import httpx
+import httpx2
 import pytest
 import pytest_asyncio
 
@@ -61,12 +61,12 @@ def notifications_server():
 @pytest_asyncio.fixture(scope='module')
 async def notifications_client():
     """An async client fixture for calling the notifications server."""
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         yield client
 
 
 @pytest.fixture(scope='module')
-def agent_server(notifications_client: httpx.AsyncClient):
+def agent_server(notifications_client: httpx2.AsyncClient):
     """Starts a test agent server and yields its URL."""
     host = '127.0.0.1'
     port = find_free_port()
@@ -91,7 +91,7 @@ def agent_server(notifications_client: httpx.AsyncClient):
 
 
 @pytest.fixture(scope='module')
-def multi_user_agent_server(notifications_client: httpx.AsyncClient):
+def multi_user_agent_server(notifications_client: httpx2.AsyncClient):
     """Starts the multi-user variant of the test agent server.
 
     This variant reads identity from an x-test-user request header
@@ -127,7 +127,7 @@ def multi_user_agent_server(notifications_client: httpx.AsyncClient):
 @pytest_asyncio.fixture(scope='function')
 async def http_client():
     """An async client fixture for test functions."""
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         yield client
 
 
@@ -135,7 +135,7 @@ async def http_client():
 async def test_notification_triggering_with_in_message_config_e2e(
     notifications_server: str,
     agent_server: str,
-    http_client: httpx.AsyncClient,
+    http_client: httpx2.AsyncClient,
 ):
     """
     Tests push notification triggering for in-message push notification config.
@@ -195,7 +195,9 @@ async def test_notification_triggering_with_in_message_config_e2e(
 
 @pytest.mark.asyncio
 async def test_notification_triggering_after_config_change_e2e(
-    notifications_server: str, agent_server: str, http_client: httpx.AsyncClient
+    notifications_server: str,
+    agent_server: str,
+    http_client: httpx2.AsyncClient,
 ):
     """
     Tests notification triggering after setting the push notification config in a separate call.
@@ -278,7 +280,7 @@ async def test_notification_triggering_after_config_change_e2e(
 async def test_multi_registrar_fan_out_e2e(
     notifications_server: str,
     agent_server: str,
-    http_client: httpx.AsyncClient,
+    http_client: httpx2.AsyncClient,
 ):
     """Two pushNotificationConfigs registered for the same task both fire end-to-end.
 
@@ -387,10 +389,10 @@ def _make_user_a2a_client(agent_server: str, user_name: str):
     """Builds an A2A client that identifies as user_name on every request.
 
     Identity is conveyed via a default header on the underlying
-    httpx.AsyncClient; the multi-user agent app's context builder
+    httpx2.AsyncClient; the multi-user agent app's context builder
     reads that header to populate ServerCallContext.user.
     """
-    httpx_client = httpx.AsyncClient(headers={_TEST_USER_HEADER: user_name})
+    httpx_client = httpx2.AsyncClient(headers={_TEST_USER_HEADER: user_name})
     return ClientFactory(
         ClientConfig(
             httpx_client=httpx_client,
@@ -405,7 +407,7 @@ def _make_user_a2a_client(agent_server: str, user_name: str):
 async def test_alice_and_bob_both_receive_notifications_on_shared_task_e2e(
     notifications_server: str,
     multi_user_agent_server: str,
-    http_client: httpx.AsyncClient,
+    http_client: httpx2.AsyncClient,
 ):
     """Alice registers a webhook; Bob registers a webhook; both fire end-to-end.
 
@@ -541,7 +543,7 @@ async def test_alice_and_bob_both_receive_notifications_on_shared_task_e2e(
 
 
 async def wait_for_n_notifications(
-    http_client: httpx.AsyncClient,
+    http_client: httpx2.AsyncClient,
     url: str,
     n: int,
     timeout: int = 3,

@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import pytest
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
@@ -115,8 +115,8 @@ async def test_agent_card_integration(header_val: str | None) -> None:
         headers[VERSION_HEADER] = header_val
 
     # 3. Use direct http client (ASGITransport) to fetch and assert
-    async with httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    async with httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url='http://testserver'
     ) as client:
         # Fetch from JSONRPC endpoint
         resp_jsonrpc = await client.get(

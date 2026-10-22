@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client.errors import A2AClientError
@@ -31,7 +31,7 @@ from a2a.utils.errors import InvalidParamsError
 
 @pytest.fixture
 def mock_httpx_client():
-    client = AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx2.AsyncClient)
     client.is_closed = False
     return client
 
@@ -435,13 +435,13 @@ async def test_compat_jsonrpc_transport_subscribe(transport):
 
 
 def test_compat_jsonrpc_transport_handle_http_error(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 400
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -526,7 +526,7 @@ async def test_compat_jsonrpc_transport_send_request(
     mock_send_http_request, transport
 ):
     mock_send_http_request.return_value = {'result': {'ok': True}}
-    mock_request = httpx.Request('POST', 'http://example.com')
+    mock_request = httpx2.Request('POST', 'http://example.com')
     transport.httpx_client.build_request.return_value = mock_request
 
     res = await transport._send_request({'some': 'data'})
@@ -553,7 +553,7 @@ async def test_compat_jsonrpc_transport_mirrors_extension_header(
     from a2a.client.client import ClientCallContext
 
     mock_send_http_request.return_value = {'result': {'ok': True}}
-    transport.httpx_client.build_request.return_value = httpx.Request(
+    transport.httpx_client.build_request.return_value = httpx2.Request(
         'POST', 'http://example.com'
     )
 

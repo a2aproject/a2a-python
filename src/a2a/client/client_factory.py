@@ -5,7 +5,7 @@ import logging
 from collections.abc import Callable
 from typing import TYPE_CHECKING, Any
 
-import httpx
+import httpx2
 
 from packaging.version import InvalidVersion, Version
 
@@ -78,7 +78,7 @@ class ClientFactory:
     The client can be used consistently regardless of the transport. This
     aligns the client configuration with the server's capabilities.
 
-    Each created client gets its own `httpx.AsyncClient` and closes it on
+    Each created client gets its own `httpx2.AsyncClient` and closes it on
     `close()`, unless `ClientConfig.httpx_client` is set.
     """
 
@@ -96,11 +96,11 @@ class ClientFactory:
         self._registry: dict[str, TransportProducer] = {}
         self._register_defaults(config.supported_protocol_bindings)
 
-    def _resolve_http_client(self) -> tuple[httpx.AsyncClient, bool]:
+    def _resolve_http_client(self) -> tuple[httpx2.AsyncClient, bool]:
         """Returns an HTTP client and whether it is shared across clients."""
         if self._config.httpx_client:
             return self._config.httpx_client, True
-        httpx_client = httpx.AsyncClient()
+        httpx_client = httpx2.AsyncClient()
         httpx_client.headers.setdefault(
             VERSION_HEADER, PROTOCOL_VERSION_CURRENT
         )

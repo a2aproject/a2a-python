@@ -4,7 +4,7 @@ import logging
 from collections.abc import Callable
 from typing import Any
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import ParseDict, ParseError
 
@@ -133,14 +133,14 @@ class A2ACardResolver:
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         base_url: str,
         agent_card_path: str = AGENT_CARD_WELL_KNOWN_PATH,
     ) -> None:
         """Initializes the A2ACardResolver.
 
         Args:
-            httpx_client: An async HTTP client instance (e.g., httpx.AsyncClient).
+            httpx_client: An async HTTP client instance (e.g., httpx2.AsyncClient).
             base_url: The base URL of the agent's host.
             agent_card_path: The path to the agent card endpoint, relative to the base URL.
         """
@@ -164,7 +164,7 @@ class A2ACardResolver:
                 relative to the base URL. If None, uses the default public
                 agent card path. Use `'/'` for an empty path.
             http_kwargs: Optional dictionary of keyword arguments to pass to the
-                underlying httpx.get request.
+                underlying httpx2.get request.
             signature_verifier: A callable used to verify the agent card's signatures.
 
         Returns:
@@ -200,7 +200,7 @@ class A2ACardResolver:
             agent_card = parse_agent_card(agent_card_data)
             if signature_verifier:
                 signature_verifier(agent_card)
-        except httpx.HTTPStatusError as e:
+        except httpx2.HTTPStatusError as e:
             raise AgentCardResolutionError(
                 f'Failed to fetch agent card from {target_url} (HTTP {e.response.status_code}): {e}',
                 status_code=e.response.status_code,
@@ -209,7 +209,7 @@ class A2ACardResolver:
             raise AgentCardResolutionError(
                 f'Failed to parse JSON for agent card from {target_url}: {e}'
             ) from e
-        except httpx.RequestError as e:
+        except httpx2.RequestError as e:
             raise AgentCardResolutionError(
                 f'Network communication error fetching agent card from {target_url}: {e}',
             ) from e

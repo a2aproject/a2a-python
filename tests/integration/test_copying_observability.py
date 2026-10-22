@@ -1,6 +1,6 @@
 from typing import NamedTuple
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client.client import Client, ClientConfig
@@ -113,8 +113,8 @@ def setup_client(agent_card: AgentCard, use_copying: bool) -> ClientSetup:
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    httpx_client = httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url='http://testserver'
     )
     factory = ClientFactory(
         config=ClientConfig(

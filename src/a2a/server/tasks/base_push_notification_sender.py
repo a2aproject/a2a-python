@@ -3,7 +3,7 @@ import logging
 
 from collections.abc import Awaitable, Callable
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import MessageToDict
 
@@ -27,7 +27,7 @@ class BasePushNotificationSender(PushNotificationSender):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         config_store: PushNotificationConfigStore,
         context: ServerCallContext | None = None,
         *,

@@ -6,7 +6,7 @@ from collections.abc import AsyncIterator, Callable, MutableMapping
 from types import TracebackType
 from typing import Any
 
-import httpx
+import httpx2
 
 from pydantic import BaseModel, Field
 from typing_extensions import Self
@@ -48,7 +48,7 @@ class ClientConfig:
     the callers job to check if the response is completed and if not run a
     polling loop."""
 
-    httpx_client: httpx.AsyncClient | None = None
+    httpx_client: httpx2.AsyncClient | None = None
     """Http client to use to connect to agent."""
 
     grpc_channel_factory: Callable[[str], Channel] | None = None

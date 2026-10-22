@@ -5,7 +5,7 @@ import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 
 from a2a.auth.user import User
 from a2a.server.context import ServerCallContext
@@ -94,7 +94,7 @@ def _set_info_in_thread(
 
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_httpx_client = AsyncMock(spec=httpx2.AsyncClient)
         self.config_store = InMemoryPushNotificationConfigStore()
         self.notifier = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
@@ -248,7 +248,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         # Mock the post call to simulate success
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -275,7 +275,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         # Mock the post call to simulate success
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -315,11 +315,11 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         mock_response = MagicMock(
-            spec=httpx.Response
+            spec=httpx2.Response
         )  # Use MagicMock for status_code attribute
         mock_response.status_code = 404
         mock_response.text = 'Not Found'
-        http_error = httpx.HTTPStatusError(
+        http_error = httpx2.HTTPStatusError(
             'Not Found', request=MagicMock(), response=mock_response
         )
         self.mock_httpx_client.post.side_effect = http_error
@@ -344,7 +344,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(url='http://notify.me/req_error')
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
-        request_error = httpx.RequestError('Network issue', request=MagicMock())
+        request_error = httpx2.RequestError(
+            'Network issue', request=MagicMock()
+        )
         self.mock_httpx_client.post.side_effect = request_error
 
         await self.notifier.send_notification(task_id, task_data)
@@ -373,7 +375,7 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         # It only supports token-based auth via the token field
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -553,8 +555,8 @@ class TestPushNotificationDispatchAcrossOwners(
     """
 
     def setUp(self) -> None:
-        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
-        mock_response = AsyncMock(spec=httpx.Response)
+        self.mock_httpx_client = AsyncMock(spec=httpx2.AsyncClient)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 

@@ -18,7 +18,7 @@ import uuid
 
 from typing import Any
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.message import Message as ProtoMessage
@@ -46,7 +46,7 @@ def _endpoint(host: str, port: int) -> str:
 
 
 async def _rpc(
-    client: httpx.AsyncClient,
+    client: httpx2.AsyncClient,
     url: str,
     method: str,
     params_msg: ProtoMessage,
@@ -69,7 +69,7 @@ async def _rpc(
     return data['result']
 
 
-async def _get_task(client: httpx.AsyncClient, url: str, task_id: str) -> Task:
+async def _get_task(client: httpx2.AsyncClient, url: str, task_id: str) -> Task:
     """Fetches a task via GetTask from the given replica."""
     result = await _rpc(client, url, 'GetTask', GetTaskRequest(id=task_id))
     task = Task()
@@ -78,7 +78,7 @@ async def _get_task(client: httpx.AsyncClient, url: str, task_id: str) -> Task:
 
 
 async def _start_streaming(
-    client: httpx.AsyncClient, url: str, send: SendMessageRequest
+    client: httpx2.AsyncClient, url: str, send: SendMessageRequest
 ) -> tuple[str, asyncio.Task[None]]:
     """Starts a streaming send; returns (task_id, drainer task).
 
@@ -128,7 +128,7 @@ async def run(host: str, ports: list[int]) -> None:
 
     urls = [_endpoint(host, p) for p in ports]
 
-    async with httpx.AsyncClient() as client:
+    async with httpx2.AsyncClient() as client:
         # 1) Start a streaming task on replica 0. The stream stays open (agent
         #    runs) while we observe and cancel from other replicas.
         print(f'[send]      -> replica 0 ({urls[0]}) (streaming)')

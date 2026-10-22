@@ -52,7 +52,7 @@ import logging
 from collections.abc import Callable, Mapping
 from typing import Any
 
-import httpx
+import httpx2
 import uvicorn
 
 from cryptography.hazmat.primitives.asymmetric import ec
@@ -275,7 +275,7 @@ class JwksKeyProvider:
 
     @classmethod
     async def fetch(
-        cls, trusted_jku_urls: set[str], http_client: httpx.AsyncClient
+        cls, trusted_jku_urls: set[str], http_client: httpx2.AsyncClient
     ) -> 'JwksKeyProvider':
         """Fetches every trusted JWKS and builds a provider from them.
 
@@ -324,7 +324,7 @@ class JwksKeyProvider:
 
 
 async def create_card_verifier(
-    trusted_jku_urls: set[str], http_client: httpx.AsyncClient
+    trusted_jku_urls: set[str], http_client: httpx2.AsyncClient
 ) -> Callable[[AgentCard], None]:
     """Builds a verifier that accepts cards signed by the trusted keys.
 
@@ -356,7 +356,7 @@ async def verify_remote_card(base_url: str) -> AgentCard:
         SignatureVerificationError: If the card carries no signature, or none of
             its signatures can be verified.
     """
-    async with httpx.AsyncClient() as http_client:
+    async with httpx2.AsyncClient() as http_client:
         verifier = await create_card_verifier(
             trusted_jku_urls={f'{base_url}{JWKS_WELL_KNOWN_PATH}'},
             http_client=http_client,
@@ -373,7 +373,7 @@ async def verify_remote_card(base_url: str) -> AgentCard:
 
 
 async def _fetch_card_json(
-    base_url: str, http_client: httpx.AsyncClient
+    base_url: str, http_client: httpx2.AsyncClient
 ) -> dict[str, Any]:
     """Fetches the raw Agent Card JSON, bypassing verification."""
     response = await http_client.get(f'{base_url}{AGENT_CARD_WELL_KNOWN_PATH}')
@@ -384,7 +384,7 @@ async def _fetch_card_json(
 
 async def run_demo(base_url: str) -> None:
     """Verifies a good card, then two cards a verifier should reject."""
-    async with httpx.AsyncClient() as http_client:
+    async with httpx2.AsyncClient() as http_client:
         verifier = await create_card_verifier(
             trusted_jku_urls={f'{base_url}{JWKS_WELL_KNOWN_PATH}'},
             http_client=http_client,

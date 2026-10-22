@@ -21,7 +21,7 @@ from a2a.types.a2a_pb2 import (
 )
 from fastapi import FastAPI
 from google.protobuf import json_format
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 from starlette.datastructures import Headers
 from starlette.requests import Request

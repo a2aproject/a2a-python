@@ -7,7 +7,7 @@ import logging
 
 from typing import Any, cast
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.types.a2a_pb2 import (
@@ -273,7 +273,7 @@ class TestRestParams:
     def _message_to_rest_params(self, message: ProtobufMessage) -> QueryParams:
         """Converts a message to REST query parameters."""
         rest_dict = MessageToDict(message)
-        return httpx.Request(
+        return httpx2.Request(
             'GET', 'http://api.example.com', params=rest_dict
         ).url.params
 

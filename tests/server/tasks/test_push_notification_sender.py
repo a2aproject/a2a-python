@@ -3,7 +3,7 @@ import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 
 from a2a.server.tasks.base_push_notification_sender import (
     BasePushNotificationSender,
@@ -46,7 +46,7 @@ def _create_sample_push_config(
 
 class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
-        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_httpx_client = AsyncMock(spec=httpx2.AsyncClient)
         self.mock_config_store = AsyncMock()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
@@ -63,7 +63,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(url='http://notify.me/here')
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -89,7 +89,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         )
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -114,7 +114,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             _create_sample_push_config(**config_kwargs)
         ]
         self.mock_httpx_client.post.return_value = AsyncMock(
-            spec=httpx.Response, status_code=200
+            spec=httpx2.Response, status_code=200
         )
 
         await self.sender.send_notification(task_data.id, task_data)
@@ -206,10 +206,10 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(url='http://notify.me/http_error')
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
-        mock_response = MagicMock(spec=httpx.Response)
+        mock_response = MagicMock(spec=httpx2.Response)
         mock_response.status_code = 404
         mock_response.text = 'Not Found'
-        http_error = httpx.HTTPStatusError(
+        http_error = httpx2.HTTPStatusError(
             'Not Found', request=MagicMock(), response=mock_response
         )
         self.mock_httpx_client.post.side_effect = http_error
@@ -240,7 +240,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
             config2,
         ]
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -274,7 +274,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(url='http://notify.me/status')
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -298,7 +298,7 @@ class TestBasePushNotificationSender(unittest.IsolatedAsyncioTestCase):
         config = _create_sample_push_config(url='http://notify.me/artifact')
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
 
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
 
@@ -363,7 +363,7 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
     push URLs must not reach non-public destinations."""
 
     def setUp(self) -> None:
-        self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
+        self.mock_httpx_client = AsyncMock(spec=httpx2.AsyncClient)
         self.mock_config_store = AsyncMock()
         self.sender = BasePushNotificationSender(
             httpx_client=self.mock_httpx_client,
@@ -375,7 +375,7 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         task = _create_sample_task()
         config = _create_sample_push_config(url=url)
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
         await self.sender.send_notification(task.id, task)
@@ -441,7 +441,7 @@ class TestPushUrlValidation(unittest.IsolatedAsyncioTestCase):
         task = _create_sample_task()
         config = _create_sample_push_config(url='http://localhost:9000/hook')
         self.mock_config_store.get_info_for_dispatch.return_value = [config]
-        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response = AsyncMock(spec=httpx2.Response)
         mock_response.status_code = 200
         self.mock_httpx_client.post.return_value = mock_response
         await sender.send_notification(task.id, task)

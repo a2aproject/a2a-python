@@ -135,7 +135,6 @@ pyproto
 pyupgrade
 pyversions
 redef
-respx
 resub
 rmi
 RS256

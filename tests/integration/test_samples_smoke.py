@@ -14,7 +14,7 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-import httpx
+import httpx2
 import pytest
 import pytest_asyncio
 
@@ -41,13 +41,13 @@ def _free_port() -> int:
 
 async def _wait_for_agent_card(url: str) -> None:
     deadline = asyncio.get_running_loop().time() + STARTUP_TIMEOUT_S
-    async with httpx.AsyncClient(timeout=2.0) as client:
+    async with httpx2.AsyncClient(timeout=2.0) as client:
         while asyncio.get_running_loop().time() < deadline:
             try:
                 response = await client.get(url)
                 if response.status_code == 200:
                     return
-            except httpx.RequestError:
+            except httpx2.RequestError:
                 pass
             await asyncio.sleep(0.2)
     raise TimeoutError(f'Agent did not become ready at {url}')

@@ -4,7 +4,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import MessageToDict
 
@@ -95,7 +95,7 @@ class RestTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         agent_card: AgentCard,
         url: str,
         is_shared_httpx: bool = False,
@@ -351,7 +351,7 @@ class RestTransport(ClientTransport):
         """Returns the full path, prepending the tenant if provided."""
         return f'/{tenant}{base_path}' if tenant else base_path
 
-    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+    def _handle_http_error(self, e: httpx2.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
             error_payload = e.response.json()
@@ -362,7 +362,7 @@ class RestTransport(ClientTransport):
             pass
 
         status_code = e.response.status_code
-        if status_code == httpx.codes.NOT_FOUND:
+        if status_code == httpx2.codes.NOT_FOUND:
             raise MethodNotFoundError(
                 f'Resource not found: {e.request.url}'
             ) from e
@@ -401,7 +401,7 @@ class RestTransport(ClientTransport):
             event: StreamResponse = parse_lenient(sse_data, StreamResponse())
             yield event
 
-    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
+    async def _send_request(self, request: httpx2.Request) -> dict[str, Any]:
         return await send_http_request(
             self.httpx_client, request, self._handle_http_error
         )

@@ -5,7 +5,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 from uuid import uuid4
 
-import httpx
+import httpx2
 
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
 
@@ -56,7 +56,7 @@ class CompatJsonRpcTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
         *,
@@ -424,7 +424,7 @@ class CompatJsonRpcTransport(ClientTransport):
 
         return A2AClientError(message)
 
-    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+    def _handle_http_error(self, e: httpx2.HTTPStatusError) -> NoReturn:
         """Handles HTTP errors for standard requests."""
         raise A2AClientError(f'HTTP Error: {e.response.status_code}') from e
 

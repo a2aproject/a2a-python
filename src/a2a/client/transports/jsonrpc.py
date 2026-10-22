@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 from uuid import uuid4
 
-import httpx
+import httpx2
 
 from google.protobuf import json_format
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
@@ -54,7 +54,7 @@ class JsonRpcTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         agent_card: AgentCard,
         url: str,
         is_shared_httpx: bool = False,

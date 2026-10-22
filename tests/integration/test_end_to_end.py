@@ -2,7 +2,7 @@ from collections.abc import AsyncGenerator
 from typing import NamedTuple
 
 import grpc
-import httpx
+import httpx2
 import pytest
 import pytest_asyncio
 
@@ -224,8 +224,8 @@ def rest_setup(agent_card, base_e2e_setup) -> ClientSetup:
         agent_card=agent_card, card_url='/'
     )
     app = Starlette(routes=[*rest_routes, *agent_card_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    httpx_client = httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url='http://testserver'
     )
     factory = ClientFactory(
         config=ClientConfig(
@@ -251,8 +251,8 @@ def jsonrpc_setup(agent_card, base_e2e_setup) -> ClientSetup:
         rpc_url='/',
     )
     app = Starlette(routes=[*agent_card_routes, *jsonrpc_routes])
-    httpx_client = httpx.AsyncClient(
-        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    httpx_client = httpx2.AsyncClient(
+        transport=httpx2.ASGITransport(app=app), base_url='http://testserver'
     )
     factory = ClientFactory(
         config=ClientConfig(

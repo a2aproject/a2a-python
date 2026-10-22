@@ -33,7 +33,7 @@ import logging
 
 from typing import Any
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import MessageToDict
 
@@ -70,7 +70,7 @@ def _is_enveloped(payload: Any) -> bool:
     )
 
 
-def _transport(payload: Any) -> httpx.MockTransport:
+def _transport(payload: Any) -> httpx2.MockTransport:
     """An HTTP transport that answers every request with ``payload``.
 
     The response's JSON-RPC ``id`` is rewritten to echo the request's, which
@@ -82,7 +82,7 @@ def _transport(payload: Any) -> httpx.MockTransport:
     express.
     """
 
-    def handler(request: httpx.Request) -> httpx.Response:
+    def handler(request: httpx2.Request) -> httpx2.Response:
         body = payload
         if _is_enveloped(payload):
             try:
@@ -91,9 +91,9 @@ def _transport(payload: Any) -> httpx.MockTransport:
                 sent = None
             if isinstance(sent, dict) and 'id' in sent:
                 body = {**payload, 'id': sent['id']}
-        return httpx.Response(200, json=body)
+        return httpx2.Response(200, json=body)
 
-    return httpx.MockTransport(handler)
+    return httpx2.MockTransport(handler)
 
 
 def _scaffold_card() -> AgentCard:
@@ -129,7 +129,7 @@ async def _client(payload: Any) -> Any:
     config = ClientConfig()
     config.streaming = False
     config.supported_protocol_bindings = [TransportProtocol.JSONRPC]
-    config.httpx_client = httpx.AsyncClient(transport=_transport(payload))
+    config.httpx_client = httpx2.AsyncClient(transport=_transport(payload))
     return await create_client(_scaffold_card(), client_config=config)
 
 
@@ -141,7 +141,7 @@ async def _parse_card(payload: Any, path: str) -> dict[str, Any]:
     plain HTTP on every binding, so there is no envelope to unwrap. The two
     differ only in the path they are served from.
     """
-    async with httpx.AsyncClient(transport=_transport(payload)) as http:
+    async with httpx2.AsyncClient(transport=_transport(payload)) as http:
         resolver = A2ACardResolver(httpx_client=http, base_url=_BASE_URL)
         card = await resolver.get_agent_card(relative_card_path=path)
         return MessageToDict(card)
@@ -149,7 +149,7 @@ async def _parse_card(payload: Any, path: str) -> dict[str, Any]:
 
 async def _parse_extended_card_envelope(payload: Any) -> dict[str, Any]:
     """The enveloped form of `get_extended_agent_card`, via the RPC client."""
-    async with httpx.AsyncClient(transport=_transport(payload)) as http:
+    async with httpx2.AsyncClient(transport=_transport(payload)) as http:
         config = ClientConfig()
         config.streaming = False
         config.supported_protocol_bindings = [TransportProtocol.JSONRPC]

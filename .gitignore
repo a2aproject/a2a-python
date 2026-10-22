@@ -13,6 +13,7 @@ spec.json
 docker-compose.yaml
 .geminiignore
 docs/ai/ai_learnings.md
+.idea
 
 # ITK Integration Test Artifacts
 itk/a2a-itk/

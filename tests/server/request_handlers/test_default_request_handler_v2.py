@@ -7,7 +7,7 @@ import warnings
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -2624,7 +2624,7 @@ async def test_push_config_store_failure_does_not_fail_task():
         task_store=task_store,
         push_config_store=FlakyPushConfigStore(),
         push_sender=BasePushNotificationSender(
-            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            httpx_client=AsyncMock(spec=httpx2.AsyncClient),
             config_store=FlakyPushConfigStore(),
         ),
         agent_card=create_default_agent_card(),

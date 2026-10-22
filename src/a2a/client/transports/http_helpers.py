@@ -4,7 +4,7 @@ from collections.abc import AsyncGenerator, Callable, Iterator
 from contextlib import contextmanager
 from typing import Any, NoReturn
 
-import httpx
+import httpx2
 
 from a2a.client.client import ClientCallContext
 from a2a.client.errors import A2AClientError, A2AClientTimeoutError
@@ -16,25 +16,25 @@ def _default_sse_error_handler(sse_data: str) -> NoReturn:
 
 @contextmanager
 def handle_http_exceptions(
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
+    status_error_handler: Callable[[httpx2.HTTPStatusError], NoReturn]
     | None = None,
 ) -> Iterator[None]:
     """Handles common HTTP exceptions for REST and JSON-RPC transports.
 
     Args:
-        status_error_handler: Optional handler for `httpx.HTTPStatusError`.
+        status_error_handler: Optional handler for `httpx2.HTTPStatusError`.
             If provided, this handler should raise an appropriate domain-specific exception.
             If not provided, a default `A2AClientError` will be raised.
     """
     try:
         yield
-    except httpx.TimeoutException as e:
+    except httpx2.TimeoutException as e:
         raise A2AClientTimeoutError('Client Request timed out') from e
-    except httpx.HTTPStatusError as e:
+    except httpx2.HTTPStatusError as e:
         if status_error_handler:
             status_error_handler(e)
         raise A2AClientError(f'HTTP Error {e.response.status_code}: {e}') from e
-    except httpx.RequestError as e:
+    except httpx2.RequestError as e:
         raise A2AClientError(f'Network communication error: {e}') from e
     except json.JSONDecodeError as e:
         raise A2AClientError(f'JSON Decode Error: {e}') from e
@@ -46,14 +46,14 @@ def get_http_args(context: ClientCallContext | None) -> dict[str, Any]:
     if context and context.service_parameters:
         http_kwargs['headers'] = context.service_parameters.copy()
     if context and context.timeout is not None:
-        http_kwargs['timeout'] = httpx.Timeout(context.timeout)
+        http_kwargs['timeout'] = httpx2.Timeout(context.timeout)
     return http_kwargs
 
 
 async def send_http_request(
-    httpx_client: httpx.AsyncClient,
-    request: httpx.Request,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
+    httpx_client: httpx2.AsyncClient,
+    request: httpx2.Request,
+    status_error_handler: Callable[[httpx2.HTTPStatusError], NoReturn]
     | None = None,
 ) -> dict[str, Any]:
     """Sends an HTTP request and parses the JSON response, handling common exceptions."""
@@ -66,9 +66,9 @@ async def send_http_request(
 
 
 async def parse_sse_stream(
-    response: httpx.Response,
+    response: httpx2.Response,
 ) -> AsyncGenerator[tuple[str, str], None]:
-    """Yields (event_name, data) from a streaming httpx.Response.
+    """Yields (event_name, data) from a streaming httpx2.Response.
 
     Conforms to the W3C Server-Sent Events specification.
     """
@@ -106,10 +106,10 @@ async def parse_sse_stream(
 
 
 async def send_http_stream_request(
-    httpx_client: httpx.AsyncClient,
+    httpx_client: httpx2.AsyncClient,
     method: str,
     url: str,
-    status_error_handler: Callable[[httpx.HTTPStatusError], NoReturn]
+    status_error_handler: Callable[[httpx2.HTTPStatusError], NoReturn]
     | None = None,
     sse_error_handler: Callable[[str], NoReturn] = _default_sse_error_handler,
     **kwargs: Any,
@@ -135,7 +135,7 @@ async def send_http_stream_request(
         ) as response:
             try:
                 response.raise_for_status()
-            except httpx.HTTPStatusError as e:
+            except httpx2.HTTPStatusError as e:
                 # Read upfront streaming error content immediately, otherwise lower-level handlers
                 # (e.g. response.json()) crash with 'ResponseNotRead' Access errors.
                 await response.aread()
@@ -174,21 +174,21 @@ class _SSEEventSource:
 
     def __init__(
         self,
-        client: httpx.AsyncClient,
+        client: httpx2.AsyncClient,
         method: str,
         url: str,
         **kwargs: Any,
     ) -> None:
-        headers = httpx.Headers(kwargs.pop('headers', None))
+        headers = httpx2.Headers(kwargs.pop('headers', None))
         headers.setdefault('Accept', 'text/event-stream')
         headers.setdefault('Cache-Control', 'no-store')
         self._request = client.build_request(
             method, url, headers=headers, **kwargs
         )
         self._client = client
-        self._response: httpx.Response | None = None
+        self._response: httpx2.Response | None = None
 
-    async def __aenter__(self) -> httpx.Response:
+    async def __aenter__(self) -> httpx2.Response:
         self._response = await self._client.send(self._request, stream=True)
         return self._response
 

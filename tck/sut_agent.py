@@ -3,7 +3,7 @@ import logging
 import os
 import uuid
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import grpc.aio
 import uvicorn
@@ -71,7 +71,7 @@ class SUTAgentExecutor(AgentExecutor):
             context_id=context.context_id or str(uuid.uuid4()),
             status=TaskStatus(
                 state=TaskState.TASK_STATE_CANCELED,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ),
         )
         await event_queue.enqueue_event(status_update)
@@ -114,7 +114,7 @@ class SUTAgentExecutor(AgentExecutor):
                     task_id=task_id,
                     context_id=context_id,
                 ),
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ),
         )
         await event_queue.enqueue_event(working_status)
@@ -142,7 +142,7 @@ class SUTAgentExecutor(AgentExecutor):
             status=TaskStatus(
                 state=TaskState.TASK_STATE_INPUT_REQUIRED,
                 message=agent_message,
-                timestamp=datetime.now(timezone.utc),
+                timestamp=datetime.now(UTC),
             ),
         )
         await event_queue.enqueue_event(final_update)

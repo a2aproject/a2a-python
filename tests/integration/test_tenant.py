@@ -1,6 +1,6 @@
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory
@@ -19,7 +19,7 @@ from a2a.types.a2a_pb2 import (
     Task,
 )
 from a2a.utils.constants import TransportProtocol
-from httpx import ASGITransport, AsyncClient
+from httpx2 import ASGITransport, AsyncClient
 from starlette.applications import Starlette
 
 
@@ -49,7 +49,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx2.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -86,7 +86,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx2.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
@@ -142,7 +142,7 @@ class TestTenantDecorator:
 
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
-        mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx = AsyncMock(spec=httpx2.AsyncClient)
         mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(

@@ -7,7 +7,7 @@ import signal
 import uuid
 
 import grpc
-import httpx
+import httpx2
 import uvicorn
 
 from fastapi import FastAPI
@@ -300,7 +300,7 @@ async def handle_call_agent(
             token='itk-token',  # noqa: S106
         )
 
-    async with httpx.AsyncClient(timeout=30.0) as httpx_client:
+    async with httpx2.AsyncClient(timeout=30.0) as httpx_client:
         config.httpx_client = httpx_client
         try:
             client = await create_client(
@@ -738,7 +738,7 @@ async def main_async(http_port: int, grpc_port: int) -> None:
 
     task_store = InMemoryTaskStore()
     push_config_store = InMemoryPushNotificationConfigStore()
-    httpx_client = httpx.AsyncClient()
+    httpx_client = httpx2.AsyncClient()
     push_sender = BasePushNotificationSender(
         httpx_client=httpx_client,
         config_store=push_config_store,

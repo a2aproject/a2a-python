@@ -4,7 +4,7 @@ import socket
 import sys
 import time
 
-import httpx
+import httpx2
 import uvicorn
 
 
@@ -26,8 +26,8 @@ def wait_for_server_ready(
     """Polls the provided URL endpoint until the server is up."""
     start_time = time.time()
     while True:
-        with contextlib.suppress(httpx.ConnectError):
-            with httpx.Client(headers=headers) as client:
+        with contextlib.suppress(httpx2.ConnectError):
+            with httpx2.Client(headers=headers) as client:
                 response = client.get(url)
                 if response.status_code == 200:
                     return

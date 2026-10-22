@@ -5,7 +5,7 @@ import sys
 from uuid import uuid4
 
 import grpc
-import httpx
+import httpx2
 
 from a2a.client import ClientConfig, create_client
 from a2a.client.errors import A2AClientError
@@ -77,7 +77,7 @@ async def test_send_message_stream(client):
 async def test_send_message_sync(url, protocol_enum):
     print('Testing send_message (synchronous)...')
     config = ClientConfig()
-    config.httpx_client = httpx.AsyncClient(timeout=30.0)
+    config.httpx_client = httpx2.AsyncClient(timeout=30.0)
     config.grpc_channel_factory = grpc.aio.insecure_channel
     config.supported_protocol_bindings = [protocol_enum]
     config.streaming = False
@@ -292,7 +292,7 @@ async def run_client(url: str, protocol: str):
     protocol_enum = protocol_enum_map[protocol]
 
     config = ClientConfig()
-    config.httpx_client = httpx.AsyncClient(timeout=30.0)
+    config.httpx_client = httpx2.AsyncClient(timeout=30.0)
     config.grpc_channel_factory = grpc.aio.insecure_channel
     config.supported_protocol_bindings = [protocol_enum]
     config.streaming = True

@@ -2,7 +2,7 @@ import json
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client.errors import A2AClientError
@@ -32,7 +32,7 @@ from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
 
 @pytest.fixture
 def mock_httpx_client():
-    client = AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx2.AsyncClient)
     client.is_closed = False
     return client
 
@@ -55,7 +55,7 @@ def transport(mock_httpx_client, agent_card):
 async def test_compat_rest_transport_send_message_response_msg_parsing(
     transport,
 ):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.json.return_value = {
         'msg': {'messageId': 'msg-123', 'role': 'agent'}
     }
@@ -79,7 +79,7 @@ async def test_compat_rest_transport_send_message_response_msg_parsing(
 
 @pytest.mark.asyncio
 async def test_compat_rest_transport_send_message_task(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.json.return_value = {'task': {'id': 'task-123'}}
 
     async def mock_send_request(*args, **kwargs):
@@ -233,31 +233,31 @@ async def test_compat_rest_transport_send_message_streaming(transport):
 
 
 def create_405_error():
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 405
     mock_response.json.return_value = {
         'type': 'MethodNotAllowed',
         'message': 'Method Not Allowed',
     }
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com/v1/tasks/task-123:subscribe'
 
-    status_error = httpx.HTTPStatusError(
+    status_error = httpx2.HTTPStatusError(
         '405 Method Not Allowed', request=mock_request, response=mock_response
     )
     raise A2AClientError('HTTP Error 405') from status_error
 
 
 def create_500_error():
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 'InternalError',
         'message': 'Internal Error',
     }
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
 
-    status_error = httpx.HTTPStatusError(
+    status_error = httpx2.HTTPStatusError(
         '500 Internal Error', request=mock_request, response=mock_response
     )
     raise A2AClientError('HTTP Error 500') from status_error
@@ -448,17 +448,17 @@ async def test_compat_rest_transport_subscribe_method_override_avoids_retry_post
 
 
 def test_compat_rest_transport_handle_http_error(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 400
     mock_response.json.return_value = {
         'type': 'InvalidParamsError',
         'message': 'Invalid parameters',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -469,14 +469,14 @@ def test_compat_rest_transport_handle_http_error(transport):
 
 
 def test_compat_rest_transport_handle_http_error_not_found(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 404
     mock_response.json.side_effect = json.JSONDecodeError('msg', 'doc', 0)
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -485,14 +485,14 @@ def test_compat_rest_transport_handle_http_error_not_found(transport):
 
 
 def test_compat_rest_transport_handle_http_error_generic(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 500
     mock_response.json.side_effect = json.JSONDecodeError('msg', 'doc', 0)
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -570,17 +570,17 @@ async def test_compat_rest_transport_get_task_with_history(transport):
 
 
 def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 123,
         'message': 'Invalid parameters',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -599,14 +599,14 @@ def test_compat_rest_transport_handle_http_error_invalid_error_type(transport):
 def test_compat_rest_transport_handle_http_error_non_object_body(
     transport, status_code, body, expected_error
 ):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = status_code
     mock_response.json.return_value = body
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -615,17 +615,17 @@ def test_compat_rest_transport_handle_http_error_non_object_body(
 
 
 def test_compat_rest_transport_handle_http_error_unknown_error_type(transport):
-    mock_response = MagicMock(spec=httpx.Response)
+    mock_response = MagicMock(spec=httpx2.Response)
     mock_response.status_code = 500
     mock_response.json.return_value = {
         'type': 'SomeUnknownErrorClass',
         'message': 'Unknown',
     }
 
-    mock_request = MagicMock(spec=httpx.Request)
+    mock_request = MagicMock(spec=httpx2.Request)
     mock_request.url = 'http://example.com'
 
-    error = httpx.HTTPStatusError(
+    error = httpx2.HTTPStatusError(
         'Error', request=mock_request, response=mock_response
     )
 
@@ -667,7 +667,7 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request, transport
 ):
     mock_send_http_request.return_value = {'ok': True}
-    mock_request = httpx.Request('POST', 'http://example.com')
+    mock_request = httpx2.Request('POST', 'http://example.com')
     transport.httpx_client.build_request.return_value = mock_request
 
     res = await transport._execute_request(

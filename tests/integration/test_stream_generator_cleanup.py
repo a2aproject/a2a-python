@@ -11,7 +11,7 @@ import gc
 from typing import Any
 from uuid import uuid4
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client.base_client import BaseClient
@@ -88,8 +88,8 @@ def client():
     )
     return ClientFactory(
         config=ClientConfig(
-            httpx_client=httpx.AsyncClient(
-                transport=httpx.ASGITransport(app=app),
+            httpx_client=httpx2.AsyncClient(
+                transport=httpx2.ASGITransport(app=app),
                 base_url='http://test',
             )
         )

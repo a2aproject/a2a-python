@@ -1,4 +1,4 @@
-import httpx
+import httpx2
 import pytest
 
 from a2a.client.errors import A2AClientError
@@ -28,7 +28,7 @@ async def test_parse_sse_stream_edge_cases():
         yield 'data: \n'
         yield '\n'
 
-    response = httpx.Response(200)
+    response = httpx2.Response(200)
     response.aiter_lines = mock_aiter_lines  # type: ignore
 
     events = [e async for e in parse_sse_stream(response)]
@@ -40,9 +40,9 @@ async def test_parse_sse_stream_edge_cases():
 
 @pytest.mark.asyncio
 async def test_send_http_stream_request_non_sse(mocker):
-    client = httpx.AsyncClient()
-    request = httpx.Request('GET', 'http://test')
-    response = httpx.Response(
+    client = httpx2.AsyncClient()
+    request = httpx2.Request('GET', 'http://test')
+    response = httpx2.Response(
         200,
         headers={'Content-Type': 'application/json'},
         content=b'plain error response',

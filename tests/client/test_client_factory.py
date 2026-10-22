@@ -4,7 +4,7 @@ import typing
 
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
+import httpx2
 import pytest
 
 from a2a.client import ClientConfig, ClientFactory, create_client
@@ -48,7 +48,7 @@ def base_agent_card() -> AgentCard:
 def test_client_factory_selects_preferred_transport(base_agent_card: AgentCard):
     """Verify that the factory selects the preferred transport by default."""
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=[
             TransportProtocol.JSONRPC,
             TransportProtocol.HTTP_JSON,
@@ -73,7 +73,7 @@ def test_client_factory_selects_secondary_transport_url(
     )
     # Client prefers REST, which is available as a secondary transport
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=[
             TransportProtocol.HTTP_JSON,
             TransportProtocol.JSONRPC,
@@ -105,7 +105,7 @@ def test_client_factory_server_preference(base_agent_card: AgentCard):
     )
     # Client supports both, but server prefers REST
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=[
             TransportProtocol.JSONRPC,
             TransportProtocol.HTTP_JSON,
@@ -139,7 +139,7 @@ def test_client_factory_prefers_1_0_ignoring_patch_version(
         ]
     )
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=[TransportProtocol.JSONRPC],
     )
     client = ClientFactory(config).create(base_agent_card)
@@ -151,7 +151,7 @@ def test_client_factory_prefers_1_0_ignoring_patch_version(
 def test_client_factory_no_compatible_transport(base_agent_card: AgentCard):
     """Verify that the factory raises an error if no compatible transport is found."""
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=['UNKNOWN_PROTOCOL'],
     )
     factory = ClientFactory(config)
@@ -200,7 +200,7 @@ async def test_client_factory_create_from_url_uses_factory_httpx_client(
         )
 
         agent_url = 'http://example.com'
-        mock_httpx_client = httpx.AsyncClient()
+        mock_httpx_client = httpx2.AsyncClient()
         config = ClientConfig(httpx_client=mock_httpx_client)
 
         factory = ClientFactory(config)
@@ -227,7 +227,7 @@ async def test_client_factory_create_from_url_passes_resolver_args(
         relative_path = '/extendedAgentCard'
         http_kwargs = {'headers': {'X-Test': 'true'}}
 
-        config = ClientConfig(httpx_client=httpx.AsyncClient())
+        config = ClientConfig(httpx_client=httpx2.AsyncClient())
         factory = ClientFactory(config)
 
         await factory.create_from_url(
@@ -360,7 +360,7 @@ def test_client_factory_applies_tenant_decorator(base_agent_card: AgentCard):
     """Verify that the factory applies TenantTransportDecorator when tenant is present."""
     base_agent_card.supported_interfaces[0].tenant = 'my-tenant'
     config = ClientConfig(
-        httpx_client=httpx.AsyncClient(),
+        httpx_client=httpx2.AsyncClient(),
         supported_protocol_bindings=[TransportProtocol.JSONRPC],
     )
     factory = ClientFactory(config)
@@ -402,7 +402,7 @@ async def test_create_client_with_url_and_config(base_agent_card: AgentCard):
             return_value=base_agent_card
         )
 
-        mock_httpx_client = httpx.AsyncClient()
+        mock_httpx_client = httpx2.AsyncClient()
         config = ClientConfig(httpx_client=mock_httpx_client)
 
         await create_client('http://example.com', client_config=config)
@@ -433,7 +433,7 @@ async def test_client_close_does_not_close_shared_httpx_client(
     base_agent_card: AgentCard,
 ):
     """Verify closing a client does not close a shared httpx_client from config."""
-    shared_httpx_client = httpx.AsyncClient()
+    shared_httpx_client = httpx2.AsyncClient()
     try:
         factory = ClientFactory(ClientConfig(httpx_client=shared_httpx_client))
         client = factory.create(base_agent_card)

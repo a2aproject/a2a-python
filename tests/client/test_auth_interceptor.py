@@ -5,9 +5,8 @@ from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any
 
-import httpx
+import httpx2
 import pytest
-import respx
 
 from a2a.client import (
     AuthInterceptor,
@@ -40,7 +39,7 @@ from a2a.utils.constants import TransportProtocol
 from google.protobuf import json_format
 
 
-def build_success_response(request: httpx.Request) -> httpx.Response:
+def build_success_response(request: httpx2.Request) -> httpx2.Response:
     """Creates a valid JSON-RPC success response based on the request."""
 
     request_payload = json.loads(request.content)
@@ -55,7 +54,7 @@ def build_success_response(request: httpx.Request) -> httpx.Response:
         'jsonrpc': '2.0',
         'result': json_format.MessageToDict(response),
     }
-    return httpx.Response(200, json=response_payload)
+    return httpx2.Response(200, json=response_payload)
 
 
 def build_message() -> Message:
@@ -67,13 +66,24 @@ def build_message() -> Message:
     )
 
 
+def build_capturing_client() -> tuple[httpx2.AsyncClient, list[httpx2.Request]]:
+    """Builds an HTTP client that records requests and replies with a success."""
+    requests: list[httpx2.Request] = []
+
+    def handler(request: httpx2.Request) -> httpx2.Response:
+        requests.append(request)
+        return build_success_response(request)
+
+    client = httpx2.AsyncClient(transport=httpx2.MockTransport(handler))
+    return client, requests
+
+
 async def send_message(
     client: Client,
-    url: str,
+    requests: list[httpx2.Request],
     session_id: str | None = None,
-) -> httpx.Request:
-    """Mocks the response and sends a message using the client."""
-    respx.post(url).mock(side_effect=build_success_response)
+) -> httpx2.Request:
+    """Sends a message using the client and returns the request it made."""
     context = ClientCallContext(
         state={'sessionId': session_id} if session_id else {}
     )
@@ -83,7 +93,7 @@ async def send_message(
         context=context,
     ):
         pass
-    return respx.calls.last.request
+    return requests[-1]
 
 
 @pytest.fixture
@@ -244,7 +254,6 @@ bearer_test_case = AuthTestCase(
     'test_case',
     [api_key_test_case, oauth2_test_case, oidc_test_case, bearer_test_case],
 )
-@respx.mock
 async def test_auth_interceptor_variants(
     test_case: AuthTestCase, store: InMemoryContextCredentialStore
 ) -> None:
@@ -276,7 +285,8 @@ async def test_auth_interceptor_variants(
         },
     )
 
-    async with httpx.AsyncClient() as http_client:
+    http_client, requests = build_capturing_client()
+    async with http_client:
         config = ClientConfig(
             httpx_client=http_client,
             supported_protocol_bindings=[TransportProtocol.JSONRPC],
@@ -284,9 +294,7 @@ async def test_auth_interceptor_variants(
         factory = ClientFactory(config)
         client = factory.create(agent_card, interceptors=[auth_interceptor])
 
-        request = await send_message(
-            client, test_case.url, test_case.session_id
-        )
+        request = await send_message(client, requests, test_case.session_id)
         assert request.headers[
             test_case.expected_header_key
         ] == test_case.expected_header_value_func(test_case.credential)

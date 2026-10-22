@@ -5,7 +5,7 @@ import logging
 from collections.abc import AsyncGenerator
 from typing import Any, NoReturn
 
-import httpx
+import httpx2
 
 from google.protobuf.json_format import MessageToDict, Parse, ParseDict
 
@@ -62,7 +62,7 @@ class CompatRestTransport(ClientTransport):
 
     def __init__(
         self,
-        httpx_client: httpx.AsyncClient,
+        httpx_client: httpx2.AsyncClient,
         agent_card: AgentCard | None,
         url: str,
         subscribe_method_override: str | None = None,
@@ -299,11 +299,12 @@ class CompatRestTransport(ClientTransport):
             ):
                 yield event
         except A2AClientError as e:
-            # Check for 405 Method Not Allowed in the cause (httpx.HTTPStatusError)
+            # Check for 405 Method Not Allowed in the cause (httpx2.HTTPStatusError)
             cause = e.__cause__
             if (
-                isinstance(cause, httpx.HTTPStatusError)
-                and cause.response.status_code == httpx.codes.METHOD_NOT_ALLOWED
+                isinstance(cause, httpx2.HTTPStatusError)
+                and cause.response.status_code
+                == httpx2.codes.METHOD_NOT_ALLOWED
             ):
                 if self._subscribe_method_override:
                     if self._subscribe_auto_method_override:
@@ -355,15 +356,15 @@ class CompatRestTransport(ClientTransport):
         except Exception as e:
             raise A2AClientError(f'Failed to close HTTP client: {e}') from e
 
-    def _handle_http_error(self, e: httpx.HTTPStatusError) -> NoReturn:
+    def _handle_http_error(self, e: httpx2.HTTPStatusError) -> NoReturn:
         """Handles HTTP status errors and raises the appropriate A2AError."""
         try:
-            with contextlib.suppress(httpx.StreamClosed):
+            with contextlib.suppress(httpx2.StreamClosed):
                 e.response.read()
 
             try:
                 error_data = e.response.json()
-            except (json.JSONDecodeError, ValueError, httpx.ResponseNotRead):
+            except (json.JSONDecodeError, ValueError, httpx2.ResponseNotRead):
                 error_data = {}
             if not isinstance(error_data, dict):
                 error_data = {}
@@ -379,7 +380,7 @@ class CompatRestTransport(ClientTransport):
             pass
 
         status_code = e.response.status_code
-        if status_code == httpx.codes.NOT_FOUND:
+        if status_code == httpx2.codes.NOT_FOUND:
             raise MethodNotFoundError(
                 f'Resource not found: {e.request.url}'
             ) from e
@@ -415,7 +416,7 @@ class CompatRestTransport(ClientTransport):
                 )
             )
 
-    async def _send_request(self, request: httpx.Request) -> dict[str, Any]:
+    async def _send_request(self, request: httpx2.Request) -> dict[str, Any]:
         return await send_http_request(
             self.httpx_client, request, self._handle_http_error
         )

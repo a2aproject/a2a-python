@@ -7,7 +7,7 @@ import uuid
 from typing import Any
 
 import grpc
-import httpx
+import httpx2
 
 from a2a.client import A2ACardResolver, ClientConfig, create_client
 from a2a.helpers import get_artifact_text, get_message_text
@@ -83,7 +83,7 @@ async def main() -> None:
         f'Connecting to {args.url} (preferred transport: {args.transport or "Any"})'
     )
 
-    async with httpx.AsyncClient() as httpx_client:
+    async with httpx2.AsyncClient() as httpx_client:
         resolver = A2ACardResolver(httpx_client, args.url)
         card = await resolver.get_agent_card()
         print('\n✓ Agent Card Found:')
@@ -124,7 +124,7 @@ async def main() -> None:
         try:
             stream = client.send_message(request)
             current_task_id = await _handle_stream(stream, current_task_id)
-        except (httpx.RequestError, grpc.RpcError) as e:
+        except (httpx2.RequestError, grpc.RpcError) as e:
             print(f'Error communicating with agent: {e}')
 
     await client.close()
