@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -385,6 +386,69 @@ class LateFailingTerminalAgentExecutor(AgentExecutor):
         await self.terminal_state_persisted.wait()
         self.raised.set()
         raise RuntimeError('late producer failure')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class FailsAfterTaskAgentExecutor(AgentExecutor):
+    """Enqueues a Task with its own metadata, then raises when allowed to."""
+
+    def __init__(self) -> None:
+        self.may_raise = asyncio.Event()
+        self.task_id: str | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        task.metadata.update({'agent_key': 'kept'})
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        # Bounded, so the test fails rather than hangs if the hook never fires.
+        await asyncio.wait_for(self.may_raise.wait(), timeout=5)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class WorksThenFailsAgentExecutor(AgentExecutor):
+    """Reports WORKING with a status message, then raises."""
+
+    def __init__(self) -> None:
+        self.task_id: str | None = None
+        self.raised_at: datetime | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(
+            TaskState.TASK_STATE_WORKING,
+            message=task_updater.new_agent_message([Part(text='halfway')]),
+        )
+        # Fail only after the WORKING status, with its timestamp, is stored.
+        await asyncio.sleep(0.05)
+        self.raised_at = datetime.now(timezone.utc)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class RepliesThenFailsAgentExecutor(AgentExecutor):
+    """Answers a follow-up with a Message, then raises."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task_updater = TaskUpdater(
+            event_queue, context.task_id, context.context_id
+        )
+        await event_queue.enqueue_event(
+            task_updater.new_agent_message([Part(text='on it')])
+        )
+        raise RuntimeError('model call failed')
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
@@ -1597,6 +1661,132 @@ async def test_on_message_send_late_producer_exception_preserves_persisted_termi
     stored_task = await task_store.get(params.message.task_id, context)
     assert stored_task is not None
     assert stored_task.status.state == terminal_state
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_right_after_task_is_recorded_on_that_task(
+    tmp_path,
+):
+    """The failure lands on the agent's Task, even while that Task is saving.
+
+    The executor raises while the store's save of its Task has looked the
+    task up but not yet inserted it: the window a database round trip
+    leaves open.
+    """
+    pytest.importorskip('sqlalchemy')
+    pytest.importorskip('aiosqlite')
+    from a2a.server.tasks.database_task_store import DatabaseTaskStore
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path / "tasks.db"}')
+    task_store = DatabaseTaskStore(engine)
+    agent_executor = FailsAfterTaskAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_right_after_task',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_merge = AsyncSession.merge
+    held = False
+
+    async def hold_agent_task_insert(self, instance, **kwargs):
+        nonlocal held
+        merged = await original_merge(self, instance, **kwargs)
+        if not held and 'agent_key' in (
+            getattr(instance, 'task_metadata', None) or {}
+        ):
+            held = True
+            agent_executor.may_raise.set()
+            # The failure path runs before this insert is flushed.
+            await asyncio.sleep(0.2)
+        return merged
+
+    try:
+        with patch.object(AsyncSession, 'merge', hold_agent_task_insert):
+            with pytest.raises(RuntimeError, match='model call failed'):
+                await request_handler.on_message_send(params, context)
+        assert agent_executor.task_id is not None
+        stored_task = await task_store.get(agent_executor.task_id, context)
+    finally:
+        await engine.dispose()
+
+    assert held
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert stored_task.metadata['agent_key'] == 'kept'
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_work_stamps_failure_time():
+    """A task failing after it reported progress is stamped when it failed."""
+    task_store = InMemoryTaskStore()
+    agent_executor = WorksThenFailsAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_after_work',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    assert agent_executor.task_id is not None
+    stored_task = await task_store.get(agent_executor.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert agent_executor.raised_at is not None
+    failed_at = stored_task.status.timestamp.ToDatetime(tzinfo=timezone.utc)
+    assert failed_at >= agent_executor.raised_at
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_message_reply_marks_task_failed():
+    """A follow-up answered with a Message still fails the task on a raise."""
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    task = Task(
+        id='task_awaiting_input',
+        context_id='ctx_awaiting_input',
+        status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+    )
+    await task_store.save(task, context)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=RepliesThenFailsAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_follow_up',
+            parts=[Part(text='large')],
+            task_id=task.id,
+            context_id=task.context_id,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    stored_task = await task_store.get(task.id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
 
 
 @pytest.mark.asyncio
