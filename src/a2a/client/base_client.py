@@ -37,8 +37,8 @@ from a2a.types.a2a_pb2 import (
 class BaseClient(Client):
     """Base implementation of the A2A client, containing transport-independent logic.
 
-    Client plugin hooks run around every call: ``before_agent_call`` before
-    the interceptors, ``after_agent_call`` after them.
+    Client plugin hooks run around every call: ``before_client_request`` before
+    the interceptors, ``after_client_request`` after them.
     """
 
     def __init__(
@@ -449,17 +449,17 @@ class BaseClient(Client):
         request = self._client_request(
             input_data, rpc_method or method, context
         )
-        await plugins.before_agent_call(request)
+        await plugins.before_client_request(request)
         try:
             result = await self._call_through_interceptors(
                 request.payload, method, request.context, transport_call
             )
         except Exception as e:
-            await plugins.after_agent_call(
+            await plugins.after_client_request(
                 ClientResponse(request.method, None, request.context, error=e)
             )
             raise
-        await plugins.after_agent_call(
+        await plugins.after_client_request(
             ClientResponse(request.method, result, request.context)
         )
         return result
@@ -536,7 +536,7 @@ class BaseClient(Client):
         request = self._client_request(
             input_data, rpc_method or method, context
         )
-        await plugins.before_agent_call(request)
+        await plugins.before_client_request(request)
         error: BaseException | None = None
         try:
             async with aclosing(
@@ -545,7 +545,7 @@ class BaseClient(Client):
                 )
             ) as events:
                 async for event in events:
-                    await plugins.after_agent_call(
+                    await plugins.after_client_request(
                         ClientResponse(
                             request.method,
                             event,
@@ -560,7 +560,7 @@ class BaseClient(Client):
             raise
         finally:
             # Also runs when the caller stops iterating early.
-            await plugins.after_agent_call(
+            await plugins.after_client_request(
                 ClientResponse(
                     request.method, None, request.context, error=error
                 )

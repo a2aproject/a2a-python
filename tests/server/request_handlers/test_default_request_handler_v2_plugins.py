@@ -78,11 +78,11 @@ class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin, PushPlugin):
     def names(self) -> list[str]:
         return [hook for hook, _ in self.calls]
 
-    async def before_agent_run(self, request: ServerRequest) -> None:
-        self.calls.append(('before_agent_run', request))
+    async def before_handler_run(self, request: ServerRequest) -> None:
+        self.calls.append(('before_handler_run', request))
 
-    async def after_agent_run(self, response: ServerResponse) -> None:
-        self.calls.append(('after_agent_run', response))
+    async def after_handler_run(self, response: ServerResponse) -> None:
+        self.calls.append(('after_handler_run', response))
 
     async def before_execution(self, request_context: RequestContext) -> None:
         self.calls.append(('before_execution', request_context))
@@ -228,13 +228,13 @@ async def test_send_message_runs_all_server_hooks():
     assert isinstance(result, Task)
     assert result.status.state == TaskState.TASK_STATE_COMPLETED
 
-    (request,) = recorder.hooks('before_agent_run')
+    (request,) = recorder.hooks('before_handler_run')
     assert request.method == 'SendMessage'
     assert request.context is context
     assert request.agent_card is CARD
     assert request.payload.message.message_id == 'm-1'
 
-    (response,) = recorder.hooks('after_agent_run')
+    (response,) = recorder.hooks('after_handler_run')
     assert response.method == 'SendMessage'
     assert response.payload is result
     assert response.error is None
@@ -273,7 +273,7 @@ async def test_send_message_runs_all_server_hooks():
     assert all(i.context is context for i in infos)
 
     names = recorder.names()
-    assert names[0] == 'before_agent_run'
+    assert names[0] == 'before_handler_run'
     assert names.index('before_execution') < names.index('on_execution_event')
 
 
@@ -289,7 +289,7 @@ async def test_streaming_reports_each_event_and_a_final_call():
         )
     ]
 
-    responses = recorder.hooks('after_agent_run')
+    responses = recorder.hooks('after_handler_run')
     assert [r.payload for r in responses[:-1]] == streamed
     assert all(r.is_stream_event and not r.is_final for r in responses[:-1])
     final = responses[-1]
@@ -309,13 +309,13 @@ async def test_stream_closed_early_still_gets_final_call():
     await anext(stream)
     await stream.aclose()
 
-    final = recorder.hooks('after_agent_run')[-1]
+    final = recorder.hooks('after_handler_run')[-1]
     assert final.is_final
     assert final.error is None
 
 
 @pytest.mark.asyncio
-async def test_handler_error_reaches_after_agent_run():
+async def test_handler_error_reaches_after_handler_run():
     recorder = Recorder()
     handler = make_handler(recorder)
 
@@ -324,7 +324,7 @@ async def test_handler_error_reaches_after_agent_run():
             GetTaskRequest(id='missing'), ServerCallContext()
         )
 
-    (response,) = recorder.hooks('after_agent_run')
+    (response,) = recorder.hooks('after_handler_run')
     assert response.method == 'GetTask'
     assert isinstance(response.error, TaskNotFoundError)
     assert response.is_final
@@ -349,14 +349,14 @@ async def test_stream_error_reaches_final_call():
         ):
             pass
 
-    final = recorder.hooks('after_agent_run')[-1]
+    final = recorder.hooks('after_handler_run')[-1]
     assert isinstance(final.error, TaskNotFoundError)
 
 
 @pytest.mark.asyncio
-async def test_before_agent_run_can_reject_the_request():
+async def test_before_handler_run_can_reject_the_request():
     class Deny(plugins.ServerPlugin):
-        async def before_agent_run(self, request):
+        async def before_handler_run(self, request):
             raise PermissionError('denied')
 
     executed = False
@@ -467,7 +467,7 @@ async def test_return_immediately_ends_request_before_execution():
     )
 
     assert result.status.state == TaskState.TASK_STATE_SUBMITTED
-    assert recorder.hooks('after_agent_run')[0].is_final
+    assert recorder.hooks('after_handler_run')[0].is_final
     assert 'after_execution' not in recorder.names()
 
     release.set()

@@ -62,20 +62,20 @@ class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin):
     def hooks(self, name: str) -> list[Any]:
         return [arg for hook, arg in self.calls if hook == name]
 
-    async def before_agent_run(self, request: ServerRequest) -> None:
-        self.calls.append(('before_agent_run', request))
+    async def before_handler_run(self, request: ServerRequest) -> None:
+        self.calls.append(('before_handler_run', request))
 
-    async def after_agent_run(self, response: ServerResponse) -> None:
-        self.calls.append(('after_agent_run', response))
+    async def after_handler_run(self, response: ServerResponse) -> None:
+        self.calls.append(('after_handler_run', response))
 
-    async def before_agent_call(self, request: ClientRequest) -> None:
+    async def before_client_request(self, request: ClientRequest) -> None:
         params = dict(request.context.service_parameters or {})
         params['x-trace'] = 'trace-123'
         request.context.service_parameters = params
-        self.calls.append(('before_agent_call', request))
+        self.calls.append(('before_client_request', request))
 
-    async def after_agent_call(self, response: ClientResponse) -> None:
-        self.calls.append(('after_agent_call', response))
+    async def after_client_request(self, response: ClientResponse) -> None:
+        self.calls.append(('after_client_request', response))
 
     async def before_execution(self, request_context: RequestContext) -> None:
         self.calls.append(('before_execution', request_context))
@@ -239,18 +239,18 @@ async def test_streaming_message_runs_hooks_on_both_sides(setup: Setup):
     )
 
     # Client side.
-    (call,) = setup.caller.hooks('before_agent_call')
+    (call,) = setup.caller.hooks('before_client_request')
     assert call.method == 'SendStreamingMessage'
-    client_responses = setup.caller.hooks('after_agent_call')
+    client_responses = setup.caller.hooks('after_client_request')
     assert len(client_responses) == len(events) + 1
     assert client_responses[-1].is_final
 
     # Server side: the header added by the client plugin arrives.
-    (run,) = setup.server.hooks('before_agent_run')
+    (run,) = setup.server.hooks('before_handler_run')
     assert run.method == 'SendStreamingMessage'
     assert incoming_headers(run.context)['x-trace'] == 'trace-123'
     assert run.agent_card.name == 'Plugin Agent'
-    server_responses = setup.server.hooks('after_agent_run')
+    server_responses = setup.server.hooks('after_handler_run')
     assert server_responses[-1].is_final
     assert sum(r.is_stream_event for r in server_responses) == len(events)
 
@@ -273,10 +273,10 @@ async def test_unary_call_runs_hooks_on_both_sides(setup: Setup):
     task = await setup.client.get_task(GetTaskRequest(id=task_id))
 
     assert task.id == task_id
-    assert [r.method for r in setup.caller.hooks('before_agent_call')] == [
+    assert [r.method for r in setup.caller.hooks('before_client_request')] == [
         'GetTask'
     ]
-    (response,) = setup.server.hooks('after_agent_run')
+    (response,) = setup.server.hooks('after_handler_run')
     assert response.method == 'GetTask'
     assert response.payload.id == task_id
     assert response.is_final
@@ -313,9 +313,9 @@ async def test_v03_jsonrpc_requests_run_server_hooks():
 
     assert response.status_code == 200
     assert response.json()['result']['status']['state'] == 'completed'
-    (run,) = recorder.hooks('before_agent_run')
+    (run,) = recorder.hooks('before_handler_run')
     assert run.method == 'SendMessage'
-    assert recorder.hooks('after_agent_run')[-1].is_final
+    assert recorder.hooks('after_handler_run')[-1].is_final
 
 
 _tenant: contextvars.ContextVar[str | None] = contextvars.ContextVar(
@@ -332,7 +332,7 @@ class TenantPlugin(CompletePlugin, ExecutionPlugin):
         headers = request_context.call_context.state.get('headers', {})
         _tenant.set(headers.get('x-tenant'))
 
-    async def before_agent_call(self, request: ClientRequest) -> None:
+    async def before_client_request(self, request: ClientRequest) -> None:
         if tenant := _tenant.get():
             params = dict(request.context.service_parameters or {})
             params['x-tenant'] = tenant
@@ -401,5 +401,5 @@ async def test_two_agent_chain_propagates_state_through_execution():
     await downstream_http.aclose()
 
     assert response.status_code == 200, response.text
-    (run,) = downstream.hooks('before_agent_run')
+    (run,) = downstream.hooks('before_handler_run')
     assert run.context.state['headers']['x-tenant'] == 'acme'

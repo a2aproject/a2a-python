@@ -157,35 +157,37 @@ class SequentialPluginManager(PluginManager):
 
     # --- server ---
 
-    async def before_agent_run(self, request: ServerRequest) -> None:  # noqa: D102
+    async def before_handler_run(self, request: ServerRequest) -> None:  # noqa: D102
         ran: list[ServerPlugin] = []
         for plugin in self._server:
             try:
-                await plugin.before_agent_run(request)
+                await plugin.before_handler_run(request)
             except Exception as e:
                 response = ServerResponse(
                     request.method, None, request.context, error=e
                 )
                 for done in reversed(ran):
                     await _run_safely(
-                        done, 'after_agent_run', done.after_agent_run(response)
+                        done,
+                        'after_handler_run',
+                        done.after_handler_run(response),
                     )
                 raise
             ran.append(plugin)
 
-    async def after_agent_run(self, response: ServerResponse) -> None:  # noqa: D102
+    async def after_handler_run(self, response: ServerResponse) -> None:  # noqa: D102
         for plugin in reversed(self._server):
             await _run_safely(
-                plugin, 'after_agent_run', plugin.after_agent_run(response)
+                plugin, 'after_handler_run', plugin.after_handler_run(response)
             )
 
     # --- client ---
 
-    async def before_agent_call(self, request: ClientRequest) -> None:  # noqa: D102
+    async def before_client_request(self, request: ClientRequest) -> None:  # noqa: D102
         ran: list[ClientPlugin] = []
         for plugin in self._client:
             try:
-                await plugin.before_agent_call(request)
+                await plugin.before_client_request(request)
             except Exception as e:
                 response = ClientResponse(
                     request.method, None, request.context, error=e
@@ -193,16 +195,18 @@ class SequentialPluginManager(PluginManager):
                 for done in reversed(ran):
                     await _run_safely(
                         done,
-                        'after_agent_call',
-                        done.after_agent_call(response),
+                        'after_client_request',
+                        done.after_client_request(response),
                     )
                 raise
             ran.append(plugin)
 
-    async def after_agent_call(self, response: ClientResponse) -> None:  # noqa: D102
+    async def after_client_request(self, response: ClientResponse) -> None:  # noqa: D102
         for plugin in reversed(self._client):
             await _run_safely(
-                plugin, 'after_agent_call', plugin.after_agent_call(response)
+                plugin,
+                'after_client_request',
+                plugin.after_client_request(response),
             )
 
     # --- execution ---

@@ -37,23 +37,23 @@ class Plugin:
 class ServerPlugin(Plugin):
     """Hooks around each request handled by `DefaultRequestHandlerV2`."""
 
-    async def before_agent_run(self, request: ServerRequest) -> None:
+    async def before_handler_run(self, request: ServerRequest) -> None:
         """Called before the handler processes a request.
 
         Raise to reject the request; the exception is returned to the caller.
         """
 
-    async def after_agent_run(self, response: ServerResponse) -> None:
+    async def after_handler_run(self, response: ServerResponse) -> None:
         """Called with the handler result, per stream event, and at the end."""
 
 
 class ClientPlugin(Plugin):
-    """Hooks around each call made by an A2A `Client`."""
+    """Hooks around each request made by an A2A `Client`."""
 
-    async def before_agent_call(self, request: ClientRequest) -> None:
-        """Called before the call is sent. Raise to cancel it."""
+    async def before_client_request(self, request: ClientRequest) -> None:
+        """Called before the request is sent. Raise to cancel it."""
 
-    async def after_agent_call(self, response: ClientResponse) -> None:
+    async def after_client_request(self, response: ClientResponse) -> None:
         """Called with the result, per stream event, and at the end."""
 
 

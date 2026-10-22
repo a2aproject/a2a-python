@@ -33,10 +33,10 @@ _F = TypeVar('_F', bound='Callable[..., Any]')
 
 
 def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
-    """Runs `before_agent_run` / `after_agent_run` around a handler method.
+    """Runs `before_handler_run` / `after_handler_run` around a handler method.
 
     Apply as the outermost decorator, so that validation errors raised by
-    inner decorators also reach `after_agent_run`. When the handler's manager
+    inner decorators also reach `after_handler_run`. When the handler's manager
     has no server hooks the method runs unchanged.
 
     Args:
@@ -63,7 +63,7 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                             yield event
                     return
 
-                await plugins.before_agent_run(
+                await plugins.before_handler_run(
                     ServerRequest(method, params, context, self.agent_card)
                 )
                 error: BaseException | None = None
@@ -72,7 +72,7 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                         func(self, params, context, *args, **kwargs)
                     ) as events:
                         async for event in events:
-                            await plugins.after_agent_run(
+                            await plugins.after_handler_run(
                                 ServerResponse(
                                     method,
                                     event,
@@ -87,7 +87,7 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
                     raise
                 finally:
                     # Also runs when the client disconnects (aclose()).
-                    await plugins.after_agent_run(
+                    await plugins.after_handler_run(
                         ServerResponse(method, None, context, error=error)
                     )
 
@@ -105,17 +105,17 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
             if not plugins.has_server_hooks:
                 return await func(self, params, context, *args, **kwargs)
 
-            await plugins.before_agent_run(
+            await plugins.before_handler_run(
                 ServerRequest(method, params, context, self.agent_card)
             )
             try:
                 result = await func(self, params, context, *args, **kwargs)
             except Exception as e:
-                await plugins.after_agent_run(
+                await plugins.after_handler_run(
                     ServerResponse(method, None, context, error=e)
                 )
                 raise
-            await plugins.after_agent_run(
+            await plugins.after_handler_run(
                 ServerResponse(method, result, context)
             )
             return result

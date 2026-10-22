@@ -23,7 +23,7 @@ if TYPE_CHECKING:
 
 @dataclass
 class ServerRequest:
-    """An incoming request, passed to `ServerPlugin.before_agent_run`.
+    """An incoming request, passed to `ServerPlugin.before_handler_run`.
 
     Attributes:
         method: A2A RPC name, e.g. ``'SendMessage'`` or ``'GetTask'``.
@@ -41,7 +41,7 @@ class ServerRequest:
 
 @dataclass
 class ServerResponse:
-    """A handler result, passed to `ServerPlugin.after_agent_run`.
+    """A handler result, passed to `ServerPlugin.after_handler_run`.
 
     For a unary call the hook runs once with ``is_final=True``. For a stream
     it runs once per event with ``is_stream_event=True, is_final=False`` and
@@ -52,7 +52,7 @@ class ServerResponse:
         method: A2A RPC name.
         payload: The handler result or stream event, ``None`` on error or
             stream end.
-        context: The same call context passed to `before_agent_run`.
+        context: The same call context passed to `before_handler_run`.
         error: The exception raised by the handler, if any.
         is_stream_event: Whether ``payload`` is one event of a stream.
         is_final: Whether this is the last call for the request.
@@ -68,7 +68,7 @@ class ServerResponse:
 
 @dataclass
 class ClientRequest:
-    """An outgoing call, passed to `ClientPlugin.before_agent_call`.
+    """An outgoing call, passed to `ClientPlugin.before_client_request`.
 
     Attributes:
         method: A2A RPC name, matching the server side.
@@ -86,7 +86,7 @@ class ClientRequest:
 
 @dataclass
 class ClientResponse:
-    """A call result, passed to `ClientPlugin.after_agent_call`.
+    """A call result, passed to `ClientPlugin.after_client_request`.
 
     Follows the same ``is_stream_event`` / ``is_final`` rules as
     `ServerResponse`.
@@ -94,7 +94,7 @@ class ClientResponse:
     Attributes:
         method: A2A RPC name.
         payload: The response or stream event, ``None`` on error or stream end.
-        context: The same call context passed to `before_agent_call`.
+        context: The same call context passed to `before_client_request`.
         error: The exception raised by the call, if any.
         is_stream_event: Whether ``payload`` is one event of a stream.
         is_final: Whether this is the last call for the request.

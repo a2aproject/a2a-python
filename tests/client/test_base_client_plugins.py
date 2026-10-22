@@ -44,14 +44,14 @@ class Recorder(plugins.ClientPlugin):
     def hooks(self, name: str) -> list[Any]:
         return [arg for hook, arg in self.calls if hook == name]
 
-    async def before_agent_call(self, request: ClientRequest) -> None:
+    async def before_client_request(self, request: ClientRequest) -> None:
         params = dict(request.context.service_parameters or {})
         params['x-trace'] = 'abc'
         request.context.service_parameters = params
-        self.calls.append(('before_agent_call', request))
+        self.calls.append(('before_client_request', request))
 
-    async def after_agent_call(self, response: ClientResponse) -> None:
-        self.calls.append(('after_agent_call', response))
+    async def after_client_request(self, response: ClientResponse) -> None:
+        self.calls.append(('after_client_request', response))
 
 
 def card(streaming: bool = True) -> AgentCard:
@@ -114,10 +114,10 @@ async def test_unary_call_runs_hooks():
     )
 
     assert result.id == 't-1'
-    (request,) = recorder.hooks('before_agent_call')
+    (request,) = recorder.hooks('before_client_request')
     assert request.method == 'GetTask'
     assert request.agent_card.name == 'Remote'
-    (response,) = recorder.hooks('after_agent_call')
+    (response,) = recorder.hooks('after_client_request')
     assert response.payload is result
     assert response.is_final
     assert response.context is request.context
@@ -142,8 +142,8 @@ async def test_non_streaming_send_message_is_a_unary_call():
     ]
 
     assert len(events) == 1
-    assert recorder.hooks('before_agent_call')[0].method == 'SendMessage'
-    (response,) = recorder.hooks('after_agent_call')
+    assert recorder.hooks('before_client_request')[0].method == 'SendMessage'
+    (response,) = recorder.hooks('after_client_request')
     assert response.is_final
 
 
@@ -168,9 +168,9 @@ async def test_streaming_reports_events_and_final_call():
     ]
 
     assert events == streamed
-    (request,) = recorder.hooks('before_agent_call')
+    (request,) = recorder.hooks('before_client_request')
     assert request.method == 'SendStreamingMessage'
-    responses = recorder.hooks('after_agent_call')
+    responses = recorder.hooks('after_client_request')
     assert [r.payload for r in responses[:-1]] == streamed
     assert all(r.is_stream_event and not r.is_final for r in responses[:-1])
     assert responses[-1].is_final
@@ -192,11 +192,11 @@ async def test_stream_stopped_early_gets_final_call():
     await anext(events)
     await events.aclose()
 
-    assert recorder.hooks('after_agent_call')[-1].is_final
+    assert recorder.hooks('after_client_request')[-1].is_final
 
 
 @pytest.mark.asyncio
-async def test_transport_errors_reach_after_agent_call():
+async def test_transport_errors_reach_after_client_request():
     recorder = Recorder()
     transport = AsyncMock(spec=ClientTransport)
     transport.get_task.side_effect = ConnectionError('down')
@@ -204,7 +204,7 @@ async def test_transport_errors_reach_after_agent_call():
     with pytest.raises(ConnectionError):
         await client(recorder, transport).get_task(GetTaskRequest(id='t-1'))
 
-    (response,) = recorder.hooks('after_agent_call')
+    (response,) = recorder.hooks('after_client_request')
     assert isinstance(response.error, ConnectionError)
 
     async def failing(request, *, context=None):
@@ -217,7 +217,7 @@ async def test_transport_errors_reach_after_agent_call():
         async for _ in client(recorder, transport).send_message(send_request()):
             pass
     assert isinstance(
-        recorder.hooks('after_agent_call')[-1].error, ConnectionError
+        recorder.hooks('after_client_request')[-1].error, ConnectionError
     )
 
 
@@ -226,10 +226,10 @@ async def test_plugins_wrap_interceptors_including_early_return():
     order: list[str] = []
 
     class Order(plugins.ClientPlugin):
-        async def before_agent_call(self, request):
+        async def before_client_request(self, request):
             order.append('plugin.before')
 
-        async def after_agent_call(self, response):
+        async def after_client_request(self, response):
             order.append('plugin.after')
 
     class Cached(ClientCallInterceptor):
@@ -262,9 +262,9 @@ async def test_plugins_wrap_interceptors_including_early_return():
 
 
 @pytest.mark.asyncio
-async def test_before_agent_call_can_cancel_the_call():
+async def test_before_client_request_can_cancel_the_call():
     class Deny(plugins.ClientPlugin):
-        async def before_agent_call(self, request):
+        async def before_client_request(self, request):
             raise PermissionError('no')
 
     transport = AsyncMock(spec=ClientTransport)
@@ -295,7 +295,7 @@ async def test_existing_context_is_passed_through():
         GetTaskRequest(id='t-1'), context=context
     )
 
-    assert recorder.hooks('before_agent_call')[0].context is context
+    assert recorder.hooks('before_client_request')[0].context is context
 
 
 @pytest.mark.asyncio
@@ -361,8 +361,10 @@ async def test_unary_methods_report_rpc_names(call, rpc_name):
 
     await call(client(recorder, AsyncMock(spec=ClientTransport)))
 
-    assert [r.method for r in recorder.hooks('before_agent_call')] == [rpc_name]
-    assert recorder.hooks('after_agent_call')[-1].method == rpc_name
+    assert [r.method for r in recorder.hooks('before_client_request')] == [
+        rpc_name
+    ]
+    assert recorder.hooks('after_client_request')[-1].method == rpc_name
 
 
 @pytest.mark.asyncio
@@ -380,10 +382,12 @@ async def test_subscribe_reports_rpc_name():
     ):
         pass
 
-    assert recorder.hooks('before_agent_call')[0].method == 'SubscribeToTask'
+    assert (
+        recorder.hooks('before_client_request')[0].method == 'SubscribeToTask'
+    )
     assert all(
         r.method == 'SubscribeToTask'
-        for r in recorder.hooks('after_agent_call')
+        for r in recorder.hooks('after_client_request')
     )
 
 
@@ -400,4 +404,4 @@ async def test_rpc_method_defaults_to_method():
         transport_call=AsyncMock(return_value=Task(id='t-1')),
     )
 
-    assert recorder.hooks('before_agent_call')[0].method == 'custom_call'
+    assert recorder.hooks('before_client_request')[0].method == 'custom_call'

@@ -38,17 +38,17 @@ class Recorder(CompletePlugin, ExecutionPlugin, TaskObserverPlugin, PushPlugin):
         if hook in self.fail:
             raise ValueError(f'{self.name}.{hook} failed')
 
-    async def before_agent_run(self, request):
-        self._record('before_agent_run')
+    async def before_handler_run(self, request):
+        self._record('before_handler_run')
 
-    async def after_agent_run(self, response):
-        self._record('after_agent_run')
+    async def after_handler_run(self, response):
+        self._record('after_handler_run')
 
-    async def before_agent_call(self, request):
-        self._record('before_agent_call')
+    async def before_client_request(self, request):
+        self._record('before_client_request')
 
-    async def after_agent_call(self, response):
-        self._record('after_agent_call')
+    async def after_client_request(self, response):
+        self._record('after_client_request')
 
     async def before_execution(self, request_context):
         self._record('before_execution')
@@ -93,26 +93,26 @@ async def test_before_in_order_after_in_reverse():
     log: list[str] = []
     m = plugins.sequential(Recorder('a', log), Recorder('b', log))
 
-    await m.before_agent_run(server_request())
-    await m.after_agent_run(
+    await m.before_handler_run(server_request())
+    await m.after_handler_run(
         ServerResponse('GetTask', None, ServerCallContext())
     )
-    await m.before_agent_call(client_request())
-    await m.after_agent_call(
+    await m.before_client_request(client_request())
+    await m.after_client_request(
         ClientResponse('GetTask', None, ClientCallContext())
     )
     await m.before_execution(MagicMock())
     await m.after_execution(MagicMock(), None)
 
     assert log == [
-        'a.before_agent_run',
-        'b.before_agent_run',
-        'b.after_agent_run',
-        'a.after_agent_run',
-        'a.before_agent_call',
-        'b.before_agent_call',
-        'b.after_agent_call',
-        'a.after_agent_call',
+        'a.before_handler_run',
+        'b.before_handler_run',
+        'b.after_handler_run',
+        'a.after_handler_run',
+        'a.before_client_request',
+        'b.before_client_request',
+        'b.after_client_request',
+        'a.after_client_request',
         'a.before_execution',
         'b.before_execution',
         'b.after_execution',
@@ -154,14 +154,14 @@ async def test_observers_run_in_order():
     ('before', 'after', 'call'),
     [
         (
-            'before_agent_run',
-            'after_agent_run',
-            lambda m: m.before_agent_run(server_request()),
+            'before_handler_run',
+            'after_handler_run',
+            lambda m: m.before_handler_run(server_request()),
         ),
         (
-            'before_agent_call',
-            'after_agent_call',
-            lambda m: m.before_agent_call(client_request()),
+            'before_client_request',
+            'after_client_request',
+            lambda m: m.before_client_request(client_request()),
         ),
         (
             'before_execution',
@@ -191,16 +191,16 @@ async def test_unwind_passes_error_to_after_hook():
     seen: list[BaseException | None] = []
 
     class Capture(ServerPlugin):
-        async def after_agent_run(self, response):
+        async def after_handler_run(self, response):
             seen.append(response.error)
 
     class Reject(ServerPlugin):
-        async def before_agent_run(self, request):
+        async def before_handler_run(self, request):
             raise PermissionError('denied')
 
     m = plugins.sequential(Capture(), Reject())
     with pytest.raises(PermissionError):
-        await m.before_agent_run(server_request())
+        await m.before_handler_run(server_request())
 
     assert len(seen) == 1
     assert isinstance(seen[0], PermissionError)
@@ -209,8 +209,8 @@ async def test_unwind_passes_error_to_after_hook():
 @pytest.mark.parametrize(
     'hook',
     [
-        'after_agent_run',
-        'after_agent_call',
+        'after_handler_run',
+        'after_client_request',
         'after_execution',
         'on_execution_event',
         'on_task_event',
@@ -222,10 +222,10 @@ async def test_after_and_observer_errors_are_swallowed(hook, caplog):
     log: list[str] = []
     m = plugins.sequential(Recorder('a', log, fail={hook}), Recorder('b', log))
     calls = {
-        'after_agent_run': lambda: m.after_agent_run(
+        'after_handler_run': lambda: m.after_handler_run(
             ServerResponse('GetTask', None, ServerCallContext())
         ),
-        'after_agent_call': lambda: m.after_agent_call(
+        'after_client_request': lambda: m.after_client_request(
             ClientResponse('GetTask', None, ClientCallContext())
         ),
         'after_execution': lambda: m.after_execution(MagicMock(), None),
@@ -293,18 +293,18 @@ async def test_nested_managers():
     inner = plugins.sequential(Recorder('b', log), Recorder('c', log))
     outer = plugins.sequential(Recorder('a', log), inner)
 
-    await outer.before_agent_run(server_request())
-    await outer.after_agent_run(
+    await outer.before_handler_run(server_request())
+    await outer.after_handler_run(
         ServerResponse('GetTask', None, ServerCallContext())
     )
 
     assert log == [
-        'a.before_agent_run',
-        'b.before_agent_run',
-        'c.before_agent_run',
-        'c.after_agent_run',
-        'b.after_agent_run',
-        'a.after_agent_run',
+        'a.before_handler_run',
+        'b.before_handler_run',
+        'c.before_handler_run',
+        'c.after_handler_run',
+        'b.after_handler_run',
+        'a.after_handler_run',
     ]
 
 
@@ -322,9 +322,9 @@ def test_rejects_non_plugins():
 @pytest.mark.asyncio
 async def test_base_hooks_are_no_ops():
     p = CompletePlugin()
-    assert await p.before_agent_run(server_request()) is None
+    assert await p.before_handler_run(server_request()) is None
     assert (
-        await p.after_agent_call(
+        await p.after_client_request(
             ClientResponse('GetTask', None, ClientCallContext())
         )
         is None
