@@ -27,6 +27,14 @@ class A2AError(Exception):
         self.data = data
         super().__init__(self.message)
 
+    def __repr__(self) -> str:
+        """Return a developer-friendly representation exposing message and data."""
+        return (
+            f'{self.__class__.__name__}('
+            f'message={self.message!r}, '
+            f'data={self.data!r})'
+        )
+
 
 class TaskNotFoundError(A2AError):
     """Exception raised when a task is not found."""

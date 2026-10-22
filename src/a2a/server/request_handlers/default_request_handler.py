@@ -478,6 +478,8 @@ class LegacyRequestHandler(RequestHandler):
         Starts the agent execution and yields events as they are produced
         by the agent.
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -490,11 +492,13 @@ class LegacyRequestHandler(RequestHandler):
 
         try:
             async for event in result_aggregator.consume_and_emit(consumer):
+                response = event
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
+                    response = apply_history_length(event, params.configuration)
 
                 await self._send_push_notification_if_needed(task_id, event)
-                yield event
+                yield response
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
             bg_task = asyncio.create_task(
