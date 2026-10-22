@@ -62,6 +62,9 @@ class ActiveTaskRegistry:
             if existing is not None and existing.is_finished:
                 # Its removal runs asynchronously, so replace it instead.
                 existing = None
+            if existing is not None:
+                # A request is about to use it, so it must not be released.
+                existing.cancel_idle_release()
             if existing is None:
                 task_manager = TaskManager(
                     task_id=task_id,
@@ -105,6 +108,7 @@ class ActiveTaskRegistry:
                 if isinstance(existing_task, StoredTask):
                     existing_task = existing_task.task
                 if not existing_task:
+                    existing.schedule_idle_release()
                     raise TaskNotFoundError
             return existing
 

@@ -3088,6 +3088,7 @@ async def test_interrupted_task_released_after_timeout(
 
 @pytest.mark.asyncio
 async def test_follow_up_after_release_resumes_from_store() -> None:
+    """A follow-up to a released task recreates its ActiveTask from the store."""
     handler = _interrupting_handler(_InterruptingAgent(), 0.1)
     task = await _send(handler, 'book a flight')
     assert await _wait_for_release(handler, task.id)
@@ -3104,6 +3105,7 @@ async def test_follow_up_after_release_resumes_from_store() -> None:
 
 @pytest.mark.asyncio
 async def test_follow_up_resets_interrupted_task_timeout() -> None:
+    """A follow-up that interrupts again restarts the timer."""
     handler = _interrupting_handler(
         _InterruptingAgent(complete_on_follow_up=False), 0.5
     )
@@ -3120,6 +3122,7 @@ async def test_follow_up_resets_interrupted_task_timeout() -> None:
 
 @pytest.mark.asyncio
 async def test_subscriber_keeps_interrupted_task_active() -> None:
+    """The timer only counts while no subscriber is attached."""
     handler = _interrupting_handler(_InterruptingAgent(), 0.1)
     task = await _send(handler, 'book a flight')
 
@@ -3158,4 +3161,63 @@ async def test_follow_up_replaces_finished_registered_active_task() -> None:
     result = await _send(handler, 'Friday', task)
 
     assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.parametrize('timeout', [0, -1])
+def test_interrupted_task_timeout_must_be_positive(timeout: float) -> None:
+    """A timeout of 0 or less is rejected."""
+    with pytest.raises(ValueError, match='greater than 0'):
+        _interrupting_handler(_InterruptingAgent(), timeout)
+
+
+@pytest.mark.asyncio
+async def test_near_zero_timeout_releases_and_resumes() -> None:
+    """A tiny timeout releases right after the request; a follow-up resumes."""
+    handler = _interrupting_handler(_InterruptingAgent(), 1e-9)
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    assert await _wait_for_release(handler, task.id)
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_cancels_idle_release() -> None:
+    """Resolving a parked task for a request stops its timer."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.2)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    registry = handler._active_task_registry
+
+    active_task = await registry.get_or_create(
+        task.id, call_context=create_server_call_context()
+    )
+
+    assert active_task._idle_release_task is None
+    assert not await _wait_for_release(handler, task.id, timeout=0.5)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_idle_release_check_failure_keeps_task(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing store read is logged and leaves the task in place."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with patch.object(
+        active_task._task_manager,
+        'get_task',
+        AsyncMock(side_effect=RuntimeError('store down')),
+    ):
+        assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    assert 'Idle release check failed' in caplog.text
     await handler.aclose()

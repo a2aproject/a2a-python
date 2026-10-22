@@ -99,7 +99,8 @@ class DefaultRequestHandlerV2(RequestHandler):
 
     ``interrupted_task_timeout`` releases the `ActiveTask` of a task idle in
     ``input-required`` or ``auth-required`` after that many seconds; a
-    follow-up recreates it from the store. ``None`` (default) never releases.
+    follow-up recreates it from the store. ``None`` (default) never releases;
+    any other value must be greater than 0.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -124,6 +125,11 @@ class DefaultRequestHandlerV2(RequestHandler):
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
     ) -> None:
+        if (
+            interrupted_task_timeout is not None
+            and interrupted_task_timeout <= 0
+        ):
+            raise ValueError('interrupted_task_timeout must be greater than 0.')
         if queue_manager is not None:
             message = (
                 'A queue_manager was passed to DefaultRequestHandlerV2, but it '

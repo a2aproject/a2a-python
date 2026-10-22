@@ -246,7 +246,7 @@ class EventConsumer:
                 'Consumer[%s]: Request completed', self.active_task._task_id
             )
             self.active_task._request_lock.release()
-            self.active_task._schedule_idle_release()
+            self.active_task.schedule_idle_release()
         elif isinstance(event, _RequestStarted):
             logger.debug(
                 'Consumer[%s]: Request started', self.active_task._task_id
@@ -729,7 +729,7 @@ class ActiveTask:
             await EventConsumer(self).run()
         finally:
             self._is_finished.set()
-            self._cancel_idle_release()
+            self.cancel_idle_release()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
 
@@ -750,7 +750,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(
+    async def subscribe(  # noqa: PLR0915
         self,
         *,
         request: RequestContext | None = None,
@@ -766,13 +766,13 @@ class ActiveTask:
         """
         logger.debug('Subscribe[%s]: New subscriber', self._task_id)
 
+        self.cancel_idle_release()
         async with self._lock:
             if self._is_finished.is_set():
                 raise UnsupportedOperationError(
                     f'Task {self._task_id} is already completed.'
                 )
             self._reference_count += 1
-            self._cancel_idle_release()
             logger.debug(
                 'Subscribe[%s]: Subscribers count: %d',
                 self._task_id,
@@ -857,7 +857,7 @@ class ActiveTask:
                 self._reference_count -= 1
             # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
-            self._schedule_idle_release()
+            self.schedule_idle_release()
 
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
@@ -983,7 +983,7 @@ class ActiveTask:
         # tasks, because their teardown re-acquires it.
         async with self._lock:
             self._is_finished.set()
-            self._cancel_idle_release()
+            self.cancel_idle_release()
             background_tasks = [
                 task
                 for task in (self._producer_task, self._consumer_task)
@@ -1000,26 +1000,35 @@ class ActiveTask:
                 if isinstance(result, Exception):
                     logger.error('Error during aclose', exc_info=result)
 
-    def _schedule_idle_release(self) -> None:
+    def schedule_idle_release(self) -> None:
         """(Re)starts the timer that releases a parked interrupted task."""
         if self._interrupted_task_timeout is None or self._is_finished.is_set():
             return
-        self._cancel_idle_release()
+        self.cancel_idle_release()
         self._idle_release_task = asyncio.create_task(
             self._release_when_idle(self._interrupted_task_timeout),
             name=f'idle-release:{self._task_id}',
         )
 
-    def _cancel_idle_release(self) -> None:
+    def cancel_idle_release(self) -> None:
+        """Stops the timer that releases a parked interrupted task, if any."""
         if self._idle_release_task is not None:
             self._idle_release_task.cancel()
             self._idle_release_task = None
 
     async def _release_when_idle(self, timeout: float) -> None:
         """Finishes the task if it is still parked after `timeout` seconds."""
-        await asyncio.sleep(timeout)
-        # Read before `_lock` so the checks and release below cannot suspend.
-        task = await self._task_manager.get_task()
+        try:
+            await asyncio.sleep(timeout)
+            # Read before `_lock` so the checks and release below cannot suspend.
+            task = await self._task_manager.get_task()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                'ActiveTask[%s]: Idle release check failed', self._task_id
+            )
+            return
         async with self._lock:
             if (
                 task is None
