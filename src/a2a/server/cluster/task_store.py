@@ -52,7 +52,9 @@ class VersionedTaskStore(ABC):
                 write. A write moving `task` to CANCELED overwrites a
                 non-terminal stored task without a version check, and raises
                 `ConcurrentTaskModificationError` if the stored task is already
-                terminal or absent.
+                terminal or absent. Any other write on top of a terminal
+                stored task MUST raise `ConcurrentTaskModificationError`, even
+                when `prev_version` matches: a terminal state is final.
             context: The server call context (used to resolve the owner).
 
         Returns:

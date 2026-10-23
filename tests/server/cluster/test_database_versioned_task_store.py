@@ -261,6 +261,44 @@ async def test_stale_update_raises_conflict(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'next_state',
+    [TaskState.TASK_STATE_WORKING, TaskState.TASK_STATE_COMPLETED],
+    ids=['non_terminal', 'same_terminal'],
+)
+async def test_write_on_top_of_terminal_state_raises_conflict(
+    versioned_store: VersionedDatabaseTaskStore, next_state: TaskState
+) -> None:
+    v1 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_WORKING),
+        event=None,
+        prev=None,
+        prev_version=TaskVersion.MISSING,
+        context=TEST_CONTEXT,
+    )
+    v2 = await versioned_store.save(
+        create_task(state=TaskState.TASK_STATE_COMPLETED),
+        event=None,
+        prev=None,
+        prev_version=v1,
+        context=TEST_CONTEXT,
+    )
+    # The writer holds the current version, but the task is already final.
+    with pytest.raises(ConcurrentTaskModificationError):
+        await versioned_store.save(
+            create_task(state=next_state),
+            event=None,
+            prev=None,
+            prev_version=v2,
+            context=TEST_CONTEXT,
+        )
+    stored = await versioned_store.get('task-abc', TEST_CONTEXT)
+    assert stored is not None
+    assert stored.task.status.state == TaskState.TASK_STATE_COMPLETED
+    assert stored.version == v2
+
+
+@pytest.mark.asyncio
 async def test_concurrent_first_insert_one_wins(
     versioned_store: VersionedDatabaseTaskStore,
 ) -> None:

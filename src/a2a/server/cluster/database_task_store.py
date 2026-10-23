@@ -232,6 +232,15 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
                 )
                 if result.rowcount == 0:  # ty:ignore[unresolved-attribute]
                     raise ConcurrentTaskModificationError(task.id)
+                # A terminal state is final. A writer holding the latest
+                # version can still be stale: it reloaded after losing a race
+                # to another writer while its executor kept producing events.
+                current = await self._current_task(session, task.id, owner)
+                if (
+                    current is not None
+                    and current.status.state in _TERMINAL_STATES
+                ):
+                    raise ConcurrentTaskModificationError(task.id)
 
             await session.merge(model)
 

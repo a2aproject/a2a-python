@@ -61,9 +61,15 @@ class VersionedInMemoryTaskStore(VersionedTaskStore):
     """
 
     def __init__(
-        self, owner_resolver: OwnerResolver = resolve_user_scope
+        self,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+        *,
+        enforce_terminal_state: bool = True,
     ) -> None:
         self._owner_resolver = owner_resolver
+        # False models a store written against the contract before terminal
+        # states were required to be final.
+        self._enforce_terminal_state = enforce_terminal_state
         self._store = InMemoryTaskStore()
         # Maps owner to a mapping of task_id to its current integer version.
         self._versions: dict[str, dict[str, int]] = {}
@@ -87,14 +93,15 @@ class VersionedInMemoryTaskStore(VersionedTaskStore):
         match the currently stored version. `TaskVersion.MISSING` skips the
         check; a write moving `task` to CANCELED overwrites a non-terminal
         stored task without a version check, and raises when it is terminal
-        or absent.
+        or absent. Any other write on top of a terminal task raises too.
+        Tasks are copied in and out, like a database row.
         """
         del event, prev  # in-memory store keeps no event log
         owner = self._owner_resolver(context)
         with self._lock:
             stored = self._current_version_locked(owner, task_id=task.id)
+            current = await self._store.get(task.id, context)
             if task.status.state == TaskState.TASK_STATE_CANCELED:
-                current = await self._store.get(task.id, context)
                 if current is None or current.status.state in _TERMINAL_STATES:
                     raise ConcurrentTaskModificationError(task.id)
             elif not prev_version.is_missing:
@@ -102,8 +109,16 @@ class VersionedInMemoryTaskStore(VersionedTaskStore):
                     raise ConcurrentTaskModificationError(task.id)
                 if TaskVersion(stored) != prev_version:
                     raise ConcurrentTaskModificationError(task.id)
+                if (
+                    self._enforce_terminal_state
+                    and current is not None
+                    and current.status.state in _TERMINAL_STATES
+                ):
+                    raise ConcurrentTaskModificationError(task.id)
             new_version = stored + 1
-            await self._store.save(task, context)
+            copy = Task()
+            copy.CopyFrom(task)
+            await self._store.save(copy, context)
             self._versions.setdefault(owner, {})[task.id] = new_version
             return TaskVersion(new_version)
 
@@ -116,8 +131,10 @@ class VersionedInMemoryTaskStore(VersionedTaskStore):
             task = await self._store.get(task_id, context)
             if task is None:
                 return None
+            copy = Task()
+            copy.CopyFrom(task)
             stored = self._current_version_locked(owner, task_id)
-            return StoredTask(task, TaskVersion(stored))
+            return StoredTask(copy, TaskVersion(stored))
 
     async def list(
         self,
