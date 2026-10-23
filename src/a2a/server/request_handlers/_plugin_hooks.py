@@ -40,7 +40,7 @@ def server_plugin_hooks(method: str) -> Callable[[_F], _F]:
     has no server hooks the method runs unchanged.
 
     Args:
-        method: The A2A RPC name passed to the hooks, e.g. ``'GetTask'``.
+        method: The method name passed to the hooks, e.g. ``'get_task'``.
     """
 
     def decorator(func: _F) -> _F:

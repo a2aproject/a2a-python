@@ -221,7 +221,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         """
         await self._active_task_registry.aclose()
 
-    @server_plugin_hooks('GetTask')
+    @server_plugin_hooks('get_task')
     @validate_request_params
     async def on_get_task(  # noqa: D102
         self,
@@ -237,7 +237,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return apply_history_length(stored.task, params)
 
-    @server_plugin_hooks('ListTasks')
+    @server_plugin_hooks('list_tasks')
     @validate_request_params
     async def on_list_tasks(  # noqa: D102
         self,
@@ -259,7 +259,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return page
 
-    @server_plugin_hooks('CancelTask')
+    @server_plugin_hooks('cancel_task')
     @validate_request_params
     async def on_cancel_task(  # noqa: D102
         self,
@@ -437,7 +437,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return active_task, request_context
 
-    @server_plugin_hooks('SendMessage')
+    @server_plugin_hooks('send_message')
     @validate_request_params
     async def on_message_send(  # noqa: D102
         self,
@@ -503,7 +503,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         )
         return result
 
-    @server_plugin_hooks('SendStreamingMessage')
+    @server_plugin_hooks('send_message_streaming')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -536,7 +536,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             else:
                 yield event
 
-    @server_plugin_hooks('CreateTaskPushNotificationConfig')
+    @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -567,7 +567,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         # Custom stores written before set_info returned the stored config.
         return normalize_push_notification_config(task_id, params)
 
-    @server_plugin_hooks('GetTaskPushNotificationConfig')
+    @server_plugin_hooks('get_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -597,7 +597,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         raise TaskNotFoundError
 
-    @server_plugin_hooks('SubscribeToTask')
+    @server_plugin_hooks('subscribe')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -672,7 +672,7 @@ class DefaultRequestHandlerV2(RequestHandler):
                 ):
                     return
 
-    @server_plugin_hooks('ListTaskPushNotificationConfigs')
+    @server_plugin_hooks('list_task_push_notification_configs')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -699,7 +699,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             configs=push_notification_config_list
         )
 
-    @server_plugin_hooks('DeleteTaskPushNotificationConfig')
+    @server_plugin_hooks('delete_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -721,7 +721,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         await self._push_config_store.delete_info(task_id, context, config_id)
 
-    @server_plugin_hooks('GetExtendedAgentCard')
+    @server_plugin_hooks('get_extended_agent_card')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.extended_agent_card,

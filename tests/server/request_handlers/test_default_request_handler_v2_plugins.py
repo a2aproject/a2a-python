@@ -229,13 +229,13 @@ async def test_send_message_runs_all_server_hooks():
     assert result.status.state == TaskState.TASK_STATE_COMPLETED
 
     (request,) = recorder.hooks('before_handler_run')
-    assert request.method == 'SendMessage'
+    assert request.method == 'send_message'
     assert request.context is context
     assert request.agent_card is CARD
     assert request.payload.message.message_id == 'm-1'
 
     (response,) = recorder.hooks('after_handler_run')
-    assert response.method == 'SendMessage'
+    assert response.method == 'send_message'
     assert response.payload is result
     assert response.error is None
     assert response.is_final
@@ -293,7 +293,7 @@ async def test_streaming_reports_each_event_and_a_final_call():
     assert [r.payload for r in responses[:-1]] == streamed
     assert all(r.is_stream_event and not r.is_final for r in responses[:-1])
     final = responses[-1]
-    assert final.method == 'SendStreamingMessage'
+    assert final.method == 'send_message_streaming'
     assert final.is_final
     assert not final.is_stream_event
     assert final.payload is None
@@ -325,7 +325,7 @@ async def test_handler_error_reaches_after_handler_run():
         )
 
     (response,) = recorder.hooks('after_handler_run')
-    assert response.method == 'GetTask'
+    assert response.method == 'get_task'
     assert isinstance(response.error, TaskNotFoundError)
     assert response.is_final
 

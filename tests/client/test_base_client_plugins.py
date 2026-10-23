@@ -115,7 +115,7 @@ async def test_unary_call_runs_hooks():
 
     assert result.id == 't-1'
     (request,) = recorder.hooks('before_client_request')
-    assert request.method == 'GetTask'
+    assert request.method == 'get_task'
     assert request.agent_card.name == 'Remote'
     (response,) = recorder.hooks('after_client_request')
     assert response.payload is result
@@ -142,7 +142,7 @@ async def test_non_streaming_send_message_is_a_unary_call():
     ]
 
     assert len(events) == 1
-    assert recorder.hooks('before_client_request')[0].method == 'SendMessage'
+    assert recorder.hooks('before_client_request')[0].method == 'send_message'
     (response,) = recorder.hooks('after_client_request')
     assert response.is_final
 
@@ -169,7 +169,7 @@ async def test_streaming_reports_events_and_final_call():
 
     assert events == streamed
     (request,) = recorder.hooks('before_client_request')
-    assert request.method == 'SendStreamingMessage'
+    assert request.method == 'send_message_streaming'
     responses = recorder.hooks('after_client_request')
     assert [r.payload for r in responses[:-1]] == streamed
     assert all(r.is_stream_event and not r.is_final for r in responses[:-1])
@@ -321,54 +321,54 @@ def test_factory_clients_use_the_global_manager():
 
 
 @pytest.mark.parametrize(
-    ('call', 'rpc_name'),
+    ('call', 'method'),
     [
-        (lambda c: c.list_tasks(ListTasksRequest()), 'ListTasks'),
-        (lambda c: c.cancel_task(CancelTaskRequest(id='t-1')), 'CancelTask'),
+        (lambda c: c.list_tasks(ListTasksRequest()), 'list_tasks'),
+        (lambda c: c.cancel_task(CancelTaskRequest(id='t-1')), 'cancel_task'),
         (
             lambda c: c.create_task_push_notification_config(
                 TaskPushNotificationConfig(task_id='t-1', url='http://hook')
             ),
-            'CreateTaskPushNotificationConfig',
+            'create_task_push_notification_config',
         ),
         (
             lambda c: c.get_task_push_notification_config(
                 GetTaskPushNotificationConfigRequest(task_id='t-1', id='c-1')
             ),
-            'GetTaskPushNotificationConfig',
+            'get_task_push_notification_config',
         ),
         (
             lambda c: c.list_task_push_notification_configs(
                 ListTaskPushNotificationConfigsRequest(task_id='t-1')
             ),
-            'ListTaskPushNotificationConfigs',
+            'list_task_push_notification_configs',
         ),
         (
             lambda c: c.delete_task_push_notification_config(
                 DeleteTaskPushNotificationConfigRequest(task_id='t-1', id='c-1')
             ),
-            'DeleteTaskPushNotificationConfig',
+            'delete_task_push_notification_config',
         ),
         (
             lambda c: c.get_extended_agent_card(GetExtendedAgentCardRequest()),
-            'GetExtendedAgentCard',
+            'get_extended_agent_card',
         ),
     ],
 )
 @pytest.mark.asyncio
-async def test_unary_methods_report_rpc_names(call, rpc_name):
+async def test_unary_methods_report_method_names(call, method):
     recorder = Recorder()
 
     await call(client(recorder, AsyncMock(spec=ClientTransport)))
 
     assert [r.method for r in recorder.hooks('before_client_request')] == [
-        rpc_name
+        method
     ]
-    assert recorder.hooks('after_client_request')[-1].method == rpc_name
+    assert recorder.hooks('after_client_request')[-1].method == method
 
 
 @pytest.mark.asyncio
-async def test_subscribe_reports_rpc_name():
+async def test_subscribe_reports_method_name():
     recorder = Recorder()
     transport = AsyncMock(spec=ClientTransport)
 
@@ -382,26 +382,7 @@ async def test_subscribe_reports_rpc_name():
     ):
         pass
 
-    assert (
-        recorder.hooks('before_client_request')[0].method == 'SubscribeToTask'
-    )
+    assert recorder.hooks('before_client_request')[0].method == 'subscribe'
     assert all(
-        r.method == 'SubscribeToTask'
-        for r in recorder.hooks('after_client_request')
+        r.method == 'subscribe' for r in recorder.hooks('after_client_request')
     )
-
-
-@pytest.mark.asyncio
-async def test_rpc_method_defaults_to_method():
-    recorder = Recorder()
-    transport = AsyncMock(spec=ClientTransport)
-    c = client(recorder, transport)
-
-    await c._execute_with_interceptors(
-        input_data=GetTaskRequest(id='t-1'),
-        method='custom_call',
-        context=None,
-        transport_call=AsyncMock(return_value=Task(id='t-1')),
-    )
-
-    assert recorder.hooks('before_client_request')[0].method == 'custom_call'

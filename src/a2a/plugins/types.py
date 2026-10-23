@@ -26,7 +26,7 @@ class ServerRequest:
     """An incoming request, passed to `ServerPlugin.before_handler_run`.
 
     Attributes:
-        method: A2A RPC name, e.g. ``'SendMessage'`` or ``'GetTask'``.
+        method: Method name, e.g. ``'send_message'`` or ``'get_task'``.
         payload: The request proto, e.g. ``SendMessageRequest``.
         context: The call context. For HTTP transports ``state['headers']``
             holds the request headers.
@@ -49,7 +49,7 @@ class ServerResponse:
     ends, including on error or client disconnect.
 
     Attributes:
-        method: A2A RPC name.
+        method: Method name.
         payload: The handler result or stream event, ``None`` on error or
             stream end.
         context: The same call context passed to `before_handler_run`.
@@ -71,7 +71,8 @@ class ClientRequest:
     """An outgoing call, passed to `ClientPlugin.before_client_request`.
 
     Attributes:
-        method: A2A RPC name, matching the server side.
+        method: Method name, the same as on the server side and as passed
+            to interceptors.
         payload: The request proto. Plugins may replace it.
         agent_card: The card of the remote agent.
         context: The call context. ``service_parameters`` holds the outgoing
@@ -92,7 +93,7 @@ class ClientResponse:
     `ServerResponse`.
 
     Attributes:
-        method: A2A RPC name.
+        method: Method name.
         payload: The response or stream event, ``None`` on error or stream end.
         context: The same call context passed to `before_client_request`.
         error: The exception raised by the call, if any.

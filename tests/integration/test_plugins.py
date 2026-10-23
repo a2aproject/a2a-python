@@ -240,14 +240,14 @@ async def test_streaming_message_runs_hooks_on_both_sides(setup: Setup):
 
     # Client side.
     (call,) = setup.caller.hooks('before_client_request')
-    assert call.method == 'SendStreamingMessage'
+    assert call.method == 'send_message_streaming'
     client_responses = setup.caller.hooks('after_client_request')
     assert len(client_responses) == len(events) + 1
     assert client_responses[-1].is_final
 
     # Server side: the header added by the client plugin arrives.
     (run,) = setup.server.hooks('before_handler_run')
-    assert run.method == 'SendStreamingMessage'
+    assert run.method == 'send_message_streaming'
     assert incoming_headers(run.context)['x-trace'] == 'trace-123'
     assert run.agent_card.name == 'Plugin Agent'
     server_responses = setup.server.hooks('after_handler_run')
@@ -274,10 +274,10 @@ async def test_unary_call_runs_hooks_on_both_sides(setup: Setup):
 
     assert task.id == task_id
     assert [r.method for r in setup.caller.hooks('before_client_request')] == [
-        'GetTask'
+        'get_task'
     ]
     (response,) = setup.server.hooks('after_handler_run')
-    assert response.method == 'GetTask'
+    assert response.method == 'get_task'
     assert response.payload.id == task_id
     assert response.is_final
 
@@ -314,7 +314,7 @@ async def test_v03_jsonrpc_requests_run_server_hooks():
     assert response.status_code == 200
     assert response.json()['result']['status']['state'] == 'completed'
     (run,) = recorder.hooks('before_handler_run')
-    assert run.method == 'SendMessage'
+    assert run.method == 'send_message'
     assert recorder.hooks('after_handler_run')[-1].is_final
 
 
