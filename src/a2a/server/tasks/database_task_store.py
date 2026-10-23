@@ -25,6 +25,7 @@ except ImportError as e:
 from google.protobuf.json_format import MessageToDict, ParseDict
 from google.protobuf.timestamp_pb2 import Timestamp
 
+from a2a.compat.v0_3.conversions import to_compat_task_status
 from a2a.compat.v0_3.model_conversions import (
     compat_task_model_to_core,
 )
@@ -259,8 +260,16 @@ class DatabaseTaskStore(TaskStore):
                 )
             if params.status:
                 base_stmt = base_stmt.where(
-                    self.task_model.status['state'].as_string()
-                    == a2a_pb2.TaskState.Name(params.status)
+                    self.task_model.status['state']
+                    .as_string()
+                    .in_(
+                        [
+                            a2a_pb2.TaskState.Name(params.status),
+                            to_compat_task_status(
+                                a2a_pb2.TaskStatus(state=params.status)
+                            ).state.value,
+                        ]
+                    )
                 )
             if params.HasField('status_timestamp_after'):
                 last_updated_after = params.status_timestamp_after.ToDatetime()
