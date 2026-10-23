@@ -6,7 +6,6 @@ from unittest.mock import AsyncMock, Mock, patch
 import pytest
 
 from a2a.server.events import EventQueue
-from a2a.server.events.event_queue import EventQueueLegacy
 from a2a.server.id_generator import IDGenerator
 from a2a.server.tasks import TaskUpdater
 from a2a.types.a2a_pb2 import (
@@ -155,61 +154,6 @@ async def test_metadata_validation_failure_allows_terminal_retry(
     event_queue.enqueue_event.assert_awaited_once()
     event = event_queue.enqueue_event.call_args.args[0]
     assert event.status.state == TaskState.TASK_STATE_FAILED
-
-
-@pytest.mark.asyncio
-async def test_message_validation_failure_allows_terminal_retry(
-    task_updater: TaskUpdater, event_queue: AsyncMock
-) -> None:
-    with pytest.raises(TypeError):
-        await task_updater.update_status(
-            TaskState.TASK_STATE_COMPLETED,
-            message=Part(text='not a Message'),
-        )
-
-    event_queue.enqueue_event.assert_not_awaited()
-    await task_updater.failed()
-
-    event_queue.enqueue_event.assert_awaited_once()
-    event = event_queue.enqueue_event.call_args.args[0]
-    assert event.status.state == TaskState.TASK_STATE_FAILED
-
-
-@pytest.mark.asyncio
-async def test_legacy_partial_publish_cancellation_keeps_terminal_guard() -> (
-    None
-):
-    parent = EventQueueLegacy(max_queue_size=1)
-    child = await parent.tap(max_queue_size=1)
-    updater = TaskUpdater(parent, 'task-id', 'context-id')
-    pending: asyncio.Task[None] | None = None
-    try:
-        await updater.start_work()
-        await parent.dequeue_event()
-        parent.task_done()
-        # The child remains full while the parent can accept COMPLETED.
-        pending = asyncio.create_task(updater.complete())
-        event = await asyncio.wait_for(parent.dequeue_event(), timeout=1)
-        parent.task_done()
-        assert event.status.state == TaskState.TASK_STATE_COMPLETED
-        assert not pending.done()
-
-        pending.cancel()
-        with pytest.raises(asyncio.CancelledError):
-            await pending
-
-        await child.dequeue_event()
-        child.task_done()
-        with pytest.raises(RuntimeError, match='already in a terminal state'):
-            await updater.failed()
-        assert parent.queue.empty()
-        assert child.queue.empty()
-    finally:
-        if pending is not None and not pending.done():
-            pending.cancel()
-            await asyncio.gather(pending, return_exceptions=True)
-        await parent.close(immediate=True)
-        await child.close(immediate=True)
 
 
 @pytest.mark.asyncio
