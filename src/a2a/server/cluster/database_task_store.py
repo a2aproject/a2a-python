@@ -258,6 +258,7 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
         commits) rather than failing the read.
         """
         await self._db._ensure_initialized()  # noqa: SLF001
+        await self._ensure_cluster_tables()
         owner = self._db.owner_resolver(context)
         attempts = 0
         while True:
@@ -355,6 +356,8 @@ class VersionedDatabaseTaskStore(VersionedTaskStore):
 
     async def delete(self, task_id: str, context: ServerCallContext) -> None:
         """Deletes a task and its version row via the underlying store."""
+        await self._db._ensure_initialized()  # noqa: SLF001
+        await self._ensure_cluster_tables()
         owner = self._db.owner_resolver(context)
         await self._db.delete(task_id, context)
         async with self._db.async_session_maker.begin() as session:
