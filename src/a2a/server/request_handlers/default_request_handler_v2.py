@@ -7,6 +7,8 @@ import warnings
 from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, cast
 
+from a2a.plugins.manager import get_global
+from a2a.plugins.types import TaskEventInfo
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -18,12 +20,16 @@ from a2a.server.agent_execution.active_task import (
     TERMINAL_TASK_STATES,
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
+from a2a.server.agent_execution.plugin_agent_executor import (
+    PluginAgentExecutor,
+)
 from a2a.server.cluster.event_stream import VersionedEvent
 from a2a.server.cluster.task_store import (
     ConcurrentTaskModificationError,
     LegacyTaskStoreAdapter,
     VersionedTaskStore,
 )
+from a2a.server.request_handlers._plugin_hooks import server_plugin_hooks
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
     validate,
@@ -73,6 +79,7 @@ from a2a.utils.telemetry import SpanKind, trace_class
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
+    from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.active_task import ActiveTask
     from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.cluster.version import TaskVersion
@@ -96,6 +103,10 @@ class DefaultRequestHandlerV2(RequestHandler):
     with `DefaultRequestHandler` but is not used: v2 delegates event streaming
     to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
     `DeprecationWarning` and logs a warning.
+
+    ``plugins`` selects the plugin manager whose hooks run for this handler.
+    It defaults to the global manager (`a2a.plugins.get_global()`) at
+    construction time.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -118,6 +129,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
         validate_input_modes: bool = False,
         event_stream: TaskEventStream | None = None,
+        plugins: PluginManager | None = None,
     ) -> None:
         if queue_manager is not None:
             message = (
@@ -130,6 +142,9 @@ class DefaultRequestHandlerV2(RequestHandler):
             )
             warnings.warn(message, DeprecationWarning, stacklevel=2)
             logger.warning(message)
+        self._plugins: PluginManager = (
+            plugins if plugins is not None else get_global()
+        )
         self.agent_executor = agent_executor
         self.task_store: TaskStore | VersionedTaskStore = task_store
         self._versioned_store: VersionedTaskStore = (
@@ -168,12 +183,27 @@ class DefaultRequestHandlerV2(RequestHandler):
             )
         )
         self._active_task_registry = ActiveTaskRegistry(
-            agent_executor=self.agent_executor,
+            agent_executor=(
+                PluginAgentExecutor(agent_executor, self._plugins)
+                if self._plugins.has_execution_hooks
+                else agent_executor
+            ),
             task_store=self._versioned_store,
             push_sender=self._push_sender,
             event_stream=self._event_stream,
+            plugins=self._plugins,
         )
         self._background_tasks = set()
+
+    @property
+    def plugins(self) -> PluginManager:
+        """The plugin manager whose hooks run for this handler."""
+        return self._plugins
+
+    @property
+    def agent_card(self) -> AgentCard:
+        """The agent card served by this handler."""
+        return self._agent_card
 
     async def _reject_unsafe_push_url(self, url: str) -> None:
         """Apply the configured push-URL policy, if any."""
@@ -191,6 +221,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         """
         await self._active_task_registry.aclose()
 
+    @server_plugin_hooks('get_task')
     @validate_request_params
     async def on_get_task(  # noqa: D102
         self,
@@ -206,6 +237,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return apply_history_length(stored.task, params)
 
+    @server_plugin_hooks('list_tasks')
     @validate_request_params
     async def on_list_tasks(  # noqa: D102
         self,
@@ -227,6 +259,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return page
 
+    @server_plugin_hooks('cancel_task')
     @validate_request_params
     async def on_cancel_task(  # noqa: D102
         self,
@@ -313,6 +346,18 @@ class DefaultRequestHandlerV2(RequestHandler):
             prev_version=version,
             context=context,
         )
+        if self._plugins.has_task_hooks:
+            # Remote cancel writes the store directly, bypassing TaskManager.
+            await self._plugins.on_task_event(
+                TaskEventInfo(
+                    task_id=task_id,
+                    from_state=current.status.state,
+                    to_state=cancelled.status.state,
+                    event=event,
+                    task=cancelled,
+                    context=context,
+                )
+            )
         if self._event_stream is not None:
             await self._event_stream.publish(
                 task_id, VersionedEvent(event=event, version=new_version)
@@ -392,6 +437,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return active_task, request_context
 
+    @server_plugin_hooks('send_message')
     @validate_request_params
     async def on_message_send(  # noqa: D102
         self,
@@ -457,6 +503,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         )
         return result
 
+    @server_plugin_hooks('send_message_streaming')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -489,6 +536,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             else:
                 yield event
 
+    @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -519,6 +567,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         # Custom stores written before set_info returned the stored config.
         return normalize_push_notification_config(task_id, params)
 
+    @server_plugin_hooks('get_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -548,6 +597,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         raise TaskNotFoundError
 
+    @server_plugin_hooks('subscribe')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -622,6 +672,7 @@ class DefaultRequestHandlerV2(RequestHandler):
                 ):
                     return
 
+    @server_plugin_hooks('list_task_push_notification_configs')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -648,6 +699,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             configs=push_notification_config_list
         )
 
+    @server_plugin_hooks('delete_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -669,6 +721,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         await self._push_config_store.delete_info(task_id, context, config_id)
 
+    @server_plugin_hooks('get_extended_agent_card')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.extended_agent_card,

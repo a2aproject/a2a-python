@@ -4,6 +4,7 @@ import logging
 
 from typing import TYPE_CHECKING
 
+from a2a.plugins.types import TaskEventInfo
 from a2a.types.a2a_pb2 import (
     Artifact,
     Message,
@@ -18,6 +19,7 @@ from a2a.utils.telemetry import trace_function
 
 
 if TYPE_CHECKING:
+    from a2a.plugins.manager import PluginManager
     from a2a.server.cluster.task_store import VersionedTaskStore
     from a2a.server.cluster.version import TaskVersion
     from a2a.server.context import ServerCallContext
@@ -103,13 +105,14 @@ class TaskManager:
     events received from the agent.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         task_store: TaskStore | VersionedTaskStore,
         context: ServerCallContext,
         task_id: str | None,
         context_id: str | None,
         initial_message: Message | None,
+        plugins: PluginManager | None = None,
     ):
         """Initializes the TaskManager.
 
@@ -121,6 +124,8 @@ class TaskManager:
             context_id: The ID of the context, if known from the request.
             initial_message: The `Message` that initiated the task, if any.
                              Used when creating a new task object.
+            plugins: Plugin manager notified of every successful task write
+                via `on_task_event`. ``None`` disables the notifications.
         """
         if task_id is not None and not (isinstance(task_id, str) and task_id):
             raise ValueError('Task ID must be a non-empty string')
@@ -149,6 +154,13 @@ class TaskManager:
         self._current_version: TaskVersion = TaskVersion.MISSING
         # Transient: the event currently being persisted, read by _save_task.
         self._pending_event: Event | None = None
+        self._plugins = (
+            plugins if plugins is not None and plugins.has_task_hooks else None
+        )
+        # State of the task as last read from or written to the store, None
+        # if it is not known to exist. Tracked separately because writes
+        # mutate `_current_task` in place before saving it.
+        self._persisted_state: TaskState | None = None
         logger.debug(
             'TaskManager initialized with task_id: %s, context_id: %s',
             task_id,
@@ -165,6 +177,7 @@ class TaskManager:
 
         self._current_task = None
         self._current_version = TaskVersion.MISSING
+        self._persisted_state = None
 
     @property
     def current_version(self) -> TaskVersion:
@@ -198,10 +211,12 @@ class TaskManager:
         if stored is not None:
             self._current_task = stored.task
             self._current_version = stored.version
+            self._persisted_state = stored.task.status.state
             logger.debug('Task %s retrieved successfully.', self.task_id)
         else:
             self._current_task = None
             self._current_version = TaskVersion.MISSING
+            self._persisted_state = None
             logger.debug('Task %s not found.', self.task_id)
         return self._current_task
 
@@ -297,8 +312,10 @@ class TaskManager:
             if stored is not None:
                 task = stored.task
                 self._current_version = stored.version
+                self._persisted_state = stored.task.status.state
             else:
                 self._current_version = TaskVersion.MISSING
+                self._persisted_state = None
 
         if not task:
             logger.info(
@@ -388,6 +405,19 @@ class TaskManager:
             logger.info('New task created with id: %s', task.id)
             self.task_id = task.id
             self.context_id = task.context_id
+        from_state = self._persisted_state
+        self._persisted_state = task.status.state
+        if self._plugins is not None:
+            await self._plugins.on_task_event(
+                TaskEventInfo(
+                    task_id=task.id,
+                    from_state=from_state,
+                    to_state=task.status.state,
+                    event=self._pending_event,
+                    task=task,
+                    context=self._call_context,
+                )
+            )
 
     def update_with_message(self, message: Message, task: Task) -> Task:
         """Updates a task object in memory by adding a new message to its history.
