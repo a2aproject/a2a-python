@@ -16,16 +16,21 @@ from .conftest import (
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(15)
+@pytest.mark.parametrize('max_event_queue_size', [1024, 1])
 async def test_resubscribe_on_non_owning_replica_streams_events(
-    shared_store, shared_stream, context
+    shared_store, shared_stream, context, max_event_queue_size: int
 ) -> None:
     """Replica A runs the agent; a resubscribe on replica B streams its events.
 
     Pre-fix, B would build a local ActiveTask, emit the snapshot, then hang.
     """
     agent = ControlledAgent()
-    replica_a = make_replica(shared_store, shared_stream, agent)
-    replica_b = make_replica(shared_store, shared_stream, agent)
+    replica_a = make_replica(
+        shared_store, shared_stream, agent, max_event_queue_size
+    )
+    replica_b = make_replica(
+        shared_store, shared_stream, agent, max_event_queue_size
+    )
     try:
         a_events: list = []
 
@@ -47,6 +52,7 @@ async def test_resubscribe_on_non_owning_replica_streams_events(
 
         # Resubscribe on B (not running the agent). Collect until COMPLETED.
         b_states: list = []
+        snapshot_received = asyncio.Event()
 
         async def run_b() -> None:
             async for ev in replica_b.on_subscribe_to_task(
@@ -54,11 +60,14 @@ async def test_resubscribe_on_non_owning_replica_streams_events(
             ):
                 if getattr(ev, 'status', None):
                     b_states.append(ev.status.state)
+                    if len(b_states) == 1:
+                        snapshot_received.set()
                     if ev.status.state == TaskState.TASK_STATE_COMPLETED:
                         return
 
         b_task = asyncio.create_task(run_b())
-        await asyncio.sleep(0.1)  # let B read snapshot + start tailing
+        await asyncio.wait_for(snapshot_received.wait(), timeout=5)
+        assert await replica_b._active_task_registry.get(task_id) is None  # noqa: SLF001
 
         # Release the agent on A -> it completes; B must observe via the stream.
         agent.release.set()

@@ -37,6 +37,18 @@ def _make_registry() -> ActiveTaskRegistry:
     )
 
 
+@pytest.mark.parametrize('max_event_queue_size', [0, -1])
+def test_registry_rejects_nonpositive_event_queue_size(
+    max_event_queue_size: int,
+) -> None:
+    with pytest.raises(ValueError, match='max_event_queue_size'):
+        ActiveTaskRegistry(
+            agent_executor=_SlowExecutor(),
+            task_store=InMemoryTaskStore(),
+            max_event_queue_size=max_event_queue_size,
+        )
+
+
 @pytest.mark.timeout(5)
 @pytest.mark.asyncio
 async def test_aclose_reaps_active_tasks_and_empties_registry():

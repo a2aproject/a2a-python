@@ -18,6 +18,7 @@ if TYPE_CHECKING:
 
 from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.cluster.task_store import StoredTask
+from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.utils.errors import TaskNotFoundError
 
@@ -34,11 +35,18 @@ class ActiveTaskRegistry:
         task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
         event_stream: TaskEventStream | None = None,
-    ):
+        *,
+        max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
+    ) -> None:
+        """Initializes a registry with a positive per-buffer event capacity."""
+        if max_event_queue_size <= 0:
+            raise ValueError('max_event_queue_size must be greater than 0')
+
         self._agent_executor = agent_executor
         self._task_store = task_store
         self._push_sender = push_sender
         self._event_stream = event_stream
+        self._max_event_queue_size = max_event_queue_size
         self._active_tasks: dict[str, ActiveTask] = {}
         self._lock = threading.RLock()
         self._cleanup_tasks: set[asyncio.Task[None]] = set()
@@ -73,6 +81,7 @@ class ActiveTaskRegistry:
                     push_sender=self._push_sender,
                     on_cleanup=self._on_active_task_cleanup,
                     event_stream=self._event_stream,
+                    max_event_queue_size=self._max_event_queue_size,
                 )
                 self._active_tasks[task_id] = active_task
 
