@@ -279,3 +279,40 @@ class TaskVersionModel(TaskVersionMixin, Base):
     """Default task-version model with standard table name."""
 
     __tablename__ = 'task_versions'
+
+
+class TaskLeaseMixin:
+    """Mixin providing columns for the turn lease of a task.
+
+    A row exists while a replica runs a turn for the task. Only used by
+    `a2a.server.cluster`; unused by the default single-process stores.
+    """
+
+    task_id: Mapped[str] = mapped_column(String(36), primary_key=True)
+    owner: Mapped[str] = mapped_column(String(255), nullable=True)
+    # Identifies the holder; renewing or releasing requires it.
+    token: Mapped[str] = mapped_column(String(32), nullable=False)
+    expires_at_ms: Mapped[int] = mapped_column(
+        BigInteger, nullable=False, index=True
+    )
+
+
+def create_task_lease_model(
+    table_name: str = 'task_leases',
+    base: type[DeclarativeBase] = Base,
+) -> type:
+    """Create a TaskLeaseModel class with a configurable table name."""
+
+    class TaskLeaseModel(TaskLeaseMixin, base):  # type: ignore
+        __tablename__ = table_name
+
+    TaskLeaseModel.__name__ = f'TaskLeaseModel_{table_name}'
+    TaskLeaseModel.__qualname__ = f'TaskLeaseModel_{table_name}'
+    return TaskLeaseModel
+
+
+# Default TaskLeaseModel with the standard table name.
+class TaskLeaseModel(TaskLeaseMixin, Base):
+    """Default task-lease model with standard table name."""
+
+    __tablename__ = 'task_leases'

@@ -16,7 +16,9 @@ from a2a.auth.user import User
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.cluster.database_event_stream import DatabaseTaskEventStream
+from a2a.server.cluster.database_lease_store import DatabaseTaskLeaseStore
 from a2a.server.cluster.database_task_store import VersionedDatabaseTaskStore
+from a2a.server.cluster.recovery import fail_abandoned_tasks
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base
 from a2a.server.request_handlers.default_request_handler_v2 import (
@@ -593,3 +595,140 @@ async def test_absent_and_non_owner_rejected(dsn: str) -> None:
             )
     finally:
         await cluster.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(60)
+async def test_task_of_stopped_replica_is_recovered_after_lease_expiry(
+    dsn: str,
+) -> None:
+    """Replica A stops mid-turn without writing anything more. Once its lease
+    expires, a sweep marks the task FAILED, which ends a stream on B."""
+    engines = [create_async_engine(dsn) for _ in range(3)]
+    for engine in engines:
+        await DatabaseTaskLeaseStore(engine).initialize()
+
+    def replica(engine, agent: AgentExecutor) -> DefaultRequestHandlerV2:  # noqa: ANN001
+        return DefaultRequestHandlerV2(
+            agent_executor=agent,
+            task_store=VersionedDatabaseTaskStore(engine, create_table=False),
+            agent_card=streaming_agent_card(),
+            event_stream=DatabaseTaskEventStream(
+                engine, create_table=False, poll_interval_s=0.05
+            ),
+            lease_store=DatabaseTaskLeaseStore(engine, create_table=False),
+            lease_ttl=1.0,
+            heartbeat_interval=0.1,
+        )
+
+    agent = LongRunningAgent()
+    replica_a = replica(engines[0], agent)
+    replica_b = replica(engines[1], LongRunningAgent())
+    ctx = make_context()
+    try:
+        stream = replica_a.on_message_send_stream(
+            build_send_request('go', message_id='m1'), ctx
+        )
+        task_id = (await asyncio.wait_for(anext(stream), timeout=10)).id
+        await asyncio.wait_for(agent.working.wait(), timeout=10)
+        await wait_for_state(
+            replica_b.task_store, task_id, TaskState.TASK_STATE_WORKING, ctx
+        )
+        b_states: list = []
+
+        async def follow_on_b() -> None:
+            async for event in replica_b.on_subscribe_to_task(
+                SubscribeToTaskRequest(id=task_id), ctx
+            ):
+                b_states.append(event.status.state)
+
+        follow = asyncio.create_task(follow_on_b())
+
+        # Stop A the way a killed process would: no further writes.
+        active = await replica_a._active_task_registry.get(task_id)  # noqa: SLF001
+        await engines[0].dispose()
+        for task in (active._producer_task, active._consumer_task):  # noqa: SLF001
+            task.cancel()
+        with contextlib.suppress(BaseException):
+            await stream.aclose()
+
+        sweeper_store = VersionedDatabaseTaskStore(
+            engines[2], create_table=False
+        )
+        sweeper_leases = DatabaseTaskLeaseStore(engines[2], create_table=False)
+        recovered = 0
+        for _ in range(60):
+            recovered = await fail_abandoned_tasks(
+                sweeper_leases, sweeper_store
+            )
+            if recovered:
+                break
+            await asyncio.sleep(0.1)
+        assert recovered == 1
+
+        await asyncio.wait_for(follow, timeout=10)
+        assert b_states[-1] == TaskState.TASK_STATE_FAILED
+        task = await replica_b.on_get_task(GetTaskRequest(id=task_id), ctx)
+        assert task is not None
+        assert task.status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        with contextlib.suppress(Exception):
+            await replica_b.aclose()
+        for engine in engines:
+            await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(60)
+async def test_leased_turns_alternate_between_replicas_without_pauses(
+    dsn: str,
+) -> None:
+    """With leases, each follow-up can go to the other replica as soon as the
+    previous turn returned INPUT_REQUIRED."""
+    engines = [create_async_engine(dsn) for _ in range(2)]
+    await DatabaseTaskLeaseStore(engines[0]).initialize()
+
+    def replica(engine) -> DefaultRequestHandlerV2:  # noqa: ANN001
+        return DefaultRequestHandlerV2(
+            agent_executor=InputRequiredThenCompleteAgent(),
+            task_store=VersionedDatabaseTaskStore(engine, create_table=False),
+            agent_card=streaming_agent_card(),
+            event_stream=DatabaseTaskEventStream(
+                engine, create_table=False, poll_interval_s=0.05
+            ),
+            lease_store=DatabaseTaskLeaseStore(engine, create_table=False),
+            lease_ttl=5.0,
+            heartbeat_interval=1.0,
+        )
+
+    replicas = [replica(engine) for engine in engines]
+    ctx = make_context()
+    try:
+        first = await replicas[0].on_message_send(
+            build_send_request('q1', message_id='m1'), ctx
+        )
+        result = first
+        for i, message_id in enumerate(('m2', 'm3'), start=1):
+            result = await replicas[i % 2].on_message_send(
+                build_send_request(
+                    'answer',
+                    task_id=first.id,
+                    context_id=first.context_id,
+                    message_id=message_id,
+                ),
+                ctx,
+            )
+        assert result.status.state == TaskState.TASK_STATE_COMPLETED
+        stored = await replicas[0].task_store.get(first.id, ctx)
+        assert stored is not None
+        assert [
+            m.message_id
+            for m in stored.task.history
+            if m.role == Role.ROLE_USER
+        ] == ['m1', 'm2', 'm3']
+    finally:
+        for r in replicas:
+            with contextlib.suppress(Exception):
+                await r.aclose()
+        for engine in engines:
+            await engine.dispose()

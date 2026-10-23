@@ -24,7 +24,10 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from a2a.helpers.proto_helpers import new_task_from_user_message
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
-from a2a.server.cluster import VersionedDatabaseTaskStore
+from a2a.server.cluster import (
+    DatabaseTaskLeaseStore,
+    VersionedDatabaseTaskStore,
+)
 from a2a.server.cluster.database_event_stream import DatabaseTaskEventStream
 from a2a.server.events.event_queue import EventQueue
 from a2a.server.models import Base
@@ -60,7 +63,7 @@ def default_dsn() -> str:
 
 
 async def init_schema(dsn: str) -> None:
-    """Creates the shared tables (task + task_events) once, up front."""
+    """Creates the shared tables (tasks, task_events, task_leases) once."""
     engine = create_async_engine(dsn)
     try:
         async with engine.begin() as conn:
@@ -84,6 +87,13 @@ def build_cluster_backends(
         engine=stream_engine, create_table=False, poll_interval_s=0.2
     )
     return store, stream
+
+
+def build_lease_store(dsn: str) -> DatabaseTaskLeaseStore:
+    """Builds the shared turn-lease store used to recover crashed turns."""
+    return DatabaseTaskLeaseStore(
+        engine=create_async_engine(dsn), create_table=False
+    )
 
 
 def build_agent_card(base_url: str) -> AgentCard:

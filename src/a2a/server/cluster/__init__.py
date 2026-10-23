@@ -1,6 +1,7 @@
 import logging
 
 from a2a.server.cluster.event_stream import TaskEventStream, VersionedEvent
+from a2a.server.cluster.lease import TaskLease, TaskLeaseStore
 from a2a.server.cluster.task_store import (
     ConcurrentTaskModificationError,
     LegacyTaskStoreAdapter,
@@ -14,6 +15,7 @@ logger = logging.getLogger(__name__)
 
 try:
     from a2a.server.cluster.database_event_stream import DatabaseTaskEventStream
+    from a2a.server.cluster.database_lease_store import DatabaseTaskLeaseStore
     from a2a.server.cluster.database_task_store import (
         VersionedDatabaseTaskStore,
     )
@@ -43,13 +45,25 @@ except ImportError as e:
                 "installed. Install with 'pip install a2a-sdk[sql]'."
             ) from _original_error
 
+    class DatabaseTaskLeaseStore:  # type: ignore[no-redef]
+        """Placeholder when database dependencies are not installed."""
+
+        def __init__(self, *args: object, **kwargs: object) -> None:
+            raise ImportError(
+                'To use DatabaseTaskLeaseStore, its dependencies must be '
+                "installed. Install with 'pip install a2a-sdk[sql]'."
+            ) from _original_error
+
 
 __all__ = [
     'ConcurrentTaskModificationError',
     'DatabaseTaskEventStream',
+    'DatabaseTaskLeaseStore',
     'LegacyTaskStoreAdapter',
     'StoredTask',
     'TaskEventStream',
+    'TaskLease',
+    'TaskLeaseStore',
     'TaskVersion',
     'VersionedDatabaseTaskStore',
     'VersionedEvent',

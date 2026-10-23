@@ -14,6 +14,7 @@ import uvicorn
 
 from fastapi import FastAPI
 
+from a2a.server.cluster.recovery import AbandonedTaskSweeper
 from a2a.server.request_handlers import DefaultRequestHandler
 from a2a.server.routes import (
     add_a2a_routes_to_fastapi,
@@ -24,6 +25,7 @@ from samples.clustermode.cluster_common import (
     SlowEchoAgent,
     build_agent_card,
     build_cluster_backends,
+    build_lease_store,
     default_dsn,
     init_schema,
 )
@@ -32,7 +34,14 @@ from samples.clustermode.cluster_common import (
 logger = logging.getLogger(__name__)
 
 
-async def serve(host: str, port: int, replica_id: str, ticks: int) -> None:
+async def serve(  # noqa: PLR0913
+    host: str,
+    port: int,
+    replica_id: str,
+    ticks: int,
+    lease_ttl: float,
+    heartbeat_interval: float,
+) -> None:
     """Runs one replica bound to a shared store + event stream."""
     dsn = default_dsn()
     await init_schema(dsn)
@@ -42,12 +51,21 @@ async def serve(host: str, port: int, replica_id: str, ticks: int) -> None:
     store, stream = build_cluster_backends(dsn)
     await store.initialize()
     await stream.initialize()
+    leases = build_lease_store(dsn)
+    await leases.initialize()
 
     handler = DefaultRequestHandler(
         agent_executor=SlowEchoAgent(replica_id, ticks=ticks),
         task_store=store,
         agent_card=agent_card,
         event_stream=stream,
+        lease_store=leases,
+        lease_ttl=lease_ttl,
+        heartbeat_interval=heartbeat_interval,
+    )
+    # Fails tasks whose replica died mid-turn, once their lease expires.
+    sweeper = AbandonedTaskSweeper(
+        leases, store, interval=heartbeat_interval, event_stream=stream
     )
 
     jsonrpc_routes = create_jsonrpc_routes(
@@ -67,7 +85,14 @@ async def serve(host: str, port: int, replica_id: str, ticks: int) -> None:
         'Replica %s listening on %s (dsn=%s)', replica_id, base_url, dsn
     )
     config = uvicorn.Config(app, host=host, port=port, log_level='warning')
-    await uvicorn.Server(config).serve()
+    sweeper.start()
+    try:
+        await uvicorn.Server(config).serve()
+    finally:
+        await sweeper.aclose()
+        # Records FAILED for turns still running here, instead of leaving
+        # them for the sweeper on another replica.
+        await handler.aclose()
 
 
 def main() -> None:
@@ -78,9 +103,20 @@ def main() -> None:
     parser.add_argument('--port', type=int, default=41241)
     parser.add_argument('--replica-id', default='replica-0')
     parser.add_argument('--ticks', type=int, default=10)
+    parser.add_argument('--lease-ttl', type=float, default=10.0)
+    parser.add_argument('--heartbeat-interval', type=float, default=2.0)
     args = parser.parse_args()
     with contextlib.suppress(KeyboardInterrupt):
-        asyncio.run(serve(args.host, args.port, args.replica_id, args.ticks))
+        asyncio.run(
+            serve(
+                args.host,
+                args.port,
+                args.replica_id,
+                args.ticks,
+                args.lease_ttl,
+                args.heartbeat_interval,
+            )
+        )
 
 
 if __name__ == '__main__':

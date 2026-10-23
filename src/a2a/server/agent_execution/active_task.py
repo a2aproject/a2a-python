@@ -51,6 +51,7 @@ if TYPE_CHECKING:
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.cluster.event_stream import TaskEventStream
+    from a2a.server.cluster.lease import TaskLease, TaskLeaseStore
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
@@ -58,6 +59,10 @@ if TYPE_CHECKING:
     from a2a.server.tasks.task_manager import TaskManager
 
 from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.lease import (
+    DEFAULT_HEARTBEAT_INTERVAL,
+    DEFAULT_LEASE_TTL,
+)
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
@@ -96,6 +101,8 @@ INTERRUPTED_TASK_STATES = {
     TaskState.TASK_STATE_AUTH_REQUIRED,
     TaskState.TASK_STATE_INPUT_REQUIRED,
 }
+# Seconds between attempts to take a lease that is about to be released.
+_LEASE_RETRY_INTERVAL = 0.05
 
 
 class _RequestStarted:
@@ -107,6 +114,14 @@ class _RequestStarted:
 class _RequestCompleted:
     def __init__(self, request_id: uuid.UUID):
         self.request_id = request_id
+
+
+class _RequestRejected:
+    """A request the producer refused without running the executor."""
+
+    def __init__(self, request_id: uuid.UUID, error: Exception):
+        self.request_id = request_id
+        self.error = error
 
 
 async def send_push_notification(
@@ -273,7 +288,7 @@ class EventConsumer:
             self.active_task._task_id,
             type(event).__name__,
         )
-        if isinstance(event, _RequestCompleted):
+        if isinstance(event, _RequestCompleted | _RequestRejected):
             self.active_task._request_lock.release()
         self.active_task._event_queue_agent.task_done()
 
@@ -291,12 +306,20 @@ class EventConsumer:
             logger.debug(
                 'Consumer[%s]: Request completed', self.active_task._task_id
             )
+            # The agent queue is FIFO, so every event of this turn has been
+            # saved by now: the turn has durably ended.
+            await self.active_task._release_lease()
+            self.active_task._request_lock.release()
+            self.active_task.schedule_idle_release()
+        elif isinstance(event, _RequestRejected):
+            self.active_task._running_elsewhere = True
             self.active_task._request_lock.release()
             self.active_task.schedule_idle_release()
         elif isinstance(event, _RequestStarted):
             logger.debug(
                 'Consumer[%s]: Request started', self.active_task._task_id
             )
+            self.active_task._running_elsewhere = False
             self.message_to_save = event.request_context.message
         elif isinstance(event, BaseException):
             # Only the producer enqueues exceptions, when a request fails.
@@ -503,6 +526,9 @@ class ActiveTask:
         on_cleanup: Callable[[ActiveTask], None] | None = None,
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
+        lease_store: TaskLeaseStore | None = None,
+        lease_ttl: float = DEFAULT_LEASE_TTL,
+        heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -518,6 +544,11 @@ class ActiveTask:
                         published to it so other replicas can observe them.
             interrupted_task_timeout: Optional seconds after which an idle
                         interrupted task is finished; ``None`` disables it.
+            lease_store: Optional store of turn leases. When set, each turn
+                        holds the task's lease, renewed every
+                        `heartbeat_interval` seconds for `lease_ttl` seconds.
+            lease_ttl: Seconds a lease lasts without being renewed.
+            heartbeat_interval: Seconds between lease renewals.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
@@ -533,6 +564,14 @@ class ActiveTask:
         self._interrupted_task_timeout = interrupted_task_timeout
         # Pending timer that releases a task parked in an interrupted state.
         self._idle_release_task: asyncio.Task[None] | None = None
+        # Set when the last request was rejected because another replica runs
+        # the task; this replica then has no use for it.
+        self._running_elsewhere = False
+        self._lease_store = lease_store
+        self._lease_ttl = lease_ttl
+        self._heartbeat_interval = heartbeat_interval
+        self._lease: TaskLease | None = None
+        self._heartbeat_task: asyncio.Task[None] | None = None
 
         # --- Synchronization Primitives ---
         # `_lock` protects structural lifecycle changes: start(), subscribe() counting,
@@ -659,6 +698,99 @@ class ActiveTask:
                 'ActiveTask[%s]: Background tasks created', self._task_id
             )
 
+    @property
+    def request_in_flight(self) -> bool:
+        """Whether this replica is running a turn for the task right now."""
+        return self._request_lock.locked()
+
+    @property
+    def call_context(self) -> ServerCallContext | None:
+        """The call context of the request most recently taken up."""
+        return self._task_manager._call_context
+
+    async def _acquire_lease(self, request_context: RequestContext) -> bool:
+        """Takes the task's turn lease; False if another replica holds it.
+
+        A task waiting for input has ended its turn, and the replica that ran
+        it releases the lease just after saving that state. Such a lease is
+        waited for, up to one heartbeat interval, so that a follow-up sent as
+        soon as the previous turn returned is not rejected.
+        """
+        if self._lease_store is None:
+            return True
+        task = request_context.current_task
+        wait = (
+            self._heartbeat_interval
+            if task is not None and task.status.state in INTERRUPTED_TASK_STATES
+            else 0.0
+        )
+        deadline = asyncio.get_running_loop().time() + wait
+        while True:
+            lease = await self._lease_store.acquire(
+                self._task_id, request_context.call_context, self._lease_ttl
+            )
+            if lease is not None:
+                break
+            if asyncio.get_running_loop().time() >= deadline:
+                return False
+            await asyncio.sleep(_LEASE_RETRY_INTERVAL)
+        self._lease = lease
+        self._heartbeat_task = asyncio.create_task(
+            self._heartbeat(self._lease_store, lease),
+            name=f'lease:{self._task_id}',
+        )
+        return True
+
+    async def _heartbeat(
+        self, lease_store: TaskLeaseStore, lease: TaskLease
+    ) -> None:
+        """Renews the lease, and stops the executor once the lease is lost."""
+        while True:
+            await asyncio.sleep(self._heartbeat_interval)
+            try:
+                renewed = await lease_store.renew(lease, self._lease_ttl)
+            except Exception:
+                # Keep trying: if the store stays unreachable past the TTL,
+                # the next renewal that gets through reports the lease lost.
+                logger.exception('Lease[%s]: renewal failed', self._task_id)
+                continue
+            if not renewed:
+                logger.warning(
+                    'Lease[%s]: lease lost, stopping execution', self._task_id
+                )
+                if self._producer_task and not self._producer_task.done():
+                    self._producer_task.cancel()
+                return
+
+    async def _release_lease(self) -> None:
+        heartbeat, self._heartbeat_task = self._heartbeat_task, None
+        lease, self._lease = self._lease, None
+        if heartbeat is not None:
+            heartbeat.cancel()
+        if lease is not None and self._lease_store is not None:
+            try:
+                await self._lease_store.release(lease)
+            except Exception:
+                logger.exception('Lease[%s]: release failed', self._task_id)
+
+    async def _end_lease_on_exit(self) -> None:
+        """Ends the lease when the consumer stops outside a normal turn end.
+
+        The lease is released only if the task is terminal. Otherwise the
+        turn was cut short without a final state being written, so renewal
+        stops and the lease is left to expire, letting the task be recovered.
+        `cancel` releases it once it has written the terminal state.
+        """
+        if self._lease is None:
+            return
+        task = self._task_manager._current_task
+        if task is not None and task.status.state in TERMINAL_TASK_STATES:
+            await self._release_lease()
+            return
+        heartbeat, self._heartbeat_task = self._heartbeat_task, None
+        if heartbeat is not None:
+            heartbeat.cancel()
+
     async def _run_producer(self) -> None:
         """Executes the agent logic.
 
@@ -705,6 +837,21 @@ class ActiveTask:
                 )
 
                 try:
+                    if not await self._acquire_lease(request_context):
+                        # Another replica holds the lease, so it is running a
+                        # turn for this task. Refuse rather than run a second
+                        # executor; nothing is written to the task.
+                        rejection = UnsupportedOperationError(
+                            message=f'Task {self._task_id} is being processed '
+                            'by another replica'
+                        )
+                        await self._event_queue_agent.enqueue_event(
+                            cast(
+                                'Event',
+                                _RequestRejected(request_id, rejection),
+                            )
+                        )
+                        continue
                     await self._event_queue_agent.enqueue_event(
                         cast(
                             'Event',
@@ -755,6 +902,7 @@ class ActiveTask:
         finally:
             self._is_finished.set()
             self.cancel_idle_release()
+            await self._end_lease_on_exit()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
 
@@ -775,7 +923,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(  # noqa: PLR0915
+    async def subscribe(
         self,
         *,
         request: RequestContext | None = None,
@@ -850,25 +998,23 @@ class ActiveTask:
                         )
                         event = updated_task
                     # Acknowledge internal lifecycle events before skipping them.
-                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                    if isinstance(
+                        event,
+                        _RequestStarted | _RequestCompleted | _RequestRejected,
+                    ):
                         tapped_queue.task_done()
-                    if isinstance(event, _RequestCompleted):
                         if (
-                            request_id is not None
-                            and event.request_id == request_id
+                            isinstance(event, _RequestStarted)
+                            or event.request_id != request_id
                         ):
-                            logger.debug(
-                                'Subscriber[%s]: Request completed',
-                                self._task_id,
-                            )
-                            return
-                        continue
-                    elif isinstance(event, _RequestStarted):
+                            continue
+                        if isinstance(event, _RequestRejected):
+                            raise event.error
                         logger.debug(
-                            'Subscriber[%s]: Request started',
+                            'Subscriber[%s]: Request completed',
                             self._task_id,
                         )
-                        continue
+                        return
                     try:
                         yield event
                     finally:
@@ -981,6 +1127,7 @@ class ActiveTask:
             await self._task_manager.save_task_event(updated)
             await send_push_notification(self._push_sender, updated.id, updated)
             task = updated
+        await self._release_lease()
         return task
 
     async def aclose(self) -> None:
@@ -1027,12 +1174,19 @@ class ActiveTask:
                     logger.error('Error during aclose', exc_info=result)
 
     def schedule_idle_release(self) -> None:
-        """(Re)starts the timer that releases a parked interrupted task."""
-        if self._interrupted_task_timeout is None or self._is_finished.is_set():
+        """(Re)starts the timer that releases a parked interrupted task.
+
+        A task running on another replica is released as soon as it is idle,
+        whatever its state and the timeout.
+        """
+        timeout = (
+            0.0 if self._running_elsewhere else self._interrupted_task_timeout
+        )
+        if timeout is None or self._is_finished.is_set():
             return
         self.cancel_idle_release()
         self._idle_release_task = asyncio.create_task(
-            self._release_when_idle(self._interrupted_task_timeout),
+            self._release_when_idle(timeout),
             name=f'idle-release:{self._task_id}',
         )
 
@@ -1058,7 +1212,10 @@ class ActiveTask:
         async with self._lock:
             if (
                 task is None
-                or task.status.state not in INTERRUPTED_TASK_STATES
+                or (
+                    task.status.state not in INTERRUPTED_TASK_STATES
+                    and not self._running_elsewhere
+                )
                 or self._is_finished.is_set()
                 # The consumer holds one reference; more means subscribers.
                 or self._reference_count != 1
