@@ -109,6 +109,29 @@ class _RequestCompleted:
         self.request_id = request_id
 
 
+async def send_push_notification(
+    push_sender: PushNotificationSender | None,
+    task_id: str,
+    event: PushNotificationEvent,
+) -> None:
+    """Sends a push notification for `event`; failures are logged, not raised."""
+    if push_sender is None or not task_id:
+        return
+    logger.debug('Sending push notification for task %s', task_id)
+    try:
+        await push_sender.send_notification(task_id, event)
+    except Exception:
+        # Push delivery is best-effort: a sender failure must not fail the
+        # task or disturb the event stream. This guard is defense-in-depth on
+        # top of the boundary inside BasePushNotificationSender, and also
+        # protects against custom PushNotificationSender implementations.
+        logger.exception(
+            'Push notification sender raised for task %s; ignoring the '
+            'failure.',
+            task_id,
+        )
+
+
 class EventConsumer:
     """Consumes events from the agent and updates system state."""
 
@@ -188,6 +211,9 @@ class EventConsumer:
                 task.status.state = TaskState.TASK_STATE_FAILED
                 task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
                 await task_manager.save_task_event(task)
+                await send_push_notification(
+                    self.active_task._push_sender, task.id, task
+                )
             self.active_task._task_created.set()
             return task
         if not task or task.status.state in TERMINAL_TASK_STATES:
@@ -205,11 +231,14 @@ class EventConsumer:
             # Not _handle_task_event: that validates what the agent sent, and
             # this write must land even after the agent replied with a Message.
             await self._handle_task_modification_event(handled_event)
-            return await task_manager.get_task()
         except ConcurrentTaskModificationError:
             # Another writer advanced the task; keep its state.
             self.active_task._task_manager.invalidate()
             return None
+        await send_push_notification(
+            self.active_task._push_sender, task.id, handled_event
+        )
+        return await task_manager.get_task()
 
     async def _process_event(self, event: Event) -> None:
         if self.fenced:
@@ -401,30 +430,10 @@ class EventConsumer:
         if is_terminal:
             await self._handle_terminal_state(updated_task)
 
-        if (
-            self.active_task._push_sender
-            and self.active_task._task_id
-            and isinstance(event, PushNotificationEvent)
-        ):
-            logger.debug(
-                'Consumer[%s]: Sending push notification',
-                self.active_task._task_id,
+        if isinstance(event, PushNotificationEvent):
+            await send_push_notification(
+                self.active_task._push_sender, self.active_task._task_id, event
             )
-            try:
-                await self.active_task._push_sender.send_notification(
-                    self.active_task._task_id, event
-                )
-            except Exception:
-                # Push delivery is best-effort: a sender failure must not
-                # fail the task or disturb the event stream. This guard is
-                # defense-in-depth on top of the boundary inside
-                # BasePushNotificationSender, and also protects against
-                # custom PushNotificationSender implementations.
-                logger.exception(
-                    'Consumer[%s]: Push notification sender raised; '
-                    'ignoring the failure.',
-                    self.active_task._task_id,
-                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
@@ -970,6 +979,7 @@ class ActiveTask:
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED
             await self._task_manager.save_task_event(updated)
+            await send_push_notification(self._push_sender, updated.id, updated)
             task = updated
         return task
 

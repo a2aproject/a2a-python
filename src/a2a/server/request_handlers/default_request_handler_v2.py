@@ -16,6 +16,7 @@ from a2a.server.agent_execution import (
 from a2a.server.agent_execution.active_task import (
     INTERRUPTED_TASK_STATES,
     TERMINAL_TASK_STATES,
+    send_push_notification,
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.cluster.event_stream import VersionedEvent
@@ -333,6 +334,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             await self._event_stream.publish(
                 task_id, VersionedEvent(event=event, version=new_version)
             )
+        await send_push_notification(self._push_sender, task_id, event)
         return cancelled
 
     def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
