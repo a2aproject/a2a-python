@@ -1,5 +1,18 @@
 # Changelog
 
+## [1.2.4](https://github.com/a2aproject/a2a-python/compare/v1.2.3...v1.2.4) (2026-10-23)
+
+
+### Bug Fixes
+
+* **client:** Create separate httpx per client when none configured ([#1358](https://github.com/a2aproject/a2a-python/issues/1358)) ([d316d0e](https://github.com/a2aproject/a2a-python/commit/d316d0e85e4d229df261d0cee0e9d9c0e5263207))
+* **client:** rejections from unrecognized fields ([#1354](https://github.com/a2aproject/a2a-python/issues/1354)) ([91929cd](https://github.com/a2aproject/a2a-python/commit/91929cda989caba089584ceafa7796583f25bec4))
+* **compat:** keep an unset v0.3 status message and provider as None ([#1362](https://github.com/a2aproject/a2a-python/issues/1362)) ([cdb4799](https://github.com/a2aproject/a2a-python/commit/cdb479957e81600f68f946f8ff0122667673cb35)), closes [#1361](https://github.com/a2aproject/a2a-python/issues/1361)
+* **compat:** set last_updated when storing a task in v0.3 format ([#1372](https://github.com/a2aproject/a2a-python/issues/1372)) ([30b6d50](https://github.com/a2aproject/a2a-python/commit/30b6d5067a9256447e3d5324163b091fc4bbad74)), closes [#1371](https://github.com/a2aproject/a2a-python/issues/1371)
+* **core:** restore structured __repr__ on A2A exceptions ([#1348](https://github.com/a2aproject/a2a-python/issues/1348)) ([79a6f45](https://github.com/a2aproject/a2a-python/commit/79a6f451f49fdeaec099d723542363b5bc6dead7))
+* **server:** apply history_length to legacy streaming sends ([#1364](https://github.com/a2aproject/a2a-python/issues/1364)) ([261c074](https://github.com/a2aproject/a2a-python/commit/261c074aa4de522dfa609882666c98c5bd1a52d0))
+* **server:** record executor failures through the event consumer ([#1366](https://github.com/a2aproject/a2a-python/issues/1366)) ([ad85806](https://github.com/a2aproject/a2a-python/commit/ad85806d9e43249eef5e3ad9724b0a5540cf99fb))
+
 ## [1.2.3](https://github.com/a2aproject/a2a-python/compare/v1.2.2...v1.2.3) (2026-10-17)
 
 
