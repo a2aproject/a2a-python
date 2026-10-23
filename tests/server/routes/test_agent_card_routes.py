@@ -1,10 +1,13 @@
 import copy
+import hashlib
+import json
 import logging
 
 from unittest.mock import AsyncMock
 
 import pytest
 
+from a2a.client.card_resolver import parse_agent_card
 from a2a.server.routes.agent_card_routes import create_agent_card_routes
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -12,7 +15,10 @@ from a2a.types.a2a_pb2 import (
     AgentInterface,
     AgentSkill,
 )
-from a2a.utils.signing import create_agent_card_signer
+from a2a.utils.signing import (
+    create_agent_card_signer,
+    create_signature_verifier,
+)
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from starlette.applications import Starlette
@@ -287,3 +293,41 @@ def test_route_creation_does_not_warn_for_complete_card(
     with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
         create_agent_card_routes(agent_card=_complete_agent_card())
     assert caplog.records == []
+
+
+@pytest.mark.parametrize(
+    'variant', ['empty-capabilities', 'empty-icon', 'control']
+)
+def test_pre_presence_etag_fetches_replacement_signature(variant: str) -> None:
+    """A 1.x cache must receive the re-signed body during the major upgrade."""
+    card = _complete_agent_card()
+    if variant != 'empty-capabilities':
+        card.capabilities.streaming = True
+    if variant == 'empty-icon':
+        card.icon_url = ''
+    key = 'agent-card-cache-migration-test-key'
+    sign = create_agent_card_signer(key, {'alg': 'HS256', 'kid': 'cache-test'})
+    verify = create_signature_verifier(lambda kid, jku: key, ['HS256'])
+
+    async def modifier(unsigned_card: AgentCard) -> AgentCard:
+        return sign(copy.deepcopy(unsigned_card))
+
+    client = card_client(agent_card=card, card_modifier=modifier)
+    url = '/.well-known/agent-card.json'
+    fresh = client.get(url)
+    unsigned = {k: v for k, v in fresh.json().items() if k != 'signatures'}
+    # The pre-2.0 route hashed only this JSON, independent of the signature.
+    old_body = json.dumps(unsigned, sort_keys=True, separators=(',', ':'))
+    old_etag = f'W/"{hashlib.sha256(old_body.encode()).hexdigest()}"'
+
+    replacement = client.get(url, headers={'If-None-Match': old_etag})
+
+    assert replacement.status_code == 200
+    assert replacement.headers['etag'] != old_etag
+    verify(parse_agent_card(replacement.json()))
+    assert (
+        client.get(
+            url, headers={'If-None-Match': replacement.headers['etag']}
+        ).status_code
+        == 304
+    )
