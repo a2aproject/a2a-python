@@ -1,9 +1,19 @@
 import asyncio
+import uuid
+
+from collections.abc import AsyncGenerator
 
 import pytest
+import pytest_asyncio
 
-from a2a.types.a2a_pb2 import SubscribeToTaskRequest, TaskState
+from a2a.helpers.proto_helpers import new_task_from_user_message
+from a2a.server.agent_execution.agent_executor import AgentExecutor
+from a2a.server.cluster import DatabaseTaskEventStream
+from a2a.server.cluster.database_task_store import VersionedDatabaseTaskStore
+from a2a.server.tasks.task_updater import TaskUpdater
+from a2a.types.a2a_pb2 import Part, Role, SubscribeToTaskRequest, TaskState
 from a2a.utils.errors import TaskNotFoundError, UnsupportedOperationError
+from sqlalchemy.ext.asyncio import AsyncConnection, create_async_engine
 
 from .conftest import (
     ControlledAgent,
@@ -137,3 +147,119 @@ async def test_resubscribe_non_owner_rejected(
                 pass
     finally:
         await handler.aclose()
+
+
+class _PauseThenResumeAgent(AgentExecutor):
+    """Turn 1 asks for input. Turn 2 goes WORKING, waits, then completes."""
+
+    def __init__(self) -> None:
+        self.resumed = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute(self, context, event_queue) -> None:  # noqa: ANN001
+        updater = TaskUpdater(
+            event_queue, str(context.task_id), str(context.context_id)
+        )
+        if context.current_task is None:
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+            await updater.requires_input(
+                message=updater.new_agent_message([Part(text='need input')])
+            )
+            return
+        await updater.start_work()
+        self.resumed.set()
+        await self.release.wait()
+        await updater.complete()
+
+    async def cancel(self, context, event_queue) -> None:  # noqa: ANN001
+        pass
+
+
+@pytest_asyncio.fixture
+async def sqlite_dsn() -> AsyncGenerator[str, None]:
+    """A shared in-memory SQLite database, kept alive for the test."""
+    dsn = (
+        f'sqlite+aiosqlite:///file:resume_{uuid.uuid4().hex}'
+        '?mode=memory&cache=shared&uri=true'
+    )
+    engine = create_async_engine(dsn)
+    keeper: AsyncConnection = await engine.connect()
+    await VersionedDatabaseTaskStore(engine).initialize()
+    await DatabaseTaskEventStream(engine).initialize()
+    yield dsn
+    await keeper.close()
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(15)
+async def test_remote_subscriber_follows_resumed_turn_to_completion(
+    sqlite_dsn: str, context
+) -> None:
+    """A task waits for input after a turn on A. C subscribes, and B runs the
+    next turn. C must see that turn through to COMPLETED; the user message
+    that resumed the task must not first re-save the waiting state."""
+    agent = _PauseThenResumeAgent()
+    engines = [create_async_engine(sqlite_dsn) for _ in range(3)]
+    replica_a, replica_b, replica_c = (
+        make_replica(
+            VersionedDatabaseTaskStore(engine),
+            DatabaseTaskEventStream(engine, poll_interval_s=0.01),
+            agent,
+        )
+        for engine in engines
+    )
+    try:
+        first = await replica_a.on_message_send(
+            build_send_request('q1', message_id='m1'), context
+        )
+        assert first.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+        c_states: list = []
+
+        async def follow_on_c() -> None:
+            async for event in replica_c.on_subscribe_to_task(
+                SubscribeToTaskRequest(id=first.id), context
+            ):
+                c_states.append(event.status.state)
+
+        c_task = asyncio.create_task(follow_on_c())
+        await asyncio.sleep(0.1)
+
+        b_task = asyncio.create_task(
+            replica_b.on_message_send(
+                build_send_request(
+                    'q2',
+                    task_id=first.id,
+                    context_id=first.context_id,
+                    message_id='m2',
+                ),
+                context,
+            )
+        )
+        await asyncio.wait_for(agent.resumed.wait(), timeout=5)
+        agent.release.set()
+        await asyncio.wait_for(b_task, timeout=8)
+        await asyncio.wait_for(c_task, timeout=8)
+
+        assert c_states == [
+            TaskState.TASK_STATE_INPUT_REQUIRED,
+            TaskState.TASK_STATE_WORKING,
+            TaskState.TASK_STATE_COMPLETED,
+        ]
+        stored = await VersionedDatabaseTaskStore(engines[0]).get(
+            first.id, context
+        )
+        assert stored is not None
+        assert [
+            m.message_id
+            for m in stored.task.history
+            if m.role == Role.ROLE_USER
+        ] == ['m1', 'm2']
+    finally:
+        for replica in (replica_a, replica_b, replica_c):
+            await replica.aclose()
+        for engine in engines:
+            await engine.dispose()
