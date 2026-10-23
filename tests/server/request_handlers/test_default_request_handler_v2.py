@@ -3221,3 +3221,26 @@ async def test_idle_release_check_failure_keeps_task(
 
     assert 'Idle release check failed' in caplog.text
     await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_cancel_restarts_idle_release() -> None:
+    """A cancel that fails leaves the parked task to be released later."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with (
+        patch.object(
+            active_task, 'cancel', AsyncMock(side_effect=RuntimeError('boom'))
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        await handler.on_cancel_task(
+            CancelTaskRequest(id=task.id), create_server_call_context()
+        )
+
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()

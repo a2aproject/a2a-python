@@ -272,7 +272,11 @@ class DefaultRequestHandlerV2(RequestHandler):
             active_task = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
             )
-            result = await active_task.cancel(context)
+            try:
+                result = await active_task.cancel(context)
+            finally:
+                # get_or_create stopped the timer; a failed cancel leaves the task parked.
+                active_task.schedule_idle_release()
         except UnsupportedOperationError as e:
             raise TaskNotCancelableError from e
 
