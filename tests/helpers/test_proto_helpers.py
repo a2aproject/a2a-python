@@ -471,6 +471,14 @@ def test_get_data_parts_empty() -> None:
     assert get_data_parts(parts) == []
 
 
+def test_get_data_parts_returns_whole_numbers_as_floats() -> None:
+    """Pins the documented behavior: Value stores numbers as doubles."""
+    result = get_data_parts([new_data_part({'id': 4326, 'items': [240]})])
+    assert result == [{'id': 4326.0, 'items': [240.0]}]
+    assert isinstance(result[0]['id'], float)
+    assert isinstance(result[0]['items'][0], float)
+
+
 def test_get_raw_parts() -> None:
     parts = [
         Part(raw=b'\x89PNG'),
