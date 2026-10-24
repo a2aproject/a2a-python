@@ -40,6 +40,7 @@ import contextvars
 import logging
 import uuid
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
 
 from a2a.server.agent_execution.context import RequestContext
@@ -115,6 +116,9 @@ class EventConsumer:
         self.active_task = active_task
         self.task_mode: bool | None = None
         self.message_to_save: Message | None = None
+        # Set when the producer failed, so a request that failed before any
+        # task was created still leaves a FAILED task behind.
+        self.producer_failed = False
 
     async def run(self) -> None:
         """Consumes events from the agent and updates system state."""
@@ -160,16 +164,45 @@ class EventConsumer:
                 )
 
     async def _write_failed_status(self) -> Task | None:
-        task = await self.active_task._task_manager.get_task()
+        """Records FAILED once a failure ends the event stream.
+
+        After a producer failure this runs once every event the executor
+        enqueued before raising has been processed, so the write lands in
+        order. There are three cases:
+
+        - The request failed before a task was created: create one as FAILED.
+        - No task exists and the failure is the consumer's own, or the task
+          already reached a terminal state: nothing is written.
+        - Otherwise: the existing task is marked FAILED.
+        """
+        task_manager = self.active_task._task_manager
+        task = await task_manager.get_task()
+        if task is None and self.producer_failed:
+            task = await task_manager.ensure_task_id(
+                self.active_task._task_id, task_manager.context_id or ''
+            )
+            if task.status.state not in TERMINAL_TASK_STATES:
+                task.status.state = TaskState.TASK_STATE_FAILED
+                task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
+                await task_manager.save_task_event(task)
+            self.active_task._task_created.set()
+            return task
         if not task or task.status.state in TERMINAL_TASK_STATES:
             return None
+        # Stamped with the failure time, which DatabaseTaskStore also uses for
+        # last_updated.
+        status = TaskStatus(state=TaskState.TASK_STATE_FAILED)
+        status.timestamp.FromDatetime(datetime.now(timezone.utc))
         handled_event = TaskStatusUpdateEvent(
             task_id=task.id,
             context_id=task.context_id,
-            status=TaskStatus(state=TaskState.TASK_STATE_FAILED),
+            status=status,
         )
         try:
-            return await self._handle_task_event(handled_event)
+            # Not _handle_task_event: that validates what the agent sent, and
+            # this write must land even after the agent replied with a Message.
+            await self._handle_task_modification_event(handled_event)
+            return await task_manager.get_task()
         except ConcurrentTaskModificationError:
             # Another writer advanced the task; keep its state.
             self.active_task._task_manager.invalidate()
@@ -219,6 +252,8 @@ class EventConsumer:
             )
             self.message_to_save = event.request_context.message
         elif isinstance(event, BaseException):
+            # Only the producer enqueues exceptions, when a request fails.
+            self.producer_failed = True
             raise event
         elif isinstance(event, Message):
             self._handle_message_event(event)
@@ -237,6 +272,18 @@ class EventConsumer:
             self.active_task._task_created.set()
 
         await self._enqueue_to_subscribers(event, updated_task)
+
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message has no task to continue, so finish like a terminal state.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
 
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
@@ -346,9 +393,21 @@ class EventConsumer:
                 'Consumer[%s]: Sending push notification',
                 self.active_task._task_id,
             )
-            await self.active_task._push_sender.send_notification(
-                self.active_task._task_id, event
-            )
+            try:
+                await self.active_task._push_sender.send_notification(
+                    self.active_task._task_id, event
+                )
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
+                logger.exception(
+                    'Consumer[%s]: Push notification sender raised; '
+                    'ignoring the failure.',
+                    self.active_task._task_id,
+                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
@@ -575,7 +634,6 @@ class ActiveTask:
         Runs as a detached asyncio.Task. Safe to cancel.
         """
         logger.debug('Producer[%s]: Started', self._task_id)
-        request_context = None
         try:
             while True:
                 (
@@ -643,17 +701,8 @@ class ActiveTask:
                 'Producer[%s]: Execution failed',
                 self._task_id,
             )
-            # Persist the failure directly instead of relying on the closing
-            # event queue to carry a final status update.
-            if request_context:
-                task = await self._task_manager.ensure_task_id(
-                    self._task_id,
-                    request_context.context_id or '',
-                )
-                if task.status.state not in TERMINAL_TASK_STATES:
-                    task.status.state = TaskState.TASK_STATE_FAILED
-                    await self._task_manager.save_task_event(task)
-                self._task_created.set()
+            # The consumer writes FAILED: writing here would race its save of
+            # an event the executor enqueued just before raising.
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
@@ -749,6 +798,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -760,6 +810,9 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
+                    # Acknowledge internal lifecycle events before skipping them.
+                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                        tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None
@@ -879,10 +932,9 @@ class ActiveTask:
             # returns the shared _task_manager._current_task, which may already
             # have been yielded to a subscriber. Copying keeps THIS terminal
             # write off the yielded reference. It is not a file-wide guarantee:
-            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom,
-            # and the producer-failure write above) still update the shared
-            # object in place. Making every write copy-on-yield is the general
-            # property tracked in #1175 and #1191.
+            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom)
+            # still update the shared object in place. Making every write
+            # copy-on-yield is the general property tracked in #1175 and #1191.
             updated = Task()
             updated.CopyFrom(task)
             updated.status.state = TaskState.TASK_STATE_CANCELED

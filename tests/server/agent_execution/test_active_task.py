@@ -1,4 +1,5 @@
 import asyncio
+import contextlib
 import logging
 
 from unittest.mock import AsyncMock, Mock, patch
@@ -41,6 +42,7 @@ class TestActiveTask:
         tm.get_task = AsyncMock(return_value=None)
         tm.context_id = 'test-context-id'
         tm._init_task_obj = Mock(return_value=Task(id='test-task-id'))
+        tm.ensure_task_id = AsyncMock(return_value=Task(id='test-task-id'))
         tm.save_task_event = AsyncMock()
         return tm
 
@@ -921,6 +923,83 @@ class TestActiveTask:
         ):
             async for _ in active_task.subscribe():
                 pass
+
+    @pytest.mark.asyncio
+    @pytest.mark.timeout(5)
+    async def test_active_task_cancel_while_subscribed_frees_producer(
+        self,
+        active_task: ActiveTask,
+        agent_executor: Mock,
+        request_context: Mock,
+        task_manager: Mock,
+    ) -> None:
+        """Regression (#1322): cancelling a stream frees its producer."""
+        hang = asyncio.Event()
+        executing = asyncio.Event()
+
+        async def execute_mock(req, q):
+            executing.set()
+            await hang.wait()  # long-running work, cancelled from outside
+
+        agent_executor.execute = AsyncMock(side_effect=execute_mock)
+        task_manager.get_task = AsyncMock(
+            return_value=Task(
+                id='test-task-id',
+                status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            )
+        )
+
+        await active_task.enqueue_request(request_context)
+        await active_task.start(
+            call_context=ServerCallContext(), create_task_if_missing=True
+        )
+        producer = active_task._producer_task
+        assert producer is not None
+
+        # Subscribe before cancellation so the lifecycle event requires an ack.
+        subscription = active_task.subscribe(request=request_context)
+
+        async def drain() -> None:
+            async for _event in subscription:
+                pass
+
+        reader = asyncio.create_task(drain())
+        # Ensure cancellation reaches _run_producer's cleanup path.
+        await asyncio.wait_for(executing.wait(), timeout=2)
+        producer.cancel()
+
+        # Graceful cleanup must not wait on an unacknowledged lifecycle event.
+        await asyncio.wait_for(asyncio.shield(producer), timeout=2)
+
+        reader.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await reader
+        hang.set()
+        await active_task.aclose()
+
+    @pytest.mark.asyncio
+    async def test_active_task_subscribe_acks_raised_exception(
+        self,
+        active_task: ActiveTask,
+    ) -> None:
+        """A re-raised queue exception is still acknowledged."""
+        tapped_queue = Mock(spec=EventQueue)
+        tapped_queue.dequeue_event = AsyncMock(
+            return_value=(RuntimeError('boom'), None)
+        )
+        tapped_queue.close = AsyncMock()
+
+        with (
+            patch.object(
+                active_task._event_queue_subscribers,
+                'tap',
+                return_value=tapped_queue,
+            ),
+            pytest.raises(RuntimeError, match='boom'),
+        ):
+            await anext(active_task.subscribe())
+
+        tapped_queue.task_done.assert_called_once_with()
 
 
 @pytest.mark.asyncio

@@ -50,6 +50,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_rest(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200, json=lambda: {'message': {}}
@@ -86,6 +87,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_jsonrpc(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200,
@@ -141,6 +143,7 @@ class TestTenantDecorator:
     @pytest.mark.asyncio
     async def test_tenant_decorator_explicit_override(self, agent_card):
         mock_httpx = AsyncMock(spec=httpx.AsyncClient)
+        mock_httpx.is_closed = False
         mock_httpx.build_request.return_value = MagicMock()
         mock_httpx.send.return_value = MagicMock(
             status_code=200, json=lambda: {'message': {}}

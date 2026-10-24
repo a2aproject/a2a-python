@@ -275,6 +275,25 @@ class TestProtoUtils:
         )
         assert config.history_length == expected
 
+    def test_message_send_params_without_configuration(self):
+        """An unset configuration stays None so the send defaults to blocking."""
+        params = proto_utils.FromProto.message_send_params(
+            a2a_pb2.SendMessageRequest(request=a2a_pb2.Message(message_id='m'))
+        )
+        assert params.configuration is None
+
+    def test_task_status_without_message(self):
+        """An unset status message stays None instead of an empty message."""
+        status = proto_utils.FromProto.task_status(
+            a2a_pb2.TaskStatus(state=a2a_pb2.TASK_STATE_WORKING)
+        )
+        assert status.message is None
+
+    def test_agent_card_without_provider(self):
+        """An unset provider stays None instead of an empty provider."""
+        card = proto_utils.FromProto.agent_card(a2a_pb2.AgentCard(name='a'))
+        assert card.provider is None
+
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""
         assert proto_utils.ToProto.message(None) is None

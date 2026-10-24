@@ -382,7 +382,16 @@ class LegacyRequestHandler(RequestHandler):
             and task_id
             and isinstance(event, PushNotificationEvent)
         ):
-            await self._push_sender.send_notification(task_id, event)
+            try:
+                await self._push_sender.send_notification(task_id, event)
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream.
+                logger.exception(
+                    'Push notification sender raised for task_id=%s; '
+                    'ignoring the failure.',
+                    task_id,
+                )
 
     @validate_request_params
     async def on_message_send(
@@ -469,6 +478,8 @@ class LegacyRequestHandler(RequestHandler):
         Starts the agent execution and yields events as they are produced
         by the agent.
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -481,11 +492,13 @@ class LegacyRequestHandler(RequestHandler):
 
         try:
             async for event in result_aggregator.consume_and_emit(consumer):
+                response = event
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
+                    response = apply_history_length(event, params.configuration)
 
                 await self._send_push_notification_if_needed(task_id, event)
-                yield event
+                yield response
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
             bg_task = asyncio.create_task(

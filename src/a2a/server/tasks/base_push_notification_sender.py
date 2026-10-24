@@ -68,8 +68,25 @@ class BasePushNotificationSender(PushNotificationSender):
     async def send_notification(
         self, task_id: str, event: PushNotificationEvent
     ) -> None:
-        """Sends a push notification for an event if configuration exists."""
-        push_configs = await self._config_store.get_info_for_dispatch(task_id)
+        """Sends a push notification for an event if configuration exists.
+
+        Best-effort by design: failures to read the configuration store or
+        to deliver a notification are logged and do not raise.
+        """
+        try:
+            push_configs = await self._config_store.get_info_for_dispatch(
+                task_id
+            )
+        except Exception:
+            # Push delivery is best-effort: an infrastructure failure while
+            # reading the config store must not propagate into the task
+            # lifecycle.
+            logger.exception(
+                'Failed to read push notification configs for task_id=%s; '
+                'skipping push notification delivery.',
+                task_id,
+            )
+            return
         if not push_configs:
             return
 
@@ -91,11 +108,19 @@ class BasePushNotificationSender(PushNotificationSender):
         task_id: str,
     ) -> bool:
         url = push_info.url
-        if (
-            self._push_url_validator is not None
-            and not await self._push_url_validator(url)
-        ):
-            return False
+        if self._push_url_validator is not None:
+            try:
+                accepted = await self._push_url_validator(url)
+            except Exception:
+                logger.exception(
+                    'Push URL validator raised for task_id=%s, URL: %s. '
+                    'Failing closed and treating the URL as rejected.',
+                    task_id,
+                    url,
+                )
+                return False
+            if not accepted:
+                return False
         try:
             headers: dict[str, str] = {}
             if push_info.token:

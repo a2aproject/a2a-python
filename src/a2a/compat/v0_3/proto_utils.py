@@ -696,7 +696,9 @@ class FromProto:
     def task_status(cls, status: a2a_pb2.TaskStatus) -> types.TaskStatus:
         return types.TaskStatus(
             state=cls.task_state(status.state),
-            message=cls.message(status.update),
+            message=cls.message(status.update)
+            if status.HasField('update')
+            else None,
             timestamp=status.timestamp.ToJsonString()
             if status.HasField('timestamp')
             else None,
@@ -804,7 +806,9 @@ class FromProto:
         cls, request: a2a_pb2.SendMessageRequest
     ) -> types.MessageSendParams:
         return types.MessageSendParams(
-            configuration=cls.message_send_configuration(request.configuration),
+            configuration=cls.message_send_configuration(request.configuration)
+            if request.HasField('configuration')
+            else None,
             message=cls.message(request.request),
             metadata=cls.metadata(request.metadata),
         )
@@ -872,7 +876,9 @@ class FromProto:
             description=card.description,
             documentation_url=card.documentation_url,
             name=card.name,
-            provider=cls.provider(card.provider),
+            provider=cls.provider(card.provider)
+            if card.HasField('provider')
+            else None,
             security=cls.security(list(card.security)),
             security_schemes=cls.security_schemes(dict(card.security_schemes)),
             skills=[cls.skill(x) for x in card.skills] if card.skills else [],

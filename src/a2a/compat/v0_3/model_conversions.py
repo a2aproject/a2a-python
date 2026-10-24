@@ -32,6 +32,11 @@ def core_to_compat_task_model(task: pb2_v10.Task, owner: str) -> TaskModel:
         artifacts=data.get('artifacts'),
         task_metadata=data.get('metadata'),
         protocol_version='0.3',
+        last_updated=(
+            task.status.timestamp.ToDatetime()
+            if task.status.HasField('timestamp')
+            else None
+        ),
     )
 
 
