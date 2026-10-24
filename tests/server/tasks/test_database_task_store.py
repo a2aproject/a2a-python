@@ -409,6 +409,82 @@ async def test_list_tasks_does_not_bind_out_of_range_datetimes(
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize(
+    'state, legacy_state',
+    [
+        (TaskState.TASK_STATE_SUBMITTED, 'submitted'),
+        (TaskState.TASK_STATE_WORKING, 'working'),
+        (TaskState.TASK_STATE_COMPLETED, 'completed'),
+        (TaskState.TASK_STATE_FAILED, 'failed'),
+        (TaskState.TASK_STATE_CANCELED, 'canceled'),
+        (TaskState.TASK_STATE_INPUT_REQUIRED, 'input-required'),
+        (TaskState.TASK_STATE_REJECTED, 'rejected'),
+        (TaskState.TASK_STATE_AUTH_REQUIRED, 'auth-required'),
+    ],
+)
+async def test_list_tasks_filters_mixed_protocol_states(
+    db_store_parameterized: DatabaseTaskStore,
+    state: TaskState.ValueType,
+    legacy_state: str,
+) -> None:
+    store = db_store_parameterized
+    other_context = ServerCallContext(user=SampleUser('other_user'))
+    for owner_context in (TEST_CONTEXT, other_context):
+        owner = store.owner_resolver(owner_context)
+        for prefix, core_state, stored_state in (
+            ('match', state, legacy_state),
+            ('nonmatch', TaskState.TASK_STATE_UNSPECIFIED, 'unknown'),
+        ):
+            await store.save(
+                Task(
+                    id=f'{owner}-{prefix}-modern',
+                    context_id='mixed-context',
+                    status=TaskStatus(state=core_state),
+                ),
+                owner_context,
+            )
+            async with store.async_session_maker.begin() as session:
+                for version in (None, '0.3'):
+                    await session.execute(
+                        insert(store.task_model).values(
+                            id=f'{owner}-{prefix}-legacy-{version}',
+                            context_id='mixed-context',
+                            owner=owner,
+                            status={'state': stored_state},
+                            protocol_version=version,
+                        )
+                    )
+
+    owner = store.owner_resolver(TEST_CONTEXT)
+    expected_ids = [
+        f'{owner}-match-modern',
+        f'{owner}-match-legacy-None',
+        f'{owner}-match-legacy-0.3',
+    ]
+    for params in (
+        ListTasksRequest(),
+        ListTasksRequest(status=TaskState.TASK_STATE_UNSPECIFIED),
+    ):
+        unfiltered = await store.list(params, TEST_CONTEXT)
+        assert unfiltered.total_size == 6
+        assert {task.id for task in unfiltered.tasks} == {
+            task_id.replace('-match-', f'-{prefix}-')
+            for task_id in expected_ids
+            for prefix in ('match', 'nonmatch')
+        }
+
+    params = ListTasksRequest(status=state, page_size=1)
+    for index, expected_id in enumerate(expected_ids):
+        page = await store.list(params, TEST_CONTEXT)
+        assert page.total_size == 3
+        assert [task.id for task in page.tasks] == [expected_id]
+        assert page.tasks[0].status.state == state
+        assert page.page_size == 1
+        assert bool(page.next_page_token) == (index < len(expected_ids) - 1)
+        params.page_token = page.next_page_token
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
     'params, expected_error_message',
     [
         (
