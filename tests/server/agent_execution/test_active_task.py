@@ -42,6 +42,7 @@ class TestActiveTask:
         tm.get_task = AsyncMock(return_value=None)
         tm.context_id = 'test-context-id'
         tm._init_task_obj = Mock(return_value=Task(id='test-task-id'))
+        tm.ensure_task_id = AsyncMock(return_value=Task(id='test-task-id'))
         tm.save_task_event = AsyncMock()
         return tm
 

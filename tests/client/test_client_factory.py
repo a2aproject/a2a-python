@@ -9,6 +9,7 @@ import pytest
 
 from a2a.client import ClientConfig, ClientFactory, create_client
 from a2a.client.client_factory import TransportProducer
+from a2a.client.errors import A2AClientError
 from a2a.client.transports import (
     JsonRpcTransport,
     RestTransport,
@@ -19,7 +20,9 @@ from a2a.types.a2a_pb2 import (
     AgentCard,
     AgentInterface,
 )
-from a2a.utils.constants import TransportProtocol
+from a2a.utils.constants import (
+    TransportProtocol,
+)
 
 
 @pytest.fixture
@@ -407,3 +410,51 @@ async def test_create_client_with_url_and_config(base_agent_card: AgentCard):
         mock_resolver.assert_called_once_with(
             mock_httpx_client, 'http://example.com'
         )
+
+
+@pytest.mark.asyncio
+async def test_client_factory_creates_a_client_per_created_client(
+    base_agent_card: AgentCard,
+):
+    """Verify each created client gets its own httpx client by default."""
+    factory = ClientFactory()
+
+    client_a = factory.create(base_agent_card)
+    client_b = factory.create(base_agent_card)
+
+    assert (
+        client_a._transport.httpx_client  # type: ignore[attr-defined]
+        is not client_b._transport.httpx_client  # type: ignore[attr-defined]
+    )
+
+
+@pytest.mark.asyncio
+async def test_client_close_does_not_close_shared_httpx_client(
+    base_agent_card: AgentCard,
+):
+    """Verify closing a client does not close a shared httpx_client from config."""
+    shared_httpx_client = httpx.AsyncClient()
+    try:
+        factory = ClientFactory(ClientConfig(httpx_client=shared_httpx_client))
+        client = factory.create(base_agent_card)
+
+        await client.close()
+
+        assert not shared_httpx_client.is_closed
+    finally:
+        await shared_httpx_client.aclose()
+
+
+@pytest.mark.asyncio
+async def test_client_second_close_raises_a2a_client_error(
+    base_agent_card: AgentCard,
+):
+    """Verify closing an already closed client raises A2AClientError."""
+    factory = ClientFactory()
+    client = factory.create(base_agent_card)
+
+    await client.close()
+    assert client._transport.httpx_client.is_closed  # type: ignore[attr-defined]
+
+    with pytest.raises(A2AClientError, match='HTTP client is already closed'):
+        await client.close()

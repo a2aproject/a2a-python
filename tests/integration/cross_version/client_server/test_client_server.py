@@ -8,6 +8,11 @@ import time
 import pytest
 
 
+# Use --isolated to not to pull project .venv.
+LEGACY_ENV_FLAGS = ['--no-project', '--isolated']
+CLIENT_03_DEPS = ['--with', 'a2a-sdk[grpc]==0.3.24', *LEGACY_ENV_FLAGS]
+
+
 def get_free_port():
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
         s.bind(('127.0.0.1', 0))
@@ -128,7 +133,7 @@ def running_servers():
         'uvicorn',
         '--with',
         'fastapi',
-        '--no-project',
+        *LEGACY_ENV_FLAGS,
     ]
     s03_cmd = (
         [uv_path, 'run']
@@ -192,14 +197,14 @@ def running_servers():
         (
             'server_0_3.py',
             'client_0_3.py',
-            ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            CLIENT_03_DEPS,
             ['grpc', 'jsonrpc', 'rest'],
         ),
         # Run 1.0 Server <-> 0.3 Client
         (
             'server_1_0.py',
             'client_0_3.py',
-            ['--with', 'a2a-sdk[grpc]==0.3.24', '--no-project'],
+            CLIENT_03_DEPS,
             ['grpc', 'jsonrpc', 'rest'],
         ),
         # Run 1.0 Server <-> 1.0 Client
