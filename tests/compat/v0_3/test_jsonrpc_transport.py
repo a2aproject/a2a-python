@@ -565,3 +565,80 @@ async def test_compat_jsonrpc_transport_mirrors_extension_header(
     headers = kwargs['headers']
     assert headers['A2A-Extensions'] == 'foo,bar'
     assert headers['X-A2A-Extensions'] == 'foo,bar'
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_get_task_history_length(
+    transport: CompatJsonRpcTransport,
+    history_length: int | None,
+    expected_ids: list[str],
+) -> None:
+    # v0.3 treats zero as unlimited; v1.0 requires an empty local history.
+    payload = {
+        'id': 'task-1',
+        'contextId': 'ctx-1',
+        'status': {'state': 'working'},
+        'history': [
+            {'messageId': f'm{i}', 'role': 'user', 'parts': []}
+            for i in range(3)
+        ],
+    }
+    with patch.object(
+        transport, '_send_request', new_callable=AsyncMock
+    ) as request:
+        request.return_value = {'jsonrpc': '2.0', 'id': '0', 'result': payload}
+        req = GetTaskRequest(id='task-1')
+        if history_length is not None:
+            req.history_length = history_length
+        task = await transport.get_task(req)
+    assert [message.message_id for message in task.history] == expected_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_send_message_history_length(
+    transport: CompatJsonRpcTransport,
+    history_length: int | None,
+    expected_ids: list[str],
+) -> None:
+    # v0.3 treats zero as unlimited; v1.0 requires an empty local history.
+    payload = {
+        'id': 'task-1',
+        'contextId': 'ctx-1',
+        'status': {'state': 'working'},
+        'history': [
+            {'messageId': f'm{i}', 'role': 'user', 'parts': []}
+            for i in range(3)
+        ],
+    }
+    payload['kind'] = 'task'
+    with patch.object(
+        transport, '_send_request', new_callable=AsyncMock
+    ) as request:
+        request.return_value = {'jsonrpc': '2.0', 'id': '0', 'result': payload}
+        req = SendMessageRequest()
+        if history_length is not None:
+            req.configuration.history_length = history_length
+        response = await transport.send_message(req)
+        assert response.HasField('task')
+        task = response.task
+    assert [message.message_id for message in task.history] == expected_ids

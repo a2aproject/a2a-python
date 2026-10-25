@@ -690,3 +690,79 @@ async def test_compat_rest_transport_execute_request(
     mock_send_http_request.assert_called_once_with(
         transport.httpx_client, mock_request, transport._handle_http_error
     )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_get_task_history_length(
+    transport: CompatRestTransport,
+    history_length: int | None,
+    expected_ids: list[str],
+) -> None:
+    # v0.3 treats zero as unlimited; v1.0 requires an empty local history.
+    payload = {
+        'id': 'task-1',
+        'contextId': 'ctx-1',
+        'status': {'state': 'TASK_STATE_WORKING'},
+        'history': [
+            {'messageId': f'm{i}', 'role': 'ROLE_USER', 'parts': []}
+            for i in range(3)
+        ],
+    }
+    with patch.object(
+        transport, '_execute_request', new_callable=AsyncMock
+    ) as request:
+        request.return_value = payload
+        req = GetTaskRequest(id='task-1')
+        if history_length is not None:
+            req.history_length = history_length
+        task = await transport.get_task(req)
+    assert [message.message_id for message in task.history] == expected_ids
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_send_message_history_length(
+    transport: CompatRestTransport,
+    history_length: int | None,
+    expected_ids: list[str],
+) -> None:
+    # v0.3 treats zero as unlimited; v1.0 requires an empty local history.
+    payload = {
+        'id': 'task-1',
+        'contextId': 'ctx-1',
+        'status': {'state': 'TASK_STATE_WORKING'},
+        'history': [
+            {'messageId': f'm{i}', 'role': 'ROLE_USER', 'parts': []}
+            for i in range(3)
+        ],
+    }
+    with patch.object(
+        transport, '_execute_request', new_callable=AsyncMock
+    ) as request:
+        request.return_value = {'task': payload}
+        req = SendMessageRequest()
+        if history_length is not None:
+            req.configuration.history_length = history_length
+        response = await transport.send_message(req)
+        assert response.HasField('task')
+        task = response.task
+    assert [message.message_id for message in task.history] == expected_ids

@@ -7,6 +7,7 @@ from a2a.client.optionals import Channel
 from a2a.compat.v0_3 import a2a_v0_3_pb2
 from a2a.compat.v0_3.grpc_transport import CompatGrpcTransport
 from a2a.types.a2a_pb2 import (
+    GetTaskRequest,
     Message,
     Role,
     SendMessageRequest,
@@ -66,3 +67,32 @@ def test_compat_grpc_transport_no_extension_metadata():
 
     assert 'a2a-extensions' not in metadata
     assert 'x-a2a-extensions' not in metadata
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'history_length, expected_ids',
+    [
+        (None, ['m0', 'm1', 'm2']),
+        (0, []),
+        (1, ['m2']),
+        (3, ['m0', 'm1', 'm2']),
+        (5, ['m0', 'm1', 'm2']),
+    ],
+)
+async def test_get_task_history_length(
+    history_length: int | None, expected_ids: list[str]
+) -> None:
+    transport = CompatGrpcTransport(
+        channel=AsyncMock(spec=Channel), agent_card=None
+    )
+    task = a2a_v0_3_pb2.Task(id='task-1', context_id='ctx-1')
+    task.status.state = a2a_v0_3_pb2.TaskState.TASK_STATE_WORKING
+    for i in range(3):
+        task.history.add(message_id=f'm{i}', role=a2a_v0_3_pb2.Role.ROLE_USER)
+    transport.stub = MagicMock(GetTask=AsyncMock(return_value=task))
+    req = GetTaskRequest(id='task-1')
+    if history_length is not None:
+        req.history_length = history_length
+    result = await transport.get_task(req)
+    assert [message.message_id for message in result.history] == expected_ids
