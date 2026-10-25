@@ -111,6 +111,7 @@ def create_rest_routes(
     }
 
     base_route_objects = []
+    tenant_route_objects = []
     for (path, method), endpoint in base_routes.items():
         base_route_objects.append(
             Route(
@@ -119,7 +120,13 @@ def create_rest_routes(
                 methods=[method],
             )
         )
+        tenant_route_objects.append(
+            Route(path=path, endpoint=endpoint, methods=[method])
+        )
     routes.extend(base_route_objects)
-    routes.append(Mount(path='/{tenant}', routes=base_route_objects))
+    # Clients send the tenant right after the interface URL, so after the prefix
+    routes.append(
+        Mount(path=f'{path_prefix}/{{tenant}}', routes=tenant_route_objects)
+    )
 
     return routes

@@ -81,6 +81,26 @@ def test_rest_endpoints_routing_tenant(agent_card, mock_handler):
     assert context.tenant == 'my-tenant'
 
 
+def test_rest_endpoints_routing_tenant_with_path_prefix(mock_handler):
+    """Tests that the {tenant} segment follows path_prefix, as clients send it."""
+    mock_handler.on_message_send.return_value = Task(id='123')
+
+    routes = create_rest_routes(
+        request_handler=mock_handler, path_prefix='/a2a/rest'
+    )
+    client = TestClient(Starlette(routes=routes))
+
+    response = client.post(
+        '/a2a/rest/my-tenant/message:send',
+        json={},
+        headers={'A2A-Version': '1.0'},
+    )
+    assert response.status_code == 200
+
+    context = mock_handler.on_message_send.call_args[0][1]
+    assert context.tenant == 'my-tenant'
+
+
 def test_rest_list_tasks(agent_card, mock_handler):
     """Tests that list tasks endpoint is routed to the handler."""
     mock_handler.on_list_tasks.return_value = ListTasksResponse()
