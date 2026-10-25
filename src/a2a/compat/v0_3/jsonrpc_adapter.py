@@ -1,7 +1,7 @@
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import JSONResponse
@@ -306,23 +306,12 @@ class JSONRPC03Adapter:
         )
 
 
-# Error codes defined by the A2A v0.3 specification. Codes added in v1.0
-# (e.g. -32009 VersionNotSupported) are unknown to v0.3 clients.
+# Error codes defined by the A2A v0.3 specification, derived from the v0.3
+# error models. Codes added in v1.0 (e.g. -32009 VersionNotSupported) are
+# unknown to v0.3 clients.
 _V03_ERROR_CODES = frozenset(
-    {
-        -32700,  # JSONParseError
-        -32600,  # InvalidRequestError
-        -32601,  # MethodNotFoundError
-        -32602,  # InvalidParamsError
-        -32603,  # InternalError
-        -32001,  # TaskNotFoundError
-        -32002,  # TaskNotCancelableError
-        -32003,  # PushNotificationNotSupportedError
-        -32004,  # UnsupportedOperationError
-        -32005,  # ContentTypeNotSupportedError
-        -32006,  # InvalidAgentResponseError
-        -32007,  # AuthenticatedExtendedCardNotConfiguredError
-    }
+    cls.model_fields['code'].default
+    for cls in get_args(types_v03.A2AError.model_fields['root'].annotation)
 )
 
 
