@@ -1,17 +1,15 @@
 import asyncio
 import collections
 import logging
-import socket
 
 from collections.abc import AsyncIterator
-from contextlib import AsyncExitStack, asynccontextmanager
-from typing import Any
+from contextlib import AsyncExitStack
+from typing import Any, NamedTuple
 
 import grpc
 import httpx
 import pytest
 import pytest_asyncio
-import uvicorn
 
 from a2a.auth.user import User
 from a2a.client.client import Client, ClientConfig
@@ -183,6 +181,20 @@ def validate_state(event, expected_state):
     assert get_state(event) == expected_state
 
 
+class RestSetup(NamedTuple):
+    app: Starlette
+    httpx_client: httpx.AsyncClient
+
+
+@pytest_asyncio.fixture(scope='module')
+async def rest_setup() -> AsyncIterator[RestSetup]:
+    app = Starlette()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    ) as httpx_client:
+        yield RestSetup(app, httpx_client)
+
+
 _test_resources = AsyncExitStack()
 
 
@@ -210,49 +222,13 @@ async def close_scenario_handler(handler: RequestHandler) -> None:
             await asyncio.gather(*background_tasks, return_exceptions=True)
 
 
-@asynccontextmanager
-async def running_rest_server(app: Starlette) -> AsyncIterator[str]:
-    """Runs a local HTTP server for streaming scenario tests."""
-    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as listener:
-        listener.bind(('127.0.0.1', 0))
-        port = listener.getsockname()[1]
-        server = uvicorn.Server(
-            uvicorn.Config(
-                app,
-                host='127.0.0.1',
-                port=port,
-                lifespan='off',
-                log_level='warning',
-                timeout_graceful_shutdown=1,
-            )
-        )
-        server_task = asyncio.create_task(server.serve(sockets=[listener]))
-        try:
-            deadline = asyncio.get_running_loop().time() + 5
-            # Uvicorn exposes readiness as a flag rather than an event.
-            while not server.started:  # noqa: ASYNC110
-                if server_task.done():
-                    await server_task
-                    raise RuntimeError('REST test server exited before startup')
-                if asyncio.get_running_loop().time() >= deadline:
-                    raise TimeoutError('REST test server did not start')
-                await asyncio.sleep(0.01)
-            yield f'http://127.0.0.1:{port}'
-        finally:
-            server.should_exit = True
-            try:
-                await asyncio.wait_for(server_task, timeout=5)
-            except asyncio.TimeoutError:
-                server_task.cancel()
-                await asyncio.gather(server_task, return_exceptions=True)
-
-
 async def create_client(
     handler: RequestHandler,
     agent_card: AgentCard,
     streaming: bool = False,
     *,
     transport: TransportProtocol = TransportProtocol.GRPC,
+    rest_setup: RestSetup | None = None,
 ) -> Client:
     """Creates a client for a scenario test."""
     if transport not in (TransportProtocol.GRPC, TransportProtocol.HTTP_JSON):
@@ -262,20 +238,18 @@ async def create_client(
         resources.push_async_callback(close_scenario_handler, handler)
 
         if transport == TransportProtocol.HTTP_JSON:
-            app = Starlette(
-                routes=create_rest_routes(
-                    request_handler=handler,
-                    context_builder=MockHttpCallContextBuilder(),
+            if rest_setup is None:
+                raise ValueError(
+                    'REST scenarios require the rest_setup fixture'
                 )
+            rest_setup.app.router.routes[:] = create_rest_routes(
+                request_handler=handler,
+                context_builder=MockHttpCallContextBuilder(),
             )
-            server_address = await resources.enter_async_context(
-                running_rest_server(app)
-            )
-            httpx_client = await resources.enter_async_context(
-                httpx.AsyncClient(trust_env=False)
-            )
+            resources.callback(rest_setup.app.router.routes.clear)
+            server_address = 'http://testserver'
             config = ClientConfig(
-                httpx_client=httpx_client,
+                httpx_client=rest_setup.httpx_client,
                 supported_protocol_bindings=[transport],
                 streaming=streaming,
             )
@@ -343,7 +317,10 @@ def create_handler(
     'streaming', [False, True], ids=['blocking', 'streaming']
 )
 async def test_scenario_1_cancel_terminal_task(
-    use_legacy: bool, streaming: bool, transport: TransportProtocol
+    use_legacy: bool,
+    streaming: bool,
+    transport: TransportProtocol,
+    rest_setup: RestSetup,
 ) -> None:
     class DummyAgentExecutor(AgentExecutor):
         async def execute(
@@ -365,6 +342,7 @@ async def test_scenario_1_cancel_terminal_task(
         agent_card=agent_card(),
         streaming=streaming,
         transport=transport,
+        rest_setup=rest_setup,
     )
 
     task_id = 'terminal-task'
@@ -386,7 +364,7 @@ async def test_scenario_1_cancel_terminal_task(
 )
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
 async def test_scenario_4_simple_streaming(
-    use_legacy: bool, transport: TransportProtocol
+    use_legacy: bool, transport: TransportProtocol, rest_setup: RestSetup
 ) -> None:
     class DummyAgentExecutor(AgentExecutor):
         async def execute(
@@ -410,7 +388,11 @@ async def test_scenario_4_simple_streaming(
 
     handler = create_handler(DummyAgentExecutor(), use_legacy)
     client = await create_client(
-        handler, agent_card=agent_card(), streaming=True, transport=transport
+        handler,
+        agent_card=agent_card(),
+        streaming=True,
+        transport=transport,
+        rest_setup=rest_setup,
     )
     msg = Message(
         message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='hello')]
@@ -1704,7 +1686,10 @@ async def test_scenario_publish_message(
     'streaming', [False, True], ids=['blocking', 'streaming']
 )
 async def test_scenario_publish_artifact(
-    use_legacy: bool, streaming: bool, transport: TransportProtocol
+    use_legacy: bool,
+    streaming: bool,
+    transport: TransportProtocol,
+    rest_setup: RestSetup,
 ) -> None:
     class ArtifactAgent(AgentExecutor):
         async def execute(
@@ -1741,6 +1726,7 @@ async def test_scenario_publish_artifact(
         agent_card=agent_card(),
         streaming=streaming,
         transport=transport,
+        rest_setup=rest_setup,
     )
 
     msg = Message(
