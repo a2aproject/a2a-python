@@ -85,6 +85,10 @@ class RequestHandler03:
         v10_req = conversions.to_core_get_task_push_notification_config_request(
             request
         )
+        # v0.3 allows a get by task id alone. A config created without an id is
+        # stored under the task id, so look that one up.
+        if not v10_req.id:
+            v10_req.id = v10_req.task_id
         v10_config = (
             await self.request_handler.on_get_task_push_notification_config(
                 v10_req, context

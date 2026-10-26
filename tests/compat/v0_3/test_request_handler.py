@@ -242,6 +242,36 @@ async def test_on_get_task_push_notification_config(
 
 
 @pytest.mark.anyio
+@pytest.mark.parametrize(
+    'params',
+    [
+        types_v03.TaskIdParams(id='task-1'),
+        types_v03.GetTaskPushNotificationConfigParams(id='task-1'),
+    ],
+)
+async def test_on_get_task_push_notification_config_by_task_id(
+    v03_handler, mock_core_handler, mock_context, params
+):
+    """Without a config id, get the config stored under the task id."""
+    v03_req = types_v03.GetTaskPushNotificationConfigRequest(
+        id='req-1', method='tasks/pushNotificationConfig/get', params=params
+    )
+    mock_core_handler.on_get_task_push_notification_config.return_value = (
+        V10PushConfig(id='task-1', task_id='task-1', url='http://example.com')
+    )
+
+    await v03_handler.on_get_task_push_notification_config(
+        v03_req, mock_context
+    )
+
+    v10_req = (
+        mock_core_handler.on_get_task_push_notification_config.call_args.args[0]
+    )
+    assert v10_req.task_id == 'task-1'
+    assert v10_req.id == 'task-1'
+
+
+@pytest.mark.anyio
 async def test_on_create_task_push_notification_config(
     v03_handler, mock_core_handler, mock_context
 ):
