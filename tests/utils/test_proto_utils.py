@@ -26,7 +26,7 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import proto_utils
 from a2a.utils.errors import InvalidParamsError
 from google.protobuf.descriptor import FieldDescriptor
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.json_format import MessageToDict, Parse, ParseError
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.datastructures import QueryParams
@@ -398,3 +398,38 @@ class TestWarnOnMissingRequiredFields:
         with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
             assert not proto_utils.warn_on_missing_required_fields(msg, 'test:')
         assert 'REQUIRED fields missing or empty: parts.' in caplog.text
+
+
+class TestParseLenient:
+    """Spec 5.7: unrecognized fields are ignored (issue #1341)."""
+
+    def test_parses_dict_and_ignores_unrecognized_fields(self) -> None:
+        """Unknown keys are skipped at every depth; known ones still parse."""
+        task = proto_utils.parse_lenient(
+            {
+                'id': 'task-1',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'someNestedField': 'y',
+                },
+                'someNewField': 'x',
+            },
+            Task(),
+        )
+
+        assert task.id == 'task-1'
+        assert task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    def test_parses_text_and_ignores_unrecognized_fields(self) -> None:
+        """Raw ProtoJSON takes the Parse path rather than ParseDict."""
+        event = proto_utils.parse_lenient(
+            '{"message": {"messageId": "r1"}, "someNewField": "x"}',
+            StreamResponse(),
+        )
+
+        assert event.message.message_id == 'r1'
+
+    def test_malformed_known_field_still_raises(self) -> None:
+        """Leniency covers unknown names, not a known field of the wrong type."""
+        with pytest.raises(ParseError):
+            proto_utils.parse_lenient({'messageId': 5}, Message())

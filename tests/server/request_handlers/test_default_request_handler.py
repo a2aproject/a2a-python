@@ -1143,6 +1143,46 @@ async def test_on_message_send_limit_history(agent_card):
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_stream_limit_history(agent_card):
+    task_store = InMemoryTaskStore()
+
+    request_handler = DefaultRequestHandler(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        agent_card=agent_card,
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_stream',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain'],
+            history_length=0,
+        ),
+    )
+
+    context = create_server_call_context()
+    tasks = [
+        event
+        async for event in request_handler.on_message_send_stream(
+            params, context
+        )
+        if isinstance(event, Task)
+    ]
+
+    # verify that history_length is honored
+    assert tasks
+    assert all(len(task.history) == 0 for task in tasks)
+
+    # verify that history is still persisted to the store
+    task = await task_store.get(tasks[0].id, context)
+    assert task is not None
+    assert len(task.history) > 0
+
+
+@pytest.mark.asyncio
 async def test_on_get_task_limit_history(agent_card):
     task_store = InMemoryTaskStore()
     push_store = InMemoryPushNotificationConfigStore()
@@ -3010,6 +3050,38 @@ async def test_on_message_send_negative_history_length_error(agent_card):
 
     with pytest.raises(InvalidParamsError) as exc_info:
         await request_handler.on_message_send(params, context)
+
+    assert 'history length must be non-negative' in exc_info.value.message
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_negative_history_length_error(
+    agent_card,
+):
+    """Test on_message_send_stream raises error for negative history length in configuration."""
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_agent_executor = AsyncMock(spec=AgentExecutor)
+    request_handler = DefaultRequestHandler(
+        agent_executor=mock_agent_executor,
+        task_store=mock_task_store,
+        agent_card=agent_card,
+    )
+
+    message_config = SendMessageConfiguration(
+        history_length=-1,
+        accepted_output_modes=['text/plain'],
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER, message_id='msg1', parts=[Part(text='Test')]
+        ),
+        configuration=message_config,
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        async for _ in request_handler.on_message_send_stream(params, context):
+            pass
 
     assert 'history length must be non-negative' in exc_info.value.message
 
