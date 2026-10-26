@@ -96,6 +96,11 @@ class DefaultRequestHandlerV2(RequestHandler):
     with `DefaultRequestHandler` but is not used: v2 delegates event streaming
     to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
     `DeprecationWarning` and logs a warning.
+
+    ``interrupted_task_timeout`` releases the `ActiveTask` of a task idle in
+    ``input-required`` or ``auth-required`` after that many seconds; a
+    follow-up recreates it from the store. ``None`` (default) never releases;
+    any other value must be greater than 0.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -118,7 +123,13 @@ class DefaultRequestHandlerV2(RequestHandler):
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
         validate_input_modes: bool = False,
         event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
     ) -> None:
+        if (
+            interrupted_task_timeout is not None
+            and interrupted_task_timeout <= 0
+        ):
+            raise ValueError('interrupted_task_timeout must be greater than 0.')
         if queue_manager is not None:
             message = (
                 'A queue_manager was passed to DefaultRequestHandlerV2, but it '
@@ -172,6 +183,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             task_store=self._versioned_store,
             push_sender=self._push_sender,
             event_stream=self._event_stream,
+            interrupted_task_timeout=interrupted_task_timeout,
         )
         self._background_tasks = set()
 
@@ -260,7 +272,11 @@ class DefaultRequestHandlerV2(RequestHandler):
             active_task = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
             )
-            result = await active_task.cancel(context)
+            try:
+                result = await active_task.cancel(context)
+            finally:
+                # get_or_create stopped the timer; a failed cancel leaves the task parked.
+                active_task.schedule_idle_release()
         except UnsupportedOperationError as e:
             raise TaskNotCancelableError from e
 
