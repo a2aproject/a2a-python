@@ -1,7 +1,7 @@
 import logging
 
 from collections.abc import AsyncIterable, AsyncIterator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, get_args
 
 from sse_starlette.sse import EventSourceResponse
 from starlette.responses import JSONResponse
@@ -42,6 +42,7 @@ from a2a.server.routes.common import (
     create_event_source_response,
 )
 from a2a.utils import constants
+from a2a.utils.errors import JSON_RPC_ERROR_CODE_MAP, A2AError
 from a2a.utils.version_validator import validate_version
 
 
@@ -89,6 +90,12 @@ class JSONRPC03Adapter:
     ) -> JSONResponse:
         if isinstance(error, CoreJSONRPCError):
             err_dict = error.model_dump(by_alias=True)
+            return JSONResponse(
+                {'jsonrpc': '2.0', 'id': request_id, 'error': err_dict}
+            )
+
+        if isinstance(error, A2AError):
+            err_dict = _to_v03_jsonrpc_error(error).model_dump(by_alias=True)
             return JSONResponse(
                 {'jsonrpc': '2.0', 'id': request_id, 'error': err_dict}
             )
@@ -141,6 +148,8 @@ class JSONRPC03Adapter:
             return await self._process_non_streaming_request(
                 request_id, specific_request, call_context
             )
+        except A2AError as e:
+            return self._generate_error_response(request_id, e)
         except Exception as e:
             logger.exception('Unhandled exception in v0.3 JSONRPCAdapter')
             return self._generate_error_response(
@@ -264,6 +273,17 @@ class JSONRPC03Adapter:
                             by_alias=True, exclude_none=True
                         )
                     }
+            except A2AError as e:
+                err_resp = types_v03.SendStreamingMessageResponse(
+                    root=types_v03.JSONRPCErrorResponse(
+                        id=request_id, error=_to_v03_jsonrpc_error(e)
+                    )
+                )
+                yield {
+                    'data': err_resp.model_dump_json(
+                        by_alias=True, exclude_none=True
+                    )
+                }
             except Exception as e:
                 logger.exception(
                     'Error during stream generation in v0.3 JSONRPCAdapter'
@@ -284,3 +304,25 @@ class JSONRPC03Adapter:
             event_generator(stream_gen),
             shutdown_grace_period=self._shutdown_grace_period,
         )
+
+
+# Error codes defined by the A2A v0.3 specification, derived from the v0.3
+# error models. Codes added in v1.0 (e.g. -32009 VersionNotSupported) are
+# unknown to v0.3 clients.
+_V03_ERROR_CODES = frozenset(
+    cls.model_fields['code'].default
+    for cls in get_args(types_v03.A2AError.model_fields['root'].annotation)
+)
+
+
+def _to_v03_jsonrpc_error(error: A2AError) -> types_v03.JSONRPCError:
+    """Maps an A2AError to a v0.3 JSON-RPC error carrying its A2A error code.
+
+    Errors without a v0.3 equivalent are reported as InternalError (-32603).
+    """
+    code = JSON_RPC_ERROR_CODE_MAP.get(type(error), -32603)
+    if code not in _V03_ERROR_CODES:
+        code = -32603
+    return types_v03.JSONRPCError(
+        code=code, message=error.message, data=error.data
+    )
