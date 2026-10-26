@@ -116,6 +116,47 @@ async def test_update_status_final(
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state',
+    [
+        TaskState.TASK_STATE_COMPLETED,
+        TaskState.TASK_STATE_CANCELED,
+        TaskState.TASK_STATE_FAILED,
+        TaskState.TASK_STATE_REJECTED,
+    ],
+)
+async def test_timestamp_validation_failure_allows_terminal_retry(
+    task_updater: TaskUpdater, event_queue: AsyncMock, state: TaskState
+) -> None:
+    with pytest.raises(ValueError):
+        await task_updater.update_status(state, timestamp='not-a-timestamp')
+
+    event_queue.enqueue_event.assert_not_awaited()
+    await task_updater.failed()
+
+    event_queue.enqueue_event.assert_awaited_once()
+    event = event_queue.enqueue_event.call_args.args[0]
+    assert event.status.state == TaskState.TASK_STATE_FAILED
+
+
+@pytest.mark.asyncio
+async def test_metadata_validation_failure_allows_terminal_retry(
+    task_updater: TaskUpdater, event_queue: AsyncMock
+) -> None:
+    with pytest.raises(ValueError):
+        await task_updater.update_status(
+            TaskState.TASK_STATE_COMPLETED, metadata={'bad': object()}
+        )
+
+    event_queue.enqueue_event.assert_not_awaited()
+    await task_updater.failed()
+
+    event_queue.enqueue_event.assert_awaited_once()
+    event = event_queue.enqueue_event.call_args.args[0]
+    assert event.status.state == TaskState.TASK_STATE_FAILED
+
+
+@pytest.mark.asyncio
 async def test_add_artifact_with_custom_id_and_name(
     task_updater: TaskUpdater, event_queue: AsyncMock, sample_parts: list[Part]
 ) -> None:
