@@ -29,12 +29,13 @@ logger = logging.getLogger(__name__)
 class ActiveTaskRegistry:
     """A registry for active ActiveTask instances."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
         event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
         *,
         max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
     ) -> None:
@@ -45,6 +46,7 @@ class ActiveTaskRegistry:
         self._agent_executor = agent_executor
         self._task_store = task_store
         self._push_sender = push_sender
+        self._interrupted_task_timeout = interrupted_task_timeout
         self._event_stream = event_stream
         self._max_event_queue_size = max_event_queue_size
         self._active_tasks: dict[str, ActiveTask] = {}
@@ -65,6 +67,12 @@ class ActiveTaskRegistry:
             if self._closed:
                 raise RuntimeError('ActiveTaskRegistry is closed')
             existing = self._active_tasks.get(task_id)
+            if existing is not None and existing.is_finished:
+                # Its removal runs asynchronously, so replace it instead.
+                existing = None
+            if existing is not None:
+                # A request is about to use it, so it must not be released.
+                existing.cancel_idle_release()
             if existing is None:
                 task_manager = TaskManager(
                     task_id=task_id,
@@ -81,6 +89,7 @@ class ActiveTaskRegistry:
                     push_sender=self._push_sender,
                     on_cleanup=self._on_active_task_cleanup,
                     event_stream=self._event_stream,
+                    interrupted_task_timeout=self._interrupted_task_timeout,
                     max_event_queue_size=self._max_event_queue_size,
                 )
                 self._active_tasks[task_id] = active_task
@@ -108,6 +117,7 @@ class ActiveTaskRegistry:
                 if isinstance(existing_task, StoredTask):
                     existing_task = existing_task.task
                 if not existing_task:
+                    existing.schedule_idle_release()
                     raise TaskNotFoundError
             return existing
 
@@ -120,14 +130,19 @@ class ActiveTaskRegistry:
     def _on_active_task_cleanup(self, active_task: ActiveTask) -> None:
         """Called by ActiveTask when it's finished and has no subscribers."""
         logger.debug('Active task %s cleanup scheduled', active_task.task_id)
-        task = asyncio.create_task(self._remove_task(active_task.task_id))
+        task = asyncio.create_task(self._remove_task(active_task))
         self._cleanup_tasks.add(task)
         task.add_done_callback(self._cleanup_tasks.discard)
 
-    async def _remove_task(self, task_id: str) -> None:
+    async def _remove_task(self, active_task: ActiveTask) -> None:
+        task_id = active_task.task_id
         with self._lock:
-            self._active_tasks.pop(task_id, None)
-            logger.debug('Removed active task for %s from registry', task_id)
+            # Only remove this instance; it may already have been replaced.
+            if self._active_tasks.get(task_id) is active_task:
+                del self._active_tasks[task_id]
+                logger.debug(
+                    'Removed active task for %s from registry', task_id
+                )
 
     async def get(self, task_id: str) -> ActiveTask | None:
         """Retrieves an existing task."""

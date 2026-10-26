@@ -113,6 +113,11 @@ class DefaultRequestHandlerV2(RequestHandler):
     snapshot rather than waiting for the agent to finish. Direct Message
     responses remain available after eviction once the consumer has validated
     the full response; later validation and executor errors take precedence.
+
+    ``interrupted_task_timeout`` releases the `ActiveTask` of a task idle in
+    ``input-required`` or ``auth-required`` after that many seconds; a
+    follow-up recreates it from the store. ``None`` (default) never releases;
+    any other value must be greater than 0.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -135,9 +140,15 @@ class DefaultRequestHandlerV2(RequestHandler):
         push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
         validate_input_modes: bool = False,
         event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
         *,
         max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
     ) -> None:
+        if (
+            interrupted_task_timeout is not None
+            and interrupted_task_timeout <= 0
+        ):
+            raise ValueError('interrupted_task_timeout must be greater than 0.')
         if queue_manager is not None:
             message = (
                 'A queue_manager was passed to DefaultRequestHandlerV2, but it '
@@ -191,6 +202,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             task_store=self._versioned_store,
             push_sender=self._push_sender,
             event_stream=self._event_stream,
+            interrupted_task_timeout=interrupted_task_timeout,
             max_event_queue_size=max_event_queue_size,
         )
         self._background_tasks = set()
@@ -280,7 +292,11 @@ class DefaultRequestHandlerV2(RequestHandler):
             active_task = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
             )
-            result = await active_task.cancel(context)
+            try:
+                result = await active_task.cancel(context)
+            finally:
+                # get_or_create stopped the timer; a failed cancel leaves the task parked.
+                active_task.schedule_idle_release()
         except UnsupportedOperationError as e:
             raise TaskNotCancelableError from e
 
