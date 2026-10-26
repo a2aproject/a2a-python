@@ -2966,3 +2966,39 @@ async def test_on_message_send_stream_message_response_releases_active_task() ->
     assert [type(event) for event in events] == [Message]
     assert await _wait_until_released(handler, baseline) == set()
     assert handler._active_task_registry._active_tasks == {}
+
+
+class SilentExecutor(AgentExecutor):
+    """Returns normally without producing any event (issue #1330)."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        return None
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_raises_when_agent_produces_no_events():
+    """A silent executor must fail fast with InternalError instead of
+    hanging forever on the uninitialized-task wait (#1330)."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=SilentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_silent',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    with pytest.raises(InternalError, match='no events'):
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
