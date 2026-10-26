@@ -1,6 +1,8 @@
 import base64
 import json
 
+from datetime import datetime
+
 import pytest
 
 from a2a.compat.v0_3 import types as types_v03
@@ -1961,6 +1963,18 @@ def test_task_db_conversion():
     assert v10_restored.context_id == v10_task.context_id
     assert v10_restored.status.state == v10_task.status.state
     assert v10_restored.metadata == v10_task.metadata
+
+
+def test_task_db_conversion_sets_last_updated():
+    """The status timestamp becomes last_updated, as in the v1.0 model."""
+    v10_task = pb2_v10.Task(id='task-123', context_id='ctx-456')
+    v10_task.status.timestamp.FromJsonString('2026-10-01T12:00:00Z')
+
+    model = core_to_compat_task_model(v10_task, 'owner-789')
+    assert model.last_updated == datetime(2026, 10, 1, 12, 0)
+
+    v10_task.status.ClearField('timestamp')
+    assert core_to_compat_task_model(v10_task, 'owner-789').last_updated is None
 
 
 def test_push_notification_config_db_conversion():
