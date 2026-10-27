@@ -84,8 +84,6 @@ class TaskUpdater:
                 raise RuntimeError(
                     f'Task {self.task_id} is already in a terminal state.'
                 )
-            if state in self._terminal_states:
-                self._terminal_state_reached = True
 
             # Create proto timestamp from datetime
             ts = Timestamp()
@@ -101,14 +99,15 @@ class TaskUpdater:
                 status.message.CopyFrom(message)
             status.timestamp.CopyFrom(ts)
 
-            await self.event_queue.enqueue_event(
-                TaskStatusUpdateEvent(
-                    task_id=self.task_id,
-                    context_id=self.context_id,
-                    metadata=metadata,
-                    status=status,
-                )
+            event = TaskStatusUpdateEvent(
+                task_id=self.task_id,
+                context_id=self.context_id,
+                metadata=metadata,
+                status=status,
             )
+            if state in self._terminal_states:
+                self._terminal_state_reached = True
+            await self.event_queue.enqueue_event(event)
 
     async def add_artifact(  # noqa: PLR0913
         self,

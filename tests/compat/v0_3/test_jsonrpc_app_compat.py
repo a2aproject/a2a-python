@@ -1,3 +1,4 @@
+import json
 import logging
 
 from collections.abc import AsyncIterator
@@ -19,6 +20,12 @@ from a2a.types.a2a_pb2 import (
     Task as Task10,
     TaskState as TaskState10,
     TaskStatus as TaskStatus10,
+)
+from a2a.utils.errors import (
+    A2AError,
+    TaskNotCancelableError,
+    TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from starlette.applications import Starlette
 from starlette.testclient import TestClient
@@ -176,3 +183,91 @@ def test_get_extended_agent_card_v03_compat(
     assert 'result' in data
     # The result should be a v0.3 AgentCard
     assert 'supportsAuthenticatedExtendedCard' in data['result']
+
+
+def test_get_task_not_found_v03_compat(
+    client: TestClient, mock_handler: AsyncMock
+) -> None:
+    mock_handler.on_get_task.return_value = None
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '4',
+        'method': 'tasks/get',
+        'params': {'id': 'missing_task_id'},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data['id'] == '4'
+    assert data['error']['code'] == -32001
+    assert data['error']['message'] == 'Task not found'
+
+
+@pytest.mark.parametrize(
+    ('error', 'expected_code'),
+    [
+        (TaskNotFoundError(), -32001),
+        (TaskNotCancelableError(), -32002),
+        (UnsupportedOperationError(), -32004),
+    ],
+)
+def test_cancel_task_v03_compat_maps_a2a_error_codes(
+    client: TestClient,
+    mock_handler: AsyncMock,
+    error: A2AError,
+    expected_code: int,
+) -> None:
+    mock_handler.on_cancel_task.side_effect = error
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '5',
+        'method': 'tasks/cancel',
+        'params': {'id': 'test_task_id'},
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    data = response.json()
+
+    assert data['id'] == '5'
+    assert data['error']['code'] == expected_code
+    assert data['error']['message'] == error.message
+
+
+def test_message_stream_v03_compat_maps_a2a_error_code(
+    client: TestClient, mock_handler: AsyncMock
+) -> None:
+    async def failing_stream(
+        *args: object, **kwargs: object
+    ) -> AsyncIterator[MagicMock]:
+        raise TaskNotFoundError
+        yield MagicMock()
+
+    mock_handler.on_message_send_stream = failing_stream
+    request_payload = {
+        'jsonrpc': '2.0',
+        'id': '6',
+        'method': 'message/stream',
+        'params': {
+            'message': {
+                'messageId': 'req',
+                'role': 'user',
+                'parts': [{'text': 'hello'}],
+            }
+        },
+    }
+
+    response = client.post('/', json=request_payload)
+    assert response.status_code == 200
+    events = [
+        json.loads(line.removeprefix('data:'))
+        for line in response.text.splitlines()
+        if line.startswith('data:')
+    ]
+
+    assert len(events) == 1
+    assert events[0]['id'] == '6'
+    assert events[0]['error']['code'] == -32001
+    assert events[0]['error']['message'] == 'Task not found'
