@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING
 
 
 if TYPE_CHECKING:
+    from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.agent_executor import AgentExecutor
     from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.cluster.task_store import VersionedTaskStore
@@ -28,15 +29,17 @@ logger = logging.getLogger(__name__)
 class ActiveTaskRegistry:
     """A registry for active ActiveTask instances."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
         task_store: TaskStore | VersionedTaskStore,
         push_sender: PushNotificationSender | None = None,
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
+        plugins: PluginManager | None = None,
     ):
         self._agent_executor = agent_executor
+        self._plugins = plugins
         self._task_store = task_store
         self._push_sender = push_sender
         self._interrupted_task_timeout = interrupted_task_timeout
@@ -72,6 +75,7 @@ class ActiveTaskRegistry:
                     task_store=self._task_store,
                     initial_message=initial_message,
                     context=call_context,
+                    plugins=self._plugins,
                 )
 
                 active_task = ActiveTask(
