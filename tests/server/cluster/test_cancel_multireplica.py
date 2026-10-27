@@ -3,7 +3,13 @@ import contextlib
 
 import pytest
 
-from a2a.types.a2a_pb2 import CancelTaskRequest, TaskState
+from a2a.types.a2a_pb2 import (
+    CancelTaskRequest,
+    Task,
+    TaskState,
+    TaskStatus,
+    TaskStatusUpdateEvent,
+)
 from a2a.utils.errors import (
     TaskNotCancelableError,
     TaskNotFoundError,
@@ -12,8 +18,10 @@ from a2a.utils.errors import (
 
 from .conftest import (
     CompletingAgent,
+    ControlledAgent,
     InputRequiredThenCompleteAgent,
     LongRunningAgent,
+    VersionedInMemoryTaskStore,
     build_send_request,
     drain,
     make_context,
@@ -194,6 +202,89 @@ async def test_follow_up_after_remote_cancel_of_waiting_task_is_rejected(
                 break
             await asyncio.sleep(0.01)
         assert await registry_a.get(r1.id) is None
+    finally:
+        await replica_a.aclose()
+        await replica_b.aclose()
+
+
+async def _fail_directly(store, task_id: str, context) -> None:  # noqa: ANN001
+    """Writes FAILED the way a writer outside the running replica would."""
+    stored = await store.get(task_id, context)
+    failed = Task()
+    failed.CopyFrom(stored.task)
+    failed.status.CopyFrom(TaskStatus(state=TaskState.TASK_STATE_FAILED))
+    await store.save(
+        failed,
+        event=TaskStatusUpdateEvent(
+            task_id=task_id, context_id=failed.context_id, status=failed.status
+        ),
+        prev=stored.task,
+        prev_version=stored.version,
+        context=context,
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize('writer', ['remote_cancel', 'direct_failed'])
+@pytest.mark.parametrize(
+    'store_enforces_terminal_state',
+    [True, False],
+    ids=['store_guard', 'consumer_fence_only'],
+)
+async def test_terminal_state_survives_events_queued_by_stale_executor(
+    shared_stream, context, writer: str, store_enforces_terminal_state: bool
+) -> None:
+    """Another writer finishes the task while A's agent is paused. When the
+    agent resumes it emits an artifact and COMPLETED back to back: the first
+    save conflicts, and the queued COMPLETED must not overwrite the result,
+    even with a store that does not itself refuse writes on a terminal task."""
+    shared_store = VersionedInMemoryTaskStore(
+        enforce_terminal_state=store_enforces_terminal_state
+    )
+    agent = ControlledAgent()
+    replica_a = make_replica(shared_store, shared_stream, agent)
+    replica_b = make_replica(shared_store, shared_stream, agent)
+    events: list = []
+
+    async def collect() -> None:
+        async for event in replica_a.on_message_send_stream(
+            build_send_request('go', message_id='m1'), context
+        ):
+            events.append(event)
+
+    try:
+        a_task = asyncio.create_task(collect())
+        await asyncio.wait_for(agent.working.wait(), timeout=5)
+        task_id = next(
+            iter(replica_a._active_task_registry._active_tasks)  # noqa: SLF001
+        )
+        await wait_for_state(
+            shared_store, task_id, TaskState.TASK_STATE_WORKING, context
+        )
+
+        if writer == 'remote_cancel':
+            await replica_b.on_cancel_task(
+                CancelTaskRequest(id=task_id), context
+            )
+            expected = TaskState.TASK_STATE_CANCELED
+        else:
+            await _fail_directly(shared_store, task_id, context)
+            expected = TaskState.TASK_STATE_FAILED
+
+        agent.release.set()
+        await asyncio.wait_for(a_task, timeout=8)
+
+        final = await shared_store.get(task_id, context)
+        assert final is not None
+        assert final.task.status.state == expected
+        assert isinstance(events[-1], Task)
+        assert events[-1].status.state == expected
+        assert not any(
+            getattr(e, 'status', None) is not None
+            and e.status.state == TaskState.TASK_STATE_COMPLETED
+            for e in events
+        )
     finally:
         await replica_a.aclose()
         await replica_b.aclose()

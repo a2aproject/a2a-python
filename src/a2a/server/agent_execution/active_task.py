@@ -119,6 +119,9 @@ class EventConsumer:
         # Set when the producer failed, so a request that failed before any
         # task was created still leaves a FAILED task behind.
         self.producer_failed = False
+        # Set when another writer finished the task while this executor was
+        # still running; the events it enqueues afterwards are dropped.
+        self.fenced = False
 
     async def run(self) -> None:
         """Consumes events from the agent and updates system state."""
@@ -209,6 +212,9 @@ class EventConsumer:
             return None
 
     async def _process_event(self, event: Event) -> None:
+        if self.fenced:
+            self._drop_fenced_event(event)
+            return
         try:
             await self._process_event_inner(event)
         except ConcurrentTaskModificationError:
@@ -220,6 +226,7 @@ class EventConsumer:
             self.active_task._task_manager.invalidate()
             task = await self.active_task._task_manager.get_task()
             if task is not None and task.status.state in TERMINAL_TASK_STATES:
+                self.fenced = True
                 await self._enqueue_to_subscribers(task, task)
                 producer = self.active_task._producer_task
                 if producer is not None and not producer.done():
@@ -230,6 +237,16 @@ class EventConsumer:
                 )
                 return
             await self._process_event_inner(event)
+
+    def _drop_fenced_event(self, event: Event) -> None:
+        logger.debug(
+            'Consumer[%s]: dropping %s from a fenced executor',
+            self.active_task._task_id,
+            type(event).__name__,
+        )
+        if isinstance(event, _RequestCompleted):
+            self.active_task._request_lock.release()
+        self.active_task._event_queue_agent.task_done()
 
     async def _process_event_inner(self, event: Event) -> None:
         updated_task = None

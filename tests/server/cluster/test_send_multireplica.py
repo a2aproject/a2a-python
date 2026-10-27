@@ -93,7 +93,10 @@ async def test_stale_version_save_raises_conflict_directly(
     shared_store, shared_stream, context
 ) -> None:
     """The store-level CAS that underpins the handler fix."""
-    handler = make_replica(shared_store, shared_stream, CompletingAgent())
+    # A non-terminal task, so only the version check can reject the save.
+    handler = make_replica(
+        shared_store, shared_stream, InputRequiredThenCompleteAgent()
+    )
     try:
         result = await handler.on_message_send(
             build_send_request('hi'), context
