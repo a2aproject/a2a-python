@@ -36,9 +36,11 @@ Data Flow and Event Handling:
 from __future__ import annotations
 
 import asyncio
+import contextvars
 import logging
 import uuid
 
+from datetime import datetime, timezone
 from typing import TYPE_CHECKING, Any, cast
 
 from a2a.server.agent_execution.context import RequestContext
@@ -48,12 +50,15 @@ if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Callable
 
     from a2a.server.agent_execution.agent_executor import AgentExecutor
+    from a2a.server.cluster.event_stream import TaskEventStream
     from a2a.server.context import ServerCallContext
     from a2a.server.tasks.push_notification_sender import (
         PushNotificationSender,
     )
     from a2a.server.tasks.task_manager import TaskManager
 
+from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
     Event,
@@ -71,9 +76,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
+    InternalError,
     InvalidAgentResponseError,
-    InvalidParamsError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 
 
@@ -110,6 +116,9 @@ class EventConsumer:
         self.active_task = active_task
         self.task_mode: bool | None = None
         self.message_to_save: Message | None = None
+        # Set when the producer failed, so a request that failed before any
+        # task was created still leaves a FAILED task behind.
+        self.producer_failed = False
 
     async def run(self) -> None:
         """Consumes events from the agent and updates system state."""
@@ -139,21 +148,90 @@ class EventConsumer:
         except Exception as e:
             logger.exception('Consumer[%s]: Failed', self.active_task._task_id)
 
-            updated_task = None
-            task = await self.active_task._task_manager.get_task()
-            if task and task.status.state not in TERMINAL_TASK_STATES:
-                handled_event = TaskStatusUpdateEvent(
-                    task_id=task.id,
-                    context_id=task.context_id,
-                    status=TaskStatus(
-                        state=TaskState.TASK_STATE_FAILED,
-                    ),
-                )
-                updated_task = await self._handle_task_event(handled_event)
+            error: Exception = e
+            if isinstance(e, ConcurrentTaskModificationError):
+                # Other writers kept advancing the task; report a protocol error.
+                error = InternalError(message=str(e))
 
-            await self._enqueue_to_subscribers(cast('Event', e), updated_task)
+            updated_task = None
+            try:
+                updated_task = await self._write_failed_status()
+            finally:
+                # Subscribers must always hear about the failure, or the
+                # request waiting on them never returns.
+                await self._enqueue_to_subscribers(
+                    cast('Event', error), updated_task
+                )
+
+    async def _write_failed_status(self) -> Task | None:
+        """Records FAILED once a failure ends the event stream.
+
+        After a producer failure this runs once every event the executor
+        enqueued before raising has been processed, so the write lands in
+        order. There are three cases:
+
+        - The request failed before a task was created: create one as FAILED.
+        - No task exists and the failure is the consumer's own, or the task
+          already reached a terminal state: nothing is written.
+        - Otherwise: the existing task is marked FAILED.
+        """
+        task_manager = self.active_task._task_manager
+        task = await task_manager.get_task()
+        if task is None and self.producer_failed:
+            task = await task_manager.ensure_task_id(
+                self.active_task._task_id, task_manager.context_id or ''
+            )
+            if task.status.state not in TERMINAL_TASK_STATES:
+                task.status.state = TaskState.TASK_STATE_FAILED
+                task.status.timestamp.FromDatetime(datetime.now(timezone.utc))
+                await task_manager.save_task_event(task)
+            self.active_task._task_created.set()
+            return task
+        if not task or task.status.state in TERMINAL_TASK_STATES:
+            return None
+        # Stamped with the failure time, which DatabaseTaskStore also uses for
+        # last_updated.
+        status = TaskStatus(state=TaskState.TASK_STATE_FAILED)
+        status.timestamp.FromDatetime(datetime.now(timezone.utc))
+        handled_event = TaskStatusUpdateEvent(
+            task_id=task.id,
+            context_id=task.context_id,
+            status=status,
+        )
+        try:
+            # Not _handle_task_event: that validates what the agent sent, and
+            # this write must land even after the agent replied with a Message.
+            await self._handle_task_modification_event(handled_event)
+            return await task_manager.get_task()
+        except ConcurrentTaskModificationError:
+            # Another writer advanced the task; keep its state.
+            self.active_task._task_manager.invalidate()
+            return None
 
     async def _process_event(self, event: Event) -> None:
+        try:
+            await self._process_event_inner(event)
+        except ConcurrentTaskModificationError:
+            # Another writer advanced this task
+            logger.info(
+                'Consumer[%s]: concurrent modification, reloading',
+                self.active_task._task_id,
+            )
+            self.active_task._task_manager.invalidate()
+            task = await self.active_task._task_manager.get_task()
+            if task is not None and task.status.state in TERMINAL_TASK_STATES:
+                await self._enqueue_to_subscribers(task, task)
+                producer = self.active_task._producer_task
+                if producer is not None and not producer.done():
+                    producer.cancel()
+                await self._handle_terminal_state(task)
+                await self.active_task._event_queue_subscribers.close(
+                    immediate=False
+                )
+                return
+            await self._process_event_inner(event)
+
+    async def _process_event_inner(self, event: Event) -> None:
         updated_task = None
         handled_event: (
             Task
@@ -168,12 +246,15 @@ class EventConsumer:
                 'Consumer[%s]: Request completed', self.active_task._task_id
             )
             self.active_task._request_lock.release()
+            self.active_task.schedule_idle_release()
         elif isinstance(event, _RequestStarted):
             logger.debug(
                 'Consumer[%s]: Request started', self.active_task._task_id
             )
             self.message_to_save = event.request_context.message
         elif isinstance(event, BaseException):
+            # Only the producer enqueues exceptions, when a request fails.
+            self.producer_failed = True
             raise event
         elif isinstance(event, Message):
             self._handle_message_event(event)
@@ -192,6 +273,18 @@ class EventConsumer:
             self.active_task._task_created.set()
 
         await self._enqueue_to_subscribers(event, updated_task)
+
+        if isinstance(event, Message):
+            self._handle_message_completion()
+
+    def _handle_message_completion(self) -> None:
+        # A direct Message has no task to continue, so finish like a terminal state.
+        logger.debug(
+            'Consumer[%s]: Message response, finishing',
+            self.active_task._task_id,
+        )
+        self.active_task._is_finished.set()
+        self.active_task._request_queue.shutdown(immediate=True)
 
     def _handle_message_event(self, event: Message) -> None:
         if self.task_mode is True:
@@ -301,9 +394,21 @@ class EventConsumer:
                 'Consumer[%s]: Sending push notification',
                 self.active_task._task_id,
             )
-            await self.active_task._push_sender.send_notification(
-                self.active_task._task_id, event
-            )
+            try:
+                await self.active_task._push_sender.send_notification(
+                    self.active_task._task_id, event
+                )
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream. This guard is
+                # defense-in-depth on top of the boundary inside
+                # BasePushNotificationSender, and also protects against
+                # custom PushNotificationSender implementations.
+                logger.exception(
+                    'Consumer[%s]: Push notification sender raised; '
+                    'ignoring the failure.',
+                    self.active_task._task_id,
+                )
 
     async def _handle_terminal_state(self, updated_task: Task) -> None:
         logger.debug(
@@ -333,6 +438,16 @@ class EventConsumer:
         await self.active_task._event_queue_subscribers.enqueue_event(
             cast('Any', (event, updated_task))
         )
+
+        # Fan out to other replicas
+        stream = self.active_task._event_stream
+        if stream is not None and isinstance(event, Event):
+            version = self.active_task._task_manager.current_version
+            await stream.publish(
+                self.active_task._task_id,
+                VersionedEvent(event=event, version=version),
+            )
+
         self.active_task._event_queue_agent.task_done()
 
 
@@ -354,13 +469,15 @@ class ActiveTask:
       permanently ceased execution and closed its queues.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
         task_id: str,
         task_manager: TaskManager,
         push_sender: PushNotificationSender | None = None,
         on_cleanup: Callable[[ActiveTask], None] | None = None,
+        event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -372,6 +489,10 @@ class ActiveTask:
             on_cleanup: Optional callback triggered when the task is fully finished
                         and the last subscriber has disconnected. Used to prune
                         the task from the ActiveTaskRegistry.
+            event_stream: Optional cross-replica stream; applied events are
+                        published to it so other replicas can observe them.
+            interrupted_task_timeout: Optional seconds after which an idle
+                        interrupted task is finished; ``None`` disables it.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
@@ -383,6 +504,10 @@ class ActiveTask:
         self._task_manager = task_manager
         self._push_sender = push_sender
         self._on_cleanup = on_cleanup
+        self._event_stream = event_stream
+        self._interrupted_task_timeout = interrupted_task_timeout
+        # Pending timer that releases a task parked in an interrupted state.
+        self._idle_release_task: asyncio.Task[None] | None = None
 
         # --- Synchronization Primitives ---
         # `_lock` protects structural lifecycle changes: start(), subscribe() counting,
@@ -410,21 +535,33 @@ class ActiveTask:
         self._reference_count = 0
 
         # Queue for incoming requests
-        self._request_queue: AsyncQueue[tuple[RequestContext, uuid.UUID]] = (
-            create_async_queue()
-        )
+        self._request_queue: AsyncQueue[
+            tuple[RequestContext, uuid.UUID, contextvars.Context]
+        ] = create_async_queue()
 
     @property
     def task_id(self) -> str:
         """The ID of the task."""
         return self._task_id
 
+    @property
+    def is_finished(self) -> bool:
+        """Whether the task's active lifecycle has ended."""
+        return self._is_finished.is_set()
+
     async def enqueue_request(
         self, request_context: RequestContext
     ) -> uuid.UUID:
-        """Enqueues a request for the active task to process."""
+        """Enqueues a request for the active task to process.
+
+        The caller's contextvars are captured so the producer runs
+        `AgentExecutor.execute` in the context of the request that sent the
+        message, not the request that started the producer.
+        """
         request_id = uuid.uuid4()
-        await self._request_queue.put((request_context, request_id))
+        await self._request_queue.put(
+            (request_context, request_id, contextvars.copy_context())
+        )
         return request_id
 
     async def start(
@@ -441,7 +578,7 @@ class ActiveTask:
         logger.debug('ActiveTask[%s]: Starting', self._task_id)
         async with self._lock:
             if self._is_finished.is_set():
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     f'Task {self._task_id} is already completed. Cannot start it again.'
                 )
 
@@ -469,8 +606,8 @@ class ActiveTask:
                 if task:
                     self._task_created.set()
                     if task.status.state in TERMINAL_TASK_STATES:
-                        raise InvalidParamsError(
-                            message=f'Task {task.id} is in terminal state: {task.status.state}'
+                        raise UnsupportedOperationError(
+                            message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                         )
                 elif not create_task_if_missing:
                     raise TaskNotFoundError
@@ -509,20 +646,32 @@ class ActiveTask:
         Runs as a detached asyncio.Task. Safe to cancel.
         """
         logger.debug('Producer[%s]: Started', self._task_id)
-        request_context = None
         try:
             while True:
                 (
                     request_context,
                     request_id,
+                    sender_context,
                 ) = await self._request_queue.get()
                 await self._request_lock.acquire()
                 # TODO: Should we create task manager every time?
                 self._task_manager._call_context = request_context.call_context
 
-                request_context.current_task = (
-                    await self._task_manager.get_task()
-                )
+                # Drop the cached snapshot and re-read to pick
+                # up state another replica may have advanced.
+                self._task_manager.invalidate()
+                task = await self._task_manager.get_task()
+                # In cluster mode another replica may have finished the task
+                # while this one waited for input.
+                if (
+                    self._event_stream is not None
+                    and task is not None
+                    and task.status.state in TERMINAL_TASK_STATES
+                ):
+                    raise UnsupportedOperationError(
+                        message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
+                    )
+                request_context.current_task = task
 
                 logger.debug(
                     'Producer[%s]: Executing agent task %s',
@@ -537,8 +686,12 @@ class ActiveTask:
                             _RequestStarted(request_id, request_context),
                         )
                     )
-                    await self._agent_executor.execute(
-                        request_context, self._event_queue_agent
+                    # Awaiting the child task propagates producer cancellation.
+                    await sender_context.run(
+                        asyncio.create_task,
+                        self._agent_executor.execute(
+                            request_context, self._event_queue_agent
+                        ),
                     )
                     logger.debug(
                         'Producer[%s]: Execution finished successfully',
@@ -560,17 +713,8 @@ class ActiveTask:
                 'Producer[%s]: Execution failed',
                 self._task_id,
             )
-            # Persist the failure directly instead of relying on the closing
-            # event queue to carry a final status update.
-            if request_context:
-                task = await self._task_manager.ensure_task_id(
-                    self._task_id,
-                    request_context.context_id or '',
-                )
-                if task.status.state not in TERMINAL_TASK_STATES:
-                    task.status.state = TaskState.TASK_STATE_FAILED
-                    await self._task_manager.save_task_event(task)
-                self._task_created.set()
+            # The consumer writes FAILED: writing here would race its save of
+            # an event the executor enqueued just before raising.
             await self._event_queue_agent.enqueue_event(cast('Event', e))
 
         finally:
@@ -585,6 +729,7 @@ class ActiveTask:
             await EventConsumer(self).run()
         finally:
             self._is_finished.set()
+            self.cancel_idle_release()
             self._request_queue.shutdown(immediate=True)
             await self._event_queue_agent.close(immediate=True)
 
@@ -605,7 +750,7 @@ class ActiveTask:
             logger.debug('Consumer[%s]: Finishing', self._task_id)
             await self._maybe_cleanup()
 
-    async def subscribe(
+    async def subscribe(  # noqa: PLR0915
         self,
         *,
         request: RequestContext | None = None,
@@ -621,9 +766,10 @@ class ActiveTask:
         """
         logger.debug('Subscribe[%s]: New subscriber', self._task_id)
 
+        self.cancel_idle_release()
         async with self._lock:
             if self._is_finished.is_set():
-                raise InvalidParamsError(
+                raise UnsupportedOperationError(
                     f'Task {self._task_id} is already completed.'
                 )
             self._reference_count += 1
@@ -633,7 +779,11 @@ class ActiveTask:
                 self._reference_count,
             )
 
-        tapped_queue = await self._event_queue_subscribers.tap()
+        # evict_on_full=True: a subscriber that falls behind is dropped, so it
+        # cannot wedge dispatch for the others. See _deliver_to_sink().
+        tapped_queue = await self._event_queue_subscribers.tap(
+            evict_on_full=True
+        )
         request_id = await self.enqueue_request(request) if request else None
 
         try:
@@ -662,6 +812,7 @@ class ActiveTask:
                             self._task_id,
                             event,
                         )
+                        tapped_queue.task_done()
                         raise event
 
                     if replace_status_update_with_task and isinstance(
@@ -673,6 +824,9 @@ class ActiveTask:
                             updated_task,
                         )
                         event = updated_task
+                    # Acknowledge internal lifecycle events before skipping them.
+                    if isinstance(event, _RequestStarted | _RequestCompleted):
+                        tapped_queue.task_done()
                     if isinstance(event, _RequestCompleted):
                         if (
                             request_id is not None
@@ -703,9 +857,16 @@ class ActiveTask:
                 self._reference_count -= 1
             # Evaluate if this was the last subscriber on a finished task.
             await self._maybe_cleanup()
+            self.schedule_idle_release()
 
     async def cancel(self, call_context: ServerCallContext) -> Task:
         """Cancels the running active task.
+
+        The returned task carries a terminal state, which is written to the
+        task store. That write is not guaranteed to reach an active subscriber
+        stream: by the time cancel writes it the event queues may already be
+        closed, so a client that was streaming may have to re-read the task to
+        observe the terminal state.
 
         Concurrency Guarantee:
         Uses `_lock` to ensure we don't attempt to cancel a producer that is
@@ -730,7 +891,26 @@ class ActiveTask:
                 logger.debug(
                     'Cancel[%s]: Cancelling producer task', self._task_id
                 )
-                self._producer_task.cancel()
+                # Await the executor's cancel before cancelling the producer,
+                # so the component that owns the task's terminal state can
+                # still write to the still-open event queue. Cancelling the
+                # producer first can tear the queue down first and drop that
+                # write. Mirrors the V1 handler ordering. The producer cancel
+                # is in a finally so it still runs when executor.cancel() raises
+                # a BaseException such as asyncio.CancelledError, which
+                # `except Exception` does not catch; otherwise the producer
+                # would leak as a pending task. Cancelling after
+                # _mark_task_as_failed also keeps the FAILED write ahead of the
+                # queue teardown, so it is not dropped as QueueShutDown.
+                #
+                # Residual: if executor.cancel() raises a BaseException (e.g.
+                # asyncio.CancelledError), it propagates out of cancel() from
+                # the finally before the _is_finished.wait() and the CANCELED
+                # write below, leaving the task non-terminal with no producer
+                # behind it. This is not the #1170 silent-success shape (the
+                # caller receives the exception), and it is recoverable: a
+                # later cancel() takes the else branch and reaches the
+                # terminal write.
                 try:
                     await self._agent_executor.cancel(
                         request_context, self._event_queue_agent
@@ -741,6 +921,8 @@ class ActiveTask:
                     )
                     await self._mark_task_as_failed(e)
                     raise
+                finally:
+                    self._producer_task.cancel()
             else:
                 logger.debug(
                     'Cancel[%s]: Task already finished [%s] or producer not started [%s], not cancelling',
@@ -750,9 +932,29 @@ class ActiveTask:
                 )
 
         await self._is_finished.wait()
+        self._task_manager.invalidate()
         task = await self._task_manager.get_task()
         if not task:
             raise RuntimeError('Task should have been created')
+        # A cleanup-only executor.cancel() may not write a terminal state, and
+        # a task parked in a non-terminal state (e.g. input-required) has no
+        # running producer to write one either. Close it out as CANCELED so a
+        # caller that cancelled is never left polling a live task. Mirrors the
+        # V1 handler, which made a non-cancelled outcome visible instead of
+        # reporting success and changing nothing.
+        if task.status.state not in TERMINAL_TASK_STATES:
+            # Write a copy rather than mutating the task in place: get_task()
+            # returns the shared _task_manager._current_task, which may already
+            # have been yielded to a subscriber. Copying keeps THIS terminal
+            # write off the yielded reference. It is not a file-wide guarantee:
+            # ordinary status writes (save_task_event -> ensure_task -> CopyFrom)
+            # still update the shared object in place. Making every write
+            # copy-on-yield is the general property tracked in #1175 and #1191.
+            updated = Task()
+            updated.CopyFrom(task)
+            updated.status.state = TaskState.TASK_STATE_CANCELED
+            await self._task_manager.save_task_event(updated)
+            task = updated
         return task
 
     async def aclose(self) -> None:
@@ -781,6 +983,7 @@ class ActiveTask:
         # tasks, because their teardown re-acquires it.
         async with self._lock:
             self._is_finished.set()
+            self.cancel_idle_release()
             background_tasks = [
                 task
                 for task in (self._producer_task, self._consumer_task)
@@ -796,6 +999,54 @@ class ActiveTask:
                 # CancelledError is a BaseException, so it is excluded here.
                 if isinstance(result, Exception):
                     logger.error('Error during aclose', exc_info=result)
+
+    def schedule_idle_release(self) -> None:
+        """(Re)starts the timer that releases a parked interrupted task."""
+        if self._interrupted_task_timeout is None or self._is_finished.is_set():
+            return
+        self.cancel_idle_release()
+        self._idle_release_task = asyncio.create_task(
+            self._release_when_idle(self._interrupted_task_timeout),
+            name=f'idle-release:{self._task_id}',
+        )
+
+    def cancel_idle_release(self) -> None:
+        """Stops the timer that releases a parked interrupted task, if any."""
+        if self._idle_release_task is not None:
+            self._idle_release_task.cancel()
+            self._idle_release_task = None
+
+    async def _release_when_idle(self, timeout: float) -> None:
+        """Finishes the task if it is still parked after `timeout` seconds."""
+        try:
+            await asyncio.sleep(timeout)
+            # Read before `_lock` so the checks and release below cannot suspend.
+            task = await self._task_manager.get_task()
+        except asyncio.CancelledError:
+            raise
+        except Exception:
+            logger.exception(
+                'ActiveTask[%s]: Idle release check failed', self._task_id
+            )
+            return
+        async with self._lock:
+            if (
+                task is None
+                or task.status.state not in INTERRUPTED_TASK_STATES
+                or self._is_finished.is_set()
+                # The consumer holds one reference; more means subscribers.
+                or self._reference_count != 1
+                or self._request_lock.locked()
+                or not self._request_queue.empty()
+            ):
+                return
+            logger.debug(
+                'ActiveTask[%s]: Releasing task parked in %s',
+                self._task_id,
+                TaskState.Name(task.status.state),
+            )
+            self._is_finished.set()
+            self._request_queue.shutdown(immediate=True)
 
     async def _maybe_cleanup(self) -> None:
         """Triggers cleanup if task is finished and has no subscribers.

@@ -1,3 +1,4 @@
+import logging
 import unittest
 
 from a2a.server.request_handlers.response_helpers import (
@@ -13,6 +14,7 @@ from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
     AgentInterface,
+    AgentSkill,
     Task,
     TaskState,
     TaskStatus,
@@ -420,3 +422,40 @@ class TestResponseHelpers(unittest.TestCase):
 
 if __name__ == '__main__':
     unittest.main()
+
+
+class TestAgentCardToDictRequiredFields(unittest.TestCase):
+    def test_warns_when_required_fields_are_missing(self) -> None:
+        with self.assertLogs('a2a.utils.proto_utils', logging.WARNING) as logs:
+            result = agent_card_to_dict(AgentCard(name='partial'))
+        self.assertEqual(result['name'], 'partial')
+        [message] = logs.output
+        self.assertIn('agent_card passed to agent_card_to_dict:', message)
+        self.assertIn('description', message)
+
+    def test_complete_card_does_not_warn(self) -> None:
+        card = AgentCard(
+            name='complete_agent',
+            description='An agent card with all required fields.',
+            supported_interfaces=[
+                AgentInterface(
+                    url='http://localhost:8000',
+                    protocol_binding='JSONRPC',
+                    protocol_version='1.0',
+                )
+            ],
+            version='1.0',
+            capabilities=AgentCapabilities(),
+            default_input_modes=['text/plain'],
+            default_output_modes=['text/plain'],
+            skills=[
+                AgentSkill(
+                    id='echo',
+                    name='Echo',
+                    description='Echoes the input.',
+                    tags=['test'],
+                )
+            ],
+        )
+        with self.assertNoLogs('a2a.utils.proto_utils', logging.WARNING):
+            agent_card_to_dict(card)

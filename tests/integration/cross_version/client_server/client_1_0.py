@@ -227,7 +227,7 @@ async def test_push_notification_lifecycle(client, task_id, server_name):
 
     # 1. Create
     task_push_cfg = TaskPushNotificationConfig(
-        task_id=task_id, id=config_id, url='http://127.0.0.1:9999/webhook'
+        task_id=task_id, id=config_id, url='http://example.com/webhook'
     )
 
     created = await client.create_task_push_notification_config(

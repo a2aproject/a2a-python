@@ -17,11 +17,13 @@
 This module provides helper functions for common proto type operations.
 """
 
-from typing import TYPE_CHECKING, Any, TypedDict
+import logging
+
+from typing import TYPE_CHECKING, Any, TypeVar, TypedDict, cast
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
 from google.protobuf.descriptor import FieldDescriptor
-from google.protobuf.json_format import ParseDict
+from google.protobuf.json_format import Parse, ParseDict, ParseError
 from google.protobuf.message import Message as ProtobufMessage
 from google.rpc import error_details_pb2
 
@@ -45,8 +47,30 @@ from a2a.types.a2a_pb2 import (
 )
 
 
+logger = logging.getLogger(__name__)
+
+
 # Define Event type locally to avoid circular imports
 Event = Message | Task | TaskStatusUpdateEvent | TaskArtifactUpdateEvent
+
+_MessageT = TypeVar('_MessageT', bound=ProtobufMessage)
+
+
+def parse_lenient(
+    data: dict[str, Any] | str | bytes, message: _MessageT
+) -> _MessageT:
+    """Parses ProtoJSON into message, ignoring unrecognized fields.
+
+    Args:
+        data: A decoded JSON object, or raw ProtoJSON text/bytes.
+        message: The message to parse into. Mutated in place and returned.
+
+    Returns:
+        The parsed message.
+    """
+    if isinstance(data, str | bytes):
+        return Parse(data, message, ignore_unknown_fields=True)
+    return ParseDict(data, message, ignore_unknown_fields=True)
 
 
 def to_stream_response(event: Event) -> StreamResponse:
@@ -150,6 +174,15 @@ def parse_string_integers_in_dict(value: Any, max_safe_digits: int = 15) -> Any:
     return value
 
 
+def _field_is_repeated(field: FieldDescriptor) -> bool:
+    """protobuf>=6.31.0 exposes `is_repeated`; older (floor >=5.29.5) does not."""
+    is_repeated = getattr(field, 'is_repeated', None)
+    if is_repeated is not None:
+        return is_repeated
+    # protobuf 7 removed `label`; only reached on the <6.31 fallback path.
+    return getattr(field, 'label', None) == FieldDescriptor.LABEL_REPEATED
+
+
 def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
     """Converts REST query parameters back into a Protobuf message.
 
@@ -162,7 +195,9 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         https://a2a-protocol.org/latest/specification/#115-query-parameter-naming-for-request-parameters
     """
     descriptor = message.DESCRIPTOR
-    fields = {f.camelcase_name: f for f in descriptor.fields}
+    fields = {
+        f.camelcase_name: cast('FieldDescriptor', f) for f in descriptor.fields
+    }
     processed: dict[str, Any] = {}
 
     keys = params.keys()
@@ -174,10 +209,7 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
         field = fields[k]
         v_list = params.getlist(k)
 
-        # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-        # deprecated `field.label` with `field.is_repeated` once the minimum
-        # protobuf version requirement is bumped.
-        if field.label == FieldDescriptor.LABEL_REPEATED:
+        if _field_is_repeated(field):
             accumulated: list[Any] = []
             for v in v_list:
                 if not v:
@@ -193,6 +225,10 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
             if raw_val is not None:
                 parsed_val: Any = raw_val
                 if field.type == field.TYPE_BOOL and isinstance(raw_val, str):
+                    if raw_val.lower() not in ('true', 'false'):
+                        raise ParseError(
+                            f'Invalid boolean query parameter {k}: expected "true" or "false".'
+                        )
                     parsed_val = raw_val.lower() == 'true'
                 processed[k] = parsed_val
 
@@ -211,10 +247,7 @@ def _check_required_field_violation(
 ) -> ValidationDetail | None:
     """Check if a required field is missing or invalid."""
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label == FieldDescriptor.LABEL_REPEATED:
+    if _field_is_repeated(field):
         if not val:
             return ValidationDetail(
                 field=field.name,
@@ -255,14 +288,14 @@ def _recurse_validation(
         return errors
 
     val = getattr(msg, field.name)
-    # TODO(https://github.com/a2aproject/a2a-python/issues/1011): Replace
-    # deprecated `field.label` with `field.is_repeated` once the minimum
-    # protobuf version requirement is bumped.
-    if field.label != FieldDescriptor.LABEL_REPEATED:
+    if not _field_is_repeated(field):
         if msg.HasField(field.name):
             sub_errs = _validate_proto_required_fields_internal(val)
             _append_nested_errors(errors, field.name, sub_errs)
-    elif field.message_type.GetOptions().map_entry:
+    elif (
+        field.message_type is not None
+        and field.message_type.GetOptions().map_entry
+    ):
         for k, v in val.items():
             if isinstance(v, ProtobufMessage):
                 sub_errs = _validate_proto_required_fields_internal(v)
@@ -281,9 +314,12 @@ def _validate_proto_required_fields_internal(
     desc = msg.DESCRIPTOR
     errors: list[ValidationDetail] = []
 
-    for field in desc.fields:
+    for raw_field in desc.fields:
+        # `desc.fields` is typed as a union of the pure-Python and C-extension
+        # FieldDescriptor; narrow to the canonical one for the helpers below.
+        field = cast('FieldDescriptor', raw_field)
         options = field.GetOptions()
-        if FieldBehavior.REQUIRED in options.Extensions[field_behavior]:
+        if FieldBehavior.REQUIRED in options.Extensions[field_behavior]:  # type: ignore[index]  # ty: ignore[invalid-argument-type]
             violation = _check_required_field_violation(msg, field)
             if violation:
                 errors.append(violation)
@@ -306,6 +342,45 @@ def validate_proto_required_fields(msg: ProtobufMessage) -> None:
         raise InvalidParamsError(
             message='Validation failed', data={'errors': errors}
         )
+
+
+_SPEC_FIELD_PRESENCE_URL = (
+    'https://a2a-protocol.org/latest/specification/'
+    '#57-field-presence-and-optionality'
+)
+
+
+def warn_on_missing_required_fields(msg: ProtobufMessage, source: str) -> bool:
+    """Log a warning if fields marked as REQUIRED are missing or empty.
+
+    Unlike `validate_proto_required_fields`, this never raises, so it can
+    surface spec violations without breaking callers that currently rely on
+    non-compliant messages.
+
+    Args:
+        msg: The Protobuf message to check.
+        source: Where the message was passed in, used in the log message.
+
+    Returns:
+        True if every REQUIRED field is set, False otherwise. Objects that
+        are not Protobuf messages (for example test doubles) are not checked.
+    """
+    if not isinstance(msg, ProtobufMessage):
+        return True
+    errors = _validate_proto_required_fields_internal(msg)
+    if not errors:
+        return True
+    logger.warning(
+        '%s %s is not spec-compliant - REQUIRED fields missing or empty: '
+        '%s. This is allowed and does not raise, but it may not verify or '
+        'interoperate across SDKs and could be rejected in a future major '
+        'release. See %s',
+        source,
+        msg.DESCRIPTOR.name,
+        ', '.join(err['field'] for err in errors),
+        _SPEC_FIELD_PRESENCE_URL,
+    )
+    return False
 
 
 def validation_errors_to_bad_request(

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+import threading
 
 from collections.abc import AsyncGenerator, Awaitable, Callable
 from typing import cast
@@ -31,6 +32,9 @@ from a2a.server.tasks import (
     TaskManager,
     TaskStore,
 )
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
+)
 from a2a.types.a2a_pb2 import (
     AgentCard,
     CancelTaskRequest,
@@ -58,6 +62,8 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -102,6 +108,8 @@ class LegacyRequestHandler(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
     ) -> None:
         """Initializes the DefaultRequestHandler.
 
@@ -116,6 +124,18 @@ class LegacyRequestHandler(RequestHandler):
               to build request contexts. Defaults to `SimpleRequestContextBuilder`.
             extended_agent_card: An optional, distinct `AgentCard` to be served at the extended card endpoint.
             extended_card_modifier: An optional callback to dynamically modify the extended `AgentCard` before it is served.
+            push_url_validator: Async callable that returns True to accept
+              a push URL, or False to reject it. Defaults to None (no
+              library screening). The spec lists these checks as SHOULD,
+              so deployments that want the built-in policy should pass
+              ``validate_push_notification_url``.
+            validate_input_modes: Reject message parts whose ``media_type``
+              the card declares nowhere -- neither in
+              ``default_input_modes`` nor in any skill's ``input_modes`` --
+              with ``ContentTypeNotSupportedError``. Defaults to False,
+              because an agent whose declared modes do not spell the media
+              types its clients really send would start refusing traffic it
+              previously accepted.
         """
         self.agent_executor = agent_executor
         self.task_store = task_store
@@ -123,8 +143,18 @@ class LegacyRequestHandler(RequestHandler):
         self._queue_manager = queue_manager or InMemoryQueueManager()
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        warn_on_missing_required_fields(
+            agent_card, 'agent_card passed to DefaultRequestHandler:'
+        )
+        if extended_agent_card is not None:
+            warn_on_missing_required_fields(
+                extended_agent_card,
+                'extended_agent_card passed to DefaultRequestHandler:',
+            )
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
@@ -133,10 +163,17 @@ class LegacyRequestHandler(RequestHandler):
         )
         # TODO: Likely want an interface for managing this, like AgentExecutionManager.
         self._running_agents = {}
-        self._running_agents_lock = asyncio.Lock()
+        self._running_agents_lock = threading.RLock()
         # Tracks background tasks (e.g., deferred cleanups) to avoid orphaning
         # asyncio tasks and to surface unexpected exceptions.
         self._background_tasks = set()
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     @validate_request_params
     async def on_get_task(
@@ -194,7 +231,7 @@ class LegacyRequestHandler(RequestHandler):
         # Check if task is in a non-cancelable state (completed, canceled, failed, rejected)
         if task.status.state in TERMINAL_TASK_STATES:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {task.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(task.status.state)}'
             )
 
         task_manager = TaskManager(
@@ -233,7 +270,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if result.status.state != TaskState.TASK_STATE_CANCELED:
             raise TaskNotCancelableError(
-                message=f'Task cannot be canceled - current state: {result.status.state}'
+                message=f'Task cannot be canceled - current state: {TaskState.Name(result.status.state)}'
             )
 
         return result
@@ -262,6 +299,9 @@ class LegacyRequestHandler(RequestHandler):
         Returns:
             A tuple of (task_manager, task_id, queue, result_aggregator, producer_task)
         """
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
+
         # Create task manager and validate existing task
         # Proto empty strings should be treated as None
         task_id = params.message.task_id or None
@@ -277,8 +317,8 @@ class LegacyRequestHandler(RequestHandler):
 
         if task:
             if task.status.state in TERMINAL_TASK_STATES:
-                raise InvalidParamsError(
-                    message=f'Task {task.id} is in terminal state: {task.status.state}'
+                raise UnsupportedOperationError(
+                    message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
                 )
 
             task = task_manager.update_with_message(params.message, task)
@@ -304,6 +344,9 @@ class LegacyRequestHandler(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -339,7 +382,16 @@ class LegacyRequestHandler(RequestHandler):
             and task_id
             and isinstance(event, PushNotificationEvent)
         ):
-            await self._push_sender.send_notification(task_id, event)
+            try:
+                await self._push_sender.send_notification(task_id, event)
+            except Exception:
+                # Push delivery is best-effort: a sender failure must not
+                # fail the task or disturb the event stream.
+                logger.exception(
+                    'Push notification sender raised for task_id=%s; '
+                    'ignoring the failure.',
+                    task_id,
+                )
 
     @validate_request_params
     async def on_message_send(
@@ -426,6 +478,8 @@ class LegacyRequestHandler(RequestHandler):
         Starts the agent execution and yields events as they are produced
         by the agent.
         """
+        validate_history_length(params.configuration)
+
         (
             _task_manager,
             task_id,
@@ -438,11 +492,13 @@ class LegacyRequestHandler(RequestHandler):
 
         try:
             async for event in result_aggregator.consume_and_emit(consumer):
+                response = event
                 if isinstance(event, Task):
                     self._validate_task_id_match(task_id, event.id)
+                    response = apply_history_length(event, params.configuration)
 
                 await self._send_push_notification_if_needed(task_id, event)
-                yield event
+                yield response
         except (asyncio.CancelledError, GeneratorExit):
             # Client disconnected: continue consuming and persisting events in the background
             bg_task = asyncio.create_task(
@@ -462,7 +518,7 @@ class LegacyRequestHandler(RequestHandler):
         self, task_id: str, producer_task: asyncio.Task
     ) -> None:
         """Registers the agent execution task with the handler."""
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents[task_id] = producer_task
 
     def _track_background_task(self, task: asyncio.Task) -> None:
@@ -501,7 +557,7 @@ class LegacyRequestHandler(RequestHandler):
                 'Producer task %s was cancelled during cleanup', task_id
             )
         await self._queue_manager.close(task_id)
-        async with self._running_agents_lock:
+        with self._running_agents_lock:
             self._running_agents.pop(task_id, None)
 
     @validate_request_params
@@ -527,13 +583,17 @@ class LegacyRequestHandler(RequestHandler):
         if not task:
             raise TaskNotFoundError
 
-        await self._push_config_store.set_info(
+        await self._reject_unsafe_push_url(params.url)
+
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
-
-        return params
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
     @validate_request_params
     @validate(
@@ -591,7 +651,7 @@ class LegacyRequestHandler(RequestHandler):
 
         if task.status.state in TERMINAL_TASK_STATES:
             raise UnsupportedOperationError(
-                message=f'Task {task.id} is in terminal state: {task.status.state}'
+                message=f'Task {task.id} is in terminal state: {TaskState.Name(task.status.state)}'
             )
 
         # The operation MUST return a Task object as the first event in the stream

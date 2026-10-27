@@ -263,6 +263,37 @@ class TestProtoUtils:
             exc_info.value
         )
 
+    @pytest.mark.parametrize(
+        ('history_length', 'expected'), [(0, None), (5, 5)]
+    )
+    def test_message_send_configuration_history_length(
+        self, history_length: int, expected: int | None
+    ):
+        """A v0.3 history_length of 0 means unlimited, as in task_query_params."""
+        config = proto_utils.FromProto.message_send_configuration(
+            a2a_pb2.SendMessageConfiguration(history_length=history_length)
+        )
+        assert config.history_length == expected
+
+    def test_message_send_params_without_configuration(self):
+        """An unset configuration stays None so the send defaults to blocking."""
+        params = proto_utils.FromProto.message_send_params(
+            a2a_pb2.SendMessageRequest(request=a2a_pb2.Message(message_id='m'))
+        )
+        assert params.configuration is None
+
+    def test_task_status_without_message(self):
+        """An unset status message stays None instead of an empty message."""
+        status = proto_utils.FromProto.task_status(
+            a2a_pb2.TaskStatus(state=a2a_pb2.TASK_STATE_WORKING)
+        )
+        assert status.message is None
+
+    def test_agent_card_without_provider(self):
+        """An unset provider stays None instead of an empty provider."""
+        card = proto_utils.FromProto.agent_card(a2a_pb2.AgentCard(name='a'))
+        assert card.provider is None
+
     def test_none_handling(self):
         """Test that None inputs are handled gracefully."""
         assert proto_utils.ToProto.message(None) is None
@@ -639,6 +670,43 @@ class TestProtoUtils:
                 header={'alg': 'ES256', 'kid': 'unique-key-identifier-123'},
             ),
         ]
+
+    def test_task_status_timestamp_roundtrip(self):
+        """TaskStatus.timestamp survives conversion to proto and back."""
+        status = types.TaskStatus(
+            state=types.TaskState.working, timestamp='2026-03-15T10:30:00Z'
+        )
+
+        proto_status = proto_utils.ToProto.task_status(status)
+        assert proto_status.HasField('timestamp')
+
+        roundtrip_status = proto_utils.FromProto.task_status(proto_status)
+        assert roundtrip_status.timestamp == '2026-03-15T10:30:00Z'
+
+    def test_agent_card_optional_fields_roundtrip(
+        self, sample_agent_card: types.AgentCard
+    ):
+        """icon_url, oauth2_metadata_url and skill security survive conversion."""
+        card = sample_agent_card.model_copy(deep=True)
+        card.icon_url = 'http://localhost/icon.png'
+        card.skills[0].security = [{'oauth_scheme': ['read']}]
+        card.security_schemes[
+            'oauth_scheme'
+        ].root.oauth2_metadata_url = (
+            'http://localhost/.well-known/oauth-authorization-server'
+        )
+
+        roundtrip_card = proto_utils.FromProto.agent_card(
+            proto_utils.ToProto.agent_card(card)
+        )
+        assert roundtrip_card.icon_url == 'http://localhost/icon.png'
+        assert roundtrip_card.skills[0].security == [{'oauth_scheme': ['read']}]
+        assert (
+            roundtrip_card.security_schemes[
+                'oauth_scheme'
+            ].root.oauth2_metadata_url
+            == 'http://localhost/.well-known/oauth-authorization-server'
+        )
 
     @pytest.mark.parametrize(
         'signature_data, expected_data',

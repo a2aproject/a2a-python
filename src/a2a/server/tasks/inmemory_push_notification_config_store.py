@@ -1,10 +1,11 @@
-import asyncio
 import logging
+import threading
 
 from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.push_notification_config_store import (
     PushNotificationConfigStore,
+    normalize_push_notification_config,
 )
 from a2a.types.a2a_pb2 import TaskPushNotificationConfig
 
@@ -24,7 +25,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         owner_resolver: OwnerResolver = resolve_user_scope,
     ) -> None:
         """Initializes the InMemoryPushNotificationConfigStore."""
-        self.lock = asyncio.Lock()
+        self.lock = threading.RLock()
         self._push_notification_infos: dict[
             str, dict[str, list[TaskPushNotificationConfig]]
         ] = {}
@@ -40,32 +41,35 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         task_id: str,
         notification_config: TaskPushNotificationConfig,
         context: ServerCallContext,
-    ) -> None:
+    ) -> TaskPushNotificationConfig:
         """Sets or updates the push notification configuration for a task in memory."""
         owner = self.owner_resolver(context)
-        if owner not in self._push_notification_infos:
-            self._push_notification_infos[owner] = {}
-        async with self.lock:
-            owner_infos = self._push_notification_infos[owner]
+        stored = normalize_push_notification_config(
+            task_id, notification_config
+        )
+
+        with self.lock:
+            owner_infos = self._push_notification_infos.setdefault(owner, {})
             if task_id not in owner_infos:
                 owner_infos[task_id] = []
 
-            if not notification_config.id:
-                notification_config.id = task_id
-
             # Remove existing config with the same ID
             for config in owner_infos[task_id]:
-                if config.id == notification_config.id:
+                if config.id == stored.id:
                     owner_infos[task_id].remove(config)
                     break
 
-            owner_infos[task_id].append(notification_config)
+            owner_infos[task_id].append(stored)
             logger.debug(
                 'Push notification config for task %s with config id %s for owner %s saved/updated.',
                 task_id,
-                notification_config.id,
+                stored.id,
                 owner,
             )
+
+        result = TaskPushNotificationConfig()
+        result.CopyFrom(stored)
+        return result
 
     async def get_info(
         self,
@@ -77,7 +81,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         Used by the user-callable read endpoints.
         """
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
             return list(owner_infos.get(task_id, []))
 
@@ -89,7 +93,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
 
         Used by the push-notification dispatch path.
         """
-        async with self.lock:
+        with self.lock:
             results: list[TaskPushNotificationConfig] = []
             for all_configs in self._push_notification_infos.values():
                 results.extend(all_configs.get(task_id, []))
@@ -107,7 +111,7 @@ class InMemoryPushNotificationConfigStore(PushNotificationConfigStore):
         If config_id is None, all configurations for the task for the owner are deleted.
         """
         owner = self.owner_resolver(context)
-        async with self.lock:
+        with self.lock:
             owner_infos = self._get_owner_push_notification_infos(owner)
             if task_id not in owner_infos:
                 logger.warning(

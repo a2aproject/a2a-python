@@ -2,9 +2,13 @@ from __future__ import annotations
 
 import asyncio  # noqa: TC003
 import logging
+import warnings
 
+from contextlib import aclosing
 from typing import TYPE_CHECKING, Any, cast
 
+from a2a.plugins.manager import get_global
+from a2a.plugins.types import TaskEventInfo
 from a2a.server.agent_execution import (
     AgentExecutor,
     RequestContext,
@@ -16,10 +20,23 @@ from a2a.server.agent_execution.active_task import (
     TERMINAL_TASK_STATES,
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
+from a2a.server.agent_execution.plugin_agent_executor import (
+    PluginAgentExecutor,
+)
+from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.task_store import (
+    ConcurrentTaskModificationError,
+    LegacyTaskStoreAdapter,
+    VersionedTaskStore,
+)
+from a2a.server.request_handlers._plugin_hooks import server_plugin_hooks
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
     validate,
     validate_request_params,
+)
+from a2a.server.tasks.push_notification_config_store import (
+    normalize_push_notification_config,
 )
 from a2a.types.a2a_pb2 import (
     AgentCard,
@@ -37,6 +54,8 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskState,
+    TaskStatusUpdateEvent,
 )
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
@@ -45,7 +64,10 @@ from a2a.utils.errors import (
     PushNotificationNotSupportedError,
     TaskNotCancelableError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
+from a2a.utils.input_mode_validator import validate_input_modes
+from a2a.utils.proto_utils import warn_on_missing_required_fields
 from a2a.utils.task import (
     apply_history_length,
     validate_history_length,
@@ -57,7 +79,10 @@ from a2a.utils.telemetry import SpanKind, trace_class
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator, Awaitable, Callable
 
+    from a2a.plugins.manager import PluginManager
     from a2a.server.agent_execution.active_task import ActiveTask
+    from a2a.server.cluster.event_stream import TaskEventStream
+    from a2a.server.cluster.version import TaskVersion
     from a2a.server.context import ServerCallContext
     from a2a.server.events import Event
     from a2a.server.tasks import (
@@ -72,17 +97,32 @@ logger = logging.getLogger(__name__)
 
 @trace_class(kind=SpanKind.SERVER)
 class DefaultRequestHandlerV2(RequestHandler):
-    """Default request handler for all incoming requests."""
+    """Default request handler for all incoming requests.
+
+    The ``queue_manager`` parameter is accepted for signature compatibility
+    with `DefaultRequestHandler` but is not used: v2 delegates event streaming
+    to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
+    `DeprecationWarning` and logs a warning.
+
+    ``interrupted_task_timeout`` releases the `ActiveTask` of a task idle in
+    ``input-required`` or ``auth-required`` after that many seconds; a
+    follow-up recreates it from the store. ``None`` (default) never releases;
+    any other value must be greater than 0.
+
+    ``plugins`` selects the plugin manager whose hooks run for this handler.
+    It defaults to the global manager (`a2a.plugins.get_global()`) at
+    construction time.
+    """
 
     _background_tasks: set[asyncio.Task]
 
     def __init__(  # noqa: PLR0913
         self,
         agent_executor: AgentExecutor,
-        task_store: TaskStore,
+        task_store: TaskStore | VersionedTaskStore,
         agent_card: AgentCard,
         queue_manager: Any
-        | None = None,  # Kept for backward compat in signature
+        | None = None,  # Accepted for signature compat; ignored in v2 (warns)
         push_config_store: PushNotificationConfigStore | None = None,
         push_sender: PushNotificationSender | None = None,
         request_context_builder: RequestContextBuilder | None = None,
@@ -91,26 +131,98 @@ class DefaultRequestHandlerV2(RequestHandler):
             [AgentCard, ServerCallContext], Awaitable[AgentCard]
         ]
         | None = None,
+        push_url_validator: Callable[[str], Awaitable[bool]] | None = None,
+        validate_input_modes: bool = False,
+        event_stream: TaskEventStream | None = None,
+        interrupted_task_timeout: float | None = None,
+        plugins: PluginManager | None = None,
     ) -> None:
+        if (
+            interrupted_task_timeout is not None
+            and interrupted_task_timeout <= 0
+        ):
+            raise ValueError('interrupted_task_timeout must be greater than 0.')
+        if queue_manager is not None:
+            message = (
+                'A queue_manager was passed to DefaultRequestHandlerV2, but it '
+                'is not used: v2 delegates event streaming to an in-memory '
+                'ActiveTaskRegistry, so custom or distributed QueueManager '
+                'implementations are ignored. For multi-replica event '
+                'streaming, either use LegacyRequestHandler or route '
+                'subscription requests to the replica holding the task.'
+            )
+            warnings.warn(message, DeprecationWarning, stacklevel=2)
+            logger.warning(message)
+        self._plugins: PluginManager = (
+            plugins if plugins is not None else get_global()
+        )
         self.agent_executor = agent_executor
-        self.task_store = task_store
+        self.task_store: TaskStore | VersionedTaskStore = task_store
+        self._versioned_store: VersionedTaskStore = (
+            task_store
+            if isinstance(task_store, VersionedTaskStore)
+            else LegacyTaskStoreAdapter(task_store)
+        )
         self._agent_card = agent_card
         self._push_config_store = push_config_store
         self._push_sender = push_sender
+        self._push_url_validator = push_url_validator
+        self._validate_input_modes = validate_input_modes
         self.extended_agent_card = extended_agent_card
         self.extended_card_modifier = extended_card_modifier
+        self._event_stream = event_stream
+        if isinstance(task_store, VersionedTaskStore) and event_stream is None:
+            message = (
+                'A VersionedTaskStore was configured without an event_stream, '
+                'so cross-replica streaming is disabled'
+            )
+            warnings.warn(message, stacklevel=2)
+            logger.warning(message)
+        warn_on_missing_required_fields(
+            agent_card, 'agent_card passed to DefaultRequestHandlerV2:'
+        )
+        if extended_agent_card is not None:
+            warn_on_missing_required_fields(
+                extended_agent_card,
+                'extended_agent_card passed to DefaultRequestHandlerV2:',
+            )
         self._request_context_builder = (
             request_context_builder
             or SimpleRequestContextBuilder(
-                should_populate_referred_tasks=False, task_store=self.task_store
+                should_populate_referred_tasks=False,
+                task_store=None,
             )
         )
         self._active_task_registry = ActiveTaskRegistry(
-            agent_executor=self.agent_executor,
-            task_store=self.task_store,
+            agent_executor=(
+                PluginAgentExecutor(agent_executor, self._plugins)
+                if self._plugins.has_execution_hooks
+                else agent_executor
+            ),
+            task_store=self._versioned_store,
             push_sender=self._push_sender,
+            event_stream=self._event_stream,
+            interrupted_task_timeout=interrupted_task_timeout,
+            plugins=self._plugins,
         )
         self._background_tasks = set()
+
+    @property
+    def plugins(self) -> PluginManager:
+        """The plugin manager whose hooks run for this handler."""
+        return self._plugins
+
+    @property
+    def agent_card(self) -> AgentCard:
+        """The agent card served by this handler."""
+        return self._agent_card
+
+    async def _reject_unsafe_push_url(self, url: str) -> None:
+        """Apply the configured push-URL policy, if any."""
+        if self._push_url_validator is None:
+            return
+        if not await self._push_url_validator(url):
+            raise InvalidParamsError(message='Invalid push notification URL')
 
     async def aclose(self) -> None:
         """Shuts down the handler, draining all active tasks.
@@ -121,6 +233,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         """
         await self._active_task_registry.aclose()
 
+    @server_plugin_hooks('get_task')
     @validate_request_params
     async def on_get_task(  # noqa: D102
         self,
@@ -130,12 +243,13 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_history_length(params)
 
         task_id = params.id
-        task: Task | None = await self.task_store.get(task_id, context)
-        if not task:
+        stored = await self._versioned_store.get(task_id, context)
+        if stored is None:
             raise TaskNotFoundError
 
-        return apply_history_length(task, params)
+        return apply_history_length(stored.task, params)
 
+    @server_plugin_hooks('list_tasks')
     @validate_request_params
     async def on_list_tasks(  # noqa: D102
         self,
@@ -146,7 +260,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         if params.HasField('page_size'):
             validate_page_size(params.page_size)
 
-        page = await self.task_store.list(params, context)
+        page = await self._versioned_store.list(params, context)
         for task in page.tasks:
             if not params.include_artifacts:
                 task.ClearField('artifacts')
@@ -157,6 +271,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return page
 
+    @server_plugin_hooks('cancel_task')
     @validate_request_params
     async def on_cancel_task(  # noqa: D102
         self,
@@ -165,12 +280,37 @@ class DefaultRequestHandlerV2(RequestHandler):
     ) -> Task | None:
         task_id = params.id
 
+        # Owner-scoped read of the current state
+        stored = await self._versioned_store.get(task_id, context)
+        if stored is None:
+            raise TaskNotFoundError
+        task, version = stored.task, stored.version
+
+        # Terminal tasks, including already cancelled ones, are not cancelable.
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise TaskNotCancelableError
+
+        # This replica holds the task, running or waiting for input.
+        if await self._active_task_registry.get(task_id) is not None:
+            return await self._cancel_local(task_id, context)
+
+        # Running on another replica (or nowhere): record CANCELED in shared
+        # state; the owner sees the version bump on its next save and aborts.
+        return await self._cancel_remote(task_id, task, version, context)
+
+    async def _cancel_local(
+        self, task_id: str, context: ServerCallContext
+    ) -> Task:
         try:
             active_task = await self._active_task_registry.get_or_create(
                 task_id, call_context=context, create_task_if_missing=False
             )
-            result = await active_task.cancel(context)
-        except InvalidParamsError as e:
+            try:
+                result = await active_task.cancel(context)
+            finally:
+                # get_or_create stopped the timer; a failed cancel leaves the task parked.
+                active_task.schedule_idle_release()
+        except UnsupportedOperationError as e:
             raise TaskNotCancelableError from e
 
         if isinstance(result, Message):
@@ -179,6 +319,66 @@ class DefaultRequestHandlerV2(RequestHandler):
             )
 
         return result
+
+    async def _cancel_remote(
+        self,
+        task_id: str,
+        task: Task,
+        version: TaskVersion,
+        context: ServerCallContext,
+    ) -> Task:
+        try:
+            return await self._write_cancel(task_id, task, version, context)
+        except ConcurrentTaskModificationError:
+            reloaded_stored = await self._versioned_store.get(task_id, context)
+            if reloaded_stored is None:
+                raise TaskNotFoundError from None
+            if (
+                reloaded_stored.task.status.state
+                == TaskState.TASK_STATE_CANCELED
+            ):
+                return reloaded_stored.task
+            raise TaskNotCancelableError from None
+
+    async def _write_cancel(
+        self,
+        task_id: str,
+        current: Task,
+        version: TaskVersion,
+        context: ServerCallContext,
+    ) -> Task:
+        cancelled = Task()
+        cancelled.CopyFrom(current)
+        cancelled.status.state = TaskState.TASK_STATE_CANCELED
+        event = TaskStatusUpdateEvent(
+            task_id=task_id,
+            context_id=current.context_id,
+            status=cancelled.status,
+        )
+        new_version = await self._versioned_store.save(
+            cancelled,
+            event=event,
+            prev=current,
+            prev_version=version,
+            context=context,
+        )
+        if self._plugins.has_task_hooks:
+            # Remote cancel writes the store directly, bypassing TaskManager.
+            await self._plugins.on_task_event(
+                TaskEventInfo(
+                    task_id=task_id,
+                    from_state=current.status.state,
+                    to_state=cancelled.status.state,
+                    event=event,
+                    task=cancelled,
+                    context=context,
+                )
+            )
+        if self._event_stream is not None:
+            await self._event_stream.publish(
+                task_id, VersionedEvent(event=event, version=new_version)
+            )
+        return cancelled
 
     def _validate_task_id_match(self, task_id: str, event_task_id: str) -> None:
         if task_id != event_task_id:
@@ -195,14 +395,28 @@ class DefaultRequestHandlerV2(RequestHandler):
         call_context: ServerCallContext,
     ) -> tuple[ActiveTask, RequestContext]:
         validate_history_length(params.configuration)
+        if self._validate_input_modes:
+            validate_input_modes(params.message, self._agent_card)
 
         original_task_id = params.message.task_id or None
         original_context_id = params.message.context_id or None
 
         if original_task_id:
-            task = await self.task_store.get(original_task_id, call_context)
-            if not task:
+            stored = await self._versioned_store.get(
+                original_task_id, call_context
+            )
+            if stored is None:
                 raise TaskNotFoundError(f'Task {original_task_id} not found')
+            task = stored.task
+            # Agents must reject a message whose contextId differs from that
+            # of the task it names.
+            if original_context_id and task.context_id != original_context_id:
+                raise InvalidParamsError(
+                    message=(
+                        f'Context {original_context_id} does not match '
+                        f'context {task.context_id} of task {original_task_id}'
+                    )
+                )
 
         # Build context to resolve or generate missing IDs
         request_context = await self._request_context_builder.build(
@@ -220,6 +434,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         if self._push_config_store and params.configuration.HasField(
             'task_push_notification_config'
         ):
+            await self._reject_unsafe_push_url(
+                params.configuration.task_push_notification_config.url
+            )
             await self._push_config_store.set_info(
                 task_id,
                 params.configuration.task_push_notification_config,
@@ -236,6 +453,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         return active_task, request_context
 
+    @server_plugin_hooks('send_message')
     @validate_request_params
     async def on_message_send(  # noqa: D102
         self,
@@ -268,9 +486,16 @@ class DefaultRequestHandlerV2(RequestHandler):
             ):
                 self._validate_task_id_match(task_id, event.id)
                 result = event
-                # DO break here as it's "return_immediately".
-                # AgentExecutor will continue to run in the background.
-                break
+                # A FAILED task may be followed by a producer exception. Keep
+                # the task as the fallback result, but let the subscription
+                # surface that exception or finish the current request.
+                if (
+                    params.configuration.return_immediately
+                    or event.status.state != TaskState.TASK_STATE_FAILED
+                ):
+                    # AgentExecutor will continue to run in the background
+                    # when return_immediately is set.
+                    break
 
             if isinstance(event, Message):
                 result = event
@@ -294,6 +519,7 @@ class DefaultRequestHandlerV2(RequestHandler):
         )
         return result
 
+    @server_plugin_hooks('send_message_streaming')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -326,6 +552,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             else:
                 yield event
 
+    @server_plugin_hooks('create_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -341,18 +568,22 @@ class DefaultRequestHandlerV2(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
-        task: Task | None = await self.task_store.get(task_id, context)
-        if not task:
+        if await self._versioned_store.get(task_id, context) is None:
             raise TaskNotFoundError
 
-        await self._push_config_store.set_info(
+        await self._reject_unsafe_push_url(params.url)
+
+        stored = await self._push_config_store.set_info(
             task_id,
             params,
             context,
         )
+        if stored is not None:
+            return stored
+        # Custom stores written before set_info returned the stored config.
+        return normalize_push_notification_config(task_id, params)
 
-        return params
-
+    @server_plugin_hooks('get_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -369,8 +600,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
-        task: Task | None = await self.task_store.get(task_id, context)
-        if not task:
+        if await self._versioned_store.get(task_id, context) is None:
             raise TaskNotFoundError
 
         push_notification_configs: list[TaskPushNotificationConfig] = (
@@ -383,6 +613,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         raise TaskNotFoundError
 
+    @server_plugin_hooks('subscribe')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.streaming,
@@ -395,15 +626,69 @@ class DefaultRequestHandlerV2(RequestHandler):
     ) -> AsyncGenerator[Event, None]:
         task_id = params.id
 
-        active_task = await self._active_task_registry.get_or_create(
-            task_id,
-            call_context=context,
-            create_task_if_missing=False,
-        )
+        stored = await self._versioned_store.get(task_id, context)
+        if stored is None:
+            raise TaskNotFoundError
+        task, snapshot_version = stored.task, stored.version
 
-        async for event in active_task.subscribe(include_initial_task=True):
+        # A terminal task cannot be resubscribed to (nothing further to stream).
+        if task.status.state in TERMINAL_TASK_STATES:
+            raise UnsupportedOperationError(
+                message=f'Task {task_id} is in terminal state: '
+                f'{TaskState.Name(task.status.state)}'
+            )
+
+        if self._event_stream is None:
+            # Single-process mode
+            active = await self._active_task_registry.get_or_create(
+                task_id, call_context=context, create_task_if_missing=False
+            )
+            async for event in active.subscribe(include_initial_task=True):
+                yield event
+            return
+
+        # Shared-stream mode. Fast path: this replica runs the agent -> tap it.
+        stream = self._event_stream
+        local = await self._active_task_registry.get(task_id)
+        if local is not None:
+            async for event in local.subscribe(include_initial_task=True):
+                yield event
+            return
+
+        # Not running here: serve the snapshot and tail the remote stream.
+        async for event in self._subscribe_remote(
+            task_id, task, snapshot_version, stream
+        ):
             yield event
 
+    async def _subscribe_remote(
+        self,
+        task_id: str,
+        task: Task,
+        snapshot_version: TaskVersion,
+        stream: TaskEventStream,
+    ) -> AsyncGenerator[Event, None]:
+        """Serves a resubscription for a task running on another replica."""
+        yield task
+
+        async with aclosing(
+            stream.subscribe(task_id, after=snapshot_version)
+        ) as subscription:
+            async for versioned in subscription:
+                if not versioned.version.is_after(snapshot_version):
+                    continue
+                event = versioned.event
+                yield event
+                # Stop tailing once the stream ends: a Message, or a status
+                # update / Task in a terminal or interrupted state.
+                if isinstance(event, Message) or (
+                    isinstance(event, TaskStatusUpdateEvent | Task)
+                    and event.status.state
+                    in (TERMINAL_TASK_STATES | INTERRUPTED_TASK_STATES)
+                ):
+                    return
+
+    @server_plugin_hooks('list_task_push_notification_configs')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -419,8 +704,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             raise PushNotificationNotSupportedError
 
         task_id = params.task_id
-        task: Task | None = await self.task_store.get(task_id, context)
-        if not task:
+        if await self._versioned_store.get(task_id, context) is None:
             raise TaskNotFoundError
 
         push_notification_config_list = await self._push_config_store.get_info(
@@ -431,6 +715,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             configs=push_notification_config_list
         )
 
+    @server_plugin_hooks('delete_task_push_notification_config')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.push_notifications,
@@ -447,12 +732,12 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         task_id = params.task_id
         config_id = params.id
-        task: Task | None = await self.task_store.get(task_id, context)
-        if not task:
+        if await self._versioned_store.get(task_id, context) is None:
             raise TaskNotFoundError
 
         await self._push_config_store.delete_info(task_id, context, config_id)
 
+    @server_plugin_hooks('get_extended_agent_card')
     @validate_request_params
     @validate(
         lambda self: self._agent_card.capabilities.extended_agent_card,

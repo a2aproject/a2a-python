@@ -1,5 +1,7 @@
 import unittest
 
+from base64 import urlsafe_b64encode
+
 import pytest
 
 from a2a.helpers.proto_helpers import new_task
@@ -14,8 +16,11 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils.errors import InvalidParamsError
 from a2a.utils.task import (
+    ListTasksCursor,
     apply_history_length,
+    decode_list_tasks_cursor,
     decode_page_token,
+    encode_list_tasks_cursor,
     encode_page_token,
 )
 
@@ -37,6 +42,56 @@ class TestTask(unittest.TestCase):
         assert 'Token is not a valid base64-encoded cursor.' in str(
             excinfo.value
         )
+
+
+@pytest.mark.parametrize(
+    'cursor',
+    [
+        ListTasksCursor(timestamp_ns=1_735_689_600_123_000_001, task_id='t-1'),
+        ListTasksCursor(timestamp_ns=-1, task_id='before-epoch'),
+        ListTasksCursor(timestamp_ns=None, task_id='no-timestamp'),
+        ListTasksCursor(timestamp_ns=0, task_id='ünïcode/+='),
+        ListTasksCursor(timestamp_ns=1, task_id='x' * 1_000),
+    ],
+)
+def test_list_tasks_cursor_round_trips(cursor: ListTasksCursor) -> None:
+    token = encode_list_tasks_cursor(cursor)
+
+    assert decode_list_tasks_cursor(token) == cursor
+    # Safe to put in a query string without escaping.
+    assert not set(token) & set('+/=')
+
+
+def test_legacy_task_id_token_is_not_a_cursor() -> None:
+    assert decode_list_tasks_cursor(encode_page_token('task-1')) is None
+    assert decode_list_tasks_cursor(encode_page_token('{"ts":1}')) is None
+    assert decode_list_tasks_cursor('invalid') is None
+
+
+@pytest.mark.parametrize(
+    'payload',
+    [
+        b'{"ts":1}',
+        b'{"id":"t"}',
+        b'{"ts":1,"id":"t","extra":0}',
+        b'{"ts":1,"id":""}',
+        b'{"ts":"1","id":"t"}',
+        b'{"ts":true,"id":"t"}',
+        b'{"ts":1.5,"id":"t"}',
+    ],
+)
+def test_incomplete_cursor_token_is_not_a_cursor(payload: bytes) -> None:
+    """Falls back to the legacy path, which rejects it as an unknown task."""
+    token = urlsafe_b64encode(payload).decode().rstrip('=')
+
+    assert decode_list_tasks_cursor(token) is None
+
+
+def test_cursor_sort_key_orders_missing_timestamps_last() -> None:
+    dated = ListTasksCursor(timestamp_ns=0, task_id='a')
+    undated = ListTasksCursor(timestamp_ns=None, task_id='z')
+
+    assert undated.sort_key() < dated.sort_key()
 
 
 class TestApplyHistoryLength(unittest.TestCase):

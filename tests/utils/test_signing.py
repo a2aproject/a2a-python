@@ -1,3 +1,5 @@
+import logging
+
 from typing import Any
 
 import pytest
@@ -139,6 +141,42 @@ def test_signer_and_verifier_symmetric_multiple_signatures(
     )
     with pytest.raises(signing.InvalidSignaturesError):
         verifier_wrong_key(signed_card)
+
+
+@pytest.mark.parametrize(
+    'protected',
+    [
+        pytest.param('!!!not-base64url!!!', id='invalid-base64url'),
+        pytest.param(
+            base64url_encode(b'\xff').decode('utf-8'), id='invalid-utf8'
+        ),
+        pytest.param(base64url_encode(b'{').decode('utf-8'), id='invalid-json'),
+        pytest.param(base64url_encode(b'[]').decode('utf-8'), id='non-object'),
+    ],
+)
+def test_verifier_skips_malformed_protected_header(
+    sample_agent_card: AgentCard,
+    protected: str,
+):
+    key = 'key12345'
+    signer = signing.create_agent_card_signer(
+        signing_key=key,
+        protected_header={'alg': 'HS384', 'kid': 'key1', 'jku': None},
+    )
+    verifier = signing.create_signature_verifier(
+        create_key_provider(key), ['HS256', 'HS384', 'ES256', 'RS256']
+    )
+    malformed = AgentCardSignature(protected=protected, signature='invalid')
+
+    invalid_card = AgentCard()
+    invalid_card.CopyFrom(sample_agent_card)
+    invalid_card.signatures.append(malformed)
+    with pytest.raises(signing.InvalidSignaturesError):
+        verifier(invalid_card)
+
+    valid_card = signer(sample_agent_card)
+    valid_card.signatures.insert(0, malformed)
+    verifier(valid_card)
 
 
 def test_signer_and_verifier_asymmetric(sample_agent_card: AgentCard):
@@ -287,3 +325,15 @@ def test_clean_empty_does_not_mutate_input():
     signing._clean_empty(original)
 
     assert original == original_copy
+
+
+def test_canonicalize_agent_card_warns_about_missing_required_fields(
+    caplog: pytest.LogCaptureFixture,
+):
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        signing._canonicalize_agent_card(AgentCard(name='partial'))
+    [record] = caplog.records
+    assert record.getMessage().startswith(
+        'agent_card passed to _canonicalize_agent_card: AgentCard is not '
+        'spec-compliant'
+    )

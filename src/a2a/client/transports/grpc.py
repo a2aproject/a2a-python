@@ -64,12 +64,13 @@ def _map_grpc_error(e: grpc.aio.AioRpcError) -> NoReturn:
     if status is not None:
         exception_cls: type[A2AError] | None = None
         for detail in status.details:
-            if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):
+            # `.DESCRIPTOR` is typed as a py/C union; `.Is` wants a Descriptor.
+            if detail.Is(error_details_pb2.ErrorInfo.DESCRIPTOR):  # ty: ignore[invalid-argument-type]
                 error_info = error_details_pb2.ErrorInfo()
                 detail.Unpack(error_info)
                 if error_info.domain == 'a2a-protocol.org':
                     exception_cls = A2A_REASON_TO_ERROR.get(error_info.reason)
-            elif detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):
+            elif detail.Is(error_details_pb2.BadRequest.DESCRIPTOR):  # ty: ignore[invalid-argument-type]
                 bad_request = error_details_pb2.BadRequest()
                 detail.Unpack(bad_request)
                 data = {'errors': bad_request_to_validation_errors(bad_request)}

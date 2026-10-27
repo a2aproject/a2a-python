@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock
+from unittest.mock import AsyncMock, patch
 
 import pytest
 
@@ -56,3 +56,34 @@ def test_jsonrpc_custom_url(agent_card, mock_handler):
     assert 'error' in resp_json
     # Method not found error from dispatcher
     assert resp_json['error']['code'] == -32601
+
+
+def test_shutdown_grace_period_is_forwarded_to_dispatcher(mock_handler) -> None:
+    """Tests that the route factory configures SSE cooperative shutdown."""
+    with patch(
+        'a2a.server.routes.jsonrpc_routes.JsonRpcDispatcher'
+    ) as dispatcher_class:
+        create_jsonrpc_routes(
+            request_handler=mock_handler,
+            rpc_url='/a2a/jsonrpc',
+        )
+        dispatcher_class.assert_called_once_with(
+            request_handler=mock_handler,
+            context_builder=None,
+            enable_v0_3_compat=False,
+            shutdown_grace_period=0,
+        )
+
+        dispatcher_class.reset_mock()
+        create_jsonrpc_routes(
+            request_handler=mock_handler,
+            rpc_url='/a2a/jsonrpc',
+            shutdown_grace_period=30.0,
+        )
+
+        dispatcher_class.assert_called_once_with(
+            request_handler=mock_handler,
+            context_builder=None,
+            enable_v0_3_compat=False,
+            shutdown_grace_period=30.0,
+        )

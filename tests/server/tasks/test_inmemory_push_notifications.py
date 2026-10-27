@@ -1,3 +1,6 @@
+import asyncio
+import concurrent.futures
+import threading
 import unittest
 
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -41,8 +44,11 @@ def _create_sample_push_config(
     url: str = 'http://example.com/callback',
     config_id: str = 'cfg1',
     token: str | None = None,
+    task_id: str = '',
 ) -> TaskPushNotificationConfig:
-    return TaskPushNotificationConfig(id=config_id, url=url, token=token)
+    return TaskPushNotificationConfig(
+        id=config_id, url=url, token=token, task_id=task_id
+    )
 
 
 class SampleUser(User):
@@ -63,6 +69,29 @@ class SampleUser(User):
 MINIMAL_CALL_CONTEXT = ServerCallContext(user=SampleUser(user_name='user'))
 
 
+def _lock_is_owned(lock: threading.RLock) -> bool:
+    is_owned = getattr(lock, '_is_owned', None)
+    return bool(is_owned()) if callable(is_owned) else False
+
+
+def _set_info_in_thread(
+    store: InMemoryPushNotificationConfigStore,
+    task_id: str,
+    config_id: str,
+    context: ServerCallContext,
+) -> None:
+    asyncio.run(
+        store.set_info(
+            task_id,
+            _create_sample_push_config(
+                url=f'http://example.com/{config_id}',
+                config_id=config_id,
+            ),
+            context,
+        )
+    )
+
+
 class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
     def setUp(self) -> None:
         self.mock_httpx_client = AsyncMock(spec=httpx.AsyncClient)
@@ -77,7 +106,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_set_info_adds_new_config(self) -> None:
         task_id = 'task_new'
-        config = _create_sample_push_config(url='http://new.url/callback')
+        config = _create_sample_push_config(
+            task_id=task_id, url='http://new.url/callback'
+        )
 
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
@@ -86,17 +117,38 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(retrieved, [config])
 
+    async def test_set_info_returns_the_stored_config_without_mutating_input(
+        self,
+    ) -> None:
+        task_id = 'task_normalize'
+        config = TaskPushNotificationConfig(url='http://normalize.url/callback')
+
+        stored = await self.config_store.set_info(
+            task_id, config, MINIMAL_CALL_CONTEXT
+        )
+
+        assert (stored.task_id, stored.id) == (task_id, task_id)
+        assert (config.task_id, config.id) == ('', '')
+        retrieved = await self.config_store.get_info(
+            task_id, MINIMAL_CALL_CONTEXT
+        )
+        self.assertEqual(retrieved, [stored])
+
     async def test_set_info_appends_to_existing_config(self) -> None:
         task_id = 'task_update'
         initial_config = _create_sample_push_config(
-            url='http://initial.url/callback', config_id='cfg_initial'
+            task_id=task_id,
+            url='http://initial.url/callback',
+            config_id='cfg_initial',
         )
         await self.config_store.set_info(
             task_id, initial_config, MINIMAL_CALL_CONTEXT
         )
 
         updated_config = _create_sample_push_config(
-            url='http://updated.url/callback', config_id='cfg_updated'
+            task_id=task_id,
+            url='http://updated.url/callback',
+            config_id='cfg_updated',
         )
         await self.config_store.set_info(
             task_id, updated_config, MINIMAL_CALL_CONTEXT
@@ -138,7 +190,9 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
 
     async def test_get_info_existing_config(self) -> None:
         task_id = 'task_get_exist'
-        config = _create_sample_push_config(url='http://get.this/callback')
+        config = _create_sample_push_config(
+            task_id=task_id, url='http://get.this/callback'
+        )
         await self.config_store.set_info(task_id, config, MINIMAL_CALL_CONTEXT)
 
         retrieved_config = await self.config_store.get_info(
@@ -425,6 +479,66 @@ class TestInMemoryPushNotifier(unittest.IsolatedAsyncioTestCase):
         # Cleanup remaining
         await self.config_store.delete_info('task1', context=context_user1)
         await self.config_store.delete_info('task1', context=context_user2)
+
+    async def test_set_info_creates_owner_bucket_under_lock(self) -> None:
+        """Creating the first owner bucket must happen while the RLock is held."""
+        store = InMemoryPushNotificationConfigStore()
+        lock_held: list[bool] = []
+
+        class _LockHeldOwnerMap(
+            dict[str, dict[str, list[TaskPushNotificationConfig]]]
+        ):
+            def setdefault(
+                self,
+                key: str,
+                default: (
+                    dict[str, list[TaskPushNotificationConfig]] | None
+                ) = None,
+            ) -> dict[str, list[TaskPushNotificationConfig]]:
+                lock_held.append(_lock_is_owned(store.lock))
+                if default is None:
+                    default = {}
+                return super().setdefault(key, default)
+
+            def __setitem__(
+                self,
+                key: str,
+                value: dict[str, list[TaskPushNotificationConfig]],
+            ) -> None:
+                lock_held.append(_lock_is_owned(store.lock))
+                super().__setitem__(key, value)
+
+        store._push_notification_infos = _LockHeldOwnerMap()
+        await store.set_info(
+            'task-a',
+            _create_sample_push_config(config_id='cfg-a'),
+            MINIMAL_CALL_CONTEXT,
+        )
+        self.assertTrue(lock_held)
+        self.assertTrue(all(lock_held))
+
+    async def test_concurrent_first_owner_set_info_keeps_both(
+        self,
+    ) -> None:
+        """Concurrent first configs for a new owner must both persist."""
+        store = InMemoryPushNotificationConfigStore()
+        context = ServerCallContext(user=SampleUser(user_name='race-owner'))
+        with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+            futures = [
+                pool.submit(
+                    _set_info_in_thread, store, 'task-a', 'cfg-a', context
+                ),
+                pool.submit(
+                    _set_info_in_thread, store, 'task-b', 'cfg-b', context
+                ),
+            ]
+            for future in futures:
+                future.result(timeout=10)
+
+        configs_a = await store.get_info('task-a', context)
+        configs_b = await store.get_info('task-b', context)
+        self.assertEqual([config.id for config in configs_a], ['cfg-a'])
+        self.assertEqual([config.id for config in configs_b], ['cfg-b'])
 
 
 class TestPushNotificationDispatchAcrossOwners(

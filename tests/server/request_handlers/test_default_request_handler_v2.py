@@ -1,10 +1,14 @@
 import asyncio
+import contextvars
 import logging
 import time
 import uuid
+import warnings
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
+import httpx
 import pytest
 
 from a2a.auth.user import UnauthenticatedUser, User
@@ -20,7 +24,7 @@ from a2a.server.agent_execution import (
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.context import ServerCallContext
-from a2a.server.events import EventQueue
+from a2a.server.events import EventQueue, InMemoryQueueManager
 from a2a.server.events.event_queue_v2 import EventQueueSource
 from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.tasks import (
@@ -31,17 +35,24 @@ from a2a.server.tasks import (
     TaskStore,
     TaskUpdater,
 )
+from a2a.server.tasks.base_push_notification_sender import (
+    BasePushNotificationSender,
+)
 from a2a.server.tasks.task_manager import TaskManager
 from a2a.types import (
+    ContentTypeNotSupportedError,
     InternalError,
     InvalidAgentResponseError,
     InvalidParamsError,
     PushNotificationNotSupportedError,
     TaskNotFoundError,
+    UnsupportedOperationError,
 )
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
+    AgentInterface,
+    AgentSkill,
     Artifact,
     CancelTaskRequest,
     DeleteTaskPushNotificationConfigRequest,
@@ -118,6 +129,66 @@ def create_server_call_context() -> ServerCallContext:
     return ServerCallContext(user=UnauthenticatedUser())
 
 
+class _StatusValidationRecoveryAgent(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue,
+            str(context.task_id or ''),
+            str(context.context_id or ''),
+        )
+        await updater.start_work()
+        try:
+            await updater.update_status(
+                TaskState.TASK_STATE_COMPLETED,
+                timestamp='not-a-timestamp',
+            )
+        except ValueError:
+            await updater.failed()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_status_validation_failure_returns_failed_task() -> None:
+    store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_StatusValidationRecoveryAgent(),
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    try:
+        result = await asyncio.wait_for(
+            handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        role=Role.ROLE_USER,
+                        message_id='validation-recovery',
+                        parts=[Part(text='test status recovery')],
+                    )
+                ),
+                context,
+            ),
+            timeout=5,
+        )
+        assert isinstance(result, Task)
+        assert result.status.state == TaskState.TASK_STATE_FAILED
+        stored = await store.get(result.id, context)
+        assert stored is not None
+        assert stored.status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        await handler.aclose()
+
+
 def test_init_default_dependencies():
     """Test that default dependencies are created if not provided."""
     agent_executor = MockAgentExecutor()
@@ -137,7 +208,49 @@ def test_init_default_dependencies():
         handler._request_context_builder._should_populate_referred_tasks
         is False
     )
-    assert handler._request_context_builder._task_store == task_store
+    assert handler._request_context_builder._task_store is None
+
+
+def test_init_warns_when_queue_manager_passed(caplog):
+    """A caller-supplied queue_manager is not honored in v2, so passing one
+    must emit a warning instead of being silently ignored (issue #1135).
+
+    Both channels are checked: the DeprecationWarning points at the caller's
+    construction site and is filterable in test suites, while the log line
+    still reaches headless servers, where DeprecationWarning is hidden by
+    Python's default filters outside __main__.
+    """
+    queue_manager = InMemoryQueueManager()
+    with (
+        caplog.at_level(logging.WARNING),
+        pytest.warns(DeprecationWarning, match='queue_manager') as record,
+    ):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+            queue_manager=queue_manager,
+        )
+    # stacklevel=2 must attribute the warning to this file, not to the handler.
+    assert record[0].filename == __file__
+    assert any(
+        'queue_manager' in rec.message and rec.levelno == logging.WARNING
+        for rec in caplog.records
+    )
+
+
+def test_init_no_warning_without_queue_manager(caplog):
+    """No warning is emitted when queue_manager is omitted."""
+    with caplog.at_level(logging.WARNING), warnings.catch_warnings():
+        warnings.simplefilter('error', DeprecationWarning)
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+        )
+    assert not any(
+        'queue_manager' in record.message for record in caplog.records
+    )
 
 
 @pytest.mark.asyncio
@@ -338,6 +451,96 @@ class LateFailingTerminalAgentExecutor(AgentExecutor):
         pass
 
 
+class FailsAfterTaskAgentExecutor(AgentExecutor):
+    """Enqueues a Task with its own metadata, then raises when allowed to."""
+
+    def __init__(self) -> None:
+        self.may_raise = asyncio.Event()
+        self.task_id: str | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        task.metadata.update({'agent_key': 'kept'})
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        # Bounded, so the test fails rather than hangs if the hook never fires.
+        await asyncio.wait_for(self.may_raise.wait(), timeout=5)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class WorksThenFailsAgentExecutor(AgentExecutor):
+    """Reports WORKING with a status message, then raises."""
+
+    def __init__(self) -> None:
+        self.task_id: str | None = None
+        self.raised_at: datetime | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(
+            TaskState.TASK_STATE_WORKING,
+            message=task_updater.new_agent_message([Part(text='halfway')]),
+        )
+        # Fail only after the WORKING status, with its timestamp, is stored.
+        await asyncio.sleep(0.05)
+        self.raised_at = datetime.now(timezone.utc)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class RepliesThenFailsAgentExecutor(AgentExecutor):
+    """Answers a follow-up with a Message, then raises."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task_updater = TaskUpdater(
+            event_queue, context.task_id, context.context_id
+        )
+        await event_queue.enqueue_event(
+            task_updater.new_agent_message([Part(text='on it')])
+        )
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class FailedStatusAgentExecutor(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(TaskState.TASK_STATE_FAILED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+class FailedStatusThenRaisesAgentExecutor(FailedStatusAgentExecutor):
+    def __init__(self) -> None:
+        self.exception = RuntimeError('late producer failure')
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await super().execute(context, event_queue)
+        raise self.exception
+
+
 async def send_message_with_early_failure(
     request_handler: DefaultRequestHandlerV2,
     params: SendMessageRequest,
@@ -442,6 +645,84 @@ async def test_set_task_push_notification_config_task_not_found():
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize('store_kind', ['inmemory', 'database'])
+async def test_create_task_push_notification_config_returns_stored_id(
+    store_kind,
+):
+    """Test on_create_task_push_notification_config returns the id that was stored."""
+    if store_kind == 'database':
+        pytest.importorskip('sqlalchemy')
+        pytest.importorskip('aiosqlite')
+        from a2a.server.tasks.database_push_notification_config_store import (
+            DatabasePushNotificationConfigStore,
+        )
+        from sqlalchemy.ext.asyncio import create_async_engine
+
+        engine = create_async_engine(
+            'sqlite+aiosqlite:///file:pushidv2?mode=memory&cache=shared&uri=true'
+        )
+        push_config_store = DatabasePushNotificationConfigStore(engine=engine)
+    else:
+        push_config_store = InMemoryPushNotificationConfigStore()
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    stored = await push_config_store.get_info(task.id, context)
+    if store_kind == 'database':
+        await engine.dispose()
+
+    assert response.id == task.id
+    assert list(stored) == [response]
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
+async def test_create_task_push_notification_config_normalizes_when_store_returns_none():
+    """A custom store that still returns None from set_info keeps working."""
+    push_config_store = AsyncMock(spec=PushNotificationConfigStore)
+    push_config_store.set_info.return_value = None
+
+    task = create_sample_task()
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    await task_store.save(task, context)
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_config_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = TaskPushNotificationConfig(
+        task_id=task.id, url='http://example.com'
+    )
+
+    response = await request_handler.on_create_task_push_notification_config(
+        params, context
+    )
+
+    assert (response.task_id, response.id) == (task.id, task.id)
+    assert params.id == '', 'the request object must not be mutated'
+
+
+@pytest.mark.asyncio
 async def test_get_task_push_notification_config_no_store():
     """Test on_get_task_push_notification_config when _push_config_store is None."""
     request_handler = DefaultRequestHandlerV2(
@@ -524,7 +805,7 @@ async def test_get_task_push_notification_config_info_with_config():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', id='config_id', url='http://1.example.com'
+        task_id='task_1', id='config_id', url='http://example.com'
     )
     context = create_server_call_context()
     await request_handler.on_create_task_push_notification_config(
@@ -557,7 +838,7 @@ async def test_get_task_push_notification_config_info_with_config_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params, create_server_call_context()
@@ -740,13 +1021,13 @@ async def test_list_task_push_notification_config_info_with_config_and_no_id():
         agent_card=create_default_agent_card(),
     )
     set_config_params1 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://1.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params1, create_server_call_context()
     )
     set_config_params2 = TaskPushNotificationConfig(
-        task_id='task_1', url='http://2.example.com'
+        task_id='task_1', url='http://example.com'
     )
     await request_handler.on_create_task_push_notification_config(
         set_config_params2, create_server_call_context()
@@ -916,6 +1197,69 @@ TERMINAL_TASK_STATES = {
 }
 
 
+def create_input_mode_handler(*, validate_input_modes: bool):
+    """A handler whose card declares text/plain as its only input mode."""
+    return DefaultRequestHandlerV2(
+        # HelloAgentExecutor reaches a terminal state; MockAgentExecutor
+        # streams forever, so a blocking send against it never returns.
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(
+            name='test_agent',
+            version='1.0',
+            capabilities=AgentCapabilities(streaming=True),
+            default_input_modes=['text/plain'],
+        ),
+        validate_input_modes=validate_input_modes,
+    )
+
+
+def create_undeclared_media_type_request():
+    return SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_bad_media_type',
+            parts=[Part(text='hello', media_type='application/x-nope')],
+        )
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_undeclared_media_type_when_enabled():
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        await handler.on_message_send(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_allows_undeclared_media_type_by_default():
+    """The check is opt-in, so an unflagged handler keeps accepting the part."""
+    handler = create_input_mode_handler(validate_input_modes=False)
+
+    result = await handler.on_message_send(
+        create_undeclared_media_type_request(), create_server_call_context()
+    )
+
+    assert result is not None
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_rejects_undeclared_media_type():
+    """Streaming shares _setup_active_task, so it is gated by the same flag."""
+    handler = create_input_mode_handler(validate_input_modes=True)
+
+    with pytest.raises(ContentTypeNotSupportedError):
+        async for _ in handler.on_message_send_stream(
+            create_undeclared_media_type_request(),
+            create_server_call_context(),
+        ):
+            pass
+
+
 @pytest.mark.asyncio
 @pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
 async def test_on_message_send_task_in_terminal_state(terminal_state):
@@ -944,13 +1288,13 @@ async def test_on_message_send_task_in_terminal_state(terminal_state):
             'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
             return_value=terminal_task,
         ),
-        pytest.raises(InvalidParamsError) as exc_info,
+        pytest.raises(UnsupportedOperationError) as exc_info,
     ):
         await request_handler.on_message_send(
             params, create_server_call_context()
         )
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -983,14 +1327,139 @@ async def test_on_message_send_stream_task_in_terminal_state(terminal_state):
             'a2a.server.request_handlers.default_request_handler.TaskManager.get_task',
             return_value=terminal_task,
         ),
-        pytest.raises(InvalidParamsError) as exc_info,
+        pytest.raises(UnsupportedOperationError) as exc_info,
     ):
         async for _ in request_handler.on_message_send_stream(
             params, create_server_call_context()
         ):
             pass
     assert (
-        f'Task {task_id} is in terminal state: {terminal_state}'
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
+        in exc_info.value.message
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_rejects_context_id_not_matching_task():
+    """A contextId disagreeing with the named task's is rejected.
+
+    Asserted on the executor never running, not merely on the error type.
+    TaskManager already rejects this mismatch once the agent emits an event
+    (`Context in event doesn't match TaskManager`), so an assertion on
+    InvalidParamsError alone passes with or without the handler's guard.
+    What the guard changes is that the request is refused before any agent
+    work starts.
+    """
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    executor = HelloAgentExecutor()
+    executor.execute = AsyncMock(wraps=executor.execute)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=executor,
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-mismatch',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='wrong-context',
+        )
+    )
+
+    with pytest.raises(InvalidParamsError) as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+
+    assert (
+        'Context wrong-context does not match context real-context'
+        in exc_info.value.message
+    )
+    executor.execute.assert_not_awaited()
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_matching_task():
+    task = create_sample_task(task_id='task-1', context_id='real-context')
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-match',
+            parts=[Part(text='hello')],
+            task_id='task-1',
+            context_id='real-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_accepts_context_id_without_task_id():
+    """A contextId alone starts a new task in that context, so it is not checked."""
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg-context-only',
+            parts=[Part(text='hello')],
+            context_id='client-chosen-context',
+        )
+    )
+
+    assert (
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+        is not None
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('terminal_state', TERMINAL_TASK_STATES)
+async def test_on_subscribe_to_task_in_terminal_state(terminal_state):
+    """Subscribing to a terminal task is rejected with UnsupportedOperationError."""
+    state_name = TaskState.Name(terminal_state)
+    task_id = f'subscribe_terminal_task_{state_name}'
+    terminal_task = create_sample_task(
+        task_id=task_id, status_state=terminal_state
+    )
+    mock_task_store = AsyncMock(spec=TaskStore)
+    mock_task_store.get.return_value = terminal_task
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=MockAgentExecutor(),
+        task_store=mock_task_store,
+        agent_card=create_default_agent_card(),
+    )
+
+    with pytest.raises(UnsupportedOperationError) as exc_info:
+        async for _ in request_handler.on_subscribe_to_task(
+            SubscribeToTaskRequest(id=task_id), create_server_call_context()
+        ):
+            pass
+
+    assert (
+        f'Task {task_id} is in terminal state: {TaskState.Name(terminal_state)}'
         in exc_info.value.message
     )
 
@@ -1255,6 +1724,180 @@ async def test_on_message_send_late_producer_exception_preserves_persisted_termi
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_failure_right_after_task_is_recorded_on_that_task(
+    tmp_path,
+):
+    """The failure lands on the agent's Task, even while that Task is saving.
+
+    The executor raises while the store's save of its Task has looked the
+    task up but not yet inserted it: the window a database round trip
+    leaves open.
+    """
+    pytest.importorskip('sqlalchemy')
+    pytest.importorskip('aiosqlite')
+    from a2a.server.tasks.database_task_store import DatabaseTaskStore
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path / "tasks.db"}')
+    task_store = DatabaseTaskStore(engine)
+    agent_executor = FailsAfterTaskAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_right_after_task',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_merge = AsyncSession.merge
+    held = False
+
+    async def hold_agent_task_insert(self, instance, **kwargs):
+        nonlocal held
+        merged = await original_merge(self, instance, **kwargs)
+        if not held and 'agent_key' in (
+            getattr(instance, 'task_metadata', None) or {}
+        ):
+            held = True
+            agent_executor.may_raise.set()
+            # The failure path runs before this insert is flushed.
+            await asyncio.sleep(0.2)
+        return merged
+
+    try:
+        with patch.object(AsyncSession, 'merge', hold_agent_task_insert):
+            with pytest.raises(RuntimeError, match='model call failed'):
+                await request_handler.on_message_send(params, context)
+        assert agent_executor.task_id is not None
+        stored_task = await task_store.get(agent_executor.task_id, context)
+    finally:
+        await engine.dispose()
+
+    assert held
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert stored_task.metadata['agent_key'] == 'kept'
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_work_stamps_failure_time():
+    """A task failing after it reported progress is stamped when it failed."""
+    task_store = InMemoryTaskStore()
+    agent_executor = WorksThenFailsAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_after_work',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    assert agent_executor.task_id is not None
+    stored_task = await task_store.get(agent_executor.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert agent_executor.raised_at is not None
+    failed_at = stored_task.status.timestamp.ToDatetime(tzinfo=timezone.utc)
+    assert failed_at >= agent_executor.raised_at
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_message_reply_marks_task_failed():
+    """A follow-up answered with a Message still fails the task on a raise."""
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    task = Task(
+        id='task_awaiting_input',
+        context_id='ctx_awaiting_input',
+        status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+    )
+    await task_store.save(task, context)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=RepliesThenFailsAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_follow_up',
+            parts=[Part(text='large')],
+            task_id=task.id,
+            context_id=task.context_id,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    stored_task = await task_store.get(task.id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failed_task_does_not_hide_producer_exception() -> (
+    None
+):
+    agent_executor = FailedStatusThenRaisesAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failed_then_raised',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='late producer failure') as exc_info:
+        await request_handler.on_message_send(
+            params, create_server_call_context()
+        )
+    assert exc_info.value is agent_executor.exception
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_returns_agent_declared_failed_task() -> None:
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=FailedStatusAgentExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_declared_failure',
+            parts=[Part(text='Hi')],
+        )
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_FAILED
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_early_producer_exception_preserves_originating_message():
     task_store = InMemoryTaskStore()
     request_handler = DefaultRequestHandlerV2(
@@ -1400,6 +2043,40 @@ async def test_on_message_send_with_push_notification():
     push_store.set_info.assert_awaited_once_with(
         result.id, push_config, context
     )
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stores_inline_push_config_under_its_task():
+    task_store = InMemoryTaskStore()
+    push_store = InMemoryPushNotificationConfigStore()
+
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=push_store,
+        agent_card=create_default_agent_card(),
+    )
+    # SendMessageConfiguration carries neither task_id nor id for the config.
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_inline',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            task_push_notification_config=TaskPushNotificationConfig(
+                url='http://example.com/webhook'
+            )
+        ),
+    )
+
+    context = create_server_call_context()
+    result = await request_handler.on_message_send(params, context)
+
+    stored = await push_store.get_info(result.id, context)
+    assert [(config.task_id, config.id) for config in stored] == [
+        (result.id, result.id)
+    ]
 
 
 @pytest.mark.asyncio
@@ -1745,4 +2422,885 @@ async def test_aclose_is_idempotent_and_handles_empty():
     )
 
     await handler.aclose()
+    await handler.aclose()
+
+
+# --- Issue #1159: SubscribeToTask / CancelTask must be owner-scoped even when
+# the task is LIVE in the ActiveTaskRegistry (the cached-active path that
+# previously skipped the owner-aware TaskStore). ------------------------------
+
+
+class _HangingAgent(AgentExecutor):
+    """Stays in ``working`` so the task remains live in the registry.
+
+    ``cancel`` writes a terminal CANCELED state, so a legitimate owner cancel
+    resolves the same way regardless of the #1170 fix.
+    """
+
+    def __init__(self) -> None:
+        self.working = asyncio.Event()
+        self.release = asyncio.Event()
+        self.cancel_called = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_WORKING)
+        self.working.set()
+        await self.release.wait()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.cancel_called.set()
+        updater = TaskUpdater(event_queue, context.task_id, context.context_id)
+        await updater.cancel()
+
+
+class _ParkThenHangAgent(AgentExecutor):
+    """Parks the task in the non-terminal ``input-required`` state and keeps
+    the producer alive, so the ActiveTask stays in the registry. ``cancel`` is
+    cleanup-only (writes no terminal state)."""
+
+    def __init__(self) -> None:
+        self.parked = asyncio.Event()
+        self.release = asyncio.Event()
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(task)
+        updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+        self.parked.set()
+        await self.release.wait()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+async def _start_live_task(handler, ctx, text):
+    task = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                message_id=f'msg-{text}',
+                role=Role.ROLE_USER,
+                parts=[Part(text=text)],
+            ),
+            configuration=SendMessageConfiguration(return_immediately=True),
+        ),
+        ctx,
+    )
+    return task.id
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_task_is_owner_scoped_for_live_task():
+    """Issue #1159: a non-owner must not cancel another user's LIVE task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    # The task is live in the registry -> exercises the cached-active path.
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # Bob (non-owner) is rejected, masked as not-found, and never reaches the
+    # executor's cancel().
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_cancel_task(CancelTaskRequest(id=task_id), bob)
+    assert not agent.cancel_called.is_set()
+
+    # Alice (owner) can still cancel her own task.
+    result = await handler.on_cancel_task(CancelTaskRequest(id=task_id), alice)
+    assert result.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_called.is_set()
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_subscribe_to_task_is_owner_scoped_for_live_task():
+    """Issue #1159: a non-owner must not subscribe to another user's LIVE task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'work')
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # Bob (non-owner) is rejected on the first iteration of the stream.
+    with pytest.raises(TaskNotFoundError):
+        async for _ in handler.on_subscribe_to_task(
+            SubscribeToTaskRequest(id=task_id), bob
+        ):
+            break
+
+    # Alice (owner) can subscribe and receives her own task.
+    received = None
+    async for event in handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(id=task_id), alice
+    ):
+        received = event
+        break
+    assert received is not None
+    assert getattr(received, 'id', None) == task_id
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_cancel_of_parked_task_is_owner_scoped():
+    """Issue #1159 x #1170: a non-owner cancel of another user's PARKED
+    (input-required) live task must be rejected and must NOT write a terminal
+    CANCELED state. This is the exact cross-tenant regression the #1170 fix
+    (cancel writes a terminal state) would otherwise expose on the un-guarded
+    cached-active path."""
+    agent = _ParkThenHangAgent()
+    store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    task_id = await _start_live_task(handler, alice, 'park')
+    await asyncio.wait_for(agent.parked.wait(), timeout=5)
+    assert await handler._active_task_registry.get(task_id) is not None
+
+    # update_status enqueues the input-required transition; wait until it is
+    # persisted to the store before the cross-tenant cancel so the assertions
+    # below do not race the event pipeline.
+    alice_view = None
+    for _ in range(500):
+        alice_view = await store.get(task_id, alice)
+        if (
+            alice_view is not None
+            and alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+        ):
+            break
+        await asyncio.sleep(0.01)
+    assert alice_view is not None
+    assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    # Bob (non-owner) is rejected...
+    with pytest.raises(TaskNotFoundError):
+        await handler.on_cancel_task(CancelTaskRequest(id=task_id), bob)
+
+    # ...and Alice's task is untouched: still input-required, not CANCELED.
+    alice_view = await store.get(task_id, alice)
+    assert alice_view is not None
+    assert alice_view.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    agent.release.set()
+    await handler.aclose()
+
+
+class _AsksForInputAgent(AgentExecutor):
+    """Always asks for more input; counts execute() and cancel() calls."""
+
+    def __init__(self) -> None:
+        self.execute_calls = 0
+        self.cancel_calls = 0
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        self.execute_calls += 1
+        if context.current_task is None:
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+        updater = TaskUpdater(
+            event_queue, context.task_id or '', context.context_id or ''
+        )
+        await updater.requires_input(
+            message=updater.new_agent_message([Part(text='need input')])
+        )
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        self.cancel_calls += 1
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_cancel_of_input_required_task_cannot_be_undone():
+    """Cancelling a task that waits for input cancels the agent, drops the
+    ActiveTask, and a follow-up message cannot revive the task."""
+    agent = _AsksForInputAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    ctx = _ctx('alice')
+    task = await handler.on_message_send(
+        SendMessageRequest(
+            message=Message(
+                role=Role.ROLE_USER, message_id='m1', parts=[Part(text='hi')]
+            )
+        ),
+        ctx,
+    )
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    # Wait until the turn has fully ended and the task is parked for input.
+    active = await handler._active_task_registry.get(task.id)
+    assert active is not None
+    for _ in range(100):
+        if not active._request_lock.locked():
+            break
+        await asyncio.sleep(0.01)
+    assert not active._request_lock.locked()
+
+    cancelled = await handler.on_cancel_task(CancelTaskRequest(id=task.id), ctx)
+    assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.cancel_calls == 1
+    for _ in range(100):
+        if await handler._active_task_registry.get(task.id) is None:
+            break
+        await asyncio.sleep(0.01)
+    assert await handler._active_task_registry.get(task.id) is None
+
+    follow_up = Message(
+        role=Role.ROLE_USER,
+        message_id='m2',
+        parts=[Part(text='more')],
+        task_id=task.id,
+        context_id=task.context_id,
+    )
+    with pytest.raises(UnsupportedOperationError, match='terminal state'):
+        await handler.on_message_send(
+            SendMessageRequest(message=follow_up), ctx
+        )
+
+    stored = await handler.on_get_task(GetTaskRequest(id=task.id), ctx)
+    assert stored.status.state == TaskState.TASK_STATE_CANCELED
+    assert agent.execute_calls == 1
+    await handler.aclose()
+
+
+_REQUEST_TAG: contextvars.ContextVar[str] = contextvars.ContextVar(
+    'request_tag', default='unset'
+)
+
+
+class _InputRequiredThenCompleteAgent(AgentExecutor):
+    """Asks for input on the first message of a task and completes on the next."""
+
+    def __init__(self) -> None:
+        self.seen_tags: list[str] = []
+        self.task: Task | None = None
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        self.seen_tags.append(_REQUEST_TAG.get())
+        if context.current_task:
+            updater = TaskUpdater(
+                event_queue, context.task_id, context.context_id
+            )
+            await updater.complete()
+            return
+        self.task = new_task_from_user_message(context.message)
+        await event_queue.enqueue_event(self.task)
+        updater = TaskUpdater(event_queue, self.task.id, self.task.context_id)
+        await updater.update_status(TaskState.TASK_STATE_INPUT_REQUIRED)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('streaming', [False, True])
+async def test_follow_up_message_runs_in_sender_contextvars(streaming):
+    """A follow-up message on a live task must see its own request's contextvars."""
+    agent = _InputRequiredThenCompleteAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    async def send(tag: str, message: Message) -> None:
+        _REQUEST_TAG.set(tag)
+        params = SendMessageRequest(message=message)
+        if streaming:
+            async for _ in handler.on_message_send_stream(
+                params, create_server_call_context()
+            ):
+                pass
+        else:
+            await handler.on_message_send(params, create_server_call_context())
+
+    await asyncio.create_task(
+        send(
+            'request-1',
+            Message(
+                message_id='msg-1',
+                role=Role.ROLE_USER,
+                parts=[Part(text='book a flight')],
+            ),
+        )
+    )
+    assert agent.task is not None
+    await asyncio.create_task(
+        send(
+            'request-2',
+            Message(
+                message_id='msg-2',
+                role=Role.ROLE_USER,
+                parts=[Part(text='Friday')],
+                task_id=agent.task.id,
+                context_id=agent.task.context_id,
+            ),
+        )
+    )
+
+    assert agent.seen_tags == ['request-1', 'request-2']
+    await handler.aclose()
+
+
+def _complete_agent_card() -> AgentCard:
+    """Returns an AgentCard with every field the A2A spec marks REQUIRED."""
+    return AgentCard(
+        name='complete_agent',
+        description='An agent card with all required fields.',
+        supported_interfaces=[
+            AgentInterface(
+                url='http://localhost:8000',
+                protocol_binding='JSONRPC',
+                protocol_version='1.0',
+            )
+        ],
+        version='1.0',
+        capabilities=AgentCapabilities(),
+        default_input_modes=['text/plain'],
+        default_output_modes=['text/plain'],
+        skills=[
+            AgentSkill(
+                id='echo',
+                name='Echo',
+                description='Echoes the input.',
+                tags=['test'],
+            )
+        ],
+    )
+
+
+def test_init_warns_about_incomplete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """Cards missing REQUIRED fields are accepted, but each one is logged."""
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=create_default_agent_card(),
+            extended_agent_card=AgentCard(),
+        )
+    messages = [record.getMessage() for record in caplog.records]
+    assert len(messages) == 2
+    assert messages[0].startswith(
+        'agent_card passed to DefaultRequestHandlerV2:'
+    )
+    assert messages[1].startswith(
+        'extended_agent_card passed to DefaultRequestHandlerV2:'
+    )
+
+
+def test_init_does_not_warn_for_complete_agent_cards(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    with caplog.at_level(logging.WARNING, logger='a2a.utils.proto_utils'):
+        DefaultRequestHandlerV2(
+            agent_executor=MockAgentExecutor(),
+            task_store=InMemoryTaskStore(),
+            agent_card=_complete_agent_card(),
+            extended_agent_card=_complete_agent_card(),
+        )
+    assert caplog.records == []
+
+
+class FlakyPushConfigStore(InMemoryPushNotificationConfigStore):
+    """Config store whose dispatch read fails transiently (issue #1313)."""
+
+    async def get_info_for_dispatch(
+        self, task_id: str
+    ) -> list[TaskPushNotificationConfig]:
+        raise RuntimeError('transient DB error while reading push configs')
+
+
+class RaisingPushSender(PushNotificationSender):
+    """A custom (public-interface) sender that always fails (issue #1313)."""
+
+    async def send_notification(self, task_id, event) -> None:
+        raise RuntimeError('sender exploded')
+
+
+@pytest.mark.asyncio
+async def test_push_config_store_failure_does_not_fail_task():
+    """A push-notification infrastructure failure must not rewrite a
+    successfully completed task as FAILED, and message/send must still
+    return the task result (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_config_store=FlakyPushConfigStore(),
+        push_sender=BasePushNotificationSender(
+            httpx_client=AsyncMock(spec=httpx.AsyncClient),
+            config_store=FlakyPushConfigStore(),
+        ),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_store_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+@pytest.mark.asyncio
+async def test_custom_push_sender_failure_does_not_fail_task():
+    """A raising custom PushNotificationSender must not rewrite a
+    completed task as FAILED — the consumer-level guard is
+    defense-in-depth behind the BasePushNotificationSender boundary
+    (#1313)."""
+    task_store = InMemoryTaskStore()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=HelloAgentExecutor(),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_push_sender_fail',
+            parts=[Part(text='Hi')],
+        ),
+        configuration=SendMessageConfiguration(
+            accepted_output_modes=['text/plain']
+        ),
+    )
+
+    result = await request_handler.on_message_send(
+        params, create_server_call_context()
+    )
+
+    assert isinstance(result, Task)
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    get_task_result = await request_handler.on_get_task(
+        GetTaskRequest(id=result.id), create_server_call_context()
+    )
+    assert get_task_result is not None
+    assert isinstance(get_task_result, Task)
+    assert get_task_result.status.state == TaskState.TASK_STATE_COMPLETED
+
+
+class _MessageOnlyAgent(AgentExecutor):
+    """Answers every request with a single direct Message (no task)."""
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        await event_queue.enqueue_event(new_text_message('hello'))
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+async def _wait_until_released(
+    handler: DefaultRequestHandlerV2, baseline: set[asyncio.Task]
+) -> set[asyncio.Task]:
+    """Waits for the handler to drop its ActiveTasks; returns tasks still pending."""
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not handler._active_task_registry._active_tasks and not leftover:
+            break
+        await asyncio.sleep(0.01)
+    return leftover
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_message_response_releases_active_task() -> None:
+    """A direct Message ends the interaction, so its ActiveTask (producer,
+    consumer, dispatchers) must not stay alive waiting for a follow-up."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    for i in range(3):
+        result = await handler.on_message_send(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id=f'm{i}',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+        assert isinstance(result, Message)
+
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_stream_message_response_releases_active_task() -> (
+    None
+):
+    """Same for a message-only stream: one Message, then nothing left running."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_MessageOnlyAgent(),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+    baseline = asyncio.all_tasks()
+
+    events = [
+        event
+        async for event in handler.on_message_send_stream(
+            SendMessageRequest(
+                message=Message(
+                    role=Role.ROLE_USER,
+                    message_id='m1',
+                    parts=[Part(text='hi')],
+                )
+            ),
+            ServerCallContext(),
+        )
+    ]
+
+    assert [type(event) for event in events] == [Message]
+    assert await _wait_until_released(handler, baseline) == set()
+    assert handler._active_task_registry._active_tasks == {}
+
+
+class _InterruptingAgent(AgentExecutor):
+    """Interrupts a new task with `state`; completes it on the follow-up."""
+
+    def __init__(
+        self,
+        state: TaskState = TaskState.TASK_STATE_INPUT_REQUIRED,
+        complete_on_follow_up: bool = True,
+        linger: float = 0,
+    ) -> None:
+        self.state = state
+        self.complete_on_follow_up = complete_on_follow_up
+        self.linger = linger
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            task_id, context_id = task.id, task.context_id
+        else:
+            task_id, context_id = context.task_id, context.context_id
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        if context.current_task is not None and self.complete_on_follow_up:
+            await updater.complete()
+            return
+        await updater.update_status(self.state)
+        # Keeps the request running after the interruption was delivered.
+        await asyncio.sleep(self.linger)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+def _interrupting_handler(
+    agent: AgentExecutor, interrupted_task_timeout: float | None
+) -> DefaultRequestHandlerV2:
+    return DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+        interrupted_task_timeout=interrupted_task_timeout,
+    )
+
+
+async def _send(
+    handler: DefaultRequestHandlerV2, text: str, task: Task | None = None
+) -> Task:
+    message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_USER,
+        parts=[Part(text=text)],
+        task_id=task.id if task else '',
+        context_id=task.context_id if task else '',
+    )
+    result = await handler.on_message_send(
+        SendMessageRequest(message=message), create_server_call_context()
+    )
+    assert isinstance(result, Task)
+    return result
+
+
+async def _wait_for_release(
+    handler: DefaultRequestHandlerV2, task_id: str, timeout: float = 2.0
+) -> bool:
+    """Waits until the task's ActiveTask has left the registry."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if task_id not in handler._active_task_registry._active_tasks:
+            return True
+        await asyncio.sleep(0.01)
+    return False
+
+
+@pytest.mark.asyncio
+async def test_interrupted_task_stays_active_without_timeout() -> None:
+    """The default keeps today's behavior: no timeout, the ActiveTask waits."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state',
+    [TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_AUTH_REQUIRED],
+)
+async def test_interrupted_task_released_after_timeout(
+    state: TaskState,
+) -> None:
+    """A parked task's runtime is released, but the stored task is kept."""
+    handler = _interrupting_handler(_InterruptingAgent(state), 0.1)
+    baseline = asyncio.all_tasks()
+
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == state
+    assert await _wait_for_release(handler, task.id)
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not leftover:
+            break
+        await asyncio.sleep(0.01)
+    assert leftover == set()
+    stored = await handler.on_get_task(
+        GetTaskRequest(id=task.id), create_server_call_context()
+    )
+    assert stored is not None
+    assert stored.status.state == state
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_after_release_resumes_from_store() -> None:
+    """A follow-up to a released task recreates its ActiveTask from the store."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    assert await _wait_for_release(handler, task.id)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    assert [m.parts[0].text for m in result.history] == [
+        'book a flight',
+        'Friday',
+    ]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_resets_interrupted_task_timeout() -> None:
+    """A follow-up that interrupts again restarts the timer."""
+    handler = _interrupting_handler(
+        _InterruptingAgent(complete_on_follow_up=False), 0.5
+    )
+    task = await _send(handler, 'book a flight')
+    await asyncio.sleep(0.3)
+
+    await _send(handler, 'Friday', task)
+
+    # 0.6s after the first request, but only 0.3s after the follow-up.
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_subscriber_keeps_interrupted_task_active() -> None:
+    """The timer only counts while no subscriber is attached."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    subscription = handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(id=task.id), create_server_call_context()
+    )
+    await anext(subscription)
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    await subscription.aclose()
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_running_request_keeps_interrupted_task_active() -> None:
+    """The timer only counts once the executor has returned."""
+    handler = _interrupting_handler(_InterruptingAgent(linger=0.4), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_replaces_finished_registered_active_task() -> None:
+    """A finished ActiveTask still in the registry must not reject a follow-up."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+    # Finish it the way a release does, before its registry cleanup has run.
+    active_task._is_finished.set()
+    active_task._request_queue.shutdown(immediate=True)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.parametrize('timeout', [0, -1])
+def test_interrupted_task_timeout_must_be_positive(timeout: float) -> None:
+    """A timeout of 0 or less is rejected."""
+    with pytest.raises(ValueError, match='greater than 0'):
+        _interrupting_handler(_InterruptingAgent(), timeout)
+
+
+@pytest.mark.asyncio
+async def test_near_zero_timeout_releases_and_resumes() -> None:
+    """A tiny timeout releases right after the request; a follow-up resumes."""
+    handler = _interrupting_handler(_InterruptingAgent(), 1e-9)
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    assert await _wait_for_release(handler, task.id)
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_cancels_idle_release() -> None:
+    """Resolving a parked task for a request stops its timer."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.2)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    registry = handler._active_task_registry
+
+    active_task = await registry.get_or_create(
+        task.id, call_context=create_server_call_context()
+    )
+
+    assert active_task._idle_release_task is None
+    assert not await _wait_for_release(handler, task.id, timeout=0.5)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_idle_release_check_failure_keeps_task(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing store read is logged and leaves the task in place."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with patch.object(
+        active_task._task_manager,
+        'get_task',
+        AsyncMock(side_effect=RuntimeError('store down')),
+    ):
+        assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    assert 'Idle release check failed' in caplog.text
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_cancel_restarts_idle_release() -> None:
+    """A cancel that fails leaves the parked task to be released later."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with (
+        patch.object(
+            active_task, 'cancel', AsyncMock(side_effect=RuntimeError('boom'))
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        await handler.on_cancel_task(
+            CancelTaskRequest(id=task.id), create_server_call_context()
+        )
+
+    assert await _wait_for_release(handler, task.id)
     await handler.aclose()

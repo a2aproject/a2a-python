@@ -99,4 +99,7 @@ cd "$PROJECT_ROOT"
 uv run pytest -v \
     tests/server/tasks/test_database_task_store.py \
     tests/server/tasks/test_database_push_notification_config_store.py \
+    tests/server/cluster/test_database_versioned_task_store.py \
+    tests/server/cluster/test_database_event_stream.py \
+    tests/integration/test_multiserver.py \
     "${PYTEST_ARGS[@]}"

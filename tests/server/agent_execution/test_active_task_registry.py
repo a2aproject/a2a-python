@@ -5,12 +5,15 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+from a2a.auth.user import User
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.context import ServerCallContext
 from a2a.server.events.event_queue_v2 import EventQueue
 from a2a.server.tasks import InMemoryTaskStore
+from a2a.types.a2a_pb2 import Task, TaskState, TaskStatus
+from a2a.utils.errors import TaskNotFoundError
 
 
 class _SlowExecutor(AgentExecutor):
@@ -105,3 +108,65 @@ async def test_aclose_logs_and_swallows_task_errors(caplog):
         await registry.aclose()
 
     assert 'Error draining active task' in caplog.text
+
+
+class _NamedUser(User):
+    """Minimal authenticated test user identified by ``user_name``."""
+
+    def __init__(self, user_name: str) -> None:
+        self._user_name = user_name
+
+    @property
+    def is_authenticated(self) -> bool:
+        return True
+
+    @property
+    def user_name(self) -> str:
+        return self._user_name
+
+
+def _ctx(user_name: str) -> ServerCallContext:
+    return ServerCallContext(user=_NamedUser(user_name))
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+async def test_get_or_create_cache_hit_is_owner_scoped():
+    """Issue #1159: resolving a LIVE (cached) task by id is owner-scoped at the
+    registry, so a non-owner cannot retrieve another user's active task on the
+    cache-hit path. The guarantee lives at the registry, not at each call site.
+    """
+    store = InMemoryTaskStore()
+    registry = ActiveTaskRegistry(
+        agent_executor=_SlowExecutor(), task_store=store
+    )
+    alice = _ctx('alice')
+    bob = _ctx('bob')
+
+    # Alice owns the task in the store and it is live in the registry, so the
+    # next lookups take the cache-hit early return rather than the miss path.
+    await store.save(
+        Task(
+            id='task-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        ),
+        alice,
+    )
+    active = await registry.get_or_create(
+        'task-1', call_context=alice, create_task_if_missing=True
+    )
+    assert await registry.get('task-1') is not None
+
+    # Bob (non-owner) is rejected on the cache-hit path, masked as not-found.
+    with pytest.raises(TaskNotFoundError):
+        await registry.get_or_create(
+            'task-1', call_context=bob, create_task_if_missing=False
+        )
+
+    # Alice (owner) still resolves the same live task.
+    again = await registry.get_or_create(
+        'task-1', call_context=alice, create_task_if_missing=False
+    )
+    assert again is active
+
+    await registry.aclose()

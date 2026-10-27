@@ -1,11 +1,11 @@
 import logging
 
 from collections.abc import AsyncIterator
-from unittest.mock import AsyncMock, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from a2a.compat.v0_3 import a2a_v0_3_pb2
+from a2a.compat.v0_3 import a2a_v0_3_pb2, rest_adapter
 from a2a.compat.v0_3.rest_adapter import REST03Adapter
 from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes import create_agent_card_routes
@@ -28,6 +28,35 @@ from starlette.requests import Request
 
 
 logger = logging.getLogger(__name__)
+
+
+@pytest.mark.anyio
+async def test_shutdown_grace_period_is_passed_to_event_source_response(
+    request_handler: RequestHandler,
+) -> None:
+    async def stream(
+        request: Request, context: object
+    ) -> AsyncIterator[dict[str, str]]:
+        yield {'result': 'value'}
+
+    adapter = REST03Adapter(
+        http_handler=request_handler,
+        shutdown_grace_period=30.0,
+    )
+    mock_req = MagicMock(spec=Request)
+    mock_req.body = AsyncMock(return_value=b'{}')
+    mock_req.headers = Headers({'a2a-version': '0.3'})
+    mock_req.user = MagicMock(is_authenticated=False)
+    mock_req.auth = None
+    mock_req.scope = {}
+
+    with patch.object(
+        rest_adapter, 'create_event_source_response'
+    ) as response_class:
+        await adapter._handle_streaming_request(stream, mock_req)
+
+    response_class.assert_called_once()
+    assert response_class.call_args.kwargs['shutdown_grace_period'] == 30.0
 
 
 @pytest.fixture
@@ -168,6 +197,17 @@ async def test_get_task_v03(
     actual_response = a2a_v0_3_pb2.Task()
     json_format.Parse(response.text, actual_response)
     assert expected_response == actual_response
+
+
+@pytest.mark.anyio
+async def test_get_task_v03_non_integer_history_length(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.get('/v1/tasks/test_task_id?historyLength=abc')
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_get_task.assert_not_called()
 
 
 @pytest.mark.anyio

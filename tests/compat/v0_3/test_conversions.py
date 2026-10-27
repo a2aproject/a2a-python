@@ -1,6 +1,8 @@
 import base64
 import json
 
+from datetime import datetime
+
 import pytest
 
 from a2a.compat.v0_3 import types as types_v03
@@ -462,6 +464,12 @@ def test_send_message_configuration_conversion_minimal():
         push_notification_config=None,
     )
     assert v03_restored == v03_expected_restored
+
+
+def test_send_message_configuration_conversion_history_length_zero():
+    v03_config = types_v03.MessageSendConfiguration(history_length=0)
+    v10_config = to_core_send_message_configuration(v03_config)
+    assert not v10_config.HasField('history_length')
 
 
 def test_artifact_conversion_full():
@@ -1348,6 +1356,14 @@ def test_get_task_request_conversion_minimal():
     assert v03_restored == v03_req
 
 
+def test_get_task_request_conversion_history_length_zero():
+    v03_req = types_v03.GetTaskRequest(
+        id='conv', params=types_v03.TaskQueryParams(id='t1', history_length=0)
+    )
+    v10_req = to_core_get_task_request(v03_req)
+    assert not v10_req.HasField('history_length')
+
+
 def test_cancel_task_request_conversion():
     v03_req = types_v03.CancelTaskRequest(
         id='conv',
@@ -1947,6 +1963,18 @@ def test_task_db_conversion():
     assert v10_restored.context_id == v10_task.context_id
     assert v10_restored.status.state == v10_task.status.state
     assert v10_restored.metadata == v10_task.metadata
+
+
+def test_task_db_conversion_sets_last_updated():
+    """The status timestamp becomes last_updated, as in the v1.0 model."""
+    v10_task = pb2_v10.Task(id='task-123', context_id='ctx-456')
+    v10_task.status.timestamp.FromJsonString('2026-10-01T12:00:00Z')
+
+    model = core_to_compat_task_model(v10_task, 'owner-789')
+    assert model.last_updated == datetime(2026, 10, 1, 12, 0)
+
+    v10_task.status.ClearField('timestamp')
+    assert core_to_compat_task_model(v10_task, 'owner-789').last_updated is None
 
 
 def test_push_notification_config_db_conversion():

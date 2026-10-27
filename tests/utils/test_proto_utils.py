@@ -3,6 +3,10 @@
 This module tests the proto utilities including to_stream_response and dictionary normalization.
 """
 
+import logging
+
+from typing import Any, cast
+
 import httpx
 import pytest
 
@@ -21,7 +25,8 @@ from a2a.types.a2a_pb2 import (
 )
 from a2a.utils import proto_utils
 from a2a.utils.errors import InvalidParamsError
-from google.protobuf.json_format import MessageToDict, Parse
+from google.protobuf.descriptor import FieldDescriptor
+from google.protobuf.json_format import MessageToDict, Parse, ParseError
 from google.protobuf.message import Message as ProtobufMessage
 from google.protobuf.timestamp_pb2 import Timestamp
 from starlette.datastructures import QueryParams
@@ -182,8 +187,84 @@ class TestDictSerialization:
         assert result['nested']['inner_large_string'] == 9999999999999999999
 
 
+class TestFieldIsRepeatedFallback:
+    """Test _field_is_repeated handles both old and new protobuf descriptor APIs."""
+
+    def test_uses_is_repeated_when_available(self):
+        """protobuf>=6.31 exposes is_repeated; the helper should use it directly."""
+
+        class FakeField:
+            is_repeated = True
+            label = 3
+
+        assert proto_utils._field_is_repeated(FakeField())
+
+        class FakeFieldNotRepeated:
+            is_repeated = False
+            label = 1
+
+        assert not proto_utils._field_is_repeated(FakeFieldNotRepeated())
+
+    def test_falls_back_to_label_when_is_repeated_missing(self):
+        """protobuf<6.31 (floor >=5.29.5) lacks is_repeated; fall back to label."""
+
+        class FakeOldFieldRepeated:
+            label = FieldDescriptor.LABEL_REPEATED
+
+        assert proto_utils._field_is_repeated(FakeOldFieldRepeated())
+
+        class FakeOldFieldOptional:
+            label = FieldDescriptor.LABEL_OPTIONAL
+
+        assert not proto_utils._field_is_repeated(FakeOldFieldOptional())
+
+
 class TestRestParams:
     """Unit tests for REST parameter conversion."""
+
+    @pytest.mark.parametrize(
+        ('values', 'expected'),
+        [
+            ([], None),
+            (['true'], True),
+            (['false'], False),
+            (['TRUE'], True),
+            (['False'], False),
+            (['true', 'false'], False),
+            (['false', 'true'], True),
+            (['garbage', 'true'], True),
+        ],
+    )
+    def test_boolean_query_values(
+        self, values: list[str], expected: bool | None
+    ) -> None:
+        message = ListTasksRequest()
+
+        proto_utils.parse_params(
+            QueryParams([('includeArtifacts', value) for value in values]),
+            message,
+        )
+
+        assert message.HasField('include_artifacts') is (expected is not None)
+        assert message.include_artifacts is bool(expected)
+
+    @pytest.mark.parametrize(
+        'value', ['garbage', '', '0', '1', ' ', ' true ', 'private-query-value']
+    )
+    @pytest.mark.parametrize('prefix', [[], ['true']])
+    def test_invalid_boolean_query_values(
+        self, value: str, prefix: list[str]
+    ) -> None:
+        with pytest.raises(ParseError, match='includeArtifacts') as error:
+            proto_utils.parse_params(
+                QueryParams(
+                    [('includeArtifacts', item) for item in [*prefix, value]]
+                ),
+                ListTasksRequest(),
+            )
+
+        if value.strip():
+            assert value not in str(error.value)
 
     def test_rest_params_roundtrip(self):
         """Test the comprehensive roundtrip conversion for REST parameters."""
@@ -264,6 +345,25 @@ class TestValidateProtoRequiredFields:
 
         assert {e['field'] for e in errors} == {'message_id', 'role', 'parts'}
 
+    def test_repeated_nested_message_validation(self):
+        """Test _recurse_validation for repeated message fields (Task.history)."""
+        task = Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            history=[Message()],  # empty message — missing required fields
+        )
+        with pytest.raises(InvalidParamsError) as exc_info:
+            proto_utils.validate_proto_required_fields(task)
+
+        err = exc_info.value
+        errors = err.data.get('errors', []) if err.data else []
+
+        fields = [e['field'] for e in errors]
+        assert 'history[0].message_id' in fields
+        assert 'history[0].role' in fields
+        assert 'history[0].parts' in fields
+
     def test_nested_required_fields(self):
         """Test nested required fields inside TaskStatus."""
         # Task Status requires 'state'
@@ -276,3 +376,104 @@ class TestValidateProtoRequiredFields:
 
         fields = [e['field'] for e in errors]
         assert 'status.state' in fields
+
+
+class TestWarnOnMissingRequiredFields:
+    """Tests for warn_on_missing_required_fields function."""
+
+    def test_complete_message_returns_true_without_logging(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        msg = Message(
+            message_id='msg-1',
+            role=Role.ROLE_USER,
+            parts=[Part(text='hello')],
+        )
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert proto_utils.warn_on_missing_required_fields(msg, 'test:')
+        assert caplog.records == []
+
+    def test_missing_fields_are_logged_instead_of_raised(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(
+                Message(), 'message passed to test:'
+            )
+        [record] = caplog.records
+        assert record.levelno == logging.WARNING
+        assert record.getMessage() == (
+            'message passed to test: Message is not spec-compliant - '
+            'REQUIRED fields missing or empty: message_id, role, parts. '
+            'This is allowed and does not raise, but it may not verify or '
+            'interoperate across SDKs and could be rejected in a future '
+            'major release. See '
+            'https://a2a-protocol.org/latest/specification/#57-field-presence-and-optionality'
+        )
+
+    def test_non_message_objects_are_not_checked(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert proto_utils.warn_on_missing_required_fields(
+                cast('Any', object()), 'test:'
+            )
+        assert caplog.records == []
+
+    def test_nested_missing_fields_are_reported_with_their_path(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        task = Task(
+            id='task-1',
+            context_id='ctx-1',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+            history=[Message()],
+        )
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(
+                task, 'test:'
+            )
+        assert 'history[0].message_id' in caplog.text
+
+    def test_empty_repeated_field_is_reported(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        msg = Message(message_id='msg-1', role=Role.ROLE_USER, parts=[])
+        with caplog.at_level(logging.WARNING, logger=proto_utils.__name__):
+            assert not proto_utils.warn_on_missing_required_fields(msg, 'test:')
+        assert 'REQUIRED fields missing or empty: parts.' in caplog.text
+
+
+class TestParseLenient:
+    """Spec 5.7: unrecognized fields are ignored (issue #1341)."""
+
+    def test_parses_dict_and_ignores_unrecognized_fields(self) -> None:
+        """Unknown keys are skipped at every depth; known ones still parse."""
+        task = proto_utils.parse_lenient(
+            {
+                'id': 'task-1',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'someNestedField': 'y',
+                },
+                'someNewField': 'x',
+            },
+            Task(),
+        )
+
+        assert task.id == 'task-1'
+        assert task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    def test_parses_text_and_ignores_unrecognized_fields(self) -> None:
+        """Raw ProtoJSON takes the Parse path rather than ParseDict."""
+        event = proto_utils.parse_lenient(
+            '{"message": {"messageId": "r1"}, "someNewField": "x"}',
+            StreamResponse(),
+        )
+
+        assert event.message.message_id == 'r1'
+
+    def test_malformed_known_field_still_raises(self) -> None:
+        """Leniency covers unknown names, not a known field of the wrong type."""
+        with pytest.raises(ParseError):
+            proto_utils.parse_lenient({'messageId': 5}, Message())

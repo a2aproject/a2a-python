@@ -1,3 +1,5 @@
+import json
+
 from collections.abc import AsyncGenerator
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -26,14 +28,16 @@ from a2a.types.a2a_pb2 import (
     TaskState,
 )
 from a2a.utils.constants import TransportProtocol
-from a2a.utils.errors import A2A_ERROR_MAPPING
+from a2a.utils.errors import A2A_ERROR_MAPPING, MethodNotFoundError
 from google.protobuf import json_format
 from google.protobuf.timestamp_pb2 import Timestamp
 
 
 @pytest.fixture
 def mock_httpx_client() -> AsyncMock:
-    return AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
+    return client
 
 
 @pytest.fixture
@@ -151,6 +155,42 @@ class TestRestTransport:
 
         with pytest.raises(error_cls):
             await client.send_message(request=params)
+
+    @pytest.mark.parametrize(
+        ('status_code', 'body', 'expected_error'),
+        [
+            (401, {'error': 'invalid_token'}, A2AClientError),
+            (404, {'error': 'Not Found'}, MethodNotFoundError),
+            (502, ['bad gateway'], A2AClientError),
+            (500, 'Internal Server Error', A2AClientError),
+            (503, None, A2AClientError),
+        ],
+    )
+    def test_rest_non_status_error_bodies(
+        self,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+        status_code,
+        body,
+        expected_error,
+    ):
+        """JSON error bodies that are not a google.rpc.Status (e.g. from a proxy) fall back to the HTTP status."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_response = MagicMock(spec=httpx.Response)
+        mock_response.status_code = status_code
+        mock_response.json.return_value = body
+        error = httpx.HTTPStatusError(
+            'Error',
+            request=httpx.Request('GET', 'http://test.url'),
+            response=mock_response,
+        )
+
+        with pytest.raises(expected_error):
+            client._handle_http_error(error)
 
     @pytest.mark.asyncio
     async def test_send_message_with_timeout_context(
@@ -710,3 +750,82 @@ class TestRestTransportTenant:
 
         # url is 3rd positional argument in aconnect_sse(client, method, url, ...)
         assert args[2] == f'http://agent.example.com/api{expected_path}'
+
+
+class TestRestUnrecognizedResponseFields:
+    """Spec 5.7: unrecognized response fields are ignored (issue #1341)."""
+
+    @pytest.mark.asyncio
+    async def test_get_task_ignores_unrecognized_fields(
+        self, mock_httpx_client: AsyncMock, mock_agent_card: MagicMock
+    ):
+        """Unknown keys are skipped at every depth; known ones still parse."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        mock_httpx_client.build_request = MagicMock(
+            return_value=AsyncMock(spec=httpx.Request)
+        )
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.json = MagicMock(
+            return_value={
+                'id': 'task-1',
+                'contextId': 'ctx-1',
+                'status': {
+                    'state': 'TASK_STATE_COMPLETED',
+                    'someNestedField': 'y',
+                },
+                'someNewField': 'x',
+            }
+        )
+        mock_httpx_client.send.return_value = mock_response
+
+        task = await client.get_task(GetTaskRequest(id='task-1'))
+
+        assert task.id == 'task-1'
+        assert task.context_id == 'ctx-1'
+        assert task.status.state == TaskState.TASK_STATE_COMPLETED
+
+    @pytest.mark.asyncio
+    @patch('a2a.client.transports.http_helpers._SSEEventSource')
+    async def test_send_message_streaming_ignores_unrecognized_fields(
+        self,
+        mock_sse_source: AsyncMock,
+        mock_httpx_client: AsyncMock,
+        mock_agent_card: MagicMock,
+    ):
+        """This branch parses with Parse, not ParseDict, so it needs its own case."""
+        client = RestTransport(
+            httpx_client=mock_httpx_client,
+            agent_card=mock_agent_card,
+            url='http://agent.example.com/api',
+        )
+        payload = {
+            'message': {
+                'messageId': 'r1',
+                'role': 'ROLE_AGENT',
+                'parts': [{'text': 'hello'}],
+            },
+            'someNewField': 'x',
+        }
+        mock_response = AsyncMock(spec=httpx.Response)
+        mock_response.raise_for_status = MagicMock()
+        mock_response.headers = {'content-type': 'text/event-stream'}
+        mock_response.aiter_lines.return_value = async_iterable_from_list(
+            [f'data: {json.dumps(payload)}', '']
+        )
+        mock_sse_source.return_value.__aenter__.return_value = mock_response
+
+        events = [
+            event
+            async for event in client.send_message_streaming(
+                SendMessageRequest(message=new_text_message(text='Hello'))
+            )
+        ]
+
+        assert len(events) == 1
+        assert events[0].message.message_id == 'r1'
+        assert events[0].message.parts[0].text == 'hello'

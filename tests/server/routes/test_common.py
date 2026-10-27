@@ -1,7 +1,9 @@
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from sse_starlette.sse import EventSourceResponse
 from starlette.datastructures import Headers
 
 
@@ -16,7 +18,68 @@ from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     StarletteUser,
+    create_event_source_response,
 )
+
+
+class LegacyEventSourceResponse:
+    """Models a constructor without cooperative shutdown support."""
+
+    def __init__(self, content: Any) -> None:
+        self.content = content
+
+
+def test_default_grace_period_supports_legacy_sse_starlette() -> None:
+    content = []
+    with patch(
+        'a2a.server.routes.common.EventSourceResponse',
+        LegacyEventSourceResponse,
+    ):
+        response = create_event_source_response(content)
+
+    assert isinstance(response, LegacyEventSourceResponse)
+    assert response.content is content
+
+
+@pytest.mark.parametrize('grace_period', [0, 30.0])
+def test_grace_period_constructor_arguments(grace_period: float) -> None:
+    content = []
+    with patch.object(
+        EventSourceResponse, '__init__', autospec=True, return_value=None
+    ) as constructor:
+        response = create_event_source_response(content, grace_period)
+
+    if grace_period:
+        constructor.assert_called_once_with(
+            response, content, shutdown_grace_period=grace_period
+        )
+    else:
+        constructor.assert_called_once_with(response, content)
+
+
+def test_nonzero_grace_period_requires_cooperative_shutdown_support() -> None:
+    with (
+        patch(
+            'a2a.server.routes.common.EventSourceResponse',
+            LegacyEventSourceResponse,
+        ),
+        pytest.raises(
+            RuntimeError,
+            match=r'cooperative shutdown support.*a2a-sdk\[http-server\]',
+        ),
+    ):
+        create_event_source_response([], 30.0)
+
+
+@pytest.mark.parametrize(
+    'response_class', [LegacyEventSourceResponse, EventSourceResponse]
+)
+def test_negative_grace_period_is_rejected(response_class: type[Any]) -> None:
+    with (
+        patch('a2a.server.routes.common.EventSourceResponse', response_class),
+        pytest.raises(ValueError, match='shutdown_grace_period must be >= 0'),
+    ):
+        create_event_source_response([], -1)
 
 
 # --- StarletteUser Tests ---

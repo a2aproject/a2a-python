@@ -2,10 +2,9 @@
 
 import json
 import logging
-import traceback
 
 from collections.abc import AsyncGenerator
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 
 from google.protobuf.json_format import MessageToDict, ParseDict
 from jsonrpc.jsonrpc2 import JSONRPC20Request, JSONRPC20Response
@@ -15,8 +14,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.events import Event
 from a2a.server.jsonrpc_models import (
     InternalError,
-    InvalidParamsError,
-    InvalidRequestError,
     JSONParseError,
     JSONRPCError,
     MethodNotFoundError,
@@ -26,6 +23,8 @@ from a2a.server.request_handlers.response_helpers import build_error_response
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
+    serialize_list_tasks_response,
 )
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
@@ -44,6 +43,8 @@ from a2a.types.a2a_pb2 import (
 from a2a.utils import constants, json_utils, proto_utils
 from a2a.utils.errors import (
     A2AError,
+    InvalidParamsError,
+    InvalidRequestError,
     TaskNotFoundError,
     UnsupportedOperationError,
 )
@@ -129,6 +130,7 @@ class JsonRpcDispatcher:
         request_handler: RequestHandler,
         context_builder: ServerCallContextBuilder | None = None,
         enable_v0_3_compat: bool = False,
+        shutdown_grace_period: float = 0,
     ) -> None:
         """Initializes the JsonRpcDispatcher.
 
@@ -139,6 +141,8 @@ class JsonRpcDispatcher:
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
             enable_v0_3_compat: Whether to enable v0.3 backward compatibility on the same endpoint.
+            shutdown_grace_period: Seconds to allow active SSE streams to
+              finish before force-cancellation during shutdown.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -152,12 +156,14 @@ class JsonRpcDispatcher:
             context_builder or DefaultServerCallContextBuilder()
         )
         self.enable_v0_3_compat = enable_v0_3_compat
+        self._shutdown_grace_period = shutdown_grace_period
         self._v03_adapter: JSONRPC03Adapter | None = None
 
         if self.enable_v0_3_compat:
             self._v03_adapter = JSONRPC03Adapter(
                 http_handler=request_handler,
                 context_builder=self._context_builder,
+                shutdown_grace_period=shutdown_grace_period,
             )
 
     def _generate_error_response(
@@ -227,9 +233,11 @@ class JsonRpcDispatcher:
             body = await request.json()
             if isinstance(body, dict):
                 request_id = body.get('id')
-                # Ensure request_id is valid for JSON-RPC response (str/int/None only)
-                if request_id is not None and not isinstance(
-                    request_id, str | int
+                # Ensure request_id is valid for JSON-RPC response (str/int/None only;
+                # exclude bool since bool is a subclass of int in Python)
+                if isinstance(request_id, bool) or (
+                    request_id is not None
+                    and not isinstance(request_id, str | int)
                 ):
                     request_id = None
             logger.debug('Request body: %s', body)
@@ -251,11 +259,18 @@ class JsonRpcDispatcher:
                             message="Invalid request: 'jsonrpc' must be exactly '2.0'"
                         ),
                     )
+                if isinstance(base_request._id, bool):  # noqa: SLF001
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message='Invalid request: id must be a string, integer, or null'
+                        ),
+                    )
             except Exception as e:
                 logger.exception('Failed to validate base JSON-RPC request')
                 return self._generate_error_response(
                     request_id,
-                    InvalidRequestError(data=str(e)),
+                    InvalidRequestError(data={'parseError': str(e)}),
                 )
 
             # 2) Route by method name; unknown -> -32601, known -> validate params (-32602 on failure)
@@ -286,14 +301,18 @@ class JsonRpcDispatcher:
                     request_id, MethodNotFoundError()
                 )
             try:
-                # Parse the params field into the proto message type
+                # Unknown fields are ignored for forward compatibility. The
+                # flag also defaults unknown enum values to 0, which protobuf
+                # gives no way to opt out of separately.
                 params = body.get('params', {})
-                specific_request = ParseDict(params, model_class())
+                specific_request = ParseDict(
+                    params, model_class(), ignore_unknown_fields=True
+                )
             except Exception as e:
                 logger.exception('Failed to parse request params')
                 return self._generate_error_response(
                     request_id,
-                    InvalidParamsError(data=str(e)),
+                    InvalidParamsError(data={'parseError': str(e)}),
                 )
 
             # 3) Build call context and wrap the request for downstream handling
@@ -322,7 +341,6 @@ class JsonRpcDispatcher:
                     handler_result = build_error_response(request_id, e)
             return self._create_response(call_context, handler_result)
         except json.decoder.JSONDecodeError as e:
-            traceback.print_exc()
             return self._generate_error_response(
                 None, JSONParseError(message=str(e))
             )
@@ -431,10 +449,8 @@ class JsonRpcDispatcher:
         tasks_response = await self.request_handler.on_list_tasks(
             request_obj, context
         )
-        return MessageToDict(
-            tasks_response,
-            preserving_proto_field_name=False,
-            always_print_fields_with_no_presence=True,
+        return serialize_list_tasks_response(
+            tasks_response, request_obj.include_artifacts
         )
 
     async def _handle_create_task_push_notification_config(
@@ -595,7 +611,11 @@ class JsonRpcDispatcher:
                         'data': json_utils.dumps(error_response),
                     }
 
-            return EventSourceResponse(event_generator(handler_result))  # ty:ignore[invalid-argument-type]
+            stream = cast('AsyncGenerator[dict[str, Any]]', handler_result)
+            return create_event_source_response(
+                event_generator(stream),
+                shutdown_grace_period=self._shutdown_grace_period,
+            )
 
         # handler_result is a dict (JSON-RPC response)
         return JSONResponse(handler_result)

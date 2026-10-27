@@ -10,6 +10,8 @@ from a2a.server.request_handlers.request_handler import RequestHandler
 from a2a.server.routes.common import (
     DefaultServerCallContextBuilder,
     ServerCallContextBuilder,
+    create_event_source_response,
+    serialize_list_tasks_response,
 )
 from a2a.types import a2a_pb2
 from a2a.types.a2a_pb2 import (
@@ -35,7 +37,8 @@ if TYPE_CHECKING:
     from sse_starlette.event import ServerSentEvent
     from sse_starlette.sse import EventSourceResponse
     from starlette.requests import Request
-    from starlette.responses import JSONResponse, Response
+    from starlette.responses import JSONResponse as A2AJSONResponse
+    from starlette.responses import Response
 
     _package_starlette_installed = True
 else:
@@ -45,12 +48,17 @@ else:
         from starlette.requests import Request
         from starlette.responses import JSONResponse, Response
 
+        class A2AJSONResponse(JSONResponse):
+            """JSONResponse labelled with the A2A media type."""
+
+            media_type = constants.A2A_JSON_MEDIA_TYPE
+
         _package_starlette_installed = True
     except ImportError:
         EventSourceResponse = Any
         ServerSentEvent = Any
         Request = Any
-        JSONResponse = Any
+        A2AJSONResponse = Any
         Response = Any
 
         _package_starlette_installed = False
@@ -71,6 +79,7 @@ class RestDispatcher:
         self,
         request_handler: RequestHandler,
         context_builder: ServerCallContextBuilder | None = None,
+        shutdown_grace_period: float = 0,
     ) -> None:
         """Initializes the RestDispatcher.
 
@@ -79,6 +88,8 @@ class RestDispatcher:
             context_builder: The ServerCallContextBuilder used to construct the
               ServerCallContext passed to the request_handler. If None the
               DefaultServerCallContextBuilder is used.
+            shutdown_grace_period: Seconds to allow active SSE streams to
+              finish before force-cancellation during shutdown.
         """
         if not _package_starlette_installed:
             raise ImportError(
@@ -91,6 +102,7 @@ class RestDispatcher:
             context_builder or DefaultServerCallContextBuilder()
         )
         self.request_handler = request_handler
+        self._shutdown_grace_period = shutdown_grace_period
 
     def _build_call_context(self, request: Request) -> ServerCallContext:
         call_context = self._context_builder.build(request)
@@ -136,7 +148,10 @@ class RestDispatcher:
         try:
             first_item = await anext(stream)
         except StopAsyncIteration:
-            return EventSourceResponse(iter([]))
+            return create_event_source_response(
+                iter([]),
+                shutdown_grace_period=self._shutdown_grace_period,
+            )
 
         async def event_generator() -> AsyncIterator[ServerSentEvent]:
             yield ServerSentEvent(data=json_utils.dumps(first_item))
@@ -150,7 +165,10 @@ class RestDispatcher:
                     event='error',
                 )
 
-        return EventSourceResponse(event_generator())
+        return create_event_source_response(
+            event_generator(),
+            shutdown_grace_period=self._shutdown_grace_period,
+        )
 
     @rest_error_handler
     async def on_message_send(self, request: Request) -> Response:
@@ -162,7 +180,7 @@ class RestDispatcher:
         ) -> a2a_pb2.SendMessageResponse:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             task_or_message = await self.request_handler.on_message_send(
                 params, context
             )
@@ -171,7 +189,7 @@ class RestDispatcher:
             return a2a_pb2.SendMessageResponse(message=task_or_message)
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_message_send_stream(
@@ -185,7 +203,7 @@ class RestDispatcher:
         ) -> AsyncIterator[dict[str, Any]]:
             body = await request.body()
             params = a2a_pb2.SendMessageRequest()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             async for event in self.request_handler.on_message_send_stream(
                 params, context
             ):
@@ -209,7 +227,7 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_stream_error_handler
     async def on_subscribe_to_task(
@@ -245,7 +263,7 @@ class RestDispatcher:
             raise TaskNotFoundError
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def get_push_notification(self, request: Request) -> Response:
@@ -267,7 +285,7 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def delete_push_notification(self, request: Request) -> Response:
@@ -285,7 +303,7 @@ class RestDispatcher:
             )
 
         await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content={})
+        return A2AJSONResponse(content={})
 
     @rest_error_handler
     async def set_push_notification(self, request: Request) -> Response:
@@ -297,14 +315,14 @@ class RestDispatcher:
         ) -> a2a_pb2.TaskPushNotificationConfig:
             body = await request.body()
             params = a2a_pb2.TaskPushNotificationConfig()
-            Parse(body, params)
+            Parse(body, params, ignore_unknown_fields=True)
             params.task_id = request.path_params['id']
             return await self.request_handler.on_create_task_push_notification_config(
                 params, context
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_push_notifications(self, request: Request) -> Response:
@@ -322,24 +340,24 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))
 
     @rest_error_handler
     async def list_tasks(self, request: Request) -> Response:
         """Handles the 'tasks/list' REST method."""
+        params = a2a_pb2.ListTasksRequest()
 
         @validate_version(constants.PROTOCOL_VERSION_1_0)
         async def _handler(
             context: ServerCallContext,
         ) -> a2a_pb2.ListTasksResponse:
-            params = a2a_pb2.ListTasksRequest()
             proto_utils.parse_params(request.query_params, params)
             return await self.request_handler.on_list_tasks(params, context)
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(
-            content=MessageToDict(
-                response, always_print_fields_with_no_presence=True
+        return A2AJSONResponse(
+            content=serialize_list_tasks_response(
+                response, params.include_artifacts
             )
         )
 
@@ -359,4 +377,4 @@ class RestDispatcher:
             )
 
         response = await self._handle_non_streaming(request, _handler)
-        return JSONResponse(content=MessageToDict(response))
+        return A2AJSONResponse(content=MessageToDict(response))

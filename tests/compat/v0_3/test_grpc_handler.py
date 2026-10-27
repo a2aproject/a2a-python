@@ -78,9 +78,6 @@ async def test_send_message_success_task(
         message=a2a_pb2.Message(
             message_id='msg-1', role=a2a_pb2.Role.ROLE_USER
         ),
-        configuration=a2a_pb2.SendMessageConfiguration(
-            history_length=0, return_immediately=True
-        ),
     )
     mock_request_handler.on_message_send.assert_called_once_with(
         expected_req, ANY
@@ -114,9 +111,6 @@ async def test_send_message_success_message(
     expected_req = a2a_pb2.SendMessageRequest(
         message=a2a_pb2.Message(
             message_id='msg-1', role=a2a_pb2.Role.ROLE_USER
-        ),
-        configuration=a2a_pb2.SendMessageConfiguration(
-            history_length=0, return_immediately=True
         ),
     )
     mock_request_handler.on_message_send.assert_called_once_with(
@@ -167,9 +161,6 @@ async def test_send_streaming_message_success(
     expected_req = a2a_pb2.SendMessageRequest(
         message=a2a_pb2.Message(
             message_id='msg-1', role=a2a_pb2.Role.ROLE_USER
-        ),
-        configuration=a2a_pb2.SendMessageConfiguration(
-            history_length=0, return_immediately=True
         ),
     )
     mock_request_handler.on_message_send_stream.assert_called_once_with(

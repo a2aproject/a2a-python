@@ -1,5 +1,6 @@
 import asyncio
 
+from collections.abc import AsyncGenerator
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -93,6 +94,122 @@ def _make_send_message_request(
     }
 
 
+class TestJsonRpcRequestIds:
+    """JSON booleans are not numeric JSON-RPC request identifiers."""
+
+    @pytest.mark.parametrize('request_id', [True, False])
+    def test_boolean_id_is_rejected(
+        self, client: TestClient, mock_handler: AsyncMock, request_id: bool
+    ) -> None:
+        request = _make_send_message_request()
+        request['id'] = request_id
+
+        response = client.post('/', json=request)
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body['id'] is None
+        assert body['error']['code'] == -32600
+        mock_handler.on_message_send.assert_not_awaited()
+
+    @pytest.mark.parametrize('request_id', [0, 1, '', 'request'])
+    def test_integer_and_string_ids_are_preserved(
+        self, client: TestClient, mock_handler: AsyncMock, request_id: int | str
+    ) -> None:
+        request = _make_send_message_request()
+        request['id'] = request_id
+
+        response = client.post('/', json=request)
+        body = response.json()
+
+        assert response.status_code == 200
+        assert body['id'] == request_id
+        assert type(body['id']) is type(request_id)
+        assert 'result' in body
+        mock_handler.on_message_send.assert_awaited_once()
+
+
+class TestUnrecognizedFields:
+    """Unrecognized fields are ignored, for forward compatibility."""
+
+    def test_unknown_field_in_params_is_ignored(self, client):
+        request = _make_send_message_request()
+        request['params']['x_custom_field'] = 'test'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+        assert 'result' in body
+
+    def test_unknown_field_inside_message_is_ignored(self, client):
+        request = _make_send_message_request()
+        request['params']['message']['x_custom_field'] = 'test'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+        assert 'result' in body
+
+    def test_a_structurally_wrong_value_is_still_rejected(self, client):
+        """Leniency covers unknown names, not values of the wrong shape."""
+        request = _make_send_message_request()
+        request['params']['message']['parts'] = 'not-a-list'
+
+        body = client.post('/', json=request).json()
+
+        assert body['error']['code'] == -32602
+
+    def test_unknown_enum_value_is_accepted_as_unspecified(self, client):
+        """A documented side effect of ignore_unknown_fields, pinned here.
+
+        protobuf applies the same forward-compatibility rule to enum values
+        as to field names, and the flag cannot be taken for one and not the
+        other. A future ROLE_* therefore arrives as ROLE_UNSPECIFIED (0)
+        rather than failing the request.
+        """
+        request = _make_send_message_request()
+        request['params']['message']['role'] = 'ROLE_FROM_THE_FUTURE'
+
+        body = client.post('/', json=request).json()
+
+        assert 'error' not in body
+
+
+class TestParseErrorDataShape:
+    """error.data is an array of objects, each carrying @type."""
+
+    @pytest.fixture
+    def parse_error(self, client) -> dict:
+        request = _make_send_message_request()
+        request['params']['message']['parts'] = 'not-a-list'
+        return client.post('/', json=request).json()['error']
+
+    def test_data_is_a_typed_array(self, parse_error):
+        assert isinstance(parse_error['data'], list)
+        assert parse_error['data'][0]['@type'].endswith('google.rpc.ErrorInfo')
+        assert parse_error['data'][0]['reason'] == 'INVALID_PARAMS'
+
+    def test_parse_diagnostic_survives_in_metadata(self, parse_error):
+        assert 'parts' in parse_error['data'][0]['metadata']['parseError']
+
+
+class TestMalformedJsonBody:
+    def test_reported_through_logging_not_stderr(self, client, capsys, caplog):
+        response = client.post(
+            '/',
+            content=b'{not json',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        assert response.json()['error']['code'] == -32700
+        assert 'Traceback' not in capsys.readouterr().err
+        assert any(
+            record.name == jsonrpc_dispatcher.__name__
+            and record.levelname == 'WARNING'
+            for record in caplog.records
+        )
+
+
 class TestJsonRpcDispatcherOptionalDependencies:
     @pytest.fixture(scope='class')
     def mock_app_params(self) -> dict:
@@ -124,6 +241,25 @@ class TestJsonRpcDispatcherOptionalDependencies:
             ),
         ):
             JsonRpcDispatcher(**mock_app_params)
+
+
+class TestJsonRpcDispatcherStreamingResponse:
+    def test_shutdown_grace_period_is_passed_to_event_source_response(
+        self, mock_handler
+    ) -> None:
+        async def stream_generator() -> AsyncGenerator[dict[str, Any]]:
+            yield {'result': {}}
+
+        dispatcher = JsonRpcDispatcher(
+            request_handler=mock_handler,
+            shutdown_grace_period=30.0,
+        )
+
+        response = dispatcher._create_response(
+            ServerCallContext(), stream_generator()
+        )
+
+        assert getattr(response, '_shutdown_grace_period') == 30.0
 
 
 class TestJsonRpcDispatcherExtensions:
@@ -196,6 +332,22 @@ class TestJsonRpcDispatcherTenant:
 
 
 class TestJsonRpcDispatcherV03Compat:
+    def test_shutdown_grace_period_is_forwarded_to_adapter(
+        self, mock_handler
+    ) -> None:
+        with patch.object(
+            jsonrpc_dispatcher, 'JSONRPC03Adapter'
+        ) as adapter_class:
+            JsonRpcDispatcher(
+                request_handler=mock_handler,
+                enable_v0_3_compat=True,
+                shutdown_grace_period=30.0,
+            )
+
+        adapter_class.assert_called_once()
+        assert adapter_class.call_args.kwargs['http_handler'] is mock_handler
+        assert adapter_class.call_args.kwargs['shutdown_grace_period'] == 30.0
+
     def test_v0_3_compat_flag_routes_to_adapter(self, mock_handler):
         mock_agent_card = MagicMock(spec=AgentCard)
         mock_agent_card.url = 'http://mockurl.com'
@@ -363,6 +515,32 @@ class TestJsonRpcDispatcherMethodRouting:
         handler.on_list_tasks.assert_called_once()
         call_context = handler.on_list_tasks.call_args[0][1]
         assert call_context.state['method'] == 'ListTasks'
+
+    @pytest.mark.parametrize(
+        ('params', 'artifacts_expected'),
+        [
+            pytest.param({}, False, id='default'),
+            pytest.param({'includeArtifacts': True}, True, id='included'),
+        ],
+    )
+    def test_list_tasks_artifact_presence(
+        self,
+        client: TestClient,
+        handler: AsyncMock,
+        params: dict[str, Any],
+        artifacts_expected: bool,
+    ) -> None:
+        handler.on_list_tasks.return_value = ListTasksResponse(
+            tasks=[Task(id='task1')]
+        )
+
+        response = client.post(
+            '/', json=_make_jsonrpc_request('ListTasks', params)
+        )
+        response.raise_for_status()
+
+        task = response.json()['result']['tasks'][0]
+        assert ('artifacts' in task) is artifacts_expected
 
     def test_create_push_notification_config_routes_correctly(
         self, client, handler

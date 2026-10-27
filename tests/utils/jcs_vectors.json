@@ -1,0 +1,685 @@
+{
+  "_comment": "RFC 8785 (JCS) conformance vectors for Agent Card canonicalization. Lifted verbatim from the language-neutral a2a-jcs-v01 corpus proposed at https://github.com/a2aproject/a2a-tck/pull/228 . Each expected value was produced by two independent RFC 8785 implementations written by neither SDK author (rfc8785 0.1.4 on PyPI, and gowebpki/jcs v1.0.1 in Go), which agree byte for byte.",
+  "corpus": "a2a-jcs-v01",
+  "specRef": "https://a2a-protocol.org/latest/specification/#841-canonicalization-requirements",
+  "oracles": [
+    "rfc8785 (PyPI, 0.1.4)",
+    "gowebpki/jcs (Go, v1.0.1)"
+  ],
+  "counts": {
+    "accept": 47,
+    "reject": 10,
+    "total": 57
+  },
+  "vectors": [
+    {
+      "id": "A2-001",
+      "group": "a2-signatures-exclusion",
+      "clause": "a2a-spec-8.4.1-rule-3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A card carrying a populated `signatures` array canonicalizes as if that key were absent entirely; the exclusion is unconditional, not conditional on the array being empty.",
+      "input": {
+        "name": "Example Agent",
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "signatures": [
+          {
+            "protected": "eyJhbGciOiJFUzI1NiJ9",
+            "signature": "abc123"
+          }
+        ]
+      },
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c226e616d65223a224578616d706c65204167656e74227d"
+    },
+    {
+      "id": "A2-002",
+      "group": "a2-signatures-exclusion",
+      "clause": "a2a-spec-8.4.1-rule-3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A card carrying an EMPTY `signatures` array ([]) is excluded the same way as a populated one (A2-001): exclusion is by key presence, not by whether the value is 'interesting'. Compare directly against A6-001, which established that an empty array is otherwise a perfectly normal RFC 8785 value elsewhere in a document -- the only thing special about `signatures` is the key name.",
+      "input": {
+        "name": "Example Agent",
+        "capabilities": {
+          "streaming": true,
+          "pushNotifications": false
+        },
+        "signatures": []
+      },
+      "canonical_utf8_hex": "7b226361706162696c6974696573223a7b22707573684e6f74696669636174696f6e73223a66616c73652c2273747265616d696e67223a747275657d2c226e616d65223a224578616d706c65204167656e74227d"
+    },
+    {
+      "id": "A2-REJECT-003",
+      "group": "a2-signatures-exclusion",
+      "clause": "a2a-spec-8.4.1-rule-3",
+      "disposition": "MUST-REJECT",
+      "rationale": "A single-signature payload presented as canonical output but still carrying its own `signatures` array is self-referential: the bytes a signature covers cannot include the signature that covers them, so any canonical form containing `signatures` is definitionally wrong regardless of what RFC 8785 alone would say about it. (confirmed: the input below is valid, well-formed JSON that parses cleanly -- both RFC 8785 oracles would canonicalize it without complaint -- and is refused ONLY because it retains the excluded key, which is an a2a-specific rule RFC 8785 itself has no opinion on.)",
+      "input_raw": "{\"capabilities\":{\"pushNotifications\":false,\"streaming\":true},\"name\":\"Example Agent\",\"signatures\":[{\"protected\":\"eyJhbGciOiJFUzI1NiJ9\",\"signature\":\"abc123\"}]}"
+    },
+    {
+      "id": "A2-REJECT-004",
+      "group": "a2-signatures-exclusion",
+      "clause": "a2a-spec-8.4.1-rule-3",
+      "disposition": "MUST-REJECT",
+      "rationale": "Even a `signatures` key holding an empty array must still be rejected in claimed-canonical output: the exclusion rule is unconditional (A2-002), so its violation is unconditional too -- an empty array does not make the self-reference acceptable, it is still the wrong key present in the wrong place. (confirmed: the input below is valid, well-formed JSON that parses cleanly -- both RFC 8785 oracles would canonicalize it without complaint -- and is refused ONLY because it retains the excluded key, which is an a2a-specific rule RFC 8785 itself has no opinion on.)",
+      "input_raw": "{\"capabilities\":{\"pushNotifications\":false,\"streaming\":true},\"name\":\"Example Agent\",\"signatures\":[]}"
+    },
+    {
+      "id": "A3-001",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Baseline: keys already in UTF-16 code-unit order pass through unchanged.",
+      "input": {
+        "a": 1,
+        "b": 2,
+        "c": 3
+      },
+      "canonical_utf8_hex": "7b2261223a312c2262223a322c2263223a337d"
+    },
+    {
+      "id": "A3-002",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Keys given out of order must be reordered to UTF-16 code-unit order.",
+      "input": {
+        "zebra": 1,
+        "apple": 2,
+        "mango": 3
+      },
+      "canonical_utf8_hex": "7b226170706c65223a322c226d616e676f223a332c227a65627261223a317d"
+    },
+    {
+      "id": "A3-003",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Case sensitivity: uppercase ASCII (U+0041 'A') sorts before lowercase ASCII (U+0061 'a') as a raw code unit.",
+      "input": {
+        "apple": 1,
+        "Apple": 2
+      },
+      "canonical_utf8_hex": "7b224170706c65223a322c226170706c65223a317d"
+    },
+    {
+      "id": "A3-004",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Numeric-looking keys sort as UTF-16 code-unit sequences, not as numbers: '1' < '10' < '2'.",
+      "input": {
+        "10": 1,
+        "2": 2,
+        "1": 3
+      },
+      "canonical_utf8_hex": "7b2231223a332c223130223a312c2232223a327d"
+    },
+    {
+      "id": "A3-005",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A BMP character above the ASCII range (U+00E9 'e with acute') sorts after every ASCII key.",
+      "input": {
+        "cafe": 1,
+        "caf\u00e9": 2
+      },
+      "canonical_utf8_hex": "7b2263616665223a312c22636166c3a9223a327d"
+    },
+    {
+      "id": "A3-006",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The a2aproject/A2A#2122 counterexample verbatim (case C3): a key containing U+1F600 (surrogate pair D83D DE00) sorts BEFORE a key containing U+FF01 (single unit FF01), because D83D < FF01 as raw UTF-16 code units, even though the code POINT 1F600 is numerically greater than FF01. Sorting by code point instead of UTF-16 code unit -- what a2a-python's sort_keys=True does -- gets this pair backwards.",
+      "input": {
+        "b\ud83d\ude00key": 1,
+        "b\uff01key": 2
+      },
+      "canonical_utf8_hex": "7b2262f09f98806b6579223a312c2262efbc816b6579223a327d"
+    },
+    {
+      "id": "A3-007",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A second astral-vs-high-BMP inversion pair, generalizing A3-006 beyond one example: U+10000 (surrogate pair D800 DC00) sorts before U+E000 (single unit E000, Private Use Area) by the same UTF-16-vs-code-point divergence.",
+      "input": {
+        "x\ud800\udc00end": 1,
+        "x\ue000end": 2
+      },
+      "canonical_utf8_hex": "7b2278f0908080656e64223a312c2278ee8080656e64223a327d"
+    },
+    {
+      "id": "A3-008",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Two byte-distinct keys that render identically to a human (precomposed U+00E9 vs the combining-character sequence 'e' + U+0301) are different code-unit sequences with no normalization applied by RFC 8785; they sort as the distinct sequences they are, and the combining form (starts with plain ASCII 'e', U+0065) sorts before the precomposed form (starts with U+00E9).",
+      "input": {
+        "caf\u00e9": 1,
+        "cafe\u0301": 2
+      },
+      "canonical_utf8_hex": "7b2263616665cc81223a322c22636166c3a9223a317d"
+    },
+    {
+      "id": "A3-009",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The empty string is a valid key and, having zero code units, sorts before every non-empty key.",
+      "input": {
+        "": 1,
+        "a": 2
+      },
+      "canonical_utf8_hex": "7b22223a312c2261223a327d"
+    },
+    {
+      "id": "A3-010",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Stress case: eleven keys spanning ASCII, digits and mixed case sorted together, confirming the ordering rule is stable across more than a handful of keys at once.",
+      "input": {
+        "Zulu": 1,
+        "alpha": 2,
+        "Bravo": 3,
+        "charlie": 4,
+        "Delta": 5,
+        "9key": 6,
+        "echo": 7,
+        "Foxtrot": 8,
+        "1key": 9,
+        "golf": 10,
+        "Hotel": 11
+      },
+      "canonical_utf8_hex": "7b22316b6579223a392c22396b6579223a362c22427261766f223a332c2244656c7461223a352c22466f7874726f74223a382c22486f74656c223a31312c225a756c75223a312c22616c706861223a322c22636861726c6965223a342c226563686f223a372c22676f6c66223a31307d"
+    },
+    {
+      "id": "A3-REJECT-011",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-REJECT",
+      "rationale": "A key containing a lone (unpaired) high surrogate U+D800 with no following low surrogate is not valid Unicode text and has no well-formed UTF-8 encoding, so it cannot be assigned a UTF-16 code-unit sort position or emitted as literal UTF-8 (RFC 8785 sect. 3.2.2.2); a conformant canonicalizer must refuse it rather than silently pass the unpaired surrogate through or substitute a replacement character. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"b\\ud800key\": 1, \"a\": 2}"
+    },
+    {
+      "id": "A3-REJECT-012",
+      "group": "a3-object-key-ordering",
+      "clause": "RFC8785-3.2.3",
+      "disposition": "MUST-REJECT",
+      "rationale": "A key containing a lone (unpaired) LOW surrogate U+DC00 with no preceding high surrogate completes A3-REJECT-011's high-surrogate case with the low-surrogate half of the pair: equally invalid Unicode, equally unencodable as well-formed UTF-8, for the same reason. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"b\\udc00key\": 1, \"a\": 2}"
+    },
+    {
+      "id": "A4-001",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The a2aproject/A2A#2122 counterexample verbatim (case C2): a non-ASCII scalar (e with acute, U+00E9) is emitted as literal UTF-8 bytes, never as a \\u00e9 escape. ensure_ascii=True in Python's json.dumps -- a2a-python's actual default -- produces the escaped form and fails this vector.",
+      "input": {
+        "name": "Caf\u00e9 Agent",
+        "description": "Planifie des itin\u00e9raires."
+      },
+      "canonical_utf8_hex": "7b226465736372697074696f6e223a22506c616e6966696520646573206974696ec3a97261697265732e222c226e616d65223a22436166c3a9204167656e74227d"
+    },
+    {
+      "id": "A4-002",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Pure ASCII content is the trivial control case: no escaping needed, output equals input.",
+      "input": {
+        "name": "Example Agent"
+      },
+      "canonical_utf8_hex": "7b226e616d65223a224578616d706c65204167656e74227d"
+    },
+    {
+      "id": "A4-003",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "An astral-plane character (U+1F600 GRINNING FACE, outside the Basic Multilingual Plane, requiring a UTF-16 surrogate pair to represent but a single 4-byte UTF-8 sequence) is emitted as literal UTF-8, not as a \\ud83d\\ude00 surrogate-pair escape.",
+      "input": {
+        "note": "hello \ud83d\ude00 world"
+      },
+      "canonical_utf8_hex": "7b226e6f7465223a2268656c6c6f20f09f988020776f726c64227d"
+    },
+    {
+      "id": "A4-004",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The mandatory escape set is exactly quote, backslash, and control characters below U+0020: this string exercises all three (a literal quote, a literal backslash, and a literal newline), each of which MUST still be escaped even though non-ASCII text is emitted literally.",
+      "input": {
+        "raw": "a \"quoted\" \\ path\nwith a newline"
+      },
+      "canonical_utf8_hex": "7b22726177223a2261205c2271756f7465645c22205c5c20706174685c6e776974682061206e65776c696e65227d"
+    },
+    {
+      "id": "A4-005",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The empty string is a valid scalar value and serializes as a pair of quote characters with nothing between them.",
+      "input": {
+        "empty": ""
+      },
+      "canonical_utf8_hex": "7b22656d707479223a22227d"
+    },
+    {
+      "id": "A4-006",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Every remaining C0 control character (U+0001 through U+001F, excluding the ones with short escapes like \\n and \\t) must still be escaped as \\u00XX -- control-character escaping is required regardless of the literal-UTF-8 rule for ordinary text, since control characters are never literal in a JSON string.",
+      "input": {
+        "ctrl": "a\u0001b\u001fc"
+      },
+      "canonical_utf8_hex": "7b226374726c223a22615c7530303031625c753030316663227d"
+    },
+    {
+      "id": "A4-007",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A CJK ideograph (U+4E2D, three-byte UTF-8) is emitted as literal UTF-8, the same rule as A4-001 applied to a script outside the Latin-1 range.",
+      "input": {
+        "label": "\u4e2d\u6587"
+      },
+      "canonical_utf8_hex": "7b226c6162656c223a22e4b8ade69687227d"
+    },
+    {
+      "id": "A4-008",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "U+007F (DELETE) sits immediately above the printable ASCII range and below the C1 control block; RFC 8785 requires literal UTF-8 for it like any other non-mandatory-escape character, it is not part of the U+0000-U+001F mandatory escape set.",
+      "input": {
+        "del": "a\u007fb"
+      },
+      "canonical_utf8_hex": "7b2264656c223a22617f62227d"
+    },
+    {
+      "id": "A4-009",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A combining diacritic (U+0301 COMBINING ACUTE ACCENT) immediately following its base character is ordinary non-ASCII text with no special JSON-string handling; it is emitted as literal UTF-8 like any other codepoint outside the escape set.",
+      "input": {
+        "combining": "e\u0301clair"
+      },
+      "canonical_utf8_hex": "7b22636f6d62696e696e67223a2265cc81636c616972227d"
+    },
+    {
+      "id": "A4-010",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Right-to-left script content (Arabic, U+0627 ALEF through U+0629 TEH MARBUTA) is emitted as literal UTF-8 bytes; RFC 8785 has no bidi-aware transform, only byte identity.",
+      "input": {
+        "rtl": "\u0627\u0644\u0633\u0644\u0627\u0645"
+      },
+      "canonical_utf8_hex": "7b2272746c223a22d8a7d984d8b3d984d8a7d985227d"
+    },
+    {
+      "id": "A4-011",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Forward slash is explicitly NOT in JSON's mandatory escape set (unlike some JSON encoders' optional habit of escaping it as \\/) and must be emitted literally.",
+      "input": {
+        "url": "https://example.com/a2a/v1"
+      },
+      "canonical_utf8_hex": "7b2275726c223a2268747470733a2f2f6578616d706c652e636f6d2f6132612f7631227d"
+    },
+    {
+      "id": "A4-012",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A string built entirely from two adjacent astral-plane characters (both requiring surrogate pairs in UTF-16) confirms multi-character non-BMP content is handled, not just a single isolated case like A4-003.",
+      "input": {
+        "emoji_pair": "\ud83d\ude00\ud83d\ude01"
+      },
+      "canonical_utf8_hex": "7b22656d6f6a695f70616972223a22f09f9880f09f9881227d"
+    },
+    {
+      "id": "A4-REJECT-013",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-REJECT",
+      "rationale": "A lone (unpaired) low surrogate U+DC00 inside a STRING VALUE (not a key, unlike A3-REJECT-011/012) is not valid Unicode text and has no well-formed UTF-8 encoding; a conformant canonicalizer must refuse it rather than emit an invalid byte sequence or silently substitute U+FFFD. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"name\": \"broken \\udc00 value\"}"
+    },
+    {
+      "id": "A4-REJECT-014",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-REJECT",
+      "rationale": "A lone low surrogate (U+DC00) embedded mid-string, with ordinary text both before and after it, is the string-value counterpart to A3-REJECT-012's key-position case: unpaired, not valid Unicode, no well-formed UTF-8 encoding, and unlike A4-REJECT-013's simpler isolated case this confirms the defect is caught with real surrounding content rather than only in a minimal reproduction. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"name\": \"before\\udc00after\"}"
+    },
+    {
+      "id": "A4-REJECT-015",
+      "group": "a4-string-serialization",
+      "clause": "RFC8785-3.2.2.2",
+      "disposition": "MUST-REJECT",
+      "rationale": "A high surrogate (U+D800) followed by an ordinary BMP character (a plain letter, not its matching low surrogate) leaves the high surrogate unpaired for exactly the same reason as A4-REJECT-013/014, just constructed a third way. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"name\": \"\\ud800x\"}"
+    },
+    {
+      "id": "A5-001",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The a2aproject/A2A#2122 counterexample verbatim (case C4): 0.000001 must serialize as the literal '0.000001', not as '1e-06' (Python's repr threshold, which is what a2a-python's json.dumps produces and what makes this a real cross-SDK break).",
+      "input": {
+        "tolerance": 1e-06
+      },
+      "canonical_utf8_hex": "7b22746f6c6572616e6365223a302e3030303030317d"
+    },
+    {
+      "id": "A5-002",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The a2aproject/A2A#2122 'big' companion value from the same case C4: 1e21 crosses the ECMAScript fixed/exponential boundary on the large-magnitude side and must serialize in exponential form.",
+      "input": {
+        "big": 1e+21
+      },
+      "canonical_utf8_hex": "7b22626967223a31652b32317d"
+    },
+    {
+      "id": "A5-003",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Positive integers serialize with no decimal point and no fractional zeros.",
+      "input": {
+        "n": 42
+      },
+      "canonical_utf8_hex": "7b226e223a34327d"
+    },
+    {
+      "id": "A5-004",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Negative integers keep the sign and otherwise follow the same integer rule.",
+      "input": {
+        "n": -17
+      },
+      "canonical_utf8_hex": "7b226e223a2d31377d"
+    },
+    {
+      "id": "A5-005",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Zero serializes as the bare digit '0'.",
+      "input": {
+        "n": 0
+      },
+      "canonical_utf8_hex": "7b226e223a307d"
+    },
+    {
+      "id": "A5-006",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Negative zero is a distinct IEEE 754 bit pattern from positive zero, but ECMAScript's Number::toString collapses both to the same string '0' -- there is no '-0' output form.",
+      "input": {
+        "n": -0.0
+      },
+      "canonical_utf8_hex": "7b226e223a307d"
+    },
+    {
+      "id": "A5-007",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "0.1 cannot be represented exactly in IEEE 754 double precision; ECMAScript's algorithm prints the shortest decimal digit sequence that round-trips back to the same double, not the full ~17-digit exact binary expansion.",
+      "input": {
+        "n": 0.1
+      },
+      "canonical_utf8_hex": "7b226e223a302e317d"
+    },
+    {
+      "id": "A5-008",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A five-significant-digit decimal exercises the shortest-round-trip rule on a value with more precision than 0.1.",
+      "input": {
+        "n": 3.14159
+      },
+      "canonical_utf8_hex": "7b226e223a332e31343135397d"
+    },
+    {
+      "id": "A5-009",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Number.MAX_SAFE_INTEGER (2^53 - 1): the largest integer every JS engine represents exactly, a natural boundary value for integer serialization.",
+      "input": {
+        "n": 9007199254740991
+      },
+      "canonical_utf8_hex": "7b226e223a393030373139393235343734303939317d"
+    },
+    {
+      "id": "A5-010",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A negative decimal combines the sign rule (A5-004) with fractional shortest-digit serialization (A5-007) in one value.",
+      "input": {
+        "n": -123.456
+      },
+      "canonical_utf8_hex": "7b226e223a2d3132332e3435367d"
+    },
+    {
+      "id": "A5-011",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "One order of magnitude below the a2aproject/A2A#2122 case C4 value (A5-001): 0.0000001 (1e-7) probes the small-magnitude side of the fixed/exponential boundary that 0.000001 sits just on the fixed side of.",
+      "input": {
+        "n": 1e-07
+      },
+      "canonical_utf8_hex": "7b226e223a31652d377d"
+    },
+    {
+      "id": "A5-012",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "One order of magnitude below the C4 'big' value (A5-002): 1e20 probes the large-magnitude side of the same boundary that 1e21 sits just past.",
+      "input": {
+        "n": 1e+20
+      },
+      "canonical_utf8_hex": "7b226e223a3130303030303030303030303030303030303030307d"
+    },
+    {
+      "id": "A5-013",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "0.1 + 0.2 in IEEE 754 double arithmetic does not equal 0.3; this is the resulting value (0.30000000000000004), a classic case requiring the full shortest-round-trip digit count rather than a short 'looks clean' rounding.",
+      "input": {
+        "n": 0.30000000000000004
+      },
+      "canonical_utf8_hex": "7b226e223a302e33303030303030303030303030303030347d"
+    },
+    {
+      "id": "A5-014",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "A round integer must not be printed in exponential form just because it has trailing zeros; 100 stays '100', not '1e2'.",
+      "input": {
+        "n": 100
+      },
+      "canonical_utf8_hex": "7b226e223a3130307d"
+    },
+    {
+      "id": "A5-015",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Input syntax is not preserved verbatim: '1E1' (uppercase E, RFC 8259 permits both cases) and a trailing '.0' both parse to the double values 10 and 1 respectively, and the canonical form is the ECMAScript string for that VALUE, not a copy of the input digit sequence -- this vector's input intentionally does not look like its output.",
+      "input": {
+        "exp_upper": 10.0,
+        "trailing_zero": 1.0
+      },
+      "canonical_utf8_hex": "7b226578705f7570706572223a31302c22747261696c696e675f7a65726f223a317d"
+    },
+    {
+      "id": "A5-REJECT-016",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-REJECT",
+      "rationale": "NaN is not a valid RFC 8259 JSON number and has no ECMAScript Number::toString representation as a JSON token; some lenient parsers accept the bare word NaN as a non-standard extension, but a conformant canonicalizer must refuse to emit it rather than pass the extension through. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"n\": NaN}"
+    },
+    {
+      "id": "A5-REJECT-017",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-REJECT",
+      "rationale": "Infinity is the positive-magnitude sibling of A5-REJECT-016: not valid JSON, no canonical representation, must be refused rather than passed through by any parser lenient enough to accept the bare word. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"n\": Infinity}"
+    },
+    {
+      "id": "A5-REJECT-018",
+      "group": "a5-number-serialization",
+      "clause": "RFC8785-3.2.2.3",
+      "disposition": "MUST-REJECT",
+      "rationale": "Negative infinity completes the set: same defect as A5-REJECT-017 with the sign flipped, confirming the rejection is not specific to the unsigned spelling. (confirmed refused by both independent oracles: go+py)",
+      "input_raw": "{\"n\": -Infinity}"
+    },
+    {
+      "id": "A6-001",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "An empty array is a valid value and serializes as '[]' with no whitespace.",
+      "input": {
+        "items": []
+      },
+      "canonical_utf8_hex": "7b226974656d73223a5b5d7d"
+    },
+    {
+      "id": "A6-002",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "An empty object is a valid value and serializes as '{}' with no whitespace.",
+      "input": {
+        "config": {}
+      },
+      "canonical_utf8_hex": "7b22636f6e666967223a7b7d7d"
+    },
+    {
+      "id": "A6-003",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Arrays preserve input order; RFC 8785 orders object keys, never array elements.",
+      "input": {
+        "matrix": [
+          [
+            1,
+            2
+          ],
+          [
+            3,
+            4
+          ]
+        ]
+      },
+      "canonical_utf8_hex": "7b226d6174726978223a5b5b312c325d2c5b332c345d5d7d"
+    },
+    {
+      "id": "A6-004",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Object nesting recurses the same key-ordering rule at every depth.",
+      "input": {
+        "a": {
+          "b": {
+            "c": 1
+          }
+        }
+      },
+      "canonical_utf8_hex": "7b2261223a7b2262223a7b2263223a317d7d7d"
+    },
+    {
+      "id": "A6-005",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "An array may mix every JSON primitive type; each element serializes per its own type's rule and array order is preserved regardless of type.",
+      "input": {
+        "mixed": [
+          1,
+          "two",
+          true,
+          false,
+          null,
+          3.5
+        ]
+      },
+      "canonical_utf8_hex": "7b226d69786564223a5b312c2274776f222c747275652c66616c73652c6e756c6c2c332e355d7d"
+    },
+    {
+      "id": "A6-006",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "The null literal serializes as the bare token 'null'.",
+      "input": {
+        "value": null
+      },
+      "canonical_utf8_hex": "7b2276616c7565223a6e756c6c7d"
+    },
+    {
+      "id": "A6-007",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Boolean literals serialize as the bare tokens 'true'/'false', and sibling keys still sort (RFC8785-3.2.3) regardless of value type.",
+      "input": {
+        "flag_true": true,
+        "flag_false": false
+      },
+      "canonical_utf8_hex": "7b22666c61675f66616c7365223a66616c73652c22666c61675f74727565223a747275657d"
+    },
+    {
+      "id": "A6-008",
+      "group": "a6-arrays-nesting-literals",
+      "clause": "RFC8785-3.2.1",
+      "disposition": "MUST-ACCEPT",
+      "rationale": "Deep alternation of arrays containing objects containing arrays exercises the recursion to more than two levels; order is preserved at every array level and keys sorted at every object level.",
+      "input": {
+        "deep": [
+          {
+            "x": [
+              1,
+              {
+                "y": 2
+              }
+            ]
+          },
+          {
+            "x": []
+          }
+        ]
+      },
+      "canonical_utf8_hex": "7b2264656570223a5b7b2278223a5b312c7b2279223a327d5d7d2c7b2278223a5b5d7d5d7d"
+    }
+  ]
+}

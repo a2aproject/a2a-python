@@ -229,7 +229,15 @@ def trace_function(  # noqa: PLR0915
         tracer = trace.get_tracer(
             INSTRUMENTING_MODULE_NAME, INSTRUMENTING_MODULE_VERSION
         )
-        with tracer.start_as_current_span(actual_span_name, kind=kind) as span:
+        # The wrapper records exceptions and sets the span status itself, so
+        # OTel must not do it again: it would mark non-error exceptions
+        # (e.g. `QueueShutDown`) as ERROR and record every exception twice.
+        with tracer.start_as_current_span(
+            actual_span_name,
+            kind=kind,
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
             if attributes:
                 for k, v in attributes.items():
                     span.set_attribute(k, v)
@@ -272,7 +280,14 @@ def trace_function(  # noqa: PLR0915
     def sync_wrapper(*args, **kwargs) -> Any:
         """Sync Wrapper for the decorator."""
         tracer = trace.get_tracer(INSTRUMENTING_MODULE_NAME)
-        with tracer.start_as_current_span(actual_span_name, kind=kind) as span:
+        # The wrapper records exceptions and sets the span status itself;
+        # letting OTel do it too would record every exception twice.
+        with tracer.start_as_current_span(
+            actual_span_name,
+            kind=kind,
+            record_exception=False,
+            set_status_on_exception=False,
+        ) as span:
             if attributes:
                 for k, v in attributes.items():
                     span.set_attribute(k, v)
