@@ -222,6 +222,50 @@ class TestFieldIsRepeatedFallback:
 class TestRestParams:
     """Unit tests for REST parameter conversion."""
 
+    @pytest.mark.parametrize(
+        ('values', 'expected'),
+        [
+            ([], None),
+            (['true'], True),
+            (['false'], False),
+            (['TRUE'], True),
+            (['False'], False),
+            (['true', 'false'], False),
+            (['false', 'true'], True),
+            (['garbage', 'true'], True),
+        ],
+    )
+    def test_boolean_query_values(
+        self, values: list[str], expected: bool | None
+    ) -> None:
+        message = ListTasksRequest()
+
+        proto_utils.parse_params(
+            QueryParams([('includeArtifacts', value) for value in values]),
+            message,
+        )
+
+        assert message.HasField('include_artifacts') is (expected is not None)
+        assert message.include_artifacts is bool(expected)
+
+    @pytest.mark.parametrize(
+        'value', ['garbage', '', '0', '1', ' ', ' true ', 'private-query-value']
+    )
+    @pytest.mark.parametrize('prefix', [[], ['true']])
+    def test_invalid_boolean_query_values(
+        self, value: str, prefix: list[str]
+    ) -> None:
+        with pytest.raises(ParseError, match='includeArtifacts') as error:
+            proto_utils.parse_params(
+                QueryParams(
+                    [('includeArtifacts', item) for item in [*prefix, value]]
+                ),
+                ListTasksRequest(),
+            )
+
+        if value.strip():
+            assert value not in str(error.value)
+
     def test_rest_params_roundtrip(self):
         """Test the comprehensive roundtrip conversion for REST parameters."""
 

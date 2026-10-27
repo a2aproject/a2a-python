@@ -5,6 +5,7 @@ import time
 import uuid
 import warnings
 
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -126,6 +127,66 @@ def create_sample_task(
 
 def create_server_call_context() -> ServerCallContext:
     return ServerCallContext(user=UnauthenticatedUser())
+
+
+class _StatusValidationRecoveryAgent(AgentExecutor):
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue,
+            str(context.task_id or ''),
+            str(context.context_id or ''),
+        )
+        await updater.start_work()
+        try:
+            await updater.update_status(
+                TaskState.TASK_STATE_COMPLETED,
+                timestamp='not-a-timestamp',
+            )
+        except ValueError:
+            await updater.failed()
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+@pytest.mark.asyncio
+async def test_status_validation_failure_returns_failed_task() -> None:
+    store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_StatusValidationRecoveryAgent(),
+        task_store=store,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    try:
+        result = await asyncio.wait_for(
+            handler.on_message_send(
+                SendMessageRequest(
+                    message=Message(
+                        role=Role.ROLE_USER,
+                        message_id='validation-recovery',
+                        parts=[Part(text='test status recovery')],
+                    )
+                ),
+                context,
+            ),
+            timeout=5,
+        )
+        assert isinstance(result, Task)
+        assert result.status.state == TaskState.TASK_STATE_FAILED
+        stored = await store.get(result.id, context)
+        assert stored is not None
+        assert stored.status.state == TaskState.TASK_STATE_FAILED
+    finally:
+        await handler.aclose()
 
 
 def test_init_default_dependencies():
@@ -385,6 +446,69 @@ class LateFailingTerminalAgentExecutor(AgentExecutor):
         await self.terminal_state_persisted.wait()
         self.raised.set()
         raise RuntimeError('late producer failure')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class FailsAfterTaskAgentExecutor(AgentExecutor):
+    """Enqueues a Task with its own metadata, then raises when allowed to."""
+
+    def __init__(self) -> None:
+        self.may_raise = asyncio.Event()
+        self.task_id: str | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        task.metadata.update({'agent_key': 'kept'})
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        # Bounded, so the test fails rather than hangs if the hook never fires.
+        await asyncio.wait_for(self.may_raise.wait(), timeout=5)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class WorksThenFailsAgentExecutor(AgentExecutor):
+    """Reports WORKING with a status message, then raises."""
+
+    def __init__(self) -> None:
+        self.task_id: str | None = None
+        self.raised_at: datetime | None = None
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        task = new_task_from_user_message(context.message)
+        self.task_id = task.id
+        await event_queue.enqueue_event(task)
+        task_updater = TaskUpdater(event_queue, task.id, task.context_id)
+        await task_updater.update_status(
+            TaskState.TASK_STATE_WORKING,
+            message=task_updater.new_agent_message([Part(text='halfway')]),
+        )
+        # Fail only after the WORKING status, with its timestamp, is stored.
+        await asyncio.sleep(0.05)
+        self.raised_at = datetime.now(timezone.utc)
+        raise RuntimeError('model call failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class RepliesThenFailsAgentExecutor(AgentExecutor):
+    """Answers a follow-up with a Message, then raises."""
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        task_updater = TaskUpdater(
+            event_queue, context.task_id, context.context_id
+        )
+        await event_queue.enqueue_event(
+            task_updater.new_agent_message([Part(text='on it')])
+        )
+        raise RuntimeError('model call failed')
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue):
         pass
@@ -1600,6 +1724,132 @@ async def test_on_message_send_late_producer_exception_preserves_persisted_termi
 
 
 @pytest.mark.asyncio
+async def test_on_message_send_failure_right_after_task_is_recorded_on_that_task(
+    tmp_path,
+):
+    """The failure lands on the agent's Task, even while that Task is saving.
+
+    The executor raises while the store's save of its Task has looked the
+    task up but not yet inserted it: the window a database round trip
+    leaves open.
+    """
+    pytest.importorskip('sqlalchemy')
+    pytest.importorskip('aiosqlite')
+    from a2a.server.tasks.database_task_store import DatabaseTaskStore
+    from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
+
+    engine = create_async_engine(f'sqlite+aiosqlite:///{tmp_path / "tasks.db"}')
+    task_store = DatabaseTaskStore(engine)
+    agent_executor = FailsAfterTaskAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_right_after_task',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+    original_merge = AsyncSession.merge
+    held = False
+
+    async def hold_agent_task_insert(self, instance, **kwargs):
+        nonlocal held
+        merged = await original_merge(self, instance, **kwargs)
+        if not held and 'agent_key' in (
+            getattr(instance, 'task_metadata', None) or {}
+        ):
+            held = True
+            agent_executor.may_raise.set()
+            # The failure path runs before this insert is flushed.
+            await asyncio.sleep(0.2)
+        return merged
+
+    try:
+        with patch.object(AsyncSession, 'merge', hold_agent_task_insert):
+            with pytest.raises(RuntimeError, match='model call failed'):
+                await request_handler.on_message_send(params, context)
+        assert agent_executor.task_id is not None
+        stored_task = await task_store.get(agent_executor.task_id, context)
+    finally:
+        await engine.dispose()
+
+    assert held
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert stored_task.metadata['agent_key'] == 'kept'
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_work_stamps_failure_time():
+    """A task failing after it reported progress is stamped when it failed."""
+    task_store = InMemoryTaskStore()
+    agent_executor = WorksThenFailsAgentExecutor()
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=agent_executor,
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_failure_after_work',
+            parts=[Part(text='Hi')],
+        )
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    assert agent_executor.task_id is not None
+    stored_task = await task_store.get(agent_executor.task_id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+    assert agent_executor.raised_at is not None
+    failed_at = stored_task.status.timestamp.ToDatetime(tzinfo=timezone.utc)
+    assert failed_at >= agent_executor.raised_at
+
+
+@pytest.mark.asyncio
+async def test_on_message_send_failure_after_message_reply_marks_task_failed():
+    """A follow-up answered with a Message still fails the task on a raise."""
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    task = Task(
+        id='task_awaiting_input',
+        context_id='ctx_awaiting_input',
+        status=TaskStatus(state=TaskState.TASK_STATE_INPUT_REQUIRED),
+    )
+    await task_store.save(task, context)
+    request_handler = DefaultRequestHandlerV2(
+        agent_executor=RepliesThenFailsAgentExecutor(),
+        task_store=task_store,
+        agent_card=create_default_agent_card(),
+    )
+    params = SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER,
+            message_id='msg_follow_up',
+            parts=[Part(text='large')],
+            task_id=task.id,
+            context_id=task.context_id,
+        )
+    )
+
+    with pytest.raises(RuntimeError, match='model call failed'):
+        await request_handler.on_message_send(params, context)
+
+    stored_task = await task_store.get(task.id, context)
+    assert stored_task is not None
+    assert stored_task.status.state == TaskState.TASK_STATE_FAILED
+
+
+@pytest.mark.asyncio
 async def test_on_message_send_failed_task_does_not_hide_producer_exception() -> (
     None
 ):
@@ -2776,3 +3026,281 @@ async def test_on_message_send_stream_message_response_releases_active_task() ->
     assert [type(event) for event in events] == [Message]
     assert await _wait_until_released(handler, baseline) == set()
     assert handler._active_task_registry._active_tasks == {}
+
+
+class _InterruptingAgent(AgentExecutor):
+    """Interrupts a new task with `state`; completes it on the follow-up."""
+
+    def __init__(
+        self,
+        state: TaskState = TaskState.TASK_STATE_INPUT_REQUIRED,
+        complete_on_follow_up: bool = True,
+        linger: float = 0,
+    ) -> None:
+        self.state = state
+        self.complete_on_follow_up = complete_on_follow_up
+        self.linger = linger
+
+    async def execute(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        if context.current_task is None:
+            task = new_task_from_user_message(context.message)
+            await event_queue.enqueue_event(task)
+            task_id, context_id = task.id, task.context_id
+        else:
+            task_id, context_id = context.task_id, context.context_id
+        updater = TaskUpdater(event_queue, task_id, context_id)
+        if context.current_task is not None and self.complete_on_follow_up:
+            await updater.complete()
+            return
+        await updater.update_status(self.state)
+        # Keeps the request running after the interruption was delivered.
+        await asyncio.sleep(self.linger)
+
+    async def cancel(
+        self, context: RequestContext, event_queue: EventQueue
+    ) -> None:
+        pass
+
+
+def _interrupting_handler(
+    agent: AgentExecutor, interrupted_task_timeout: float | None
+) -> DefaultRequestHandlerV2:
+    return DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+        interrupted_task_timeout=interrupted_task_timeout,
+    )
+
+
+async def _send(
+    handler: DefaultRequestHandlerV2, text: str, task: Task | None = None
+) -> Task:
+    message = Message(
+        message_id=str(uuid.uuid4()),
+        role=Role.ROLE_USER,
+        parts=[Part(text=text)],
+        task_id=task.id if task else '',
+        context_id=task.context_id if task else '',
+    )
+    result = await handler.on_message_send(
+        SendMessageRequest(message=message), create_server_call_context()
+    )
+    assert isinstance(result, Task)
+    return result
+
+
+async def _wait_for_release(
+    handler: DefaultRequestHandlerV2, task_id: str, timeout: float = 2.0
+) -> bool:
+    """Waits until the task's ActiveTask has left the registry."""
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        if task_id not in handler._active_task_registry._active_tasks:
+            return True
+        await asyncio.sleep(0.01)
+    return False
+
+
+@pytest.mark.asyncio
+async def test_interrupted_task_stays_active_without_timeout() -> None:
+    """The default keeps today's behavior: no timeout, the ActiveTask waits."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state',
+    [TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_AUTH_REQUIRED],
+)
+async def test_interrupted_task_released_after_timeout(
+    state: TaskState,
+) -> None:
+    """A parked task's runtime is released, but the stored task is kept."""
+    handler = _interrupting_handler(_InterruptingAgent(state), 0.1)
+    baseline = asyncio.all_tasks()
+
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == state
+    assert await _wait_for_release(handler, task.id)
+    leftover: set[asyncio.Task] = set()
+    for _ in range(100):
+        leftover = asyncio.all_tasks() - baseline - {asyncio.current_task()}
+        if not leftover:
+            break
+        await asyncio.sleep(0.01)
+    assert leftover == set()
+    stored = await handler.on_get_task(
+        GetTaskRequest(id=task.id), create_server_call_context()
+    )
+    assert stored is not None
+    assert stored.status.state == state
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_after_release_resumes_from_store() -> None:
+    """A follow-up to a released task recreates its ActiveTask from the store."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    assert await _wait_for_release(handler, task.id)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    assert [m.parts[0].text for m in result.history] == [
+        'book a flight',
+        'Friday',
+    ]
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_resets_interrupted_task_timeout() -> None:
+    """A follow-up that interrupts again restarts the timer."""
+    handler = _interrupting_handler(
+        _InterruptingAgent(complete_on_follow_up=False), 0.5
+    )
+    task = await _send(handler, 'book a flight')
+    await asyncio.sleep(0.3)
+
+    await _send(handler, 'Friday', task)
+
+    # 0.6s after the first request, but only 0.3s after the follow-up.
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_subscriber_keeps_interrupted_task_active() -> None:
+    """The timer only counts while no subscriber is attached."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    subscription = handler.on_subscribe_to_task(
+        SubscribeToTaskRequest(id=task.id), create_server_call_context()
+    )
+    await anext(subscription)
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    await subscription.aclose()
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_running_request_keeps_interrupted_task_active() -> None:
+    """The timer only counts once the executor has returned."""
+    handler = _interrupting_handler(_InterruptingAgent(linger=0.4), 0.1)
+    task = await _send(handler, 'book a flight')
+
+    assert not await _wait_for_release(handler, task.id, timeout=0.3)
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_follow_up_replaces_finished_registered_active_task() -> None:
+    """A finished ActiveTask still in the registry must not reject a follow-up."""
+    handler = _interrupting_handler(_InterruptingAgent(), None)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+    # Finish it the way a release does, before its registry cleanup has run.
+    active_task._is_finished.set()
+    active_task._request_queue.shutdown(immediate=True)
+
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.parametrize('timeout', [0, -1])
+def test_interrupted_task_timeout_must_be_positive(timeout: float) -> None:
+    """A timeout of 0 or less is rejected."""
+    with pytest.raises(ValueError, match='greater than 0'):
+        _interrupting_handler(_InterruptingAgent(), timeout)
+
+
+@pytest.mark.asyncio
+async def test_near_zero_timeout_releases_and_resumes() -> None:
+    """A tiny timeout releases right after the request; a follow-up resumes."""
+    handler = _interrupting_handler(_InterruptingAgent(), 1e-9)
+    task = await _send(handler, 'book a flight')
+
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+    assert await _wait_for_release(handler, task.id)
+    result = await _send(handler, 'Friday', task)
+
+    assert result.status.state == TaskState.TASK_STATE_COMPLETED
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_get_or_create_cancels_idle_release() -> None:
+    """Resolving a parked task for a request stops its timer."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.2)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    registry = handler._active_task_registry
+
+    active_task = await registry.get_or_create(
+        task.id, call_context=create_server_call_context()
+    )
+
+    assert active_task._idle_release_task is None
+    assert not await _wait_for_release(handler, task.id, timeout=0.5)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_idle_release_check_failure_keeps_task(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    """A failing store read is logged and leaves the task in place."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with patch.object(
+        active_task._task_manager,
+        'get_task',
+        AsyncMock(side_effect=RuntimeError('store down')),
+    ):
+        assert not await _wait_for_release(handler, task.id, timeout=0.3)
+
+    assert 'Idle release check failed' in caplog.text
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_failed_cancel_restarts_idle_release() -> None:
+    """A cancel that fails leaves the parked task to be released later."""
+    handler = _interrupting_handler(_InterruptingAgent(), 0.1)
+    task = await _send(handler, 'book a flight')
+    # Lets the first request's cleanup start the timer before it is cancelled.
+    await asyncio.sleep(0.05)
+    active_task = handler._active_task_registry._active_tasks[task.id]
+
+    with (
+        patch.object(
+            active_task, 'cancel', AsyncMock(side_effect=RuntimeError('boom'))
+        ),
+        pytest.raises(RuntimeError),
+    ):
+        await handler.on_cancel_task(
+            CancelTaskRequest(id=task.id), create_server_call_context()
+        )
+
+    assert await _wait_for_release(handler, task.id)
+    await handler.aclose()

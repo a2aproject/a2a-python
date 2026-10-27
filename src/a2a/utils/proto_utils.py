@@ -23,7 +23,7 @@ from typing import TYPE_CHECKING, Any, TypeVar, TypedDict, cast
 
 from google.api.field_behavior_pb2 import FieldBehavior, field_behavior
 from google.protobuf.descriptor import FieldDescriptor
-from google.protobuf.json_format import Parse, ParseDict
+from google.protobuf.json_format import Parse, ParseDict, ParseError
 from google.protobuf.message import Message as ProtobufMessage
 from google.rpc import error_details_pb2
 
@@ -225,6 +225,10 @@ def parse_params(params: QueryParams, message: ProtobufMessage) -> None:
             if raw_val is not None:
                 parsed_val: Any = raw_val
                 if field.type == field.TYPE_BOOL and isinstance(raw_val, str):
+                    if raw_val.lower() not in ('true', 'false'):
+                        raise ParseError(
+                            f'Invalid boolean query parameter {k}: expected "true" or "false".'
+                        )
                     parsed_val = raw_val.lower() == 'true'
                 processed[k] = parsed_val
 

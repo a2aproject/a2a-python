@@ -28,6 +28,7 @@ from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
 from a2a.server.context import ServerCallContext
 from a2a.utils import constants
+from a2a.utils.errors import InvalidParamsError
 from a2a.utils.telemetry import SpanKind, trace_class
 from a2a.utils.version_validator import validate_version
 
@@ -250,7 +251,14 @@ class REST03Handler:
         """
         task_id = request.path_params['id']
         history_length_str = request.query_params.get('historyLength')
-        history_length = int(history_length_str) if history_length_str else None
+        try:
+            history_length = (
+                int(history_length_str) if history_length_str else None
+            )
+        except ValueError as e:
+            raise InvalidParamsError(
+                message=f'Failed to parse historyLength field: {e}.'
+            ) from e
 
         rpc_req = types_v03.GetTaskRequest(
             id='',

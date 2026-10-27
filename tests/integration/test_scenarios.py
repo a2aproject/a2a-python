@@ -2,14 +2,17 @@ import asyncio
 import collections
 import logging
 
-from typing import Any
+from collections.abc import AsyncIterator
+from contextlib import AsyncExitStack
+from typing import Any, NamedTuple
 
 import grpc
+import httpx
 import pytest
 import pytest_asyncio
 
 from a2a.auth.user import User
-from a2a.client.client import ClientConfig
+from a2a.client.client import Client, ClientConfig
 from a2a.client.client_factory import ClientFactory
 from a2a.client.errors import A2AClientError
 from a2a.helpers.proto_helpers import new_task_from_user_message
@@ -21,10 +24,13 @@ from a2a.server.request_handlers import (
     DefaultRequestHandlerV2,
     GrpcHandler,
     GrpcServerCallContextBuilder,
+    RequestHandler,
 )
 from a2a.server.request_handlers.default_request_handler import (
     LegacyRequestHandler,
 )
+from a2a.server.routes.common import DefaultServerCallContextBuilder
+from a2a.server.routes.rest_routes import create_rest_routes
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
 from a2a.types import a2a_pb2_grpc
 from a2a.types.a2a_pb2 import (
@@ -54,6 +60,8 @@ from a2a.utils.errors import (
     TaskNotFoundError,
     UnsupportedOperationError,
 )
+from starlette.applications import Starlette
+from starlette.requests import Request
 
 
 logger = logging.getLogger(__name__)
@@ -99,6 +107,12 @@ class MockCallContextBuilder(GrpcServerCallContextBuilder):
         return ServerCallContext(
             user=MockUser(), state={'headers': {'a2a-version': '1.0'}}
         )
+
+
+class MockHttpCallContextBuilder(DefaultServerCallContextBuilder):
+    def build_user(self, request: Request) -> User:
+        """Uses the same test identity as the gRPC setup."""
+        return MockUser()
 
 
 class InputRequiredAgent(AgentExecutor):
@@ -167,43 +181,104 @@ def validate_state(event, expected_state):
     assert get_state(event) == expected_state
 
 
-_test_servers = []
+class RestSetup(NamedTuple):
+    app: Starlette
+    httpx_client: httpx.AsyncClient
+
+
+@pytest_asyncio.fixture(scope='module')
+async def rest_setup() -> AsyncIterator[RestSetup]:
+    app = Starlette()
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=app), base_url='http://testserver'
+    ) as httpx_client:
+        yield RestSetup(app, httpx_client)
+
+
+_test_resources = AsyncExitStack()
 
 
 @pytest_asyncio.fixture(autouse=True)
-async def cleanup_test_servers():
-    yield
-    for server in _test_servers:
-        await server.stop(None)
-    _test_servers.clear()
+async def cleanup_test_servers() -> AsyncIterator[None]:
+    try:
+        yield
+    finally:
+        await _test_resources.aclose()
 
 
-# TODO: Test different transport (e.g. HTTP_JSON hangs for some tests).
-async def create_client(handler, agent_card, streaming=False):
-    server = grpc.aio.server()
-    port = server.add_insecure_port('[::]:0')
-    server_address = f'localhost:{port}'
+async def close_scenario_handler(handler: RequestHandler) -> None:
+    """Stops agent work owned by a scenario, including legacy background work."""
+    if isinstance(handler, DefaultRequestHandlerV2):
+        await handler.aclose()
+    elif isinstance(handler, LegacyRequestHandler):
+        with handler._running_agents_lock:
+            producers = list(handler._running_agents.values())
+        for producer in producers:
+            producer.cancel()
+        if producers:
+            await asyncio.gather(*producers, return_exceptions=True)
+        background_tasks = list(handler._background_tasks)
+        if background_tasks:
+            await asyncio.gather(*background_tasks, return_exceptions=True)
 
-    agent_card.supported_interfaces[0].url = server_address
-    agent_card.supported_interfaces[0].protocol_binding = TransportProtocol.GRPC
 
-    servicer = GrpcHandler(
-        request_handler=handler, context_builder=MockCallContextBuilder()
-    )
-    a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
-    await server.start()
-    _test_servers.append(server)
+async def create_client(
+    handler: RequestHandler,
+    agent_card: AgentCard,
+    streaming: bool = False,
+    *,
+    transport: TransportProtocol = TransportProtocol.GRPC,
+    rest_setup: RestSetup | None = None,
+) -> Client:
+    """Creates a client for a scenario test."""
+    if transport not in (TransportProtocol.GRPC, TransportProtocol.HTTP_JSON):
+        raise ValueError(f'Unsupported scenario transport: {transport}')
 
-    factory = ClientFactory(
-        config=ClientConfig(
-            grpc_channel_factory=grpc.aio.insecure_channel,
-            supported_protocol_bindings=[TransportProtocol.GRPC],
-            streaming=streaming,
-        )
-    )
-    client = factory.create(agent_card)
-    client._server = server  # Keep reference to prevent garbage collection
-    return client
+    async with AsyncExitStack() as resources:
+        resources.push_async_callback(close_scenario_handler, handler)
+
+        if transport == TransportProtocol.HTTP_JSON:
+            if rest_setup is None:
+                raise ValueError(
+                    'REST scenarios require the rest_setup fixture'
+                )
+            rest_setup.app.router.routes[:] = create_rest_routes(
+                request_handler=handler,
+                context_builder=MockHttpCallContextBuilder(),
+            )
+            resources.callback(rest_setup.app.router.routes.clear)
+            server_address = 'http://testserver'
+            config = ClientConfig(
+                httpx_client=rest_setup.httpx_client,
+                supported_protocol_bindings=[transport],
+                streaming=streaming,
+            )
+        else:
+            server = grpc.aio.server()
+            resources.push_async_callback(server.stop, None)
+            port = server.add_insecure_port('[::]:0')
+            server_address = f'localhost:{port}'
+
+            servicer = GrpcHandler(
+                request_handler=handler,
+                context_builder=MockCallContextBuilder(),
+            )
+            a2a_pb2_grpc.add_A2AServiceServicer_to_server(servicer, server)
+            await server.start()
+            config = ClientConfig(
+                grpc_channel_factory=grpc.aio.insecure_channel,
+                supported_protocol_bindings=[transport],
+                streaming=streaming,
+            )
+
+        agent_card.supported_interfaces[0].url = server_address
+        agent_card.supported_interfaces[0].protocol_binding = transport
+
+        factory = ClientFactory(config=config)
+        client = factory.create(agent_card)
+        resources.push_async_callback(client.close)
+        _test_resources.push_async_callback(resources.pop_all().aclose)
+        return client
 
 
 def create_handler(
@@ -232,20 +307,30 @@ def create_handler(
 # This also covers test_scenario_7_cancel_terminal_task from test_handler_comparison
 @pytest.mark.timeout(2.0)
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport',
+    [TransportProtocol.GRPC, TransportProtocol.HTTP_JSON],
+    ids=['grpc', 'rest'],
+)
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
 @pytest.mark.parametrize(
     'streaming', [False, True], ids=['blocking', 'streaming']
 )
-async def test_scenario_1_cancel_terminal_task(use_legacy, streaming):
+async def test_scenario_1_cancel_terminal_task(
+    use_legacy: bool,
+    streaming: bool,
+    transport: TransportProtocol,
+    rest_setup: RestSetup,
+) -> None:
     class DummyAgentExecutor(AgentExecutor):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             pass
 
         async def cancel(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             pass
 
     task_store = InMemoryTaskStore()
@@ -253,7 +338,11 @@ async def test_scenario_1_cancel_terminal_task(use_legacy, streaming):
         DummyAgentExecutor(), use_legacy, task_store=task_store
     )
     client = await create_client(
-        handler, agent_card=agent_card(), streaming=streaming
+        handler,
+        agent_card=agent_card(),
+        streaming=streaming,
+        transport=transport,
+        rest_setup=rest_setup,
     )
 
     task_id = 'terminal-task'
@@ -268,12 +357,19 @@ async def test_scenario_1_cancel_terminal_task(use_legacy, streaming):
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport',
+    [TransportProtocol.GRPC, TransportProtocol.HTTP_JSON],
+    ids=['grpc', 'rest'],
+)
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
-async def test_scenario_4_simple_streaming(use_legacy):
+async def test_scenario_4_simple_streaming(
+    use_legacy: bool, transport: TransportProtocol, rest_setup: RestSetup
+) -> None:
     class DummyAgentExecutor(AgentExecutor):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
@@ -287,12 +383,16 @@ async def test_scenario_4_simple_streaming(use_legacy):
 
         async def cancel(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             pass
 
     handler = create_handler(DummyAgentExecutor(), use_legacy)
     client = await create_client(
-        handler, agent_card=agent_card(), streaming=True
+        handler,
+        agent_card=agent_card(),
+        streaming=True,
+        transport=transport,
+        rest_setup=rest_setup,
     )
     msg = Message(
         message_id='test-msg', role=Role.ROLE_USER, parts=[Part(text='hello')]
@@ -1576,15 +1676,25 @@ async def test_scenario_publish_message(
 # Scenario: Publish ArtifactUpdateEvent
 @pytest.mark.timeout(2.0)
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'transport',
+    [TransportProtocol.GRPC, TransportProtocol.HTTP_JSON],
+    ids=['grpc', 'rest'],
+)
 @pytest.mark.parametrize('use_legacy', [False, True], ids=['v2', 'legacy'])
 @pytest.mark.parametrize(
     'streaming', [False, True], ids=['blocking', 'streaming']
 )
-async def test_scenario_publish_artifact(use_legacy, streaming):
+async def test_scenario_publish_artifact(
+    use_legacy: bool,
+    streaming: bool,
+    transport: TransportProtocol,
+    rest_setup: RestSetup,
+) -> None:
     class ArtifactAgent(AgentExecutor):
         async def execute(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             task = new_task_from_user_message(context.message)
             task.status.state = TaskState.TASK_STATE_WORKING
             await event_queue.enqueue_event(task)
@@ -1607,12 +1717,16 @@ async def test_scenario_publish_artifact(use_legacy, streaming):
 
         async def cancel(
             self, context: RequestContext, event_queue: EventQueue
-        ):
+        ) -> None:
             pass
 
     handler = create_handler(ArtifactAgent(), use_legacy)
     client = await create_client(
-        handler, agent_card=agent_card(), streaming=streaming
+        handler,
+        agent_card=agent_card(),
+        streaming=streaming,
+        transport=transport,
+        rest_setup=rest_setup,
     )
 
     msg = Message(

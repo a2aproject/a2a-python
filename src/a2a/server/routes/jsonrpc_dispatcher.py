@@ -233,9 +233,11 @@ class JsonRpcDispatcher:
             body = await request.json()
             if isinstance(body, dict):
                 request_id = body.get('id')
-                # Ensure request_id is valid for JSON-RPC response (str/int/None only)
-                if request_id is not None and not isinstance(
-                    request_id, str | int
+                # Ensure request_id is valid for JSON-RPC response (str/int/None only;
+                # exclude bool since bool is a subclass of int in Python)
+                if isinstance(request_id, bool) or (
+                    request_id is not None
+                    and not isinstance(request_id, str | int)
                 ):
                     request_id = None
             logger.debug('Request body: %s', body)
@@ -255,6 +257,13 @@ class JsonRpcDispatcher:
                         request_id,
                         InvalidRequestError(
                             message="Invalid request: 'jsonrpc' must be exactly '2.0'"
+                        ),
+                    )
+                if isinstance(base_request._id, bool):  # noqa: SLF001
+                    return self._generate_error_response(
+                        request_id,
+                        InvalidRequestError(
+                            message='Invalid request: id must be a string, integer, or null'
                         ),
                     )
             except Exception as e:
