@@ -200,6 +200,17 @@ async def test_get_task_v03(
 
 
 @pytest.mark.anyio
+async def test_get_task_v03_non_integer_history_length(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.get('/v1/tasks/test_task_id?historyLength=abc')
+
+    assert response.status_code == 400
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_get_task.assert_not_called()
+
+
+@pytest.mark.anyio
 async def test_list_tasks_not_in_v03_adapter_routes(
     request_handler: RequestHandler,
 ) -> None:
