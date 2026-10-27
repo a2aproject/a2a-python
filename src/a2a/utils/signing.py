@@ -2,9 +2,10 @@ import binascii
 import json
 
 from collections.abc import Callable
-from typing import Any, TypedDict
+from typing import TYPE_CHECKING, Any, TypedDict, cast
 
 from google.protobuf.json_format import MessageToDict
+from google.protobuf.message import Message as ProtobufMessage
 
 
 try:
@@ -22,8 +23,16 @@ except ImportError as e:
     ) from e
 
 from a2a.types import AgentCard, AgentCardSignature
-from a2a.utils._jcs import MAX_DEPTH, CanonicalizationError, canonicalize
-from a2a.utils.proto_utils import warn_on_missing_required_fields
+from a2a.utils._jcs import CanonicalizationError, canonicalize
+from a2a.utils.proto_utils import (
+    _field_is_repeated,
+    _field_is_required,
+    warn_on_missing_required_fields,
+)
+
+
+if TYPE_CHECKING:
+    from google.protobuf.descriptor import FieldDescriptor
 
 
 class SignatureVerificationError(Exception):
@@ -173,36 +182,56 @@ def create_signature_verifier(
     return signature_verifier
 
 
-def _clean_empty(d: Any, depth: int = 1) -> Any:
-    """Recursively remove empty strings, lists and dicts from a dictionary.
+def _apply_field_presence(
+    message: ProtobufMessage, serialized: dict[str, Any]
+) -> None:
+    """Apply A2A 8.4.1 field presence to Protobuf's JSON representation.
 
-    Depth is bounded for the same reason canonicalization is: nesting reaches
-    this function from `AgentExtension.params`, and without the bound a deeply
-    nested card exhausts the interpreter stack here, before the canonicalizer
-    ever gets the chance to reject it. `depth` counts open containers on the
-    path to `d`, the outermost at 1, and matches `_jcs.MAX_DEPTH`'s rule.
+    REQUIRED fields always participate, explicitly present optionals retain
+    their defaults, and implicit optional defaults are omitted. Protobuf
+    well-known types have their own JSON representation: in particular,
+    extension Struct contents are JSON data rather than A2A message fields.
+    Their empty values must reach JCS unchanged, including its nesting bound.
     """
-    if isinstance(d, (dict, list)) and depth > MAX_DEPTH:
-        raise CanonicalizationError(
-            f'nesting exceeds the maximum depth of {MAX_DEPTH}'
-        )
-    if isinstance(d, dict):
-        cleaned_dict = {
-            k: cleaned_v
-            for k, v in d.items()
-            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
-        }
-        return cleaned_dict or None
-    if isinstance(d, list):
-        cleaned_list = [
-            cleaned_v
-            for v in d
-            if (cleaned_v := _clean_empty(v, depth + 1)) is not None
-        ]
-        return cleaned_list or None
-    if isinstance(d, str) and not d:
-        return None
-    return d
+    if message.DESCRIPTOR.full_name.startswith('google.protobuf.'):
+        return
+
+    for raw_field in message.DESCRIPTOR.fields:
+        field = cast('FieldDescriptor', raw_field)
+        key = field.json_name
+        value = getattr(message, field.name)
+        repeated = _field_is_repeated(field)
+        if _field_is_required(field):
+            # MessageToDict prints implicit scalar/repeated defaults, but an
+            # absent required message still needs its default representation.
+            if key not in serialized and field.message_type is not None:
+                serialized[key] = MessageToDict(
+                    value, always_print_fields_with_no_presence=True
+                )
+        elif (
+            (field.has_presence and not message.HasField(field.name))
+            or (not field.has_presence and repeated and not value)
+            or (
+                not field.has_presence
+                and not repeated
+                and value == field.default_value
+            )
+        ):
+            serialized.pop(key, None)
+            continue
+
+        if key not in serialized or field.message_type is None:
+            continue
+        if field.message_type.GetOptions().map_entry:
+            value_field = field.message_type.fields_by_name['value']
+            if value_field.message_type is not None:
+                for map_key, item in value.items():
+                    _apply_field_presence(item, serialized[key][map_key])
+        elif repeated:
+            for item, item_dict in zip(value, serialized[key], strict=True):
+                _apply_field_presence(item, item_dict)
+        else:
+            _apply_field_presence(value, serialized[key])
 
 
 def _canonicalize_agent_card(agent_card: AgentCard) -> str:
@@ -212,10 +241,10 @@ def _canonicalize_agent_card(agent_card: AgentCard) -> str:
     )
     card_dict = MessageToDict(
         agent_card,
+        always_print_fields_with_no_presence=True,
     )
     # Remove signatures field if present
     card_dict.pop('signatures', None)
 
-    # Recursively remove empty values
-    cleaned_dict = _clean_empty(card_dict)
-    return canonicalize(cleaned_dict)
+    _apply_field_presence(agent_card, card_dict)
+    return canonicalize(card_dict)
