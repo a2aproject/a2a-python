@@ -3304,3 +3304,133 @@ async def test_failed_cancel_restarts_idle_release() -> None:
 
     assert await _wait_for_release(handler, task.id)
     await handler.aclose()
+
+
+class _RecordingPushSender(PushNotificationSender):
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, int]] = []
+
+    async def send_notification(self, task_id, event) -> None:
+        self.sent.append((task_id, event.status.state))
+
+
+class _FailingAgent(AgentExecutor):
+    """Raises before or after creating its task."""
+
+    def __init__(self, create_task_first: bool) -> None:
+        self.create_task_first = create_task_first
+
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        if self.create_task_first:
+            assert context.message is not None
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+            updater = TaskUpdater(
+                event_queue, str(context.task_id), str(context.context_id)
+            )
+            await updater.start_work()
+        raise RuntimeError('agent failed')
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+class _InputRequiredAgent(AgentExecutor):
+    async def execute(self, context: RequestContext, event_queue: EventQueue):
+        assert context.message is not None
+        await event_queue.enqueue_event(
+            new_task_from_user_message(context.message)
+        )
+        updater = TaskUpdater(
+            event_queue, str(context.task_id), str(context.context_id)
+        )
+        await updater.requires_input()
+
+    async def cancel(self, context: RequestContext, event_queue: EventQueue):
+        pass
+
+
+def _send_request(message_id: str) -> SendMessageRequest:
+    return SendMessageRequest(
+        message=Message(
+            role=Role.ROLE_USER, message_id=message_id, parts=[Part(text='hi')]
+        )
+    )
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize('create_task_first', [True, False])
+async def test_executor_failure_sends_failed_push(create_task_first: bool):
+    """The FAILED state written after an executor raises is pushed too."""
+    push_sender = _RecordingPushSender()
+    task_store = InMemoryTaskStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_FailingAgent(create_task_first),
+        task_store=task_store,
+        push_sender=push_sender,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+
+    with pytest.raises(RuntimeError, match='agent failed'):
+        await handler.on_message_send(_send_request('m1'), context)
+
+    task_id, last_state = push_sender.sent[-1]
+    assert last_state == TaskState.TASK_STATE_FAILED
+    stored = await task_store.get(task_id, context)
+    assert stored is not None
+    assert stored.status.state == TaskState.TASK_STATE_FAILED
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_cancel_of_waiting_task_sends_canceled_push():
+    """Cancelling a task that waits for input closes it out as CANCELED
+    without the agent writing anything; that write is pushed too."""
+    push_sender = _RecordingPushSender()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_InputRequiredAgent(),
+        task_store=InMemoryTaskStore(),
+        push_sender=push_sender,
+        agent_card=create_default_agent_card(),
+    )
+    context = create_server_call_context()
+    task = await handler.on_message_send(_send_request('m1'), context)
+    assert task.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
+
+    cancelled = await handler.on_cancel_task(
+        CancelTaskRequest(id=task.id), context
+    )
+
+    assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+    assert push_sender.sent[-1] == (task.id, TaskState.TASK_STATE_CANCELED)
+    await handler.aclose()
+
+
+@pytest.mark.asyncio
+async def test_raising_push_sender_does_not_break_sdk_terminal_writes():
+    task_store = InMemoryTaskStore()
+    context = create_server_call_context()
+    failing = DefaultRequestHandlerV2(
+        agent_executor=_FailingAgent(create_task_first=True),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    with pytest.raises(RuntimeError, match='agent failed'):
+        await failing.on_message_send(_send_request('m1'), context)
+    await failing.aclose()
+
+    waiting = DefaultRequestHandlerV2(
+        agent_executor=_InputRequiredAgent(),
+        task_store=task_store,
+        push_sender=RaisingPushSender(),
+        agent_card=create_default_agent_card(),
+    )
+    task = await waiting.on_message_send(_send_request('m2'), context)
+    cancelled = await waiting.on_cancel_task(
+        CancelTaskRequest(id=task.id), context
+    )
+    assert cancelled.status.state == TaskState.TASK_STATE_CANCELED
+    await waiting.aclose()

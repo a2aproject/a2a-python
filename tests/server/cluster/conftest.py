@@ -24,6 +24,7 @@ from a2a.server.request_handlers.default_request_handler_v2 import (
     DefaultRequestHandlerV2,
 )
 from a2a.server.tasks.inmemory_task_store import InMemoryTaskStore
+from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_updater import TaskUpdater
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
@@ -407,6 +408,7 @@ def make_replica(
     store: VersionedTaskStore,
     stream: TaskEventStream,
     agent: AgentExecutor,
+    push_sender: PushNotificationSender | None = None,
 ) -> DefaultRequestHandlerV2:
     """Builds a handler ('replica') wired to a shared store and stream."""
     return DefaultRequestHandlerV2(
@@ -414,6 +416,7 @@ def make_replica(
         task_store=store,
         agent_card=streaming_agent_card(),
         event_stream=stream,
+        push_sender=push_sender,
     )
 
 

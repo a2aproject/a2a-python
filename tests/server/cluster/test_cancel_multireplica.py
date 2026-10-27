@@ -3,6 +3,7 @@ import contextlib
 
 import pytest
 
+from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.types.a2a_pb2 import (
     CancelTaskRequest,
     Task,
@@ -285,6 +286,50 @@ async def test_terminal_state_survives_events_queued_by_stale_executor(
             and e.status.state == TaskState.TASK_STATE_COMPLETED
             for e in events
         )
+    finally:
+        await replica_a.aclose()
+        await replica_b.aclose()
+
+
+class _RecordingPushSender(PushNotificationSender):
+    def __init__(self) -> None:
+        self.sent: list[tuple[str, int]] = []
+
+    async def send_notification(self, task_id, event) -> None:  # noqa: ANN001
+        self.sent.append((task_id, event.status.state))
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(15)
+async def test_remote_cancel_sends_canceled_push(
+    shared_store, shared_stream, context
+) -> None:
+    """The replica running the agent never pushes a cancel written by another
+    replica, so the cancelling replica does."""
+    agent = LongRunningAgent()
+    replica_a = make_replica(shared_store, shared_stream, agent)
+    push_sender = _RecordingPushSender()
+    replica_b = make_replica(shared_store, shared_stream, agent, push_sender)
+    try:
+        a_task = asyncio.create_task(
+            drain(
+                replica_a.on_message_send_stream(
+                    build_send_request('go', message_id='m1'), context
+                )
+            )
+        )
+        await asyncio.wait_for(agent.working.wait(), timeout=5)
+        task_id = next(
+            iter(replica_a._active_task_registry._active_tasks)  # noqa: SLF001
+        )
+        await wait_for_state(
+            shared_store, task_id, TaskState.TASK_STATE_WORKING, context
+        )
+
+        await replica_b.on_cancel_task(CancelTaskRequest(id=task_id), context)
+
+        assert push_sender.sent == [(task_id, TaskState.TASK_STATE_CANCELED)]
+        await asyncio.wait_for(a_task, timeout=8)
     finally:
         await replica_a.aclose()
         await replica_b.aclose()
