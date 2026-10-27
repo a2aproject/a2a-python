@@ -471,6 +471,17 @@ def test_get_data_parts_empty() -> None:
     assert get_data_parts(parts) == []
 
 
+@pytest.mark.xfail(
+    reason='https://github.com/a2aproject/a2a-python/issues/1328',
+    strict=True,
+)
+def test_get_data_parts_keeps_whole_numbers_as_ints() -> None:
+    result = get_data_parts([new_data_part({'id': 4326, 'items': [240]})])
+    assert result == [{'id': 4326, 'items': [240]}]
+    assert isinstance(result[0]['id'], int)
+    assert isinstance(result[0]['items'][0], int)
+
+
 def test_get_raw_parts() -> None:
     parts = [
         Part(raw=b'\x89PNG'),

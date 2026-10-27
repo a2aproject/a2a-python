@@ -57,6 +57,8 @@ async def send_http_request(
     | None = None,
 ) -> dict[str, Any]:
     """Sends an HTTP request and parses the JSON response, handling common exceptions."""
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         response = await httpx_client.send(request)
         response.raise_for_status()
@@ -125,6 +127,8 @@ async def send_http_stream_request(
             Should raise an appropriate domain-specific exception.
         **kwargs: Additional keyword arguments forwarded to ``aconnect_sse``.
     """
+    if httpx_client.is_closed:
+        raise A2AClientError('HTTP client is closed')
     with handle_http_exceptions(status_error_handler):
         async with _SSEEventSource(
             httpx_client, method, url, **kwargs

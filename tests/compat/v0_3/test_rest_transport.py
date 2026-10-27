@@ -25,13 +25,16 @@ from a2a.types.a2a_pb2 import (
     SubscribeToTaskRequest,
     Task,
     TaskPushNotificationConfig,
+    TaskStatus,
 )
 from a2a.utils.errors import InvalidParamsError, MethodNotFoundError
 
 
 @pytest.fixture
 def mock_httpx_client():
-    return AsyncMock(spec=httpx.AsyncClient)
+    client = AsyncMock(spec=httpx.AsyncClient)
+    client.is_closed = False
+    return client
 
 
 @pytest.fixture
@@ -93,8 +96,6 @@ async def test_compat_rest_transport_send_message_task(transport):
     expected_response = SendMessageResponse(
         task=Task(id='task-123', status=Task(id='task-123').status)
     )
-    # The default conversion from 0.3 task generates a TaskStatus with a default empty message with role=ROLE_AGENT
-    expected_response.task.status.message.role = Role.ROLE_AGENT
     assert response == expected_response
 
 
@@ -108,8 +109,7 @@ async def test_compat_rest_transport_get_task(transport):
     req = GetTaskRequest(id='task-123')
     response = await transport.get_task(req)
 
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -123,8 +123,7 @@ async def test_compat_rest_transport_cancel_task(transport):
     req = CancelTaskRequest(id='task-123')
     response = await transport.cancel_task(req)
 
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -552,8 +551,7 @@ async def test_compat_rest_transport_get_task_no_history(transport):
 
     req = GetTaskRequest(id='task-123')
     response = await transport.get_task(req)
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -567,8 +565,7 @@ async def test_compat_rest_transport_get_task_with_history(transport):
 
     req = GetTaskRequest(id='task-123', history_length=10)
     response = await transport.get_task(req)
-    expected_response = Task(id='task-123')
-    expected_response.status.message.role = Role.ROLE_AGENT
+    expected_response = Task(id='task-123', status=TaskStatus())
     assert response == expected_response
 
 
@@ -651,8 +648,7 @@ async def test_compat_rest_transport_send_stream_request(
     ]
 
     assert len(events) == 1
-    expected_task = Task(id='task-123')
-    expected_task.status.message.role = Role.ROLE_AGENT
+    expected_task = Task(id='task-123', status=TaskStatus())
     assert events[0] == StreamResponse(task=expected_task)
 
     mock_send_http_stream_request.assert_called_once_with(
