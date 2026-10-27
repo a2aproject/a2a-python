@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-import asyncio  # noqa: TC003
+import asyncio
 import logging
 import warnings
 
@@ -20,6 +20,11 @@ from a2a.server.agent_execution.active_task import (
 )
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.lease import (
+    DEFAULT_HEARTBEAT_INTERVAL,
+    DEFAULT_LEASE_TTL,
+)
+from a2a.server.cluster.recovery import fail_task
 from a2a.server.cluster.task_store import (
     ConcurrentTaskModificationError,
     LegacyTaskStoreAdapter,
@@ -76,6 +81,7 @@ if TYPE_CHECKING:
 
     from a2a.server.agent_execution.active_task import ActiveTask
     from a2a.server.cluster.event_stream import TaskEventStream
+    from a2a.server.cluster.lease import TaskLeaseStore
     from a2a.server.cluster.version import TaskVersion
     from a2a.server.context import ServerCallContext
     from a2a.server.events import Event
@@ -102,6 +108,12 @@ class DefaultRequestHandlerV2(RequestHandler):
     ``input-required`` or ``auth-required`` after that many seconds; a
     follow-up recreates it from the store. ``None`` (default) never releases;
     any other value must be greater than 0.
+
+    With a ``lease_store``, each turn holds the task's lease and renews it
+    every ``heartbeat_interval`` seconds. A follow-up arriving while another
+    replica holds the lease is rejected with `UnsupportedOperationError`, and
+    a task whose lease expired can be failed with
+    `a2a.server.cluster.recovery.fail_abandoned_tasks`.
     """
 
     _background_tasks: set[asyncio.Task]
@@ -125,6 +137,9 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_input_modes: bool = False,
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
+        lease_store: TaskLeaseStore | None = None,
+        lease_ttl: float = DEFAULT_LEASE_TTL,
+        heartbeat_interval: float = DEFAULT_HEARTBEAT_INTERVAL,
     ) -> None:
         if (
             interrupted_task_timeout is not None
@@ -185,6 +200,9 @@ class DefaultRequestHandlerV2(RequestHandler):
             push_sender=self._push_sender,
             event_stream=self._event_stream,
             interrupted_task_timeout=interrupted_task_timeout,
+            lease_store=lease_store,
+            lease_ttl=lease_ttl,
+            heartbeat_interval=heartbeat_interval,
         )
         self._background_tasks = set()
 
@@ -195,14 +213,51 @@ class DefaultRequestHandlerV2(RequestHandler):
         if not await self._push_url_validator(url):
             raise InvalidParamsError(message='Invalid push notification URL')
 
-    async def aclose(self) -> None:
+    async def aclose(
+        self, *, fail_in_flight: bool | None = None, timeout: float = 5.0
+    ) -> None:
         """Shuts down the handler, draining all active tasks.
 
         Drains the ``ActiveTaskRegistry`` so a server shutdown leaves no
         pending ``asyncio.Task``. Intended to be wired into an ASGI
         ``lifespan`` / ``on_shutdown`` hook. Safe to call multiple times.
+
+        Args:
+            fail_in_flight: Whether to mark tasks with a turn still running
+                FAILED first, spending at most `timeout` seconds on it.
+                Defaults to True when an ``event_stream`` is configured: the
+                shared store outlives this replica, and the task would
+                otherwise stay WORKING for every replica.
+            timeout: Seconds allowed for failing in-flight tasks.
         """
+        if fail_in_flight is None:
+            fail_in_flight = self._event_stream is not None
+        if fail_in_flight:
+            try:
+                await asyncio.wait_for(self._fail_in_flight_tasks(), timeout)
+            except asyncio.TimeoutError:
+                logger.warning('Timed out failing in-flight tasks on close')
         await self._active_task_registry.aclose()
+
+    async def _fail_in_flight_tasks(self) -> None:
+        for active_task in self._active_task_registry.snapshot():
+            context = active_task.call_context
+            if not active_task.request_in_flight or context is None:
+                continue
+            try:
+                await fail_task(
+                    self._versioned_store,
+                    active_task.task_id,
+                    context,
+                    reason='The server shut down while the task was running.',
+                    push_sender=self._push_sender,
+                    event_stream=self._event_stream,
+                )
+            except Exception:
+                logger.exception(
+                    'Failing in-flight task %s on close failed',
+                    active_task.task_id,
+                )
 
     @validate_request_params
     async def on_get_task(  # noqa: D102

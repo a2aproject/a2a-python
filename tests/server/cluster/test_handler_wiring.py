@@ -1,3 +1,8 @@
+import asyncio
+import logging
+
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import pytest
 
 from a2a.server.agent_execution.agent_executor import AgentExecutor
@@ -14,6 +19,7 @@ from a2a.types.a2a_pb2 import AgentCard
 
 from .conftest import (
     InMemoryTaskEventStream,
+    InMemoryTaskLeaseStore,
     VersionedInMemoryTaskStore,
     make_context,
 )
@@ -163,3 +169,94 @@ def test_plain_store_without_stream_does_not_warn(recwarn) -> None:  # noqa: ANN
         for w in recwarn
         if 'cross-replica streaming is disabled' in str(w.message)
     ]
+
+
+@pytest.mark.asyncio
+async def test_lease_settings_reach_the_active_task() -> None:
+    leases = InMemoryTaskLeaseStore()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=NoopExecutor(),
+        task_store=InMemoryTaskStore(),
+        agent_card=AgentCard(),
+        lease_store=leases,
+        lease_ttl=12.0,
+        heartbeat_interval=3.0,
+    )
+    active_task = await handler._active_task_registry.get_or_create(  # noqa: SLF001
+        'task-1', call_context=make_context(), create_task_if_missing=True
+    )
+    try:
+        assert active_task._lease_store is leases  # noqa: SLF001
+        assert active_task._lease_ttl == 12.0  # noqa: SLF001
+        assert active_task._heartbeat_interval == 3.0  # noqa: SLF001
+    finally:
+        await handler.aclose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ('event_stream', 'fail_in_flight', 'expected'),
+    [
+        (None, None, False),
+        (InMemoryTaskEventStream(), None, True),
+        (InMemoryTaskEventStream(), False, False),
+        (None, True, True),
+    ],
+)
+async def test_aclose_fails_in_flight_tasks_in_cluster_mode_by_default(
+    event_stream: TaskEventStream | None,
+    fail_in_flight: bool | None,
+    expected: bool,
+) -> None:
+    handler = make_handler(event_stream=event_stream)
+    with patch.object(
+        handler, '_fail_in_flight_tasks', new_callable=AsyncMock
+    ) as fail_in_flight_tasks:
+        await handler.aclose(fail_in_flight=fail_in_flight)
+
+    assert fail_in_flight_tasks.await_count == int(expected)
+
+
+@pytest.mark.asyncio
+async def test_aclose_gives_up_on_failing_in_flight_tasks_after_timeout(
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    handler = make_handler(event_stream=InMemoryTaskEventStream())
+
+    async def hang() -> None:
+        await asyncio.sleep(10)
+
+    with (
+        patch.object(handler, '_fail_in_flight_tasks', side_effect=hang),
+        caplog.at_level(logging.WARNING),
+    ):
+        await asyncio.wait_for(handler.aclose(timeout=0.01), timeout=2)
+
+    assert 'Timed out failing in-flight tasks' in caplog.text
+
+
+@pytest.mark.asyncio
+async def test_fail_in_flight_tasks_skips_idle_tasks_and_survives_errors() -> (
+    None
+):
+    handler = make_handler(event_stream=InMemoryTaskEventStream())
+    running = MagicMock(task_id='running', request_in_flight=True)
+    running.call_context = make_context()
+    idle = MagicMock(task_id='idle', request_in_flight=False)
+    idle.call_context = make_context()
+    no_context = MagicMock(task_id='new', request_in_flight=True)
+    no_context.call_context = None
+    target = 'a2a.server.request_handlers.default_request_handler_v2.fail_task'
+
+    with (
+        patch.object(
+            handler._active_task_registry,  # noqa: SLF001
+            'snapshot',
+            return_value=[running, idle, no_context],
+        ),
+        patch(target, side_effect=RuntimeError('store down')) as fail_task,
+    ):
+        await handler._fail_in_flight_tasks()  # noqa: SLF001
+
+    assert [c.args[1] for c in fail_task.await_args_list] == ['running']
+    await handler.aclose(fail_in_flight=False)

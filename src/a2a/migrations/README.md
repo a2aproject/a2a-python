@@ -40,6 +40,8 @@ Always run this command after installing or upgrading the SDK to ensure your dat
 
 Revision `b5e3d1c8a2f7` creates two additive tables, `task_versions` and `task_events`, used only by the clustered multi-server stores (`a2a.server.cluster`). It leaves the `tasks` table untouched, so deployments that use the default `DatabaseTaskStore` need not run it and are unaffected. Run it only when adopting a `VersionedTaskStore` for multi-server deployment.
 
+Revision `b0f01b04ff26` creates the additive `task_leases` table, used only by `DatabaseTaskLeaseStore` (`a2a.server.cluster`) to recover tasks whose replica stopped while running them. Run it only when adopting a lease store.
+
 ```bash
 uv run a2a-db
 ```

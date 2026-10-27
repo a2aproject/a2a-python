@@ -1,6 +1,9 @@
+from __future__ import annotations
+
 import asyncio
 import contextlib
 import threading
+import uuid
 
 from collections.abc import AsyncGenerator
 
@@ -13,6 +16,8 @@ from a2a.server.cluster import (
     ConcurrentTaskModificationError,
     StoredTask,
     TaskEventStream,
+    TaskLease,
+    TaskLeaseStore,
     TaskVersion,
     VersionedEvent,
     VersionedTaskStore,
@@ -201,6 +206,93 @@ class InMemoryTaskEventStream(TaskEventStream):
         """Drops all subscribers for `task_id`."""
         async with self._lock:
             self._subscribers.pop(task_id, None)
+
+
+class FakeClock:
+    """A settable clock for lease expiry."""
+
+    def __init__(self, now: float = 1_000_000.0) -> None:
+        self.now = now
+
+    def __call__(self) -> float:
+        return self.now
+
+    def advance(self, seconds: float) -> None:
+        self.now += seconds
+
+
+class InMemoryTaskLeaseStore(TaskLeaseStore):
+    """`TaskLeaseStore` kept in a dict, with a settable clock.
+
+    Set `unreachable` to make every call raise, as if the database could not
+    be reached from this replica.
+    """
+
+    def __init__(
+        self,
+        clock: FakeClock | None = None,
+        owner_resolver: OwnerResolver = resolve_user_scope,
+    ) -> None:
+        self.clock = clock or FakeClock()
+        self._owner_resolver = owner_resolver
+        self._leases: dict[str, tuple[str, str, float]] = {}
+        self.unreachable = False
+
+    def view(self) -> InMemoryTaskLeaseStore:
+        """Another replica's handle on the same leases."""
+        other = InMemoryTaskLeaseStore(self.clock, self._owner_resolver)
+        other._leases = self._leases
+        return other
+
+    def held(self, task_id: str) -> bool:
+        lease = self._leases.get(task_id)
+        return lease is not None and lease[2] > self.clock()
+
+    def _check_reachable(self) -> None:
+        if self.unreachable:
+            raise ConnectionError('lease store unreachable')
+
+    async def acquire(
+        self, task_id: str, context: ServerCallContext, ttl: float
+    ) -> TaskLease | None:
+        self._check_reachable()
+        now = self.clock()
+        current = self._leases.get(task_id)
+        if current is not None and current[2] > now:
+            return None
+        owner = self._owner_resolver(context)
+        token = uuid.uuid4().hex
+        self._leases[task_id] = (owner, token, now + ttl)
+        return TaskLease(task_id, owner, token)
+
+    async def renew(self, lease: TaskLease, ttl: float) -> bool:
+        self._check_reachable()
+        current = self._leases.get(lease.task_id)
+        if current is None or current[1] != lease.token:
+            return False
+        self._leases[lease.task_id] = (
+            current[0],
+            current[1],
+            self.clock() + ttl,
+        )
+        return True
+
+    async def release(self, lease: TaskLease) -> None:
+        self._check_reachable()
+        current = self._leases.get(lease.task_id)
+        if current is not None and current[1] == lease.token:
+            del self._leases[lease.task_id]
+
+    async def claim_expired(self, ttl: float, limit: int) -> list[TaskLease]:
+        self._check_reachable()
+        now = self.clock()
+        claimed = []
+        for task_id, (owner, _, expires_at) in list(self._leases.items()):
+            if expires_at <= now and len(claimed) < limit:
+                token = uuid.uuid4().hex
+                self._leases[task_id] = (owner, token, now + ttl)
+                claimed.append(TaskLease(task_id, owner, token))
+        return claimed
 
 
 # --- Identity / context helpers ---------------------------------------------
@@ -404,11 +496,15 @@ class InputRequiredThenCompleteAgent(AgentExecutor):
 # --- Replica / infra factories ----------------------------------------------
 
 
-def make_replica(
+def make_replica(  # noqa: PLR0913
     store: VersionedTaskStore,
     stream: TaskEventStream,
     agent: AgentExecutor,
     push_sender: PushNotificationSender | None = None,
+    lease_store: TaskLeaseStore | None = None,
+    lease_ttl: float = 1.0,
+    heartbeat_interval: float = 0.02,
+    interrupted_task_timeout: float | None = None,
 ) -> DefaultRequestHandlerV2:
     """Builds a handler ('replica') wired to a shared store and stream."""
     return DefaultRequestHandlerV2(
@@ -417,6 +513,10 @@ def make_replica(
         agent_card=streaming_agent_card(),
         event_stream=stream,
         push_sender=push_sender,
+        lease_store=lease_store,
+        lease_ttl=lease_ttl,
+        heartbeat_interval=heartbeat_interval,
+        interrupted_task_timeout=interrupted_task_timeout,
     )
 
 

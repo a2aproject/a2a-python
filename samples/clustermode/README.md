@@ -46,6 +46,27 @@ Expected output ends with:
 OK: one task was started, observed, and cancelled across three different replicas.
 ```
 
+## Recovering from a crashed replica
+
+Each turn holds a lease in the shared `task_leases` table, renewed every
+`--heartbeat-interval` seconds (2 s here). If a replica dies mid-turn, its lease
+expires after `--lease-ttl` seconds (10 s here) and the `AbandonedTaskSweeper`
+on a surviving replica marks the task FAILED. A follow-up sent while another
+replica holds the lease is rejected instead of starting a second executor.
+
+To see it, start the cluster with slower ticks, send a message to one replica,
+then kill that replica's process:
+
+```bash
+python -m samples.clustermode.run_cluster --replicas 2 --ticks 60
+pkill -9 -f 'samples.clustermode.server.*--port 41241'
+```
+
+A `GetTask` against port 41242 shows the task in WORKING until the lease
+expires, then FAILED with the status message "The replica running this task
+stopped responding." When a replica is stopped normally, `handler.aclose()`
+fails its running turns right away.
+
 ## Files
 
 | File | Purpose |
@@ -66,8 +87,12 @@ handler = DefaultRequestHandler(
     task_store=VersionedDatabaseTaskStore(engine=..., create_table=False),
     agent_card=agent_card,
     event_stream=DatabaseTaskEventStream(engine=..., create_table=False),
+    lease_store=DatabaseTaskLeaseStore(engine=..., create_table=False),
 )
 ```
+
+The lease store is optional; without it, a task whose replica crashes mid-turn
+stays WORKING.
 
 Omit `event_stream` (and use a plain `InMemoryTaskStore`) and you get the ordinary
 single-process behaviour — the multi-server path is fully opt-in.
