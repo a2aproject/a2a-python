@@ -54,6 +54,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatusUpdateEvent,
 )
 from a2a.utils import TransportProtocol
+from a2a.utils.constants import TERMINAL_TASK_STATES
 from a2a.utils.errors import (
     InvalidAgentResponseError,
     TaskNotCancelableError,
@@ -2379,12 +2380,6 @@ async def test_scenario_context_id_visibility(use_legacy, streaming):
 # executors below define cancel() as an empty teardown, which is what
 # InputRequiredAgent, SlowAgent and DummyAgentExecutor use in this file and what
 # a real cleanup-only executor looks like.
-_TERMINAL_STATES = {
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 
 
 async def _start_task(client, text):
@@ -2435,7 +2430,7 @@ async def test_scenario_19_mid_run_cancel_reaches_a_terminal_state():
     await client.cancel_task(CancelTaskRequest(id=task_id))
     task_after = await client.get_task(GetTaskRequest(id=task_id))
 
-    assert task_after.status.state in _TERMINAL_STATES
+    assert task_after.status.state in TERMINAL_TASK_STATES
 
 
 @pytest.mark.timeout(5.0)

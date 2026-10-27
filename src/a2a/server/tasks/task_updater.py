@@ -21,6 +21,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
 class TaskUpdater:
@@ -51,12 +52,7 @@ class TaskUpdater:
         self.context_id = context_id
         self._lock = asyncio.Lock()
         self._terminal_state_reached = False
-        self._terminal_states = {
-            TaskState.TASK_STATE_COMPLETED,
-            TaskState.TASK_STATE_CANCELED,
-            TaskState.TASK_STATE_FAILED,
-            TaskState.TASK_STATE_REJECTED,
-        }
+        self._terminal_states = set(TERMINAL_TASK_STATES)
         self._artifact_id_generator = (
             artifact_id_generator if artifact_id_generator else UUIDGenerator()
         )

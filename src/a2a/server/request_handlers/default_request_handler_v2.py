@@ -15,10 +15,6 @@ from a2a.server.agent_execution import (
     RequestContextBuilder,
     SimpleRequestContextBuilder,
 )
-from a2a.server.agent_execution.active_task import (
-    INTERRUPTED_TASK_STATES,
-    TERMINAL_TASK_STATES,
-)
 from a2a.server.agent_execution.active_task_registry import ActiveTaskRegistry
 from a2a.server.agent_execution.plugin_agent_executor import (
     PluginAgentExecutor,
@@ -56,6 +52,10 @@ from a2a.types.a2a_pb2 import (
     TaskPushNotificationConfig,
     TaskState,
     TaskStatusUpdateEvent,
+)
+from a2a.utils.constants import (
+    INTERRUPTED_TASK_STATES,
+    TERMINAL_TASK_STATES,
 )
 from a2a.utils.errors import (
     ExtendedAgentCardNotConfiguredError,
