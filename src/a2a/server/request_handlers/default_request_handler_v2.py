@@ -24,6 +24,7 @@ from a2a.server.cluster.task_store import (
     LegacyTaskStoreAdapter,
     VersionedTaskStore,
 )
+from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE
 from a2a.server.request_handlers.request_handler import (
     RequestHandler,
     validate,
@@ -97,6 +98,22 @@ class DefaultRequestHandlerV2(RequestHandler):
     to an in-memory `ActiveTaskRegistry`. Passing a non-``None`` value emits a
     `DeprecationWarning` and logs a warning.
 
+    ``max_event_queue_size`` sets the positive event capacity of each local
+    event buffer (default 1024): the two source inputs, the agent's default
+    sink and one sink per local subscription. Internal request-start and
+    request-completion markers also occupy slots. This is a per-buffer event
+    count, not a task memory limit; pending requests, shared storage and remote
+    ``TaskEventStream`` buffers are outside its scope.
+
+    A full default sink backpressures the agent when the internal consumer
+    falls behind. Full subscriber sinks are evicted, including live but slow
+    consumers and the subscriptions used by send and streaming requests.
+    Smaller capacities can end a subscription sooner; a non-streaming send
+    whose subscription is evicted can return a non-terminal stored task
+    snapshot rather than waiting for the agent to finish. Direct Message
+    responses remain available after eviction once the consumer has validated
+    the full response; later validation and executor errors take precedence.
+
     ``interrupted_task_timeout`` releases the `ActiveTask` of a task idle in
     ``input-required`` or ``auth-required`` after that many seconds; a
     follow-up recreates it from the store. ``None`` (default) never releases;
@@ -124,6 +141,8 @@ class DefaultRequestHandlerV2(RequestHandler):
         validate_input_modes: bool = False,
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
+        *,
+        max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
     ) -> None:
         if (
             interrupted_task_timeout is not None
@@ -184,6 +203,7 @@ class DefaultRequestHandlerV2(RequestHandler):
             push_sender=self._push_sender,
             event_stream=self._event_stream,
             interrupted_task_timeout=interrupted_task_timeout,
+            max_event_queue_size=max_event_queue_size,
         )
         self._background_tasks = set()
 
@@ -461,7 +481,7 @@ class DefaultRequestHandlerV2(RequestHandler):
 
         if result is None:
             logger.debug('Missing result for task %s', request_context.task_id)
-            result = await active_task.get_task()
+            result = await active_task.get_result()
 
         if isinstance(result, Task):
             result = apply_history_length(result, params.configuration)

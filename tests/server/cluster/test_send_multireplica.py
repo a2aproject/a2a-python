@@ -17,10 +17,13 @@ from .conftest import (
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
+@pytest.mark.parametrize('max_event_queue_size', [1024, 1])
 async def test_single_send_completes_on_shared_store(
-    shared_store, shared_stream, context
+    shared_store, shared_stream, context, max_event_queue_size: int
 ) -> None:
-    handler = make_replica(shared_store, shared_stream, CompletingAgent())
+    handler = make_replica(
+        shared_store, shared_stream, CompletingAgent(), max_event_queue_size
+    )
     try:
         result = await handler.on_message_send(
             build_send_request('hi'), context

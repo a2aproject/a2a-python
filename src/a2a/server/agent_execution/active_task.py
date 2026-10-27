@@ -60,6 +60,7 @@ if TYPE_CHECKING:
 from a2a.server.cluster.event_stream import VersionedEvent
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
+    DEFAULT_MAX_QUEUE_SIZE,
     AsyncQueue,
     Event,
     EventQueueSource,
@@ -140,6 +141,9 @@ class EventConsumer:
 
                 await self._process_event(event)
 
+        except asyncio.CancelledError as error:
+            self.active_task._consumer_error = error
+            raise
         except QueueShutDown:
             logger.debug(
                 'Consumer[%s]: Event queue shut down',
@@ -152,16 +156,25 @@ class EventConsumer:
             if isinstance(e, ConcurrentTaskModificationError):
                 # Other writers kept advancing the task; report a protocol error.
                 error = InternalError(message=str(e))
+            self.active_task._consumer_error = error
 
             updated_task = None
             try:
                 updated_task = await self._write_failed_status()
+            except Exception:
+                logger.exception(
+                    'Consumer[%s]: Failed to persist failure status',
+                    self.active_task._task_id,
+                )
             finally:
                 # Subscribers must always hear about the failure, or the
                 # request waiting on them never returns.
                 await self._enqueue_to_subscribers(
                     cast('Event', error), updated_task
                 )
+        finally:
+            # Validation ends before _run_consumer waits for producer cleanup.
+            self.active_task._response_validation_done.set()
 
     async def _write_failed_status(self) -> Task | None:
         """Records FAILED once a failure ends the event stream.
@@ -296,6 +309,7 @@ class EventConsumer:
                 'Multiple Message objects received.'
             )
         self.task_mode = False
+        self.active_task._message_result = event
 
     async def _handle_task_event(
         self,
@@ -478,6 +492,8 @@ class ActiveTask:
         on_cleanup: Callable[[ActiveTask], None] | None = None,
         event_stream: TaskEventStream | None = None,
         interrupted_task_timeout: float | None = None,
+        *,
+        max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
     ) -> None:
         """Initializes the ActiveTask.
 
@@ -491,15 +507,23 @@ class ActiveTask:
                         the task from the ActiveTaskRegistry.
             event_stream: Optional cross-replica stream; applied events are
                         published to it so other replicas can observe them.
+            max_event_queue_size: Positive event capacity for each local event
+                        buffer, including internal lifecycle markers. Applies
+                        to both sources, the agent's default sink and each
+                        subscriber tap, not the pending-request queue or the
+                        cross-replica stream.
             interrupted_task_timeout: Optional seconds after which an idle
                         interrupted task is finished; ``None`` disables it.
         """
         # --- Core Dependencies ---
         self._agent_executor = agent_executor
         self._task_id = task_id
-        self._event_queue_agent = EventQueueSource()
+        self._max_event_queue_size = max_event_queue_size
+        self._event_queue_agent = EventQueueSource(
+            max_queue_size=max_event_queue_size
+        )
         self._event_queue_subscribers = EventQueueSource(
-            create_default_sink=False
+            max_queue_size=max_event_queue_size, create_default_sink=False
         )
         self._task_manager = task_manager
         self._push_sender = push_sender
@@ -519,6 +543,7 @@ class ActiveTask:
 
         # _task_created is set when initial version of task is stored in DB.
         self._task_created = asyncio.Event()
+        self._response_validation_done = asyncio.Event()
 
         # `_is_finished` is set EXACTLY ONCE when the consumer loop exits, signifying
         # the absolute end of the task's active lifecycle.
@@ -529,6 +554,8 @@ class ActiveTask:
         self._producer_task: asyncio.Task[None] | None = None
         # The background task reading from _event_queue and updating the DB.
         self._consumer_task: asyncio.Task[None] | None = None
+        self._message_result: Message | None = None
+        self._consumer_error: BaseException | None = None
 
         # Tracks how many active SSE/gRPC streams are currently tailing this task.
         # Protected by `_lock`.
@@ -782,7 +809,7 @@ class ActiveTask:
         # evict_on_full=True: a subscriber that falls behind is dropped, so it
         # cannot wedge dispatch for the others. See _deliver_to_sink().
         tapped_queue = await self._event_queue_subscribers.tap(
-            evict_on_full=True
+            max_queue_size=self._max_event_queue_size, evict_on_full=True
         )
         request_id = await self.enqueue_request(request) if request else None
 
@@ -970,6 +997,13 @@ class ActiveTask:
         background tasks are cancelled, so teardown is bounded even when a
         subscriber sink was never drained. It is safe to call multiple times.
         """
+        # Immediate queue closure can discard events before validation ends.
+        if (
+            not self._response_validation_done.is_set()
+            and self._consumer_error is None
+        ):
+            self._consumer_error = asyncio.CancelledError()
+
         # Shut down the request queue first, mirroring the producer's
         # ``finally``. If `start()` was never called, the producer/consumer
         # ``finally`` blocks never run, and without this a caller parked in
@@ -1090,6 +1124,23 @@ class ActiveTask:
             except QueueShutDown:
                 pass
         return task
+
+    async def get_result(self) -> Task | Message:
+        """Returns a task snapshot or a fully validated direct Message result.
+
+        An evicted subscriber may miss the Message or a validation error. Wait
+        for Message validation, independently of producer cleanup, so later
+        invalid events or executor failures still take precedence. Cancelling
+        this waiter does not cancel the shared consumer.
+        """
+        message = self._message_result
+        if message is not None:
+            await self._response_validation_done.wait()
+        if self._consumer_error is not None:
+            raise self._consumer_error
+        if message is not None:
+            return message
+        return await self.get_task()
 
     async def get_task(self) -> Task:
         """Get task from db."""

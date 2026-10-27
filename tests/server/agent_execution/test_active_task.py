@@ -2,6 +2,7 @@ import asyncio
 import contextlib
 import logging
 
+from typing import cast
 from unittest.mock import AsyncMock, Mock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from a2a.server.agent_execution.active_task import ActiveTask
 from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.agent_execution.context import RequestContext
 from a2a.server.context import ServerCallContext
+from a2a.server.events.event_queue import Event
 from a2a.server.events.event_queue_v2 import EventQueueSource as EventQueue
 from a2a.server.tasks.push_notification_sender import PushNotificationSender
 from a2a.server.tasks.task_manager import TaskManager
@@ -1336,3 +1338,69 @@ async def test_subscriber_taps_are_evict_on_full():
     for t in background:
         t.cancel()
     await asyncio.gather(*background, return_exceptions=True)
+
+
+@pytest.mark.timeout(5)
+@pytest.mark.asyncio
+@pytest.mark.parametrize('max_event_queue_size', [1, 2])
+async def test_small_event_queue_capacity_evicts_slow_subscriber(
+    max_event_queue_size: int,
+) -> None:
+    task_manager = Mock(spec=TaskManager)
+    task_manager.get_task = AsyncMock(
+        return_value=Task(
+            id='test-task-id',
+            status=TaskStatus(state=TaskState.TASK_STATE_WORKING),
+        )
+    )
+    active_task = ActiveTask(
+        agent_executor=Mock(spec=AgentExecutor),
+        task_id='test-task-id',
+        task_manager=task_manager,
+        max_event_queue_size=max_event_queue_size,
+    )
+    active_task._task_created.set()
+    source = active_task._event_queue_subscribers
+    slow = active_task.subscribe(include_initial_task=True)
+    fast = active_task.subscribe(include_initial_task=True)
+    subscriptions = [slow, fast]
+    readers: list[asyncio.Task[Event]] = []
+    try:
+        assert isinstance(await anext(slow), Task)
+        slow_sink = next(iter(source._sinks))
+        assert isinstance(await anext(fast), Task)
+
+        for index in range(max_event_queue_size + 2):
+            reader = asyncio.create_task(anext(fast))
+            readers.append(reader)
+            event = Task(id=f'event-{index}')
+            await source.enqueue_event(cast('Event', (event, None)))
+            await source.test_only_join_incoming_queue()
+            assert await reader == event
+            assert slow_sink.is_closed() == (index >= max_event_queue_size)
+
+        assert slow_sink not in source._sinks
+        assert len(source._sinks) == 1
+
+        late = active_task.subscribe(include_initial_task=True)
+        subscriptions.append(late)
+        assert isinstance(await anext(late), Task)
+        fast_reader = asyncio.create_task(anext(fast))
+        late_reader = asyncio.create_task(anext(late))
+        readers.extend((fast_reader, late_reader))
+        event = Task(id='after-eviction')
+        await source.enqueue_event(cast('Event', (event, None)))
+        await source.test_only_join_incoming_queue()
+        assert await fast_reader == event
+        assert await late_reader == event
+    finally:
+        for reader in readers:
+            if not reader.done():
+                reader.cancel()
+        await asyncio.gather(*readers, return_exceptions=True)
+        for subscription in subscriptions:
+            await subscription.aclose()
+        await active_task.aclose()
+
+    assert not source._sinks
+    assert source._dispatcher_task.done()

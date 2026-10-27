@@ -18,7 +18,7 @@ from a2a.server.cluster import (
     VersionedTaskStore,
 )
 from a2a.server.context import ServerCallContext
-from a2a.server.events.event_queue import Event
+from a2a.server.events.event_queue import DEFAULT_MAX_QUEUE_SIZE, Event
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.request_handlers.default_request_handler_v2 import (
     DefaultRequestHandlerV2,
@@ -390,6 +390,7 @@ def make_replica(
     store: VersionedTaskStore,
     stream: TaskEventStream,
     agent: AgentExecutor,
+    max_event_queue_size: int = DEFAULT_MAX_QUEUE_SIZE,
 ) -> DefaultRequestHandlerV2:
     """Builds a handler ('replica') wired to a shared store and stream."""
     return DefaultRequestHandlerV2(
@@ -397,6 +398,7 @@ def make_replica(
         task_store=store,
         agent_card=streaming_agent_card(),
         event_stream=stream,
+        max_event_queue_size=max_event_queue_size,
     )
 
 

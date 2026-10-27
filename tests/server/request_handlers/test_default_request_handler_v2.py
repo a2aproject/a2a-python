@@ -3164,6 +3164,43 @@ async def test_follow_up_after_release_resumes_from_store() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize(
+    'state',
+    [TaskState.TASK_STATE_INPUT_REQUIRED, TaskState.TASK_STATE_AUTH_REQUIRED],
+)
+async def test_event_queue_capacity_survives_interrupted_task_release(
+    state: TaskState,
+) -> None:
+    """Recreated interrupted tasks retain the configured event capacity."""
+    handler = DefaultRequestHandlerV2(
+        agent_executor=_InterruptingAgent(state, complete_on_follow_up=False),
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+        interrupted_task_timeout=0.1,
+        max_event_queue_size=8,
+    )
+    try:
+        task = await _send(handler, 'book a flight')
+        first = await handler._active_task_registry.get(task.id)
+        assert first is not None
+        assert first._event_queue_agent.queue.maxsize == 8
+        assert first._event_queue_subscribers._incoming_queue.maxsize == 8
+        assert await _wait_for_release(handler, task.id)
+
+        result = await _send(handler, 'Friday', task)
+        recreated = await handler._active_task_registry.get(task.id)
+
+        assert result.status.state == state
+        assert recreated is not None
+        assert recreated is not first
+        assert recreated._event_queue_agent.queue.maxsize == 8
+        assert recreated._event_queue_subscribers._incoming_queue.maxsize == 8
+        assert await _wait_for_release(handler, task.id)
+    finally:
+        await handler.aclose()
+
+
+@pytest.mark.asyncio
 async def test_follow_up_resets_interrupted_task_timeout() -> None:
     """A follow-up that interrupts again restarts the timer."""
     handler = _interrupting_handler(

@@ -24,12 +24,17 @@ from .conftest import (
 
 @pytest.mark.asyncio
 @pytest.mark.timeout(15)
+@pytest.mark.parametrize('max_event_queue_size', [1024, 1])
 async def test_cancel_on_non_owning_replica_stops_remote_agent(
-    shared_store, shared_stream, context
+    shared_store, shared_stream, context, max_event_queue_size: int
 ) -> None:
     agent = LongRunningAgent()
-    replica_a = make_replica(shared_store, shared_stream, agent)
-    replica_b = make_replica(shared_store, shared_stream, agent)
+    replica_a = make_replica(
+        shared_store, shared_stream, agent, max_event_queue_size
+    )
+    replica_b = make_replica(
+        shared_store, shared_stream, agent, max_event_queue_size
+    )
     try:
         a_task = asyncio.create_task(
             drain(
@@ -52,6 +57,7 @@ async def test_cancel_on_non_owning_replica_stops_remote_agent(
             CancelTaskRequest(id=task_id), context
         )
         assert result.status.state == TaskState.TASK_STATE_CANCELED
+        assert await replica_b._active_task_registry.get(task_id) is None  # noqa: SLF001
 
         # A's agent observes the CAS conflict and aborts; its stream ends.
         await asyncio.wait_for(agent.aborted.wait(), timeout=8)
