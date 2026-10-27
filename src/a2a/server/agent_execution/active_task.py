@@ -375,19 +375,18 @@ class EventConsumer:
                 for message in updated_task.history
             )
             if not message_already_saved:
-                updated_task = (
-                    self.active_task._task_manager.update_with_message(
-                        self.message_to_save,
-                        updated_task,
-                    )
+                # Saved together with the event below. A separate save here
+                # would first re-save the previous, interrupted state.
+                self.active_task._task_manager.update_with_message(
+                    self.message_to_save,
+                    updated_task,
                 )
-                await self.active_task._task_manager.save_task_event(
-                    updated_task
-                )
-            self.message_to_save = None
 
         self.active_task._task_manager.context_id = event.context_id
         await self.active_task._task_manager.process(event)
+        # Kept until the save lands: after a conflict the event is applied
+        # again on the reloaded task, which needs the message added again.
+        self.message_to_save = None
 
     async def _update_task_state(
         self,

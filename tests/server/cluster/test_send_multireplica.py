@@ -1,9 +1,13 @@
 import asyncio
+import contextlib
 
 import pytest
 
+from a2a.helpers.proto_helpers import new_task_from_user_message
+from a2a.server.agent_execution.agent_executor import AgentExecutor
 from a2a.server.cluster import ConcurrentTaskModificationError, TaskVersion
-from a2a.types.a2a_pb2 import Role, Task, TaskState
+from a2a.server.tasks.task_updater import TaskUpdater
+from a2a.types.a2a_pb2 import Part, Role, Task, TaskState
 from a2a.utils.errors import InternalError
 
 from .conftest import (
@@ -118,17 +122,56 @@ async def test_stale_version_save_raises_conflict_directly(
 
 
 class _ContendedStore(VersionedInMemoryTaskStore):
-    """Rejects every save while `contended` is set, as if other replicas kept
-    writing the task."""
+    """Rejects every save while `contended` is set, and the next `conflicts`
+    saves, as if other replicas kept writing the task."""
 
     def __init__(self) -> None:
         super().__init__()
         self.contended = False
+        self.conflicts = 0
 
     async def save(self, task: Task, **kwargs) -> TaskVersion:  # noqa: ANN003
         if self.contended:
             raise ConcurrentTaskModificationError(task.id)
+        if self.conflicts > 0:
+            self.conflicts -= 1
+            raise ConcurrentTaskModificationError(task.id)
         return await super().save(task, **kwargs)
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_follow_up_message_survives_a_conflict_on_its_first_save(
+    shared_stream, context
+) -> None:
+    """The follow-up's message is saved with the turn's first event. When
+    that save conflicts and is retried on the reloaded task, the message
+    must still be recorded."""
+    store = _ContendedStore()
+    handler = make_replica(
+        store, shared_stream, InputRequiredThenCompleteAgent()
+    )
+    try:
+        r1 = await handler.on_message_send(
+            build_send_request('q1', message_id='m1'), context
+        )
+        store.conflicts = 1
+        await handler.on_message_send(
+            build_send_request(
+                'a', task_id=r1.id, context_id=r1.context_id, message_id='m2'
+            ),
+            context,
+        )
+
+        stored = await store.get(r1.id, context)
+        assert stored is not None
+        assert [
+            m.message_id
+            for m in stored.task.history
+            if m.role == Role.ROLE_USER
+        ] == ['m1', 'm2']
+    finally:
+        await handler.aclose()
 
 
 @pytest.mark.asyncio
@@ -170,3 +213,74 @@ async def test_follow_up_that_keeps_conflicting_fails_with_a2a_error(
     finally:
         store.contended = False
         await handler.aclose()
+
+
+class _SecondTurnAgent(AgentExecutor):
+    """Turn 1 asks for input; turn 2 starts with the configured first event."""
+
+    def __init__(self, second_turn: str) -> None:
+        self.second_turn = second_turn
+
+    async def execute(self, context, event_queue) -> None:  # noqa: ANN001
+        updater = TaskUpdater(
+            event_queue, str(context.task_id), str(context.context_id)
+        )
+        if context.current_task is None:
+            await event_queue.enqueue_event(
+                new_task_from_user_message(context.message)
+            )
+            await updater.requires_input(
+                message=updater.new_agent_message([Part(text='need input')])
+            )
+            return
+        if self.second_turn == 'raises':
+            raise RuntimeError('agent failed')
+        if self.second_turn == 'artifact_first':
+            await updater.add_artifact([Part(text='result')])
+        await updater.complete()
+
+    async def cancel(self, context, event_queue) -> None:  # noqa: ANN001
+        pass
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+@pytest.mark.parametrize(
+    ('second_turn', 'final_state'),
+    [
+        ('status_first', TaskState.TASK_STATE_COMPLETED),
+        ('artifact_first', TaskState.TASK_STATE_COMPLETED),
+        ('raises', TaskState.TASK_STATE_FAILED),
+    ],
+)
+async def test_resumed_turn_records_follow_up_message_once(
+    shared_store, shared_stream, context, second_turn: str, final_state
+) -> None:
+    agent = _SecondTurnAgent(second_turn)
+    replica_a = make_replica(shared_store, shared_stream, agent)
+    replica_b = make_replica(shared_store, shared_stream, agent)
+    try:
+        first = await replica_a.on_message_send(
+            build_send_request('q1', message_id='m1'), context
+        )
+        with contextlib.suppress(RuntimeError):
+            await replica_b.on_message_send(
+                build_send_request(
+                    'a1',
+                    task_id=first.id,
+                    context_id=first.context_id,
+                    message_id='m2',
+                ),
+                context,
+            )
+        stored = await shared_store.get(first.id, context)
+        assert stored is not None
+        assert stored.task.status.state == final_state
+        assert [
+            m.message_id
+            for m in stored.task.history
+            if m.role == Role.ROLE_USER
+        ] == ['m1', 'm2']
+    finally:
+        await replica_a.aclose()
+        await replica_b.aclose()
