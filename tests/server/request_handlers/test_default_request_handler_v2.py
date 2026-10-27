@@ -73,6 +73,7 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
 def create_default_agent_card():
@@ -1187,14 +1188,6 @@ async def test_delete_task_push_notification_config_info_with_config_and_no_id()
         create_server_call_context(),
     )
     assert len(result2.configs) == 0
-
-
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
 
 
 def create_input_mode_handler(*, validate_input_modes: bool):

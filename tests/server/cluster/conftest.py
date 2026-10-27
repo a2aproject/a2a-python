@@ -37,18 +37,10 @@ from a2a.types.a2a_pb2 import (
     Task,
     TaskState,
 )
+from a2a.utils.constants import TERMINAL_TASK_STATES
 
 
 # --- In-memory cluster doubles ----------------------------------------------
-
-_TERMINAL_STATES = frozenset(
-    {
-        TaskState.TASK_STATE_COMPLETED,
-        TaskState.TASK_STATE_CANCELED,
-        TaskState.TASK_STATE_FAILED,
-        TaskState.TASK_STATE_REJECTED,
-    }
-)
 
 
 class VersionedInMemoryTaskStore(VersionedTaskStore):
@@ -95,7 +87,10 @@ class VersionedInMemoryTaskStore(VersionedTaskStore):
             stored = self._current_version_locked(owner, task_id=task.id)
             if task.status.state == TaskState.TASK_STATE_CANCELED:
                 current = await self._store.get(task.id, context)
-                if current is None or current.status.state in _TERMINAL_STATES:
+                if (
+                    current is None
+                    or current.status.state in TERMINAL_TASK_STATES
+                ):
                     raise ConcurrentTaskModificationError(task.id)
             elif not prev_version.is_missing:
                 if stored == 0:

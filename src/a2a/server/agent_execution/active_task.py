@@ -75,6 +75,10 @@ from a2a.types.a2a_pb2 import (
     TaskStatus,
     TaskStatusUpdateEvent,
 )
+from a2a.utils.constants import (
+    INTERRUPTED_TASK_STATES,
+    TERMINAL_TASK_STATES,
+)
 from a2a.utils.errors import (
     InternalError,
     InvalidAgentResponseError,
@@ -84,18 +88,6 @@ from a2a.utils.errors import (
 
 
 logger = logging.getLogger(__name__)
-
-
-TERMINAL_TASK_STATES = {
-    TaskState.TASK_STATE_COMPLETED,
-    TaskState.TASK_STATE_CANCELED,
-    TaskState.TASK_STATE_FAILED,
-    TaskState.TASK_STATE_REJECTED,
-}
-INTERRUPTED_TASK_STATES = {
-    TaskState.TASK_STATE_AUTH_REQUIRED,
-    TaskState.TASK_STATE_INPUT_REQUIRED,
-}
 
 
 class _RequestStarted:
