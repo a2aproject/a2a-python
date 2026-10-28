@@ -57,7 +57,10 @@ if TYPE_CHECKING:
     )
     from a2a.server.tasks.task_manager import TaskManager
 
-from a2a.server.cluster.event_stream import VersionedEvent
+from a2a.server.cluster.event_stream import (
+    VersionedEvent,
+    _stream_accepts_context,
+)
 from a2a.server.cluster.task_store import ConcurrentTaskModificationError
 from a2a.server.events.event_queue_v2 import (
     AsyncQueue,
@@ -435,10 +438,17 @@ class EventConsumer:
         stream = self.active_task._event_stream
         if stream is not None and isinstance(event, Event):
             version = self.active_task._task_manager.current_version
-            await stream.publish(
-                self.active_task._task_id,
-                VersionedEvent(event=event, version=version),
-            )
+            versioned_event = VersionedEvent(event=event, version=version)
+            task_id = self.active_task._task_id
+            if _stream_accepts_context(stream, 'publish'):
+                # TODO(ISSUE #1374): remove this check once ServerCallContext is a required parameter on TaskEventStream.
+                await stream.publish(
+                    task_id,
+                    versioned_event,
+                    context=self.active_task._task_manager._call_context,  # ty:ignore[unknown-argument]
+                )
+            else:
+                await stream.publish(task_id, versioned_event)
 
         self.active_task._event_queue_agent.task_done()
 

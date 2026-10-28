@@ -4,6 +4,7 @@ import asyncio
 import contextlib
 import os
 import uuid
+import warnings
 
 from collections.abc import AsyncGenerator
 
@@ -22,6 +23,10 @@ from a2a.server.cluster.database_event_stream import (
     stream_response_to_event,
 )
 from a2a.server.cluster.database_task_store import VersionedDatabaseTaskStore
+from a2a.server.cluster.event_stream import (
+    TaskEventStream,
+    _stream_accepts_context,
+)
 from a2a.server.context import ServerCallContext
 from a2a.server.models import Base
 from a2a.types.a2a_pb2 import (
@@ -181,6 +186,32 @@ def test_as_int_rejects_non_integer_version() -> None:
         _as_int(TaskVersion('etag'))
 
 
+class _LegacyStream(TaskEventStream):
+    """A `TaskEventStream` with no `context` support, for compat testing."""
+
+    async def publish(self, task_id: str, event: VersionedEvent) -> None:
+        pass
+
+    async def subscribe(
+        self, task_id: str, *, after: TaskVersion
+    ) -> AsyncGenerator[VersionedEvent, None]:
+        return
+        yield  # unreachable; makes this an async generator function
+
+    async def destroy(self, task_id: str) -> None:
+        pass
+
+
+def test_stream_accepts_context_warns_once_per_type() -> None:
+    """A non-updated stream is detected once and cached, not re-warned per call."""
+    stream = _LegacyStream()
+    with pytest.warns(DeprecationWarning, match='does not accept'):
+        assert _stream_accepts_context(stream, 'publish') is False
+    with warnings.catch_warnings():
+        warnings.simplefilter('error')
+        assert _stream_accepts_context(stream, 'publish') is False
+
+
 @pytest.mark.asyncio
 @pytest.mark.timeout(10)
 async def test_initialize_creates_table_and_is_idempotent(
@@ -273,6 +304,98 @@ async def test_stream_delivers_events_written_by_store(db_url: str) -> None:
             TaskState.TASK_STATE_WORKING,
             TaskState.TASK_STATE_COMPLETED,
         ]
+    finally:
+        await store_engine.dispose()
+        await stream_engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_owner_context_succeeds_on_all_methods(db_url: str) -> None:
+    """The owner's context sees its own events and is accepted everywhere."""
+    store_engine = create_async_engine(db_url)
+    stream_engine = create_async_engine(db_url)
+    _enforce_sqlite_foreign_keys(store_engine)
+    _enforce_sqlite_foreign_keys(stream_engine)
+    try:
+        store = VersionedDatabaseTaskStore(
+            engine=store_engine, create_table=False
+        )
+        stream = DatabaseTaskEventStream(
+            engine=stream_engine, create_table=False
+        )
+        await store.initialize()
+        await stream.initialize()
+
+        v1 = await store.save(
+            create_task(),
+            event=None,
+            prev=None,
+            prev_version=TaskVersion.MISSING,
+            context=TEST_CONTEXT,
+        )
+        v2 = await store.save(
+            create_task(),
+            event=status_event(state=TaskState.TASK_STATE_WORKING),
+            prev=None,
+            prev_version=v1,
+            context=TEST_CONTEXT,
+        )
+
+        agen = stream.subscribe('task-abc', after=v1, context=TEST_CONTEXT)
+        received = await asyncio.wait_for(agen.__anext__(), timeout=5)
+        assert received.event.status.state == TaskState.TASK_STATE_WORKING
+        await agen.aclose()
+
+        await stream.publish(
+            'task-abc',
+            VersionedEvent(create_task(), v2),
+            context=TEST_CONTEXT,
+        )
+        await stream.destroy('task-abc', context=TEST_CONTEXT)
+    finally:
+        await store_engine.dispose()
+        await stream_engine.dispose()
+
+
+@pytest.mark.asyncio
+@pytest.mark.timeout(10)
+async def test_other_owner_context_does_not_receive_events(db_url: str) -> None:
+    """A different owner does not see events belonging to another owner."""
+    store_engine = create_async_engine(db_url)
+    stream_engine = create_async_engine(db_url)
+    _enforce_sqlite_foreign_keys(store_engine)
+    _enforce_sqlite_foreign_keys(stream_engine)
+    try:
+        store = VersionedDatabaseTaskStore(
+            engine=store_engine, create_table=False
+        )
+        stream = DatabaseTaskEventStream(
+            engine=stream_engine, create_table=False, poll_interval_s=0.05
+        )
+        await store.initialize()
+        await stream.initialize()
+
+        v1 = await store.save(
+            create_task(),
+            event=None,
+            prev=None,
+            prev_version=TaskVersion.MISSING,
+            context=TEST_CONTEXT,
+        )
+        await store.save(
+            create_task(),
+            event=status_event(state=TaskState.TASK_STATE_WORKING),
+            prev=None,
+            prev_version=v1,
+            context=TEST_CONTEXT,
+        )
+        other = ServerCallContext(user=SampleUser('someone_else'))
+
+        agen = stream.subscribe('task-abc', after=v1, context=other)
+        with pytest.raises(asyncio.TimeoutError):
+            await asyncio.wait_for(agen.__anext__(), timeout=0.15)
+        await agen.aclose()
     finally:
         await store_engine.dispose()
         await stream_engine.dispose()
