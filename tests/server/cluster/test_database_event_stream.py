@@ -313,6 +313,7 @@ async def test_stream_delivers_events_written_by_store(db_url: str) -> None:
 @pytest.mark.timeout(10)
 async def test_owner_context_succeeds_on_all_methods(db_url: str) -> None:
     """The owner's context sees its own events and is accepted everywhere."""
+    task_id = 'task-owner-ctx'
     store_engine = create_async_engine(db_url)
     stream_engine = create_async_engine(db_url)
     _enforce_sqlite_foreign_keys(store_engine)
@@ -328,31 +329,31 @@ async def test_owner_context_succeeds_on_all_methods(db_url: str) -> None:
         await stream.initialize()
 
         v1 = await store.save(
-            create_task(),
+            create_task(task_id),
             event=None,
             prev=None,
             prev_version=TaskVersion.MISSING,
             context=TEST_CONTEXT,
         )
         v2 = await store.save(
-            create_task(),
-            event=status_event(state=TaskState.TASK_STATE_WORKING),
+            create_task(task_id),
+            event=status_event(task_id, state=TaskState.TASK_STATE_WORKING),
             prev=None,
             prev_version=v1,
             context=TEST_CONTEXT,
         )
 
-        agen = stream.subscribe('task-abc', after=v1, context=TEST_CONTEXT)
+        agen = stream.subscribe(task_id, after=v1, context=TEST_CONTEXT)
         received = await asyncio.wait_for(agen.__anext__(), timeout=5)
         assert received.event.status.state == TaskState.TASK_STATE_WORKING
         await agen.aclose()
 
         await stream.publish(
-            'task-abc',
-            VersionedEvent(create_task(), v2),
+            task_id,
+            VersionedEvent(create_task(task_id), v2),
             context=TEST_CONTEXT,
         )
-        await stream.destroy('task-abc', context=TEST_CONTEXT)
+        await stream.destroy(task_id, context=TEST_CONTEXT)
     finally:
         await store_engine.dispose()
         await stream_engine.dispose()
@@ -362,6 +363,7 @@ async def test_owner_context_succeeds_on_all_methods(db_url: str) -> None:
 @pytest.mark.timeout(10)
 async def test_other_owner_context_does_not_receive_events(db_url: str) -> None:
     """A different owner does not see events belonging to another owner."""
+    task_id = 'task-other-owner'
     store_engine = create_async_engine(db_url)
     stream_engine = create_async_engine(db_url)
     _enforce_sqlite_foreign_keys(store_engine)
@@ -377,22 +379,22 @@ async def test_other_owner_context_does_not_receive_events(db_url: str) -> None:
         await stream.initialize()
 
         v1 = await store.save(
-            create_task(),
+            create_task(task_id),
             event=None,
             prev=None,
             prev_version=TaskVersion.MISSING,
             context=TEST_CONTEXT,
         )
         await store.save(
-            create_task(),
-            event=status_event(state=TaskState.TASK_STATE_WORKING),
+            create_task(task_id),
+            event=status_event(task_id, state=TaskState.TASK_STATE_WORKING),
             prev=None,
             prev_version=v1,
             context=TEST_CONTEXT,
         )
         other = ServerCallContext(user=SampleUser('someone_else'))
 
-        agen = stream.subscribe('task-abc', after=v1, context=other)
+        agen = stream.subscribe(task_id, after=v1, context=other)
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(agen.__anext__(), timeout=0.15)
         await agen.aclose()
