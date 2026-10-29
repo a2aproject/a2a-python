@@ -2614,6 +2614,97 @@ async def test_on_cancel_of_parked_task_is_owner_scoped():
     await handler.aclose()
 
 
+def _hanging_send_request(text: str) -> SendMessageRequest:
+    return SendMessageRequest(
+        message=Message(
+            message_id=f'msg-{text}',
+            role=Role.ROLE_USER,
+            parts=[Part(text=text)],
+        )
+    )
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_wait_for_times_out_while_task_works():
+    """A caller timeout on a blocking send raises instead of returning the
+    unfinished task."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(
+            handler.on_message_send(
+                _hanging_send_request('timeout'), create_server_call_context()
+            ),
+            timeout=0.5,
+        )
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_propagates_caller_cancellation():
+    """Cancelling the task that awaits a blocking send cancels it."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    send = asyncio.create_task(
+        handler.on_message_send(
+            _hanging_send_request('cancel'), create_server_call_context()
+        )
+    )
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    send.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await send
+    assert send.cancelled()
+
+    agent.release.set()
+    await handler.aclose()
+
+
+@pytest.mark.timeout(10)
+@pytest.mark.asyncio
+async def test_on_message_send_stream_propagates_consumer_cancellation():
+    """Cancelling a stream consumer cancels it instead of ending the stream
+    as if the task had finished."""
+    agent = _HangingAgent()
+    handler = DefaultRequestHandlerV2(
+        agent_executor=agent,
+        task_store=InMemoryTaskStore(),
+        agent_card=create_default_agent_card(),
+    )
+
+    async def consume() -> None:
+        async for _ in handler.on_message_send_stream(
+            _hanging_send_request('stream'), create_server_call_context()
+        ):
+            pass
+
+    reader = asyncio.create_task(consume())
+    await asyncio.wait_for(agent.working.wait(), timeout=5)
+    reader.cancel()
+
+    with pytest.raises(asyncio.CancelledError):
+        await reader
+    assert reader.cancelled()
+
+    agent.release.set()
+    await handler.aclose()
+
+
 class _AsksForInputAgent(AgentExecutor):
     """Always asks for more input; counts execute() and cancel() calls."""
 

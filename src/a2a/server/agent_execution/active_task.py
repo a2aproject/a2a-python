@@ -840,7 +840,7 @@ class ActiveTask:
                         yield event
                     finally:
                         tapped_queue.task_done()
-                except (QueueShutDown, asyncio.CancelledError):
+                except QueueShutDown:
                     break
         finally:
             logger.debug('Subscribe[%s]: Unsubscribing', self._task_id)

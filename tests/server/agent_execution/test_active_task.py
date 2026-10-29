@@ -534,9 +534,9 @@ class TestActiveTask:
 
         task.cancel()
 
-        # In python 3.10+ cancelling an async generator next() might raise StopAsyncIteration
-        # if the generator handles the cancellation by closing.
-        with pytest.raises((asyncio.CancelledError, StopAsyncIteration)):
+        # The cancellation belongs to the caller, so subscribe() must re-raise
+        # it rather than end the stream as if the task had finished.
+        with pytest.raises(asyncio.CancelledError):
             await task
 
         await it.aclose()
