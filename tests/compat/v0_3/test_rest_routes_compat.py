@@ -1,3 +1,4 @@
+import json
 import logging
 
 from collections.abc import AsyncIterator
@@ -19,6 +20,7 @@ from a2a.types.a2a_pb2 import (
     TaskState as TaskState10,
     TaskStatus as TaskStatus10,
 )
+from a2a.utils.errors import TaskNotFoundError
 from fastapi import FastAPI
 from google.protobuf import json_format
 from httpx import ASGITransport, AsyncClient
@@ -282,3 +284,64 @@ async def test_v03_streaming_does_not_ascii_escape_non_ascii(
         payload = payload.decode('utf-8')
     assert non_ascii_text in payload
     assert '\\u4f60\\u597d' not in payload
+
+
+@pytest.mark.anyio
+async def test_v03_message_stream_malformed_json_returns_400(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    response = await client.post(
+        '/v1/message:stream',
+        content=b'{bad',
+        headers={'Content-Type': 'application/json'},
+    )
+
+    assert response.status_code == 400
+    assert response.headers['content-type'].startswith('application/json')
+    assert response.json()['error']['status'] == 'INVALID_ARGUMENT'
+    request_handler.on_message_send_stream.assert_not_called()
+
+
+@pytest.mark.anyio
+async def test_v03_subscribe_unknown_task_returns_404(
+    client: AsyncClient, request_handler: MagicMock
+) -> None:
+    async def not_found(*args: object, **kwargs: object) -> AsyncIterator[None]:
+        raise TaskNotFoundError
+        yield
+
+    request_handler.on_subscribe_to_task.side_effect = not_found
+
+    response = await client.post('/v1/tasks/unknown:subscribe')
+
+    assert response.status_code == 404
+    assert response.json()['error']['status'] == 'NOT_FOUND'
+
+
+@pytest.mark.anyio
+async def test_v03_streaming_yields_all_events_in_order(
+    request_handler: RequestHandler,
+) -> None:
+    adapter = REST03Adapter(http_handler=request_handler)
+
+    async def stream(
+        request: Request, context: object
+    ) -> AsyncIterator[dict[str, int]]:
+        for i in range(3):
+            yield {'n': i}
+
+    mock_req = MagicMock(spec=Request)
+    mock_req.body = AsyncMock(return_value=b'{}')
+    mock_req.headers = Headers({'a2a-version': '0.3'})
+    mock_req.user = MagicMock(is_authenticated=False)
+    mock_req.auth = None
+    mock_req.scope = {}
+
+    response = await adapter._handle_streaming_request(stream, mock_req)
+    chunks = [chunk async for chunk in response.body_iterator]
+
+    assert [json.loads(chunk) for chunk in chunks] == [
+        {'n': 0},
+        {'n': 1},
+        {'n': 2},
+    ]
