@@ -6,7 +6,7 @@ from a2a.compat.v0_3 import conversions
 from a2a.compat.v0_3 import types as types_v03
 from a2a.server.context import ServerCallContext
 from a2a.server.request_handlers.request_handler import RequestHandler
-from a2a.types.a2a_pb2 import Task
+from a2a.types.a2a_pb2 import ListTaskPushNotificationConfigsRequest, Task
 from a2a.utils import proto_utils as core_proto_utils
 from a2a.utils.errors import TaskNotFoundError
 
@@ -85,10 +85,24 @@ class RequestHandler03:
         v10_req = conversions.to_core_get_task_push_notification_config_request(
             request
         )
-        # v0.3 allows a get by task id alone. A config created without an id is
-        # stored under the task id, so look that one up.
+        # v0.3 allows a get by task id alone. Prefer the config stored under
+        # the task id, which is where a config created without an id goes.
+        # Otherwise take the first, like v0.3 did.
         if not v10_req.id:
-            v10_req.id = v10_req.task_id
+            v10_resp = await self.request_handler.on_list_task_push_notification_configs(
+                ListTaskPushNotificationConfigsRequest(task_id=v10_req.task_id),
+                context,
+            )
+            configs = list(v10_resp.configs)
+            v10_config = next(
+                (c for c in configs if c.id == v10_req.task_id),
+                configs[0] if configs else None,
+            )
+            if v10_config is None:
+                raise TaskNotFoundError
+            return conversions.to_compat_task_push_notification_config(
+                v10_config
+            )
         v10_config = (
             await self.request_handler.on_get_task_push_notification_config(
                 v10_req, context

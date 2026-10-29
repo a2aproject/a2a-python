@@ -2,10 +2,14 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from a2a.auth.user import UnauthenticatedUser
 from a2a.compat.v0_3 import types as types_v03
 from a2a.compat.v0_3.request_handler import RequestHandler03
+from a2a.server.agent_execution import AgentExecutor
 from a2a.server.context import ServerCallContext
+from a2a.server.request_handlers import DefaultRequestHandlerV2
 from a2a.server.request_handlers.request_handler import RequestHandler
+from a2a.server.tasks import InMemoryPushNotificationConfigStore, TaskStore
 from a2a.types.a2a_pb2 import (
     AgentCapabilities,
     AgentCard,
@@ -241,34 +245,77 @@ async def test_on_get_task_push_notification_config(
     assert result.push_notification_config.url == 'http://example.com'
 
 
+@pytest.fixture
+def v03_handler_with_push_store():
+    task_store = AsyncMock(spec=TaskStore)
+    task_store.get.return_value = V10Task(id='task-1', context_id='ctx-1')
+    core_handler = DefaultRequestHandlerV2(
+        agent_executor=MagicMock(spec=AgentExecutor),
+        task_store=task_store,
+        push_config_store=InMemoryPushNotificationConfigStore(),
+        agent_card=AgentCard(
+            capabilities=AgentCapabilities(push_notifications=True)
+        ),
+    )
+    return RequestHandler03(request_handler=core_handler)
+
+
 @pytest.mark.anyio
 @pytest.mark.parametrize(
-    'params',
+    ('config_ids', 'expected_id'),
     [
-        types_v03.TaskIdParams(id='task-1'),
-        types_v03.GetTaskPushNotificationConfigParams(id='task-1'),
+        ([None], 'task-1'),
+        (['cfg-1'], 'cfg-1'),
+        (['cfg-1', None], 'task-1'),
     ],
 )
 async def test_on_get_task_push_notification_config_by_task_id(
-    v03_handler, mock_core_handler, mock_context, params
+    v03_handler_with_push_store, config_ids, expected_id
 ):
-    """Without a config id, get the config stored under the task id."""
-    v03_req = types_v03.GetTaskPushNotificationConfigRequest(
-        id='req-1', method='tasks/pushNotificationConfig/get', params=params
-    )
-    mock_core_handler.on_get_task_push_notification_config.return_value = (
-        V10PushConfig(id='task-1', task_id='task-1', url='http://example.com')
+    """Without a config id, prefer the config stored under the task id."""
+    context = ServerCallContext(user=UnauthenticatedUser())
+    for config_id in config_ids:
+        await v03_handler_with_push_store.on_create_task_push_notification_config(
+            types_v03.SetTaskPushNotificationConfigRequest(
+                id='req-1',
+                method='tasks/pushNotificationConfig/set',
+                params=types_v03.TaskPushNotificationConfig(
+                    task_id='task-1',
+                    push_notification_config=types_v03.PushNotificationConfig(
+                        id=config_id, url='http://example.com'
+                    ),
+                ),
+            ),
+            context,
+        )
+
+    result = (
+        await v03_handler_with_push_store.on_get_task_push_notification_config(
+            types_v03.GetTaskPushNotificationConfigRequest(
+                id='req-2',
+                method='tasks/pushNotificationConfig/get',
+                params=types_v03.TaskIdParams(id='task-1'),
+            ),
+            context,
+        )
     )
 
-    await v03_handler.on_get_task_push_notification_config(
-        v03_req, mock_context
-    )
+    assert result.push_notification_config.id == expected_id
 
-    v10_req = (
-        mock_core_handler.on_get_task_push_notification_config.call_args.args[0]
-    )
-    assert v10_req.task_id == 'task-1'
-    assert v10_req.id == 'task-1'
+
+@pytest.mark.anyio
+async def test_on_get_task_push_notification_config_by_task_id_none_set(
+    v03_handler_with_push_store,
+):
+    with pytest.raises(TaskNotFoundError):
+        await v03_handler_with_push_store.on_get_task_push_notification_config(
+            types_v03.GetTaskPushNotificationConfigRequest(
+                id='req-1',
+                method='tasks/pushNotificationConfig/get',
+                params=types_v03.TaskIdParams(id='task-1'),
+            ),
+            ServerCallContext(user=UnauthenticatedUser()),
+        )
 
 
 @pytest.mark.anyio
