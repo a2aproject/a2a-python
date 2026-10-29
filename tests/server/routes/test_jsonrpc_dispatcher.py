@@ -194,6 +194,16 @@ class TestParseErrorDataShape:
 
 
 class TestMalformedJsonBody:
+    def test_invalid_utf8_is_a_parse_error(self, client):
+        response = client.post(
+            '/',
+            content=b'{"jsonrpc": "2.0", "id": 1, "method": "GetTask", '
+            b'"params": {"id": "\xff"}}',
+            headers={'Content-Type': 'application/json'},
+        )
+
+        assert response.json()['error']['code'] == -32700
+
     def test_reported_through_logging_not_stderr(self, client, capsys, caplog):
         response = client.post(
             '/',
